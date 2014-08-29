@@ -3,7 +3,6 @@
 
 server {
   include      <?php print "{$server->include_path}"; ?>/fastcgi_ssl_params.conf;
-  limit_conn   limreq 5555;
   listen       <?php print "{$ip_address}:{$http_ssl_port}"; ?>;
   server_name  <?php print $this->uri . ' ' . implode(' ', $this->aliases); ?>;
   root         /var/www/nginx-default;
