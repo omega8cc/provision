@@ -10,10 +10,11 @@ function drush_provision_drupal_provision_verify_validate() {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
     _provision_drupal_create_settings_file();
+    provision_drupal_push_site();
     drush_errors_on();
     if (drush_drupal_major_version() < 8 && d()->profile != 'hostmaster') {
       provision_backend_invoke(d()->name, 'registry-rebuild');
-      drush_log(dt('Rebuilt registry without --no-cache-clear option'));
+      drush_log(dt('Completed registry-rebuild without --no-cache-clear option'));
     }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
   }
@@ -81,6 +82,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // Determine latest BOA contrib directory name and add INI template if missing.
     $pathAll = '/data/all/';
+    $pathDrc = d()->root . '/sites/all/drush';
     $iniFile = d()->root . '/sites/all/modules/default.boa_platform_control.ini';
     $iniTpl = '/data/conf/default.boa_platform_control.ini';
 
@@ -104,6 +106,12 @@ function drush_provision_drupal_pre_provision_verify() {
         ->succeed('Changed permissions of <code>@path</code> to @perm')
         ->fail('Could not change permissions of <code>@path</code> to @perm');
       provision_file()->chmod(d()->root . '/sites', 0751)
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+
+    if (provision_file()->exists($pathDrc)->status()) {
+      provision_file()->chmod(d()->root . '/sites/all/drush', 0700)
         ->succeed('Changed permissions of <code>@path</code> to @perm')
         ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -153,15 +161,26 @@ function drush_provision_drupal_pre_provision_verify() {
           ->fail('Could not create symlink @path to @target: @reason');
       }
     }
-
+    provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
+    _provision_drupal_ensure_htaccess_update();
     // Requires at least the database settings to complete.
-   _provision_drupal_create_settings_file();
+
+    _provision_drupal_create_settings_file();
+
+    if (function_exists('hosting_get_features')) {
+      // We're verifying the hostmaster site, so record a list of enabled
+      // Hosting Features.
+      $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
+      $aegir_drushrc->write();
+    }
+
+    provision_drupal_push_site();
   }
 }
 

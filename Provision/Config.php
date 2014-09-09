@@ -110,11 +110,33 @@ class Provision_Config {
 
   /**
    * Load template from filename().
+   *
+   * @see hook_provision_config_load_templates()
+   * @see hook_provision_config_load_templates_alter()
    */
   private function load_template() {
-    $class_name = get_class($this);
 
+    // Allow other Drush commands to change the template used first.
+    $templates = drush_command_invoke_all('provision_config_load_templates', $this);
+    // Ensure that templates is at least an array.
+    if (!is_array($templates)) {
+      $templates = array();
+    }
+    // Allow other Drush commands to alter the templates from other commands.
+    drush_command_invoke_all_ref('provision_config_load_templates_alter', $templates, $this);
+    if (!empty($templates) && is_array($templates)) {
+      foreach ($templates as $file) {
+        if (is_readable($file)) {
+          drush_log("Template loaded A: $file");
+          return file_get_contents($file);
+        }
+      }
+    }
+
+    // If we've got this far, then try to find a template from this class or
+    // one of its parents.
     if (isset($this->template)) {
+      $class_name = get_class($this);
       while ($class_name) {
         // Iterate through the config file's parent classes until we
         // find the template file to use.
@@ -122,8 +144,8 @@ class Provision_Config {
 
         $file = $base_dir . '/' . $this->template;
 
-        if (file_exists($file) && is_readable($file)) {
-          drush_log("Template loaded: $file");
+        if (is_readable($file)) {
+          drush_log("Template loaded B: $file");
           return file_get_contents($file);
         }
 
@@ -131,6 +153,7 @@ class Provision_Config {
       }
     }
 
+    // We've failed to find a template if we've reached this far.
     return FALSE;
   }
 
@@ -161,11 +184,16 @@ class Provision_Config {
    */
   function write() {
     $filename = $this->filename();
+    // Debug tmp
+    drush_log("DEBUG A: filename is $filename");
     // Make directory structure if it does not exist.
-    if (!provision_file()->exists(dirname($filename))->status()) {
+    if ($filename && !provision_file()->exists(dirname($filename))->status()) {
       provision_file()->mkdir(dirname($filename))
         ->succeed('Created directory @path.')
         ->fail('Could not create directory @path.');
+      // Debug tmp
+      $this_dirname = dirname($filename);
+      drush_log("DEBUG B: this_dirname is $this_dirname");
     }
 
     $status = FALSE;
@@ -182,8 +210,8 @@ class Provision_Config {
         }
 
         $status = provision_file()->file_put_contents($filename, $this->render_template($template, $this->data))
-          ->succeed('Generated config ' . (empty($this->description) ? $filename : $this->description), 'success')
-          ->fail('Could not generate ' . (empty($this->description) ? $filename : $this->description))->status();
+          ->succeed('Generated config A ' . (empty($this->description) ? $filename : $this->description), 'success')
+          ->fail('Could not generate A ' . (empty($this->description) ? $filename : $this->description))->status();
 
         // Change the permissions of the file if needed
         if (!is_null($this->mode)) {
@@ -204,7 +232,7 @@ class Provision_Config {
   // allow overriding w.r.t locking
   function file_put_contents($filename, $text) {
     provision_file()->file_put_contents($filename, $text)
-      ->succeed('Generated config ' . (empty($this->description) ? $filename : $this->description), 'success');
+      ->succeed('Generated config B ' . (empty($this->description) ? $filename : $this->description), 'success');
   }
 
   /**

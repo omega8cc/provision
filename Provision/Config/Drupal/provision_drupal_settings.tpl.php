@@ -17,11 +17,20 @@ print '<?php' ?>
  * to avoid further confusion.
  */
 
+<?php if ($subdirs_support_enabled): ?>
+/**
+ * Detecting subdirectory mode
+ */
+if (isset($_SERVER['SITE_SUBDIR']) && isset($_SERVER['RAW_HOST'])) {
+  $base_url = 'http://' . $_SERVER['RAW_HOST'] . '/' . $_SERVER['SITE_SUBDIR'];
+}
+<?php endif; ?>
+
 <?php if ($this->cloaked): ?>
 if (isset($_SERVER['db_name'])) {
   /**
-   * The database credentials are stored in the Apache vhost config
-   * of the associated site with SetEnv parameters.
+   * The database credentials are stored in the Apache or Nginx vhost config
+   * of the associated site with SetEnv (fastcgi_param in Nginx) parameters.
    * They are called here with $_SERVER environment variables to
    * prevent sensitive data from leaking to site administrators
    * with PHP access, that potentially might be of other sites in
@@ -144,20 +153,20 @@ if (isset($_SERVER['db_name'])) {
   $conf['aegir_api'] = <?php print !$this->backup_in_progress ? $this->api_version : 0 ?>;
 
 <?php if (!$this->site_enabled) : ?>
-  // This is for Drupal 6 and below.
-  $conf['site_offline'] = 1;
-  // And this is for Drupal 7 and above.
-  $conf['maintenance_mode'] = 1;
+    // This is for Drupal 6 and below.
+    $conf['site_offline'] = 1;
+    // And this is for Drupal 7 and above.
+    $conf['maintenance_mode'] = 1;
 <?php endif ?>
 
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
-  if (file_exists('<?php print $this->platform->server->include_path  ?>/global.inc')) {
+  if (is_readable('<?php print $this->platform->server->include_path  ?>/global.inc')) {
     include_once('<?php print $this->platform->server->include_path  ?>/global.inc');
   }
 
   # Additional site configuration settings.
-  if (file_exists('<?php print $this->site_path  ?>/local.settings.php')) {
+  if (is_readable('<?php print $this->site_path  ?>/local.settings.php')) {
     include_once('<?php print $this->site_path  ?>/local.settings.php');
   }

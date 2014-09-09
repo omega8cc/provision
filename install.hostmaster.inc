@@ -4,6 +4,29 @@
  * @file install the hostmaster system
  */
 
+/**
+ * Implements drush_COMMAND_pre_validate().
+ *
+ * Ensure the database cannot be accessed by anonymous users, as it will
+ * otherwise fail later in the install, and thus be harder to recover from.
+ *
+ * @see Provision_Service_db_mysql::grant_host().
+ */
+function drush_provision_hostmaster_install_pre_validate() {
+  $command = sprintf('mysql -u intntnllyInvalid -h %s -P %s -e "SELECT VERSION()"', drush_get_option('aegir_db_host', 'localhost'), drush_get_option('aegir_db_port', '3306'));
+  drush_shell_exec($command);
+
+  if (preg_match("/Access denied for user 'intntnllyInvalid'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
+    return;
+  }
+  elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
+    return;
+  }
+  else {
+    return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Dummy connection failed to fail. Either your MySQL permissions are too lax, or the response was not understood. See http://is.gd/Y6i4FO for more information. %msg', array('%msg' => join("\n", drush_shell_exec_output()))));
+  }
+}
+
 function drush_provision_hostmaster_install_validate($site = NULL) {
   // set defaults for this whole script
   // those are settings that are not prompted to the user but still overridable
@@ -15,11 +38,21 @@ function drush_provision_hostmaster_install_validate($site = NULL) {
   drush_set_default('script_user', provision_current_user());
   drush_set_default('web_group', _provision_default_web_group());
   drush_set_default('http_service_type', 'apache');
-  drush_set_default('drush_make_version', '6.x-2.3');
+  drush_set_default('http_port', '80');
   drush_set_default('aegir_db_user', 'root');
+  drush_set_default('aegir_db_port', '3306');
   drush_set_default('client_name', 'admin');
   $aegir_db_user = drush_get_option('aegir_db_user');
-  drush_set_default('makefile', dirname(__FILE__) . '/aegir.make');
+
+  $root = drush_get_option(array('r', 'root'));
+  if (is_dir($root) && !drush_get_option('makefile', FALSE)) {
+    // Don't assume we know the makefile used to build an existing platform
+    $makefile_msg = '';
+  }
+  else {
+    drush_set_default('makefile', dirname(__FILE__) . '/aegir.make');
+    $makefile_msg = dt("Aegir makefile: !makefile\n", array('!makefile' => drush_get_option('makefile')));
+  }
 
   drush_print("Aegir $version automated install script");
   drush_print("==============================================================================");
@@ -59,10 +92,9 @@ Don't worry: you will get to review those settings after the final install");
 This script will operate the following changes in your system:
 
 1. Create server-level configuration directories
-2. Download drush_make
-3. Create the Hostmaster frontend platform
-4. Install the frontend site
-5. Setup the dispatcher (a user cron job)
+2. Create the Hostmaster frontend platform
+3. Install the frontend site
+4. Setup the dispatcher (a user cron job)
 
 We are making the following assumptions:
  * you have read and are following the install instructions at:
@@ -77,29 +109,32 @@ The following settings will be used:
  Aegir user: !user
  Web group: !web
  Web server: !web_server
+ Web server port: !web_server_port
  Aegir DB host: !db_host
  Aegir DB user: !db_user
  Aegir DB password: !db_pass
- Drush make version: !drush_make
+ Aegir DB port: !db_port
  Aegir version: !version
  Aegir platform path: !root
- Aegir makefile: !makefile
  Admin email: !email
-', array('!site' => $site,
-         '!fqdn' => drush_get_option('aegir_host'),
-         '!home' => drush_get_option('aegir_root'),
-         '!user' => drush_get_option('script_user'),
-         '!web' => drush_get_option('web_group'),
-         '!web_server' => drush_get_option('http_service_type'),
-         '!db_host' => drush_get_option('aegir_db_host'),
-         '!db_user' => drush_get_option('aegir_db_user'),
-         '!db_pass' => is_null(drush_get_option('aegir_db_pass', NULL, 'process')) ? '<previously set>' : '<prompted>',
-         '!drush_make' => drush_get_option('drush_make_version'),
-         '!version' => drush_get_option('version'),
-         '!root' => drush_get_option(array('r', 'root')),
-         '!makefile' => drush_get_option('makefile'),
-         '!email' => drush_get_option('client_email'),
-         )));
+ !makefile',
+  array(
+    '!site' => $site,
+    '!fqdn' => drush_get_option('aegir_host'),
+    '!home' => drush_get_option('aegir_root'),
+    '!user' => drush_get_option('script_user'),
+    '!web' => drush_get_option('web_group'),
+    '!web_server' => drush_get_option('http_service_type'),
+    '!web_server_port' => drush_get_option('http_port'),
+    '!db_host' => drush_get_option('aegir_db_host'),
+    '!db_user' => drush_get_option('aegir_db_user'),
+    '!db_pass' => is_null(drush_get_option('aegir_db_pass', NULL, 'process')) ? '<previously set>' : '<prompted>',
+    '!db_port' => drush_get_option('aegir_db_port'),
+    '!version' => drush_get_option('version'),
+    '!root' => $root,
+    '!makefile' => $makefile_msg,
+    '!email' => drush_get_option('client_email'),
+  )));
 
   if (!drush_confirm(dt('Do you really want to proceed with the install'))) {
     return drush_set_error('PROVISION_CANCEL_INSTALL', dt('Installation aborted'));
@@ -117,39 +152,46 @@ function drush_provision_hostmaster_install($site = NULL) {
   $aegir_root = drush_get_option('aegir_root');
   $platform = drush_get_option(array('r', 'root'));
 
+  $aegir_http_host = drush_get_option('aegir_host');
+  $aegir_http_port = drush_get_option('http_port');
   $aegir_db_user = drush_get_option('aegir_db_user');
   $aegir_db_pass = drush_get_option('aegir_db_pass');
+  $aegir_db_port = drush_get_option('aegir_db_port');
+  $aegir_db_host = drush_get_option('aegir_db_host');
 
   $server = '@server_master';
   $master_context = array(
     'context_type' => 'server',
     // files
-    'remote_host' => drush_get_option('aegir_host'),
+    'remote_host' => $aegir_http_host,
     'aegir_root' => $aegir_root,
     'script_user' => drush_get_option('script_user'),
    // apache or nginx or..
     'http_service_type' => drush_get_option('http_service_type'),
+    'http_port' => $aegir_http_port,
     'web_group' => drush_get_option('web_group'),
     'master_url' => "http://" . $site,
+    'db_port' => $aegir_db_port,
   );
 
-  $master_db = sprintf("mysql://%s:%s@%s", urlencode($aegir_db_user), urlencode($aegir_db_pass), drush_get_option('aegir_db_host'));
-  if (drush_get_option('aegir_host') == drush_get_option('aegir_db_host')) {
+  $master_db = sprintf("mysql://%s:%s@%s:%s", urlencode($aegir_db_user), urlencode($aegir_db_pass), $aegir_db_host, $aegir_db_port);
+  if ($aegir_http_host == $aegir_db_host) {
     $master_context['db_service_type'] = 'mysql';
     $master_context['master_db'] = $master_db;
     $dbserver = $server;
   } else {
-    $dbserver = '@server_' . drush_get_option('aegir_db_host');
+    $dbserver = '@server_' . $aegir_db_host;
     $dbserver_context = array(
-      'remote_host' => drush_get_option('aegir_db_host'),
+      'remote_host' => $aegir_db_host,
       'context_type' => 'server',
       'db_service_type' => 'mysql',
       'master_db' => $master_db,
+      'db_port' => $aegir_db_port,
     );
-    drush_backend_invoke_args("provision-save", array($dbserver), $dbserver_context);
+    drush_invoke_process('@none', "provision-save", array($dbserver), $dbserver_context);
     provision_backend_invoke($dbserver, 'provision-verify');
   }
-  drush_backend_invoke_args("provision-save", array($server), $master_context);
+  drush_invoke_process('@none', "provision-save", array($server), $master_context);
   provision_backend_invoke($server, 'provision-verify');
 
   // exit if an error has occured.
@@ -161,12 +203,8 @@ function drush_provision_hostmaster_install($site = NULL) {
     return;
   }
 
-  if (!function_exists('drush_make_drush_command')) {
-    drush_backend_invoke('dl', array('drush_make-' . drush_get_option('drush_make_version'), 'destination' => $aegir_root . '/.drush/'));
-  }
-
   $platform_name = '@platform_hostmaster';
-  drush_backend_invoke_args("provision-save", array($platform_name), array(
+  drush_invoke_process('@none', "provision-save", array($platform_name), array(
     'context_type' => 'platform',
     'server' => $server,
     'web_server' => $server,
@@ -189,7 +227,7 @@ function drush_provision_hostmaster_install($site = NULL) {
   $profile = drush_get_option('profile');
 
   $site_name = '@hostmaster';
-  drush_backend_invoke_args("provision-save", array($site_name), array(
+  drush_invoke_process('@none', "provision-save", array($site_name), array(
     'context_type' => 'site',
     'platform' => $platform_name,
     'db_server' => $dbserver,
@@ -207,6 +245,7 @@ function drush_provision_hostmaster_install($site = NULL) {
 
 
   drush_print(dt("Initializing the hosting system"));
+  drush_invoke_process('@none', 'cache-clear', array('drush'));
   provision_backend_invoke($site_name, 'hosting-setup');
 
   drush_print("");
@@ -224,3 +263,12 @@ function drush_provision_hostmaster_install($site = NULL) {
   drush_print("");
 }
 
+/**
+ *  Implements drush_hook_post_hostmaster_install().
+ */
+function drush_provision_post_hostmaster_install() {
+  $backend_only = drush_get_option('backend-only');
+  if (empty($backend_only)) {
+    drush_invoke_process('@hostmaster', 'cache-clear', array('drush'));
+  }
+}

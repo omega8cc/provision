@@ -29,14 +29,14 @@ We are making the following assumptions:
 
   if (!file_exists($platform)) {
     $dir = realpath(dirname($platform));
-    if (file_exists($dir)) {
+    if (is_dir($dir)) {
       $platform = $dir . '/' . basename($platform);
       drush_log("changed relative platform path to absolute");
     }
   }
 
   // If the alias file exists, it means we are migrating from a post alpha9 release.
-  if (file_exists($alias_file)) {
+  if (is_readable($alias_file)) {
     provision_backend_invoke('@server_master', 'provision-verify');
     provision_backend_invoke('@hostmaster', 'provision-verify');
 
@@ -44,7 +44,7 @@ We are making the following assumptions:
     drush_set_option('old_platform', d('@hostmaster')->platform->name);
 
     $new_platform = '@platform_' . preg_replace("/[!\W]/", "", basename(rtrim($platform, '/')));
-    drush_backend_invoke_args("provision-save", array($new_platform), array(
+    drush_invoke_process('@none', "provision-save", array($new_platform), array(
       'context_type' => 'platform',
       'server' => '@server_master',
       'web_server' => '@server_master',
@@ -67,7 +67,7 @@ We are making the following assumptions:
      * 'options' when we drop drush3 support
      */
     $context = drush_get_context('cli') ? 'cli' : 'options';
-    drush_backend_invoke_args("provision-save", array($server), array(
+    drush_invoke_process('@none', "provision-save", array($server), array(
       'context_type' => 'server',
       'aegir_root' => dirname(rtrim($data['config_path'], '/')),
       'remote_host' => php_uname('n'),
@@ -91,7 +91,7 @@ We are making the following assumptions:
 
    
     $old_platform = '@platform_' . preg_replace("/[!\W]/", "", basename(rtrim($data['publish_path'], '/')));
-    drush_backend_invoke_args("provision-save", array($old_platform), array(
+    drush_invoke_process('@none', "provision-save", array($old_platform), array(
       'context_type' => 'platform',
       'server' => $server,
       'web_server' => $server,
@@ -105,7 +105,7 @@ We are making the following assumptions:
     }
 
     $new_platform = '@platform_' . preg_replace("/[!\W]/", "", basename(rtrim($platform, '/')));
-    drush_backend_invoke_args("provision-save", array($new_platform), array(
+    drush_invoke_process('@none', "provision-save", array($new_platform), array(
       'context_type' => 'platform',
       'server' => $server,
       'web_server' => $server,
@@ -121,7 +121,7 @@ We are making the following assumptions:
 
 
     $site_name = '@hostmaster';
-    drush_backend_invoke_args("provision-save", array($site_name), array(
+    drush_invoke_process('@none', "provision-save", array($site_name), array(
       'context_type' => 'site',
       'platform' => $old_platform,
       'db_server' => $server,
@@ -148,8 +148,6 @@ We are making the following assumptions:
 function drush_provision_pre_hostmaster_migrate($site, $platform) {
   // wipe out cron entry
   exec('crontab -r');
-  // we can't rely on update.php to run that because it will run too late. this can be removed in 0.5 and above
-  provision_backend_invoke(drush_get_option('site_name'), 'sqlq', array("UPDATE {system} SET weight = 0 WHERE type='module' AND name='hosting';"));
 }
 
 function drush_provision_hostmaster_migrate($site, $platform) {
@@ -157,6 +155,7 @@ function drush_provision_hostmaster_migrate($site, $platform) {
 }
 
 function drush_provision_post_hostmaster_migrate($site, $platform) {
+  provision_backend_invoke(drush_get_option('site_name'), 'cache-clear', array('drush'));
   // we pass the context names we generated to the task so we can enforce that the names
   // stay the same.
   provision_backend_invoke(drush_get_option('site_name'), 'hostmaster-resume', array(), array(

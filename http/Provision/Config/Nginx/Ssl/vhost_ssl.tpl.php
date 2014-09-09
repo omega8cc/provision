@@ -19,10 +19,18 @@ server {
 <?php endif ?>
 
 server {
-  include      <?php print "{$server->include_path}"; ?>/fastcgi_ssl_params.conf;
-  listen       <?php print "{$ip_address}:{$http_ssl_port}"; ?>;
-  server_name  <?php print $this->uri; ?><?php if (!$this->redirection && is_array($this->aliases)) : foreach ($this->aliases as $alias_url) : if (trim($alias_url)) : ?> <?php print $alias_url; ?><?php endif; endforeach; endif; ?>;
-  root         <?php print "{$this->root}"; ?>;
+  include       fastcgi_params;
+  fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  fastcgi_param HTTPS on;
+  fastcgi_param db_type   <?php print urlencode($db_type); ?>;
+  fastcgi_param db_name   <?php print urlencode($db_name); ?>;
+  fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+  fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
+  fastcgi_param db_host   <?php print urlencode($db_host); ?>;
+  fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+  listen        <?php print "{$ip_address}:{$http_ssl_port}"; ?>;
+  server_name   <?php print $this->uri; ?><?php if (!$this->redirection && is_array($this->aliases)) : foreach ($this->aliases as $alias_url) : if (trim($alias_url)) : ?> <?php print $alias_url; ?><?php endif; endforeach; endif; ?>;
+  root          <?php print "{$this->root}"; ?>;
   ssl                        on;
   ssl_certificate            <?php print $ssl_cert; ?>;
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
@@ -31,28 +39,7 @@ server {
   ssl_prefer_server_ciphers  on;
   keepalive_timeout          70;
   <?php print $extra_config; ?>
-<?php
-$nginx_has_upload_progress = drush_get_option('nginx_has_upload_progress');
-if (drush_drupal_major_version() >= 7 || $this->profile == "hostmaster") {
-  if ($server->nginx_has_upload_progress) {
-    print "  include      " . $server->include_path . "/nginx_modern_include.conf;\n";
-  }
-  else {
-    print "  include      " . $server->include_path . "/nginx_legacy_include.conf;\n";
-  }
-}
-elseif (drush_drupal_major_version() == 5) {
-  print "  include      " . $server->include_path . "/nginx_legacy_include.conf;\n";
-}
-else {
-  if ($server->nginx_has_upload_progress) {
-    print "  include      " . $server->include_path . "/nginx_octopus_include.conf;\n";
-  }
-  else {
-    print "  include      " . $server->include_path . "/nginx_legacy_include.conf;\n";
-  }
-}
-?>
+  include                    <?php print $server->include_path; ?>/nginx_vhost_common.conf;
 }
 
 <?php endif; ?>

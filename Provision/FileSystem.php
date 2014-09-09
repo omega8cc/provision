@@ -50,7 +50,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function exists($path) {
     $this->_clear_state();
 
-    $this->last_status = file_exists($path);
+    $this->last_status = file_exists($path) || is_link($path);
     $this->tokens = array('@path' => $path);
 
     return $this;
@@ -118,7 +118,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function unlink($path) {
     $this->_clear_state();
 
-    if (file_exists($path) || is_link($path)) {
+    if (is_file($path) || is_link($path)) {
       $this->last_status = unlink($path);
     }
     else {
@@ -288,14 +288,22 @@ class Provision_FileSystem extends Provision_ChainedState {
 
     $this->tokens = array('@path' => $path, '@target' => $target);
 
-    if (file_exists($path) && is_readable($path)) {
+    if (is_readable($path)) {
       if (is_writeable(dirname($target)) && !file_exists($target) && !is_dir($target)) {
         $this->mkdir($target);
         $oldcwd = getcwd();
         // we need to do this because some retarded implementations of tar (e.g. SunOS) don't support -C
         chdir($target);
-        // same here: some do not support -z
-        $command = 'gunzip -c %s | tar pxf -';
+
+        // We need to check if the archive is gzipped and choose the command accordingly
+        if (substr($path, -2) == 'gz') {
+          // same here: some do not support -z
+          $command = 'gunzip -c %s | tar pxf -';
+        }
+        else {
+          $command = 'tar -pxf %s';
+        }
+
         drush_log(dt('Running: %command in %target', array('%command' => sprintf($command, $path), '%target' => $target)));
         $result = drush_shell_exec($command, $path);
         chdir($oldcwd);

@@ -1,12 +1,22 @@
 
 <?php if ($this->ssl_enabled && $this->ssl_key) : ?>
 
+<?php
+$satellite_mode = drush_get_option('satellite_mode');
+if (!$satellite_mode && $server->satellite_mode) {
+  $satellite_mode = $server->satellite_mode;
+}
+?>
+
 server {
-  include      <?php print "{$server->include_path}"; ?>/fastcgi_ssl_params.conf;
   listen       <?php print "{$ip_address}:{$http_ssl_port}"; ?>;
-  server_name  <?php print $this->uri . ' ' . implode(' ', $this->aliases); ?>;
+  server_name  <?php print $this->uri . ' ' . implode(' ', str_replace('/', '.', $this->aliases)); ?>;
+<?php if ($satellite_mode == 'boa'): ?>
   root         /var/www/nginx-default;
   index        index.html index.htm;
+<?php else: ?>
+  return       404;
+<?php endif; ?>
   ssl                        on;
   ssl_certificate            <?php print $ssl_cert; ?>;
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;

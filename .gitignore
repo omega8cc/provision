@@ -1,3 +1,7 @@
 # Ignore paths from OS X
 .DS_Store
 build-area
+GPATH
+GRTAGS
+GSYMS
+GTAGS

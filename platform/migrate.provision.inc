@@ -26,6 +26,7 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_uri = NULL
   d()->site_enabled = FALSE;
   _provision_drupal_create_settings_file();
   drush_invoke('provision-backup');
+  provision_drupal_push_site();
 
   drush_set_option('old_platform', d()->platform->name);
 
@@ -57,6 +58,8 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_u
   drush_log(dt("Bringing site out of maintenance"));
   d()->site_enabled = true;
   _provision_drupal_create_settings_file();
+  provision_drupal_push_site();
+
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused migration site package')
     ->fail('Could not remove unused migration site package');
@@ -150,7 +153,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_uri = NULL) {
 
   drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
 
-  drush_backend_invoke_args('provision-save', array($target), $options);
+  drush_invoke_process('@none', 'provision-save', array($target), $options);
   provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), array('old_uri' => d()->uri));
   if (!drush_get_error()) {
     drush_log(dt("Bringing site out of maintenance"));
@@ -166,7 +169,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_uri = NULL) {
  * Implementation of drush_hook_COMMAND_rollback().
  */
 function drush_provision_drupal_provision_migrate_rollback($platform) {
-  drush_backend_invoke_args('provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
+  drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
 }
 
 /**

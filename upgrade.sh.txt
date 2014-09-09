@@ -1,6 +1,4 @@
-#! /bin/sh
-
-# $Id$
+#!/bin/sh
 
 ########################################################################
 # Aegir quick upgrade script
@@ -36,23 +34,35 @@ else
   exit 1
 fi
 
-TEMPFILE=`mktemp`
-$DRUSH --pipe @hostmaster status | egrep "site_uri|drupal_root" >> $TEMPFILE || true
-if grep -q 'site_uri' $TEMPFILE; then
-    # this sources the result of drush --pipe so we initialise shell variables used later
-    . $TEMPFILE
-else
-    msg 'could not find running hostmaster site'
-    msg 'try running "drush @hostmaster status" to diagnose and repair'
-    exit 1
-fi
+# Detect the current Drush version to work with
+DRUSH_VERSION=`drush --version --pipe`
 
-AEGIR_DOMAIN="$site_uri"
-OLD_DRUPAL_DIR="$drupal_root"
+case "$DRUSH_VERSION" in
+  5*)
+  TEMPFILE=`mktemp`
+  $DRUSH --pipe @hostmaster status | egrep "site_uri|drupal_root" >> $TEMPFILE || true
+  if grep -q 'site_uri' $TEMPFILE; then
+      # this sources the result of drush --pipe so we initialise shell variables used later
+      . $TEMPFILE
+  else
+      msg 'could not find running hostmaster site'
+      msg 'try running "drush @hostmaster status" to diagnose and repair'
+      exit 1
+  fi
+  AEGIR_DOMAIN="$site_uri"
+  OLD_DRUPAL_DIR="$drupal_root"
+  ;;
+
+  [67]*)
+
+  AEGIR_DOMAIN=`drush @hostmaster status --fields="uri" --field-labels=0`
+  OLD_DRUPAL_DIR=`drush @hostmaster status --fields="root" --field-labels=0`
+
+esac
+
 HOME="$HOME"
 DRUPAL_DIR=$HOME/hostmaster-$AEGIR_VERSION
-DRUSH_VERSION=7.x-4.5
-DRUSH_MAKE_VERSION=6.x-2.3
+DRUSH_VERSION=5.10.0
 BACKUP_DIR=$HOME/pre-upgrade-`date '+%F-%H%M'`
 
 ########################################################################
@@ -110,7 +120,6 @@ EOF
 if [ -w $DRUSH_DIR ]; then
   cat <<EOF
 The version of Drush will be $DRUSH_VERSION
-The version of Drush Make will be $DRUSH_MAKE_VERSION
 EOF
 else
   echo "Drush will not be upgraded as its directory is not writable: $DRUSH_DIR"
@@ -133,9 +142,10 @@ if [ -w $DRUSH_DIR ]; then
   fi
 
   cd $HOME
-  wget http://ftp.drupal.org/files/projects/drush-$DRUSH_VERSION.tar.gz 
-  gunzip -c drush-$DRUSH_VERSION.tar.gz | tar -xf -
-  rm drush-$DRUSH_VERSION.tar.gz
+  wget http://github.com/drush-ops/drush/archive/$DRUSH_VERSION.zip
+  unzip $DRUSH_VERSION.zip
+  rm $DRUSH_VERSION.zip
+  mv drush-$DRUSH_VERSION $DRUSH_DIR
 fi
 
 # fetch new version of provision
@@ -148,18 +158,15 @@ if [ -d "provision" ] ; then
 fi
 
 if [ "$AEGIR_VERSION" = "6.x-2.x" ]; then
-  git clone http://git.drupal.org/project/provision.git $HOME/.drush/provision
+  git clone --branch "$AEGIR_VERSION" http://git.drupal.org/project/provision.git $HOME/.drush/provision
 else
   wget http://ftp.drupal.org/files/projects/provision-$AEGIR_VERSION.tar.gz
   gunzip -c provision-$AEGIR_VERSION.tar.gz | tar -xf -
   rm provision-$AEGIR_VERSION.tar.gz
 fi
 
-if [ -d "drush_make" ] ; then
-  msg "Moving existing drush_make into $BACKUP_DIR"
-  mv drush_make $BACKUP_DIR
-fi
-$DRUSH dl drush_make-$DRUSH_MAKE_VERSION --destination="$HOME/.drush"
+# Clear the drush command cache
+drush cache-clear drush
 
 cd $OLD_DRUPAL_DIR
 $DRUSH hostmaster-migrate $AEGIR_DOMAIN $DRUPAL_DIR

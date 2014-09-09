@@ -21,14 +21,19 @@
 class Provision_Service_http_pack extends Provision_Service_http {
   static function option_documentation() {
     return array(
-      '--slave_web_servers' => 'server with pack: comma-separated list of slave web servers.',
-      '--master_web_servers' => 'server with pack: comma-separated list of master web servers.',
+      'slave_web_servers' => 'server with pack: comma-separated list of slave web servers.',
+      'master_web_servers' => 'server with pack: comma-separated list of master web servers.',
     );
   }
 
   function init_server() {
     $this->server->setProperty('slave_web_servers', array(), TRUE);
     $this->server->setProperty('master_web_servers', array(), TRUE);
+  }
+
+  function init_site() {
+    $this->_each_server($this->server->master_web_servers, __FUNCTION__);
+    $this->_each_server($this->server->slave_web_servers, __FUNCTION__);
   }
 
   /**
@@ -62,6 +67,8 @@ class Provision_Service_http_pack extends Provision_Service_http {
   function delete_config($config) { 
     $this->_each_server($this->server->master_web_servers, __FUNCTION__, array($config));
     $this->_each_server($this->server->slave_web_servers, __FUNCTION__, array($config));
+
+    return $this;
   }
 
   function restart() {

@@ -1,11 +1,14 @@
 <Directory <?php print $this->root; ?>>
     Order allow,deny
     Allow from all
+    Satisfy any
+    Require all granted
+
 <?php print $extra_config; ?>
 
 
 <?php
-  if (file_exists("{$this->root}/.htaccess")) {
+  if (is_readable("{$this->root}/.htaccess")) {
     print "\n# Include the platform's htaccess file\n";
     print "Include {$this->root}/.htaccess\n";
   }

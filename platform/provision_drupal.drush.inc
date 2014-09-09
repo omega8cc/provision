@@ -168,7 +168,7 @@ function provision_drupal_drush_exit() {
  *   If the file exists, return TRUE, else return FALSE.
  */
 function _provision_drupal_site_exists() {
-  return file_exists(d()->site_path . '/settings.php');
+  return is_readable(d()->site_path . '/settings.php');
 }
 
 /**
@@ -227,55 +227,41 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   }
 }
 
-function provision_drupal_sync_site() {
-  provision_file()->create_dir(d()->server->http_platforms_path, dt("Platforms"), 0711);
-  d()->server->sync(d()->server->http_platforms_path, array(
-    'exclude' => d()->server->http_platforms_path . '/*',  // Make sure remote directory is created
-  ));
-  d()->service('http')->sync(d()->root, array('exclude-sites' => TRUE));
-  if (d()->type === 'site') {
-    // Sync all filesystem changes to the remote server.
-    d()->service('http')->sync(d()->site_path, array('no-delete' => TRUE));
-  }
-}
-
 /**
  * Sync the current Drupal site BACK from a slave. Call before
  * running operations that need files where the slave is authoritative.
  *
  * E.g. before a backup is made.
  */
-function provision_drupal_sync_site_back() {
+function provision_drupal_fetch_site() {
+
   // synch filesystem changes back from the remote server.
   d()->service('http')->fetch(d()->site_path . '/files/');
   d()->service('http')->fetch(d()->site_path . '/private/');
   d()->service('http')->fetch(d()->site_path . '/modules/');
   d()->service('http')->fetch(d()->site_path . '/themes/');
   d()->service('http')->fetch(d()->site_path . '/libraries/');
+  // Questionable... who is authoritive?
   d()->service('http')->fetch(d()->site_path . '/local.settings.php');
 }
 
 /**
  * Generate a settings file for the site.
- *
- * @param url
- *   The url of the site being invoked.
- * @param data
- *   A reference to the associated array containing the data for the site. This needs to be a reference,
- *   because the modules might provide additional information about the site.
  */
 function _provision_drupal_create_settings_file() {
   $config = new Provision_Config_Drupal_Settings(d()->name, drush_get_context('site'));
   $config->write();
-  provision_drupal_sync_site();
 }
 
 /**
  * Create the directories needed to host a drupal site
  *
  * Also maintains permissions on existing directories.
- */
-function _provision_drupal_create_directories($url = NULL, $profile = NULL) {
+ *
+ * @param $url
+ *   The url of the site being invoked.
+  */
+function _provision_drupal_create_directories($url = NULL) {
   if (is_null($url)) {
     if (d()->type == 'site') {
       $url = d()->uri;
@@ -409,6 +395,10 @@ function _provision_drupal_create_directories($url = NULL, $profile = NULL) {
     "sites/$url/private/config/staging"
   );
 
+  // Allow other commands to add or alter the directories to be created.
+  drush_command_invoke_all_ref('provision_drupal_create_directories_alter', $mkdir, $url);
+  drush_command_invoke_all_ref('provision_drupal_chgrp_directories_alter', $chgrp, $url);
+
   foreach ($mkdir as $path => $perm) {
     if (!is_dir($path)) {
       provision_file()->mkdir($path)
@@ -416,14 +406,81 @@ function _provision_drupal_create_directories($url = NULL, $profile = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
 
-    provision_file()->chmod($path, $perm, !in_array($path, $not_recursive))
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions <code>@path</code> to @perm');
+    if ($perm !== FALSE) {
+      provision_file()->chmod($path, $perm, !in_array($path, $not_recursive))
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions <code>@path</code> to @perm');
+    }
   }
   foreach ($chgrp as $path => $group) {
-    provision_file()->chgrp($path, $group, !in_array($path, $not_recursive))
-      ->succeed('Changed group ownership of <code>@path</code> to @gid')
-      ->fail('Could not change group ownership <code>@path</code> to @gid');
+    if ($group !== FALSE) {
+      provision_file()->chgrp($path, $group, !in_array($path, $not_recursive))
+        ->succeed('Changed group ownership of <code>@path</code> to @gid')
+        ->fail('Could not change group ownership <code>@path</code> to @gid');
+    }
+  }
+}
+
+/**
+ * Call the core file_create_htaccess() functions.
+ *
+ * Unlink the files first to avoid permission issues.
+ * If drupal already created the file then it's owned by e.g. www-data and aegir can not chmod those.
+ *
+ * @see https://drupal.org/SA-CORE-2013-003
+ */
+function _provision_drupal_ensure_htaccess_update() {
+
+  if (drush_drupal_major_version() == 7) {
+
+    // Copied from modules/system/system.install system_requirements()
+    $htaccess_files['public://.htaccess'] = array(
+      'directory' => variable_get('file_public_path', conf_path() . '/files'),
+    );
+    if ($private_files_directory = variable_get('file_private_path')) {
+      $htaccess_files['private://.htaccess'] = array(
+        'directory' => $private_files_directory,
+      );
+    }
+    $htaccess_files['temporary://.htaccess'] = array(
+      'directory' => variable_get('file_temporary_path', file_directory_temp()),
+    );
+    foreach ($htaccess_files as $htaccess_file => $info) {
+      // Check for the string which was added to the recommended .htaccess file
+      // in the latest security update.
+      if (!file_exists($htaccess_file) || !($contents = @file_get_contents($htaccess_file)) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
+
+        // Aegir specific
+        @unlink($htaccess_file);
+        file_create_htaccess($info['directory'], FALSE);
+        drush_log(dt('Updated @file to match http://drupal.org/SA-CORE-2013-003', array('@file' => $info['directory'] . '/.htaccess')), 'notice');
+        $path = file_stream_wrapper_get_instance_by_uri($htaccess_file)->getDirectoryPath();
+        d()->service('http')->sync(d()->root . '/' . $info['directory'] . '/.htaccess');
+      }
+    }
+  }
+  elseif (drush_drupal_major_version() == 6 && function_exists('file_create_htaccess')) {
+
+    // Copied from modules/system/system.install system_requirements()
+    $htaccess_files['files_htaccess'] = array(
+      'directory' => file_directory_path(),
+    );
+    $htaccess_files['temporary_files_htaccess'] = array(
+      'directory' => file_directory_temp(),
+    );
+    foreach ($htaccess_files as $key => $info) {
+      // Check for the string which was added to the recommended .htaccess file
+      // in the latest security update.
+      $htaccess_file = $info['directory'] . '/.htaccess';
+      if (!file_exists($htaccess_file) || !($contents = @file_get_contents($htaccess_file)) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
+
+        // Aegir specific
+        @unlink($info['directory'] . '/.htaccess');
+        file_create_htaccess($info['directory'], NULL);
+        drush_log(dt('Updated @file to match http://drupal.org/SA-CORE-2013-003', array('@file' => $info['directory'] . '/.htaccess')), 'notice');
+        d()->service('http')->sync(d()->root . '/' . $info['directory'] . '/.htaccess');
+      }
+    }
   }
 }
 
@@ -440,21 +497,15 @@ function _provision_drupal_rebuild_caches() {
  * Find available profiles on this platform.
  */
 function _provision_find_profiles() {
-  if (drush_drupal_major_version() >= 8) {
-    include_once('core/includes/install.inc');
-    $profiles_subdir = "./core/profiles";
-  }
-  else {
-    include_once('includes/install.inc');
-    $profiles_subdir = "./profiles";
-  }
-  if (!$dir = opendir($profiles_subdir)) {
+  include_once('includes/install.inc');
+
+  if (!$dir = opendir("./profiles")) {
     drush_log(dt("Cannot find profiles directory"), 'error');
     return FALSE;
   }
   while (FALSE !== ($name = readdir($dir))) {
     $languages = array();
-    $file = "$profiles_subdir/$name/$name.profile";
+    $file = "./profiles/$name/$name.profile";
     if ($name == '..' || $name == '.' || !file_exists($file)) {
       continue;
     }
@@ -466,9 +517,13 @@ function _provision_find_profiles() {
 
     $profile->info = array();
 
-    $info_file = "$profiles_subdir/$name/$name.info";
+    $info_file = "./profiles/$name/$name.info";
     if (file_exists($info_file)) {
       $profile->info = provision_parse_info_file($info_file);
+      // Skip hidden profiles
+      if (isset($profile->info['hidden']) && $profile->info['hidden'] == 1) {
+        continue;
+      }
     }
 
     require_once($profile->filename);
@@ -479,8 +534,8 @@ function _provision_find_profiles() {
 
     $languages['en'] = 1;
     // Find languages available
-    $files = array_keys(drush_scan_directory($profiles_subdir . '/' . $name . '/translations', '/\.po$/', array('.', '..', 'CVS'), 0, FALSE, 'filepath'));
-    $files = array_merge($files, array_keys(drush_scan_directory($profiles_subdir . '/' . $name , '/\.po$/', array('.', '..', 'CVS'), 0, FALSE, 'filepath')));
+    $files = array_keys(drush_scan_directory('./profiles/' . $name . '/translations', '/\.po$/', array('.', '..', 'CVS'), 0, FALSE, 'filepath'));
+    $files = array_merge($files, array_keys(drush_scan_directory('./profiles/' . $name , '/\.po$/', array('.', '..', 'CVS'), 0, FALSE, 'filepath')));
     if (is_array($files)) {
       foreach ($files as $file) {
         if (preg_match('!(/|\.)([^\./]+)\.po$!', $file, $langcode)) {
@@ -493,9 +548,9 @@ function _provision_find_profiles() {
     // Drupal 7 renamed the default installation profile to 'standard'
     // Aegir now allows projects to specify an "old short name" to provide an upgrade path when projects get renamed.
     if (empty($profile->info['old_short_name'])) {
-      if ($profile->name == 'standard') {
-        $profile->info['old_short_name'] = 'default';
-      }
+    if ($profile->name == 'standard') {
+      $profile->info['old_short_name'] = 'default';
+    }
       elseif ($profile->name == 'minimal') {
         $profile->info['old_short_name'] = 'acquia';
       }
@@ -525,6 +580,7 @@ function _provision_find_profiles() {
 }
 
 function provision_drupal_find_sites() {
+  $sites = array();
   if ($dir = opendir("./sites")) {
     while (FALSE !== ($subdir = readdir($dir))) {
       // skip internal directory pointers
@@ -606,11 +662,10 @@ function _provision_drupal_maintain_aliases() {
     }
     else {
       _provision_drupal_delete_aliases();
-
       if (!d()->redirection) {
         foreach (d()->aliases as $alias) {
           if ($alias = trim($alias)) {
-            provision_file()->symlink(d()->uri, d()->root . '/sites/' . $alias)
+            provision_file()->symlink(d()->uri, d()->root . '/sites/' . str_replace('/', '.', $alias))
               ->succeed('Created symlink for alias @target')
               ->fail('Could not create symlink for alias @target');
             d()->service('http')->sync(d()->root . '/sites/' . $alias);
@@ -635,7 +690,6 @@ function _provision_drupal_delete_aliases() {
     }
     else {
       $aliases = provision_drupal_find_aliases();
-
       foreach ($aliases as $alias) {
         $path = d()->root . '/sites/' . $alias;
         provision_file()->unlink($path)
@@ -726,13 +780,17 @@ function provision_drupal_system_map() {
   $packages['profiles'][$profile]->status = 1;
 
   foreach (_provision_system_query("module") as $module) {
-    $frags = explode("/", $module->filename);
-    // ignore site-specific modules
-    if ($frags[0] == 'sites' && $frags[1] != 'all') {
-      continue;
-    }
     $info_file = sprintf("%s/%s.info", dirname($module->filename), $module->name);
     $module->info = provision_parse_info_file($info_file);
+    // Skip hidden modules
+    if (isset($module->info['hidden']) && $module->info['hidden'] == 1) {
+      continue;
+    }
+    $frags = explode("/", $module->filename);
+    // flag site-specific modules
+    if ($frags[0] == 'sites' && $frags[1] != 'all') {
+      $module->platform = -1;
+    }
 
     _provision_cvs_deploy($module);
     $module->filename = realpath($module->filename);
@@ -747,9 +805,9 @@ function provision_drupal_system_map() {
   // XXX: mostly a copy-paste from above
   foreach (_provision_system_query("theme") as $theme) {
     $frags = explode("/", $theme->filename);
-    // ignore site-specific themes
+    // flag site-specific themes
     if ($frags[0] == 'sites' && $frags[1] != 'all') {
-      continue;
+      $theme->platform = -1;
     }
     $info_file = sprintf("%s/%s.info", dirname($theme->filename), $theme->name);
     $theme->info = provision_parse_info_file($info_file);
@@ -775,7 +833,6 @@ function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
   switch ($scope) {
     case 'base' :
       $searchpaths[] = sprintf("%s/%s", $drupal_root, $type);
-      $searchpaths[] = sprintf("%s/core/%s", $drupal_root, $type);
       break;
     default :
       if ($key) {
@@ -800,6 +857,13 @@ function _provision_drupal_find_modules($scope, $key = '') {
     $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
   }
   foreach ($files as $name => $info) {
+    $info_file = sprintf("%s/%s.info", dirname($info->filename), $name);
+    $files[$name]->info = provision_parse_info_file($info_file);
+    // Skip hidden modules
+    if (isset($files[$name]->info['hidden']) && $files[$name]->info['hidden'] != FALSE) {
+      unset($files[$name]);
+      continue;
+    }
     $install_file = sprintf("%s/%s.install", dirname($info->filename), $name);
     $schema_version = 0;
     if (file_exists($install_file)) {
@@ -813,8 +877,6 @@ function _provision_drupal_find_modules($scope, $key = '') {
         $schema_version = max($function_matches[2]);
       }
     }
-    $info_file = sprintf("%s/%s.info", dirname($info->filename), $name);
-    $files[$name]->info = provision_parse_info_file($info_file);
     $files[$name]->schema_version = $schema_version;
     _provision_cvs_deploy($files[$name]);
   }
@@ -873,6 +935,7 @@ function provision_reload_config($context, $file = NULL) {
   if (file_exists($file)) {
     drush_log("Reloading $context drushrc.php from $file");
     include($file);
+    // $options will be defined by the config file included above.
     if (sizeof($options)) {
       $options = array_merge(drush_get_context($context, array()), $options);
       drush_set_context($context, $options);
@@ -911,7 +974,7 @@ function _provision_client_create_symlink() {
 function _provision_client_delete_old_symlink() {
   $previous = d()->server->clients_path . '/' . d()->client_name . '/' . d()->uri;
   // this is necessary because unlink doesn't fail on missing files (!)
-  $found = (file_exists($previous) || is_link($previous));
+  $found = (is_file($previous) || is_link($previous));
   provision_file()->unlink($previous);
   if (!$found) {
     drush_log(dt("couldn't find previous client symlink, iterating through all sites"));
@@ -920,7 +983,7 @@ function _provision_client_delete_old_symlink() {
       while (($file = readdir($dh)) !== false) {
         if ($file != '.' && $file != '..') {
           $path = d()->server->clients_path . '/' . $file . '/' . d()->uri;
-          if (file_exists($path) || is_link($path)) {
+          if (is_file($path) || is_link($path)) {
             provision_file()->unlink($path);
             drush_log(dt("removed previous symlink in @path", array("@path" => $path)), 'success');
             break; // found it

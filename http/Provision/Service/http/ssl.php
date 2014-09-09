@@ -38,7 +38,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
 
     $this->context->setProperty('ssl_enabled', 0);
     $this->context->setProperty('ssl_key', NULL);
-    $this->context->setProperty('ip_address', '*');
+    $this->context->setProperty('ip_addresses', array());
   }
 
 
@@ -47,7 +47,16 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
     $data['http_ssl_port'] = $this->server->http_ssl_port;
 
     if ($config == 'site' && $this->context->ssl_enabled) {
-      $data['ip_address'] = $this->context->ip_address;
+      foreach ($this->context->ip_addresses as $server => $ip_address) {
+        if ($server == $this->server->name || '@' . $server == $this->server->name) {
+          $data['ip_address'] = $ip_address;
+          break;
+        }
+      }
+      if (!isset($data['ip_address'])) {
+        drush_log(dt('No proper IP provided by the frontend for server %servername, using wildcard', array('%servername' => $this->server->name)), 'info');
+        $data['ip_address'] = '*';
+      }
       if ($this->context->ssl_enabled == 2) {
         $data['ssl_redirection'] = TRUE;
         $data['redirect_url'] = "https://{$this->context->uri}";
@@ -117,7 +126,17 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
 
     if (provision_file()->exists($path)->status()) {
       drush_log(dt('generating 2048 bit RSA key in %path/', array('%path' => $path)));
-      // generate a key
+      /* 
+       * according to RSA security and most sites I could read, 1024
+       * was recommended until 2010-2015 and 2048 is now the
+       * recommended length for more sensitive data. we are therefore
+       * taking the safest route.
+       *
+       * http://www.javamex.com/tutorials/cryptography/rsa_key_length.shtml
+       * http://www.vocal.com/cryptography/rsa-key-size-selection/
+       * https://en.wikipedia.org/wiki/Key_size#Key_size_and_encryption_system
+       * http://www.redkestrel.co.uk/Articles/CSR.html
+       */
       drush_shell_exec('openssl genrsa -out %s/openssl.key 2048', $path)
         || drush_set_error('SSL_KEY_GEN_FAIL', dt('failed to generate SSL key in %path', array('%path' => $path . '/openssl.key')));
 

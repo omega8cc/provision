@@ -1,4 +1,138 @@
-aegir-provision (2.0~alpha) UNRELEASED; urgency=low
+aegir2-provision (2.1) unstable; urgency=medium
+
+  * This release ships with support for Apache 2.4, along with updates
+    to Drupal core and ModalframeAPI. A number of bug-fixes are included
+    affecting deployment of Drupal 7 sites, aliases with sub-directory
+    installs, backups, and more: http://community.aegirproject.org/2.1
+
+ -- Christopher Gervais <chris@ergonlogic.com>  Wed, 23 Apr 2014 17:06:21 -0400
+
+aegir2-provision (2.0) unstable; urgency=low
+
+  * stable 2.0 release
+  * significant stability improvements, Drush 5 and 6 support,
+    subdirectory multisite support, improved nginx support, native views
+    and more: http://community.aegirproject.org/2.0
+
+ -- Antoine Beaupré <anarcat@debian.org>  Wed, 08 Jan 2014 15:05:24 -0500
+
+aegir2-provision (2.0~rc5.1) testing; urgency=low
+
+  * rebuild package with all makefiles and modules
+
+ -- Antoine Beaupré <anarcat@debian.org>  Thu, 17 Oct 2013 16:15:42 -0400
+
+aegir2-provision (2.0~rc5) unstable; urgency=low
+
+  * This release ships a ton of bugfixes we have found in RC4. We also
+    finalised subdirectory support which, while it still has some issues,
+    is now actually working correctly, even on multiple servers. The IP
+    allocation code for SSL on multiple servers was also fixed, making
+    this probably the most solid multi-server Aegir release ever. We also
+    did some API cleanups that seemed necessary before the final 2.0
+    release.
+  * Finally, we should also mentionned that the install process was
+    significantly sped up thanks to the use of Drupal.org distributions to
+    ship a single tarball for the hostmaster platform instead of using a
+    makefile to build it from its parts all the times. During out tests,
+    the platform make step went from 60 seconds to 1.5 seconds, an amazing
+    improvement!
+  * Note that the binary package name changes here
+  
+ -- Antoine Beaupré <anarcat@debian.org>  Thu, 17 Oct 2013 10:21:36 -0400
+
+aegir-provision2 (2.0~rc4) unstable; urgency=low
+
+  * Fixes a missed step in the 2.0~rc3 release process.
+
+ -- Christopher Gervais <chris@ergonlogic.com>  Fri, 30 Aug 2013 15:46:06 -0400
+
+aegir-provision2 (2.0~rc3) unstable; urgency=low
+
+  * This release mainly fixes a couple critical bugs in 2.0-rc2 that were
+    causing problems when sites were being cloned or renamed.
+  * We've added a couple small features, such as additional options during
+    hostmaster-install, and allowing the redirect to the Welcome page to be
+    turned off.
+  * Also, we've made a small addition to the API, in that there is now a hook
+    available (hook_provision_drupal_create_directories_alter()) to allow
+    altering the directories created when a site installed.
+
+ -- Christopher Gervais <chris@ergonlogic.com>  Thu, 29 Aug 2013 11:53:43 -0400
+
+aegir-provision2 (2.0~rc2) unstable; urgency=low
+
+  * This release mainly fixes an error during the rc1 release, which had not
+    been properly updated to pull in the latest tagged code.
+  * A small fix to SSL handling, and updates to external dependencies are
+    the only other changes since rc1.
+  * Full release notes at http://community.aegirproject.org/2.0-rc2
+
+ -- Christopher Gervais <chris@ergonlogic.com>  Sat, 20 Jul 2013 15:32:46 -0400
+
+aegir-provision2 (2.0~rc1) unstable; urgency=low
+
+  * This release mainly targets a few critical bugs that were found in the
+    second beta, mostly related to ongoing Views and Drush integration and
+    access control. We also introduce a number of new features and finally
+    drop support for provisionning Drupal 5 sites completely.
+  * We've added some long-standing UI enhancements, and fixed a number of
+    bugs in the views integration and other usability problems, as well as
+    overhauling our access control.
+  * Full release notes at http://community.aegirproject.org/2.0-rc1
+
+ -- Christopher Gervais <chris@ergonlogic.com>  Fri, 19 Jul 2013 14:41:19 -0400
+
+aegir-provision2 (2.0~beta2) unstable; urgency=low
+
+  * This release mainly targets a few critical bugs that were found in the
+    first beta, namely IP allocation on non-SSL and non-cluster sites
+    which was completely broken, some problems with the new views
+    integration and the Debian package.
+  * We also introduce a few new features and finally drop support for
+    provisionning Drupal 5 sites completely.
+  * Full release notes at http://community.aegirproject.org/2.0-beta2
+
+ -- Antoine Beaupré <anarcat@debian.org>  Wed, 26 Jun 2013 14:30:31 -0400
+
+aegir-provision2 (2.0~beta1) unstable; urgency=low
+
+  * Feature freeze begins, only critical and major bug fixes will be
+    committed.
+  * A few bugfixes, especially to the Debian package, the new views code
+    and nginx support.
+  * This release adds subdirectory support, a nice homepage and fixes SSL
+    support and IP allocation on clusters. We also ship with a wider
+    variety of roles.
+  * Full release notes at http://community.aegirproject.org/2.0-beta1
+
+ -- Antoine Beaupré <anarcat@debian.org>  Fri, 14 Jun 2013 17:01:07 -0400
+
+aegir-provision2 (2.0~alpha2) unstable; urgency=low
+
+  * This release features improvements to the IP management mechanisms that
+    were broken in the last alpha1 release. We now manage IP addresses
+    individually, and check if an IP is in use before allowing it to be
+    deleted.
+
+  * We also finally leave the files alone on spokes in the multi-server
+    model, a long-standing bug in the 1.x series that led to data loss. A
+    lot of work was done to standardize the Nginx configuration to allow
+    for simpler, yet optional, configurations that leave the admin in
+    charge of choosing the optimisation methods. This is still work in
+    progress, tracked in #1635596: nginx: do not decide the policy for
+    users.
+
+ -- Antoine Beaupré <anarcat@debian.org>  Thu, 16 May 2013 19:13:17 -0400
+
+aegir-provision2 (2.0~alpha1) unstable; urgency=low
+
+  * first alpha release of the 2.x branch, release notes too long to
+    document here: http://community.aegirproject.org/2.0-alpha1
+
+ -- Antoine Beaupré <anarcat@debian.org>  Thu, 07 Feb 2013 16:52:49 -0500
+
+aegir-provision (2.0~0.0alpha0) UNRELEASED; urgency=low
 
   * switch to a native package
   
@@ -12,6 +146,30 @@ aegir-provision (2.0~alpha) UNRELEASED; urgency=low
     (1.x, 2.x and debian, debian2x) to have a 2.x debian package.
 
  -- Antoine Beaupré <anarcat@debian.org>  Tue, 06 Mar 2012 14:39:41 -0500
+
+aegir-provision (1.8) testing; urgency=low
+
+  * new release: various bugfixes to regressions introduced in 1.7, a few
+    general bug fixes and lots of Nginx fixes.
+
+ -- Steven Jones <steven.jones@computerminds.co.uk>  Wed, 18 Apr 2012 09:34:44 +0100
+
+aegir-provision (1.7) testing; urgency=low
+
+  * new release: various bugfixes that have accumulated in the issue queue
+    since the 1.6 release, including a lot of fixes on Nginx support. We
+    also ship a new clustering module aimed at lightweight slave
+    deployments named the pack module, designed to replace the cluster
+    module which has performance and configuration issues.
+
+ -- Antoine Beaupré <anarcat@debian.org>  Tue, 06 Mar 2012 18:39:37 -0500
+
+aegir-provision (1.6+dev) unstable; urgency=low
+
+  * merge in the debian branch to the main 1.x branch, making this a
+    native package.
+
+ -- Antoine Beaupré <anarcat@debian.org>  Thu, 16 Feb 2012 15:47:18 -0500
 
 aegir-provision (1.6-1+webpack) testing; urgency=low
 

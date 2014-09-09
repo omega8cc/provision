@@ -4,6 +4,50 @@
 ###  nginx.conf main
 #######################################################
 
+<?php
+$nginx_config_mode = drush_get_option('nginx_config_mode');
+if (!$nginx_config_mode && $server->nginx_config_mode) {
+  $nginx_config_mode = $server->nginx_config_mode;
+}
+
+$nginx_is_modern = drush_get_option('nginx_is_modern');
+if (!$nginx_is_modern && $server->nginx_is_modern) {
+  $nginx_is_modern = $server->nginx_is_modern;
+}
+
+$nginx_has_gzip = drush_get_option('nginx_has_gzip');
+if (!$nginx_has_gzip && $server->nginx_has_gzip) {
+  $nginx_has_gzip = $server->nginx_has_gzip;
+}
+
+$nginx_has_upload_progress = drush_get_option('nginx_has_upload_progress');
+if (!$nginx_has_upload_progress && $server->nginx_has_upload_progress) {
+  $nginx_has_upload_progress = $server->nginx_has_upload_progress;
+}
+
+$satellite_mode = drush_get_option('satellite_mode');
+if (!$satellite_mode && $server->satellite_mode) {
+  $satellite_mode = $server->satellite_mode;
+}
+
+if ($nginx_is_modern) {
+  print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
+}
+else {
+  print "  limit_zone limreq \$binary_remote_addr 10m;\n";
+}
+
+if ($nginx_has_gzip) {
+  print "  gzip_static       on;\n";
+}
+
+if ($nginx_has_upload_progress) {
+  print "  upload_progress uploads 1m;\n";
+}
+?>
+
+<?php if ($nginx_config_mode == 'extended'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
  ## FastCGI params
   fastcgi_param  SCRIPT_FILENAME     $document_root$fastcgi_script_name;
   fastcgi_param  QUERY_STRING        $query_string;
@@ -28,26 +72,30 @@
   fastcgi_param  GEOIP_COUNTRY_NAME  $geoip_country_name;
   fastcgi_param  REDIRECT_STATUS     200;
   fastcgi_index  index.php;
-
- ## Default index files
-  index         index.php index.html;
+<?php endif; ?>
 
  ## Size Limits
   client_body_buffer_size        64k;
   client_header_buffer_size      32k;
+<?php if ($satellite_mode == 'boa'): ?>
   client_max_body_size          100m;
+<?php endif; ?>
   connection_pool_size           256;
   fastcgi_buffer_size           128k;
   fastcgi_buffers             256 4k;
   fastcgi_busy_buffers_size     256k;
   fastcgi_temp_file_write_size  256k;
   large_client_header_buffers 32 32k;
+<?php if ($satellite_mode == 'boa'): ?>
   map_hash_bucket_size           192;
+<?php endif; ?>
   request_pool_size               4k;
   server_names_hash_bucket_size  512;
+<?php if ($satellite_mode == 'boa'): ?>
   server_names_hash_max_size    8192;
   types_hash_bucket_size         512;
   variables_hash_max_size       1024;
+<?php endif; ?>
 
  ## Timeouts
   client_body_timeout            180;
@@ -74,32 +122,25 @@
 
  ## General Options
   ignore_invalid_headers          on;
-<?php
-$nginx_is_modern = drush_get_option('nginx_is_modern');
-if ($nginx_is_modern) {
-  print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
-}
-else {
-  print "  limit_zone limreq \$binary_remote_addr 10m;\n";
-}
-?>
   recursive_error_pages           on;
   reset_timedout_connection       on;
   fastcgi_intercept_errors        on;
+<?php if ($satellite_mode == 'boa'): ?>
   server_tokens                  off;
   fastcgi_hide_header         'Link';
   fastcgi_hide_header  'X-Generator';
   fastcgi_hide_header 'X-Powered-By';
   fastcgi_hide_header 'X-Drupal-Cache';
-
- ## TCP options moved to /etc/nginx/nginx.conf
+<?php endif; ?>
 
  ## SSL performance
   ssl_session_cache   shared:SSL:10m;
   ssl_session_timeout            10m;
 
+<?php if ($satellite_mode == 'boa'): ?>
  ## GeoIP support
   geoip_country /usr/share/GeoIP/GeoIP.dat;
+<?php endif; ?>
 
  ## Compression
   gzip_buffers      16 8k;
@@ -127,16 +168,10 @@ else {
     text/xml;
   gzip_vary         on;
   gzip_proxied      any;
-<?php
-$nginx_has_gzip = drush_get_option('nginx_has_gzip');
-if ($nginx_has_gzip) {
-  print "  gzip_static       on;\n";
-}
-$nginx_has_upload_progress = drush_get_option('nginx_has_upload_progress');
-if ($nginx_has_upload_progress) {
-  print "  upload_progress uploads 1m;\n";
-}
-?>
+<?php endif; ?>
+
+ ## Default index files
+  index         index.php index.html;
 
  ## Log Format
   log_format        main '"$proxy_add_x_forwarded_for" $host [$time_local] '
@@ -146,9 +181,12 @@ if ($nginx_has_upload_progress) {
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
-  error_log              /var/log/nginx/error.log crit;
 
 <?php print $extra_config; ?>
+<?php if ($nginx_config_mode == 'extended'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
+  error_log              /var/log/nginx/error.log crit;
+<?php endif; ?>
 #######################################################
 ###  nginx default maps
 #######################################################
@@ -167,7 +205,7 @@ map $http_user_agent $device {
 ### Set a cache_uid variable for authenticated users (by @brianmercer and @perusio, fixed by @omega8cc).
 ###
 map $http_cookie $cache_uid {
-  default  '';
+  default                                        '';
   ~SESS[[:alnum:]]+=(?<session_id>[[:graph:]]+)  $session_id;
 }
 
@@ -177,14 +215,6 @@ map $http_cookie $cache_uid {
 map $request_uri $key_uri {
   default                                                                            $request_uri;
   ~(?<no_args_uri>[[:graph:]]+)\?(.*)(utm_|__utm|_campaign|gclid|source=|adv=|req=)  $no_args_uri;
-}
-
-###
-### Set cache expiration depending on the Drupal core version.
-###
-map $sent_http_x_purge_level $will_expire_in {
-  default   on-demand;
-  ~*5|none  5m;
 }
 
 ###
@@ -199,7 +229,7 @@ map $http_user_agent $is_crawler {
 ### Deny all known bots/spiders on some URIs.
 ###
 map $http_user_agent $is_bot {
-  default  '';
+  default                                                    '';
   ~*crawl|bot|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  is_bot;
 }
 
@@ -215,51 +245,35 @@ map $http_user_agent $deny_on_high_load {
 ### Deny listed requests for security reasons.
 ###
 map $args $is_denied {
-  default  '';
-  ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\.  is_denied;
+  default                                                                                                      '';
+  ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\. is_denied;
 }
+<?php endif; ?>
 
 #######################################################
 ###  nginx default server
 #######################################################
 
-<?php
-$ip_address = !empty($ip_address) ? $ip_address : '*';
-?>
 server {
-<?php
-if ($ip_address == '*') {
-  print "  listen       {$ip_address}:{$http_port};\n";
-}
-else {
-  foreach ($server->ip_addresses as $ip) {
-    print "  listen       {$ip}:{$http_port};\n";
-  }
-}
-?>
+  listen       *:<?php print $http_port; ?>;
   server_name  _;
   location / {
-     expires 99s;
-     add_header Cache-Control "public, must-revalidate, proxy-revalidate";
-     add_header Access-Control-Allow-Origin *;
-     root   /var/www/nginx-default;
-     index  index.html index.htm;
+<?php if ($satellite_mode == 'boa'): ?>
+    expires 99s;
+    add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+    add_header Access-Control-Allow-Origin *;
+    root   /var/www/nginx-default;
+    index  index.html index.htm;
+<?php else: ?>
+    return 404;
+<?php endif; ?>
   }
 }
 
+<?php if ($satellite_mode == 'boa'): ?>
 server {
-<?php
-if ($ip_address == '*') {
-  print "  listen       {$ip_address}:{$http_port};\n";
-}
-else {
-  foreach ($server->ip_addresses as $ip) {
-    print "  listen       {$ip}:{$http_port};\n";
-  }
-  print "  listen       127.0.0.1:{$http_port};\n";
-}
-?>
-  server_name 127.0.0.1;
+  listen       *:<?php print $http_port; ?>;
+  server_name  127.0.0.1;
   location /nginx_status {
     stub_status on;
     access_log off;
@@ -267,6 +281,7 @@ else {
     deny all;
   }
 }
+<?php endif; ?>
 
 #######################################################
 ###  nginx virtual domains

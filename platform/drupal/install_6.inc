@@ -9,8 +9,10 @@ $GLOBALS['profile'] = d()->profile;
 $GLOBALS['install_locale'] = d()->language;
 $GLOBALS['base_url'] = provision_get_base_url();
 
+// @TODO Document how/why this works.
+require_once 'includes/install.inc';  // From the Drupal platform.
+require_once 'install.inc';           // From Provision.
 
-require_once 'includes/install.inc';
 define('MAINTENANCE_MODE', 'install');
 
 /**
@@ -45,13 +47,16 @@ function install_verify_settings() {
   return FALSE;
 }
 
-function install_create_admin_user($client_email = NULL) {
-  if (!$client_email) {
-    $client_email = 'webmaster@localhost';
+function install_create_admin_user($client_email) {
+  $name = drush_get_option('admin_user', PROVISION_DEFAULT_ADMIN_USER);
+  if ($error = user_validate_name($name)) {
+    drush_log(dt('Error setting UID username to `!user`: ', array('!user' => $name)) . $error . dt(' Using default (!default) instead.', array('!default' => PROVISION_DEFAULT_ADMIN_USER)), 'warning');
+    $name = PROVISION_DEFAULT_ADMIN_USER;
   }
+
   // create the admin account
   $account = user_load(1);
-  $edit['name'] = 'admin';
+  $edit['name'] = $name;
   $edit['pass'] = user_password();
   $edit['mail'] = $client_email;
   $edit['status'] = 1;
@@ -78,10 +83,10 @@ function install_send_welcome_mail($url, $account, $profile, $language, $client_
   $mail_success = drupal_mail('install', 'welcome-admin', $client_email, user_preferred_language($account), $mail_params, $from, TRUE);
 
   if ($mail_success) {
-    drush_log(dt('Sent welcome mail to @client', array('@client' => $client_email)), 'message');
+    drush_log(dt('Sent welcome mail to @client', array('@client' => $client_email)), 'success');
   }
   else {
-    drush_log(dt('Could not send welcome mail to @client', array('@client' => $client_email)));
+    drush_log(dt('Could not send welcome mail to @client', array('@client' => $client_email)), 'warning');
   }
 }
 
@@ -172,7 +177,7 @@ function install_main() {
   drush_log(st("Installing Drupal schema"), 'install');
   // Load the profile.
   require_once "./profiles/$profile/$profile.profile";
-  drush_log(st("Loading @profile installation profile", array("@profile" => $profile)), 'install');
+  drush_log(st("Loading @profile install profile", array("@profile" => $profile)), 'install');
 
   drush_log(st("Installing translation : @locale", array("@locale" => $install_locale)), 'install');
 
@@ -248,7 +253,7 @@ function install_main() {
   foreach ($modules as $module) {
     _drupal_install_module($module);
     module_enable(array($module));
-    drush_log(dt("Installed @module module.", 
+    drush_log(dt("Installed @module module.",
       array("@module" => $files[$module]->info['name'])));
   }
 
@@ -284,7 +289,7 @@ function install_main() {
   menu_rebuild();
 
   // profile task
-  // @TODO support installation profiles with multiple additional tasks
+  // @TODO support install profiles with multiple additional tasks
   $task = 'profile';
 
   $function = $profile .'_profile_tasks';
@@ -351,12 +356,13 @@ function install_main() {
   cache_clear_all();
   variable_set('install_profile', $profile);
 
-  $client_email = drush_get_option('client_email');
+  $client_email = install_validate_client_email(drush_get_option('client_email', FALSE));
+
   $account = install_create_admin_user($client_email);
   $onetime = user_pass_reset_url($account);
   // Store the one time login link in an option so the front end can direct the user to their new site.
   drush_set_option('login_link', $onetime . '/login');
-  drush_log(dt('Login url: !onetime', array('!onetime' => $onetime . '/login')), 'message');
+  drush_log(dt('Login url: !onetime', array('!onetime' => $onetime . '/login')), 'success');
 
   if ($client_email) {
     install_send_welcome_mail($url, $account, $profile, $install_locale, $client_email, $onetime);

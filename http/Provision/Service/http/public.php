@@ -15,22 +15,10 @@ class Provision_Service_http_public extends Provision_Service_http {
       $data['http_postd_path'] = $this->server->http_postd_path;
       $data['http_platformd_path'] = $this->server->http_platformd_path;
       $data['http_vhostd_path'] = $this->server->http_vhostd_path;
+      $data['http_subdird_path'] = $this->server->http_subdird_path;
     }
 
     $data['http_port'] = $this->server->http_port;
-
-    // We assign this generic catch all for standard http.
-    // The SSL based services will override this with the
-    // correct ip address.
-    if (sizeof($this->server->ip_addresses)) {
-      // Use the first IP address for all standard virtual hosts.
-      $data['ip_address'] = $this->server->ip_addresses[0];
-    }
-    else {
-      // If no external ip addresses are defined, we fall back on *:port
-      // There will be no SSL , so that's fine.
-      $data['ip_address'] = '*';
-    }
 
     // TODO: move away from drush_get_context entirely.
     if ($config == 'site') {
@@ -67,6 +55,7 @@ class Provision_Service_http_public extends Provision_Service_http {
       $this->server->http_postd_path = "{$app_dir}/post.d";
       $this->server->http_platformd_path = "{$app_dir}/platform.d";
       $this->server->http_vhostd_path = "{$app_dir}/vhost.d";
+      $this->server->http_subdird_path = "{$app_dir}/subdir.d";
       $this->server->http_platforms_path = "{$this->server->aegir_root}/platforms";
     }
   }
@@ -74,9 +63,9 @@ class Provision_Service_http_public extends Provision_Service_http {
 
   static function option_documentation() {
     return array(
-      '--web_group' => 'server with http: OS group for permissions; working default will be attempted',
-      '--web_disable_url' => 'server with http: URL disabled sites are redirected to; default {master_url}/hosting/disabled',
-      '--web_maintenance_url' => 'server with http: URL maintenance sites are redirected to; default {master_url}/hosting/maintenance',
+      'web_group' => 'server with http: OS group for permissions; working default will be attempted',
+      'web_disable_url' => 'server with http: URL disabled sites are redirected to; default {master_url}/hosting/disabled',
+      'web_maintenance_url' => 'server with http: URL maintenance sites are redirected to; default {master_url}/hosting/maintenance',
     );
   }
 
@@ -101,6 +90,11 @@ class Provision_Service_http_public extends Provision_Service_http {
       provision_file()->create_dir($this->server->http_vhostd_path , dt("Webserver virtual host configuration"), 0700);
       $this->sync($this->server->http_vhostd_path, array(
         'exclude' => $this->server->http_vhostd_path . '/*',  // Make sure remote directory is created
+      ));
+
+      provision_file()->create_dir($this->server->http_subdird_path, dt("Webserver subdir configuration"), 0700);
+      $this->sync($this->server->http_subdird_path, array(
+        'exclude' => $this->server->http_subdird_path . '/*',  // Make sure remote directory is created
       ));
     } 
 

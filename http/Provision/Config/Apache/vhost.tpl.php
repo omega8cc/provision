@@ -1,10 +1,10 @@
 <VirtualHost *:<?php print $http_port; ?>>
 <?php if ($this->site_mail) : ?>
-  ServerAdmin <?php  print $this->site_mail; ?> 
+  ServerAdmin <?php  print $this->site_mail; ?>
 <?php endif;?>
 
-  DocumentRoot <?php print $this->root; ?> 
-    
+  DocumentRoot <?php print $this->root; ?>
+
   ServerName <?php print $this->uri; ?>
 
   SetEnv db_type  <?php print urlencode($db_type); ?>
@@ -20,9 +20,9 @@
   SetEnv db_port  <?php print urlencode($db_port); ?>
 
 
-<?php 
+<?php
 if (sizeof($this->aliases)) {
-  print "\n ServerAlias " . implode("\n ServerAlias ", $this->aliases) . "\n";
+  print "\n  ServerAlias " . implode("\n  ServerAlias ", $this->aliases) . "\n";
 }
 ?>
 
@@ -41,8 +41,8 @@ if ($this->redirection || $ssl_redirection) {
   }
   elseif (!$ssl_redirection && $this->redirection) {
     // Redirect all aliases to the main http url.
-    print " RewriteCond %{HTTP_HOST} !^{$this->uri}$ [NC]\n";
-    print " RewriteRule ^/*(.*)$ http://{$this->uri}/$1 [NE,L,R=301]\n";
+    print " RewriteCond %{HTTP_HOST} !^{$this->redirection}$ [NC]\n";
+    print " RewriteRule ^/*(.*)$ http://{$this->redirection}/$1 [NE,L,R=301]\n";
   }
 }
 ?>
@@ -55,19 +55,41 @@ if ($this->redirection || $ssl_redirection) {
 
     # Error handler for Drupal > 4.6.7
     <Directory "<?php print $this->site_path; ?>/files">
-      SetHandler This_is_a_Drupal_security_line_do_not_remove
+      <Files *>
+        SetHandler This_is_a_Drupal_security_line_do_not_remove
+      </Files>
+      Options None
+      Options +FollowSymLinks
+
+      # If we know how to do it safely, disable the PHP engine entirely.
+      <IfModule mod_php5.c>
+        php_flag engine off
+      </IfModule>
     </Directory>
 
     # Prevent direct reading of files in the private dir.
     # This is for Drupal7 compatibility, which would normally drop
     # a .htaccess in those directories, but we explicitly ignore those
     <Directory "<?php print $this->site_path; ?>/private/" >
-       SetHandler This_is_a_Drupal_security_line_do_not_remove
-       Deny from all
-       Options None
-       Options +FollowSymLinks
+      <Files *>
+        SetHandler This_is_a_Drupal_security_line_do_not_remove
+      </Files>
+      Deny from all
+      Options None
+      Options +FollowSymLinks
+
+      # If we know how to do it safely, disable the PHP engine entirely.
+      <IfModule mod_php5.c>
+        php_flag engine off
+      </IfModule>
     </Directory>
-    
+
+<?php
+$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
+if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {
+  print "  Include " . $if_subsite . "/*.conf\n";
+}
+?>
 
 </VirtualHost>
 
