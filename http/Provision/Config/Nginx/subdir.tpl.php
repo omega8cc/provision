@@ -28,6 +28,8 @@ if (!$satellite_mode && $server->satellite_mode) {
 <?php endif; ?>
 #######################################################
 
+set $main_site_name "<?php print $this->uri; ?>";
+
 ###
 ### Use the main site name if available, instead of
 ### potentially virtual server_name when alias is set
@@ -36,6 +38,40 @@ if (!$satellite_mode && $server->satellite_mode) {
 if ($main_site_name = '') {
   set $main_site_name "$server_name";
 }
+
+<?php if ($nginx_config_mode == 'extended'): ?>
+###
+### Helper locations to avoid 404 on legacy images paths
+###
+location ^~ /<?php print $subdir; ?>/sites/default/files {
+
+  root  <?php print "{$this->root}"; ?>;
+
+  location ~* ^/<?php print $subdir; ?>/sites/default/files/imagecache {
+    access_log off;
+    log_not_found off;
+    expires    30d;
+    set $nocache_details "Skip";
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/imagecache/(.*)$ /<?php print $subdir; ?>/sites/$main_site_name/files/imagecache/$1 last;
+    try_files  $uri @drupal_<?php print $subdir; ?>;
+  }
+  location ~* ^/<?php print $subdir; ?>/sites/default/files/styles {
+    access_log off;
+    log_not_found off;
+    expires    30d;
+    set $nocache_details "Skip";
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/styles/(.*)$ /<?php print $subdir; ?>/sites/$main_site_name/files/styles/$1 last;
+    try_files  $uri @drupal_<?php print $subdir; ?>;
+  }
+  location ~* ^/<?php print $subdir; ?>/sites/default/files {
+    access_log off;
+    log_not_found off;
+    expires    30d;
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/$main_site_name/files/$1 last;
+    try_files /$1 $uri =404;
+  }
+}
+<?php endif; ?>
 
 ###
 ### Master location for subdir support (start)
@@ -82,60 +118,60 @@ location ^~ /<?php print $subdir; ?> {
     return 403;
   }
 
-###
-### HTTPRL standard support.
-###
-location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
-  location ~* ^/<?php print $subdir; ?>/httprl_async_function_callback {
-    access_log off;
-    add_header X-Header "HTTPRL 2.0";
-    set $nocache_details "Skip";
-    try_files /httprl_async_function_callback $uri @nobots_<?php print $subdir; ?>;
+  ###
+  ### HTTPRL standard support.
+  ###
+  location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
+    location ~* ^/<?php print $subdir; ?>/httprl_async_function_callback {
+      access_log off;
+      add_header X-Header "HTTPRL 2.0";
+      set $nocache_details "Skip";
+      try_files /httprl_async_function_callback $uri @nobots_<?php print $subdir; ?>;
+    }
   }
-}
 
-###
-### HTTPRL test mode support.
-###
-location ^~ /<?php print $subdir; ?>/admin/httprl-test {
-  location ~* ^/<?php print $subdir; ?>/admin/httprl-test {
-    access_log off;
-    add_header X-Header "HTTPRL 2.1";
-    set $nocache_details "Skip";
-    try_files /admin/httprl-test $uri @nobots_<?php print $subdir; ?>;
+  ###
+  ### HTTPRL test mode support.
+  ###
+  location ^~ /<?php print $subdir; ?>/admin/httprl-test {
+    location ~* ^/<?php print $subdir; ?>/admin/httprl-test {
+      access_log off;
+      add_header X-Header "HTTPRL 2.1";
+      set $nocache_details "Skip";
+      try_files /admin/httprl-test $uri @nobots_<?php print $subdir; ?>;
+    }
   }
-}
 
-###
-### CDN Far Future expiration support.
-###
-location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
-  tcp_nodelay   off;
-  access_log    off;
-  log_not_found off;
-  etag          off;
-  gzip_http_version 1.0;
-  if_modified_since exact;
-  set $nocache_details "Skip";
-  location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff|eot|less))$ {
-    expires max;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Header "CDN Far Future Generator 1.0";
-    add_header Cache-Control "no-transform, public";
-    add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
-    rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
-    try_files /$1 $uri @nobots_<?php print $subdir; ?>;
+  ###
+  ### CDN Far Future expiration support.
+  ###
+  location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
+    tcp_nodelay   off;
+    access_log    off;
+    log_not_found off;
+    etag          off;
+    gzip_http_version 1.0;
+    if_modified_since exact;
+    set $nocache_details "Skip";
+    location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff|eot|less))$ {
+      expires max;
+      add_header Access-Control-Allow-Origin *;
+      add_header X-Header "CDN Far Future Generator 1.0";
+      add_header Cache-Control "no-transform, public";
+      add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
+      rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
+      try_files /$1 $uri @nobots_<?php print $subdir; ?>;
+    }
+    location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/) {
+      expires epoch;
+      add_header Access-Control-Allow-Origin *;
+      add_header X-Header "CDN Far Future Generator 1.1";
+      add_header Cache-Control "private, must-revalidate, proxy-revalidate";
+      rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
+      try_files /$1 $uri @nobots_<?php print $subdir; ?>;
+    }
+    try_files $uri @nobots_<?php print $subdir; ?>;
   }
-  location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/) {
-    expires epoch;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Header "CDN Far Future Generator 1.1";
-    add_header Cache-Control "private, must-revalidate, proxy-revalidate";
-    rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
-    try_files /$1 $uri @nobots_<?php print $subdir; ?>;
-  }
-  try_files $uri @nobots_<?php print $subdir; ?>;
-}
 <?php endif; ?>
 
   ###
@@ -181,6 +217,7 @@ location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
     fastcgi_param  HTTP_HOST           <?php print $subdir; ?>.$host;
     fastcgi_param  RAW_HOST            $host;
     fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+    fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
     fastcgi_param  REDIRECT_STATUS     200;
     fastcgi_index  index.php;
@@ -560,6 +597,7 @@ location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
     fastcgi_param  HTTP_HOST           <?php print $subdir; ?>.$host;
     fastcgi_param  RAW_HOST            $host;
     fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+    fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
     fastcgi_param  REDIRECT_STATUS     200;
     fastcgi_index  index.php;
@@ -745,6 +783,7 @@ location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
     fastcgi_param  HTTP_HOST           <?php print $subdir; ?>.$host;
     fastcgi_param  RAW_HOST            $host;
     fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+    fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
     fastcgi_param  REDIRECT_STATUS     200;
     fastcgi_index  index.php;
@@ -820,6 +859,7 @@ location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
     fastcgi_param  HTTP_HOST           <?php print $subdir; ?>.$host;
     fastcgi_param  RAW_HOST            $host;
     fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+    fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
     fastcgi_param  REDIRECT_STATUS     200;
     fastcgi_index  index.php;
@@ -963,6 +1003,7 @@ location @allowupdate_<?php print $subdir; ?> {
   fastcgi_param  HTTP_HOST           <?php print $subdir; ?>.$host;
   fastcgi_param  RAW_HOST            $host;
   fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+  fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
   fastcgi_param  REDIRECT_STATUS     200;
   fastcgi_index  index.php;
