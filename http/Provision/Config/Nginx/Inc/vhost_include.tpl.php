@@ -75,6 +75,13 @@ if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|DELETE|OPTIONS)$ ) {
 if ($is_denied) {
   return 403;
 }
+
+###
+### Support for letsencrypt.org per https://tools.ietf.org/html/rfc5785.
+###
+location ^~ /.well-known/acme-challenge/ {
+  try_files $uri 404;
+}
 <?php endif; ?>
 
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1213,7 +1220,7 @@ location = /index.php {
 <?php if ($nginx_config_mode == 'extended'): ?>
 location ~* ^/(?:core/)?(?:boost_stats|rtoc|js)\.php$ {
 <?php else: ?>
-location ~* ^/(?:index|cron|boost_stats|update|authorize)\.php$ {
+location ~* ^/(?:index|cron|boost_stats|update|authorize|xmlrpc)\.php$ {
 <?php endif; ?>
 <?php if ($satellite_mode == 'boa'): ?>
   limit_conn   limreq 88;

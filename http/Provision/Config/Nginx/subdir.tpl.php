@@ -143,6 +143,13 @@ location ^~ /<?php print $subdir; ?> {
   if ($is_denied) {
     return 403;
   }
+
+  ###
+  ### Support for letsencrypt.org per https://tools.ietf.org/html/rfc5785.
+  ###
+  location ^~ /<?php print $subdir; ?>/.well-known/acme-challenge/ {
+    try_files $uri 404;
+  }
 <?php endif; ?>
 
   ###
@@ -887,7 +894,7 @@ location ^~ /<?php print $subdir; ?> {
 <?php if ($nginx_config_mode == 'extended'): ?>
   location ~* ^/<?php print $subdir; ?>/((core/)?(boost_stats|rtoc|js))\.php$ {
 <?php else: ?>
-  location ~* ^/<?php print $subdir; ?>/(cron|boost_stats|update|authorize)\.php$ {
+  location ~* ^/<?php print $subdir; ?>/(cron|boost_stats|update|authorize|xmlrpc)\.php$ {
 <?php endif; ?>
 <?php if ($satellite_mode == 'boa'): ?>
     limit_conn   limreq 88;
