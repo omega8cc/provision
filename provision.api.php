@@ -34,6 +34,24 @@
  *   avoid having restores error out during operations such as cloning, migrating, and restoring from
  *   backup.  Default is FALSE.
  *
+ * provision_composer_install_platforms
+ *   Set to FALSE to prevent provision from ever running `composer install`.
+ *   Default is TRUE.
+ *
+ * provision_composer_install_platforms_verify_always
+ *   By default, provision will run `composer install` every time a platform
+ *   is verified.
+ *
+ *   Set to FALSE to only run `composer install` once. If composer.json
+ *   changes, you will have to run `composer install` manually.
+ *
+ *   Default is TRUE.
+ *
+ * provision_composer_install_command
+ *
+ *   The full command to run during platform verify.
+ *   Default is 'composer install --no-interaction --no-progress --no-dev'
+ *
  */
 
 /**

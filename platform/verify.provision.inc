@@ -80,6 +80,58 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
 
+    // Composer Install Support
+    // Step 0: if drush variable allows composer install on platforms, and check for composer executable fails, show warning.
+    if (drush_get_option('provision_composer_install_platforms', TRUE) && !shell_exec('composer')) {
+      drush_log(dt('The composer executable was not found. Install composer using instructions located at https://getcomposer.org/doc/00-intro.md#globally or, if you wish to disable composer install, set "provision_composer_install_platforms" to FALSE in the ~/.drush/drushrc.php file.'), 'warning');
+    }
+    // If drush variable allows composer install on platforms (and composer exec passed)...
+    elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
+      // Detect composer-based platform and run composer install if it has not been run yet.
+      // Step 1: Look for composer directory. Could be Drupal root. Could be the git repo_root.
+      if (provision_file()->exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
+        $composer_directory = d()->root;
+      }
+      elseif (d()->repo_path && provision_file()->exists(d()->repo_path . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
+        $composer_directory = d()->repo_path;
+      }
+
+      // Step 2: Run composer install if composer.json is present.
+      // If drush option provision_composer_install_platforms_verify_always is set to
+      // false, only run `composer-install` if ./vendor directory is missing.
+      if (isset($composer_directory) && (!file_exists($composer_directory . DIRECTORY_SEPARATOR . 'vendor') || drush_get_option('provision_composer_install_platforms_verify_always', TRUE))) {
+
+        // Composer Install command: Do not interact, do not show download progress.
+        // Customizable by setting drush option 'provision_composer_install_command'
+        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev');
+        drush_log(dt("Running command @command", array(
+          '@command' => $composer_command
+        )), 'ok');
+        $start = time();
+
+        // @TODO: Implement Symfony Process component for line-by-line output logging.
+        if (drush_shell_cd_and_exec($composer_directory, $composer_command)) {
+          $stop = time();
+
+          $output = implode("\n", drush_shell_exec_output());
+          $log_status = strpos($output, 'Warning:') === FALSE? 'success': 'warning';
+
+          drush_log($output, $log_status);
+          drush_log(dt(strpos($output, 'Warning:') . "Command ran successfully in @times: @command", array(
+            '@command' => $composer_command,
+            '@time' => $stop - $start,
+          )), $log_status);
+        }
+        else {
+          drush_log(implode("\n", drush_shell_exec_output()), 'error');
+          drush_set_error('DRUSH_COMPOSER_ERROR', dt('The composer command failed in @dir: @command', array(
+            '@dir' => $composer_directory,
+            '@command' => $composer_command,
+          )));
+        }
+      }
+    }
+
     // Re-set the ROOT PATH for Drush.
     // In cases where we just build the platform Drush would have cleared this value.
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
@@ -273,6 +325,8 @@ function drush_provision_drupal_pre_provision_verify() {
     if (d()->root == d('@hostmaster')->root && d()->uri == d('@hostmaster')->uri) {
       $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
       $aegir_drushrc->write();
+
+      drush_invoke_process('@none', "cache-clear", array('drush'));
     }
 
     provision_drupal_push_site(drush_get_option('override_slave_authority', FALSE));
