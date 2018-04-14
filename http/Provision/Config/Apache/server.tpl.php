@@ -21,6 +21,14 @@ NameVirtualHost *:<?php print $http_port; ?>
   LoadModule rewrite_module modules/mod_rewrite.so
 </IfModule>
 
+# Mitigation for https://www.drupal.org/SA-CORE-2018-002
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{QUERY_STRING} (.*)(23value|23default_value|element_parents=%23)(.*) [NC]
+    RewriteCond %{REQUEST_METHOD} POST [NC]
+    RewriteRule ^.*$  - [R=403,L]
+</IfModule>
+
 <?php
 if (drush_get_option('provision_apache_conf_suffix', FALSE)) {
   $include_statement = 'IncludeOptional ';
