@@ -70,6 +70,20 @@ if ($main_site_name = '') {
   set $main_site_name "$server_name";
 }
 
+# Mitigation for https://www.drupal.org/SA-CORE-2018-002
+set $rce "ZZ";
+if ( $query_string ~* (23value|23default_value|element_parents=%23) ) {
+  set $rce "A";
+}
+
+if ( $request_method = POST ) {
+  set $rce "${rce}B";
+}
+
+if ( $rce = "AB" ) {
+  return 403;
+}
+
 <?php if ($nginx_config_mode == 'extended'): ?>
 set $nocache_details "Cache";
 
