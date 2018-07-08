@@ -60,7 +60,6 @@ server {
     print "  server_name  {$alias_url};\n";
   }
 ?>
-  ssl                        on;
 <?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
@@ -155,7 +154,6 @@ server {
       }
     } ?>;
   root          <?php print "{$this->root}"; ?>;
-  ssl                        on;
 <?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
