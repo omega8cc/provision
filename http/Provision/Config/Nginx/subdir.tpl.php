@@ -1149,6 +1149,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_cache_valid 200 10s;
     fastcgi_cache_valid 301 1m;
     fastcgi_cache_valid 302 403 404 1s;
+    fastcgi_cache_valid any 3s;
     fastcgi_cache_lock on;
     fastcgi_ignore_headers Cache-Control Expires;
     fastcgi_pass_header Set-Cookie;
@@ -1157,6 +1158,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_no_cache $cookie_NoCacheID $http_authorization $http_pragma $nocache;
     fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $http_pragma $nocache;
     fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
+    fastcgi_cache_background_update on;
 <?php endif; ?>
   }
 
