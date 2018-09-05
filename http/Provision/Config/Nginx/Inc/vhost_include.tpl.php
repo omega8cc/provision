@@ -785,6 +785,13 @@ location ~* \.(?:js|htc)$ {
 }
 
 ###
+### Support for dynamic .json requests.
+###
+location ~* \.json$ {
+  try_files $uri @cache;
+}
+
+###
 ### Support for static .json files with fast 404 +Boost compatibility.
 ###
 location ~* ^/sites/.*/files/.*\.json$ {
@@ -799,13 +806,6 @@ location ~* ^/sites/.*/files/.*\.json$ {
   add_header X-Content-Type-Options nosniff;
   add_header X-XSS-Protection "1; mode=block";
   try_files   /cache/normal/$host${uri}_.json $uri =404;
-}
-
-###
-### Support for dynamic .json requests.
-###
-location ~* \.json$ {
-  try_files $uri @cache;
 }
 
 ###
