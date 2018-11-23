@@ -765,6 +765,13 @@ location ~* \.css$ {
 }
 
 ###
+### Support for dynamic /sw.js requests. See #2982073 on drupal.org
+###
+location = /sw.js {
+  try_files $uri @cache;
+}
+
+###
 ### Make js files compatible with boost caching.
 ###
 location ~* \.(?:js|htc)$ {
