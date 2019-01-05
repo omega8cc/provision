@@ -142,7 +142,7 @@ add_header X-XSS-Protection "1; mode=block";
 ###
 ### Force clean URLs for Drupal 8.
 ###
-#rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
+rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
 
 ###
 ### Include high level local configuration override if exists.
