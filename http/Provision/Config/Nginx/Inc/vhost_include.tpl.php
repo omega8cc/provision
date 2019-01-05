@@ -1322,24 +1322,27 @@ location @cache {
 location @drupal {
   set $core_detected "Legacy";
   ###
-  ### For Drupal >= 8
+  ### For Drupal >= 7
   ###
+  if ( -e $document_root/web.config ) {
+    set $core_detected "Regular";
+  }
   if ( -e $document_root/core ) {
     set $core_detected "Modern";
   }
   error_page 418 = @modern;
-  if ( $core_detected = "Modern" ) {
+  if ( $core_detected ~ (?:Regular|Modern) ) {
     return 418;
   }
   ###
-  ### For Drupal <= 7
+  ### For Drupal 6
   ###
   rewrite ^/(.*)$ /index.php?q=$1 last;
 }
 
 <?php if ($nginx_config_mode == 'extended'): ?>
 ###
-### Special location for Drupal 8+.
+### Special location for Drupal 7+.
 ###
 location @modern {
   try_files $uri /index.php?$query_string;
