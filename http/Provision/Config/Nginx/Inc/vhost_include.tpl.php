@@ -70,18 +70,26 @@ if ($main_site_name = '') {
   set $main_site_name "$server_name";
 }
 
-# Mitigation for https://www.drupal.org/SA-CORE-2018-002
+###
+### Mitigation for https://www.drupal.org/SA-CORE-2018-002
+###
 set $rce "ZZ";
 if ( $query_string ~* (23value|23default_value|element_parents=%23) ) {
   set $rce "A";
 }
-
 if ( $request_method = POST ) {
   set $rce "${rce}B";
 }
-
 if ( $rce = "AB" ) {
   return 403;
+}
+
+###
+### Return 404 on special PHP URLs to avoid revealing version used,
+### even indirectly. See also: https://drupal.org/node/2116387
+###
+if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
+  return 404;
 }
 
 <?php if ($nginx_config_mode == 'extended'): ?>
@@ -162,7 +170,7 @@ location ^~ /httprl_async_function_callback {
   location ~* ^/httprl_async_function_callback {
     access_log off;
     set $nocache_details "Skip";
-    try_files  $uri @nobots;
+    try_files  $uri @drupal;
   }
 }
 
@@ -173,7 +181,7 @@ location ^~ /admin/httprl-test {
   location ~* ^/admin/httprl-test {
     access_log off;
     set $nocache_details "Skip";
-    try_files  $uri @nobots;
+    try_files  $uri @drupal;
   }
 }
 
@@ -201,7 +209,7 @@ location ^~ /cdn/farfuture/ {
     add_header X-Content-Type-Options nosniff;
     add_header X-XSS-Protection "1; mode=block";
     rewrite ^/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
-    try_files $uri @nobots;
+    try_files $uri @drupal;
   }
   location ~* ^/cdn/farfuture/ {
     expires epoch;
@@ -211,9 +219,9 @@ location ^~ /cdn/farfuture/ {
     add_header X-Content-Type-Options nosniff;
     add_header X-XSS-Protection "1; mode=block";
     rewrite ^/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
-    try_files $uri @nobots;
+    try_files $uri @drupal;
   }
-  try_files $uri @nobots;
+  try_files $uri @drupal;
 }
 <?php endif; ?>
 
@@ -708,7 +716,7 @@ location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
   add_header X-XSS-Protection "1; mode=block";
-  try_files $uri @nobots;
+  try_files $uri @drupal;
 }
 
 ###
@@ -729,7 +737,7 @@ location ~* files/advagg_(?:css|js)/ {
   add_header X-Content-Type-Options nosniff;
   add_header X-XSS-Protection "1; mode=block";
   set $nocache_details "Skip";
-  try_files  $uri @nobots;
+  try_files  $uri @drupal;
 }
 
 ###
@@ -1062,7 +1070,7 @@ location ~* /(?:ahah|ajax|batch|autocomplete|done|progress/|x-progress-id|js/.*)
   log_not_found off;
 <?php if ($nginx_config_mode == 'extended'): ?>
   set $nocache_details "Skip";
-  try_files $uri @nobots;
+  try_files $uri @drupal;
 <?php else: ?>
   try_files $uri @drupal;
 <?php endif; ?>
@@ -1312,19 +1320,16 @@ location @cache {
 ### Send all not cached requests to drupal with clean URLs support.
 ###
 location @drupal {
-<?php if ($nginx_config_mode == 'extended'): ?>
-  error_page 418 = @nobots;
-  if ($args) {
-    return 418;
-  }
-<?php endif; ?>
   set $core_detected "Legacy";
   ###
   ### For Drupal >= 8
   ###
   if ( -e $document_root/core ) {
     set $core_detected "Modern";
-    rewrite ^ /index.php?$query_string last;
+  }
+  error_page 418 = @modern;
+  if ( $core_detected = "Modern" ) {
+    return 418;
   }
   ###
   ### For Drupal <= 7
@@ -1334,43 +1339,10 @@ location @drupal {
 
 <?php if ($nginx_config_mode == 'extended'): ?>
 ###
-### Special location for bots custom restrictions; can be overridden.
+### Special location for Drupal 8+.
 ###
-location @nobots {
-  ###
-  ### Support for Accelerated Mobile Pages (AMP) when bots are redirected below
-  ###
-  # if ( $query_string ~ "^amp$" ) {
-  #  rewrite ^/(.*)$  /index.php?q=$1 last;
-  # }
-
-  ###
-  ### Send all known bots to $args free URLs (optional)
-  ###
-  # if ( $is_bot ) {
-  #   return 301 $scheme://$host$request_uri;
-  # }
-
-  ###
-  ### Return 404 on special PHP URLs to avoid revealing version used,
-  ### even indirectly. See also: https://drupal.org/node/2116387
-  ###
-  if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
-    return 404;
-  }
-
-  set $core_detected "Legacy";
-  ###
-  ### For Drupal >= 8
-  ###
-  if ( -e $document_root/core ) {
-    set $core_detected "Modern";
-    rewrite ^ /index.php?$query_string last;
-  }
-  ###
-  ### For Drupal <= 7
-  ###
-  rewrite ^/(.*)$ /index.php?q=$1 last;
+location @modern {
+  try_files $uri /index.php?$query_string;
 }
 
 ###
