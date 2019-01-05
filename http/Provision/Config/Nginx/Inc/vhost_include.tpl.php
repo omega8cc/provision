@@ -1331,7 +1331,7 @@ location @drupal {
     set $core_detected "Modern";
   }
   error_page 418 = @modern;
-  if ( $core_detected ~ (?:Regular|Modern) ) {
+  if ( $core_detected ~ (?:NotForD7|Modern) ) {
     return 418;
   }
   ###

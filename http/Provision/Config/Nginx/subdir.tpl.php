@@ -1226,7 +1226,7 @@ location @drupal_<?php print $subdir_loc; ?> {
     set $core_detected "Modern";
   }
   error_page 418 = @modern_<?php print $subdir_loc; ?>;
-  if ( $core_detected ~ (?:Regular|Modern) ) {
+  if ( $core_detected ~ (?:NotForD7|Modern) ) {
     return 418;
   }
   ###
