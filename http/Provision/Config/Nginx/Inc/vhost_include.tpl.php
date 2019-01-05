@@ -327,7 +327,7 @@ location ^~ /search {
     if ( $is_bot ) {
       return 403;
     }
-    try_files $uri @cache;
+    try_files $uri @drupal;
   }
 }
 
@@ -415,7 +415,7 @@ location ^~ /hosting {
   }
   access_log off;
   set $nocache_details "Skip";
-  try_files $uri @cache;
+  try_files $uri @drupal;
 }
 
 <?php if ($satellite_mode == 'boa'): ?>
@@ -550,7 +550,7 @@ location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/) {
     return 403;
   }
   access_log off;
-  try_files $uri @cache;
+  try_files $uri @drupal;
 }
 
 ###
@@ -768,7 +768,7 @@ location ~* \.css$ {
 ### Support for dynamic /sw.js requests. See #2982073 on drupal.org
 ###
 location = /sw.js {
-  try_files $uri @cache;
+  try_files $uri @drupal;
 }
 
 ###
@@ -795,7 +795,7 @@ location ~* \.(?:js|htc)$ {
 ### Support for dynamic .json requests.
 ###
 location ~* \.json$ {
-  try_files $uri @cache;
+  try_files $uri @drupal;
 }
 
 ###
@@ -1330,10 +1330,12 @@ location @drupal {
     return 418;
   }
 <?php endif; ?>
+  set $core_detected "Legacy";
   ###
   ### For Drupal >= 8
   ###
   if ( -e $document_root/core ) {
+    set $core_detected "Modern";
     rewrite ^ /index.php?$query_string last;
   }
   ###
@@ -1369,10 +1371,12 @@ location @nobots {
     return 404;
   }
 
+  set $core_detected "Legacy";
   ###
   ### For Drupal >= 8
   ###
   if ( -e $document_root/core ) {
+    set $core_detected "Modern";
     rewrite ^ /index.php?$query_string last;
   }
   ###
@@ -1392,6 +1396,7 @@ location = /index.php {
   add_header X-GeoIP-Country-Name "$geoip_country_name";
 <?php endif; ?>
 <?php if ($nginx_config_mode == 'extended'): ?>
+  add_header X-Core-Variant "$core_detected";
   add_header X-Speed-Cache "$upstream_cache_status";
   add_header X-Speed-Cache-UID "$cache_uid";
   add_header X-Speed-Cache-Key "$key_uri";

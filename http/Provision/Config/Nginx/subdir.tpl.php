@@ -377,7 +377,7 @@ location ^~ /<?php print $subdir; ?> {
       if ( $is_bot ) {
         return 403;
       }
-      try_files /search $uri @cache_<?php print $subdir_loc; ?>;
+      try_files /search $uri @drupal_<?php print $subdir_loc; ?>;
     }
   }
 
@@ -752,7 +752,7 @@ location ^~ /<?php print $subdir; ?> {
   ### Support for dynamic .json requests.
   ###
   location ~* (.*\.json)$ {
-    try_files /$1 $uri @cache_<?php print $subdir_loc; ?>;
+    try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 <?php endif; ?>
 
@@ -1221,10 +1221,12 @@ location @drupal_<?php print $subdir_loc; ?> {
     return 418;
   }
 <?php endif; ?>
+  set $core_detected "Legacy";
   ###
   ### For Drupal >= 8
   ###
   if ( -e $document_root/core ) {
+    set $core_detected "Modern";
     rewrite ^ /<?php print $subdir; ?>/index.php?$query_string last;
   }
   ###
@@ -1260,10 +1262,12 @@ location @nobots_<?php print $subdir_loc; ?> {
     return 404;
   }
 
+  set $core_detected "Legacy";
   ###
   ### For Drupal >= 8
   ###
   if ( -e $document_root/core ) {
+    set $core_detected "Modern";
     rewrite ^ /<?php print $subdir; ?>/index.php?$query_string last;
   }
   ###
