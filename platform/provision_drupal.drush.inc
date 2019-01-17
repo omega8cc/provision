@@ -741,8 +741,22 @@ function _provision_drupal_find_modules($scope, $key = '') {
     }
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
+      // Some modules keep update hooks in an include file (webform).
+      $install_file_include = sprintf("%s/includes/%s.install.update.inc", dirname($info->filename), $name);
+      if (file_exists($install_file_include)) {
+        $source .= "\n" . file_get_contents(trim($install_file_include));
+      }
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
+      // Also search included files for function signature
+      $include_matches = array();
+        preg_match_all('!(include|require)(_once)?[\s\(]*[\\\'\"]{1}([\w\-\.\/]*\.(php|inc))[\\\'\"]{1}[\s\)]*!', $source, $include_matches);
+        if (sizeof($include_matches[0])) {
+          foreach($include_matches[3] as $include) {
+            $include_file = sprintf("%s/%s", dirname($info->filename), $include);
+            $source .= "\n" . file_get_contents(trim($include_file));
+          }
+        }
       $function_matches = array();
         preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
 
