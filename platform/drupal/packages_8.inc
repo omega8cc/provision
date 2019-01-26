@@ -127,7 +127,7 @@ function _provision_system_query($type) {
  * Find available profiles on this platform.
  */
 function _provision_find_profiles() {
-  $profile_dirs = array('./core/profiles', './profiles');
+  $profile_dirs = array('./core/profiles', './profiles', './profiles/contrib');
 
   $profiles = array();
   foreach($profile_dirs as $profile_dir) {
