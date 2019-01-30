@@ -1232,12 +1232,12 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
   fastcgi_cache_lock on;
-  fastcgi_ignore_headers Cache-Control Expires;
+  fastcgi_ignore_headers Cache-Control Expires Vary;
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;
   fastcgi_pass_header X-Accel-Redirect;
-  fastcgi_no_cache $cookie_NoCacheID $http_authorization $http_pragma $nocache;
-  fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $http_pragma $nocache;
+  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
+  fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
   tcp_nopush off;
   keepalive_requests 0;
@@ -1358,6 +1358,9 @@ location = /index.php {
 <?php endif; ?>
 <?php if ($nginx_config_mode == 'extended'): ?>
   add_header X-Core-Variant "$core_detected";
+  add_header X-Http-Pragma "$http_pragma";
+  add_header X-Arg-Nocache "$arg_nocache";
+  add_header X-Arg-Comment "$arg_comment";
   add_header X-Speed-Cache "$upstream_cache_status";
   add_header X-Speed-Cache-UID "$cache_uid";
   add_header X-Speed-Cache-Key "$key_uri";
@@ -1388,6 +1391,9 @@ location = /index.php {
   if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
     set $nocache "NoCache";
   }
+  add_header X-Debug-NoCache-Switch "$nocache";
+  add_header X-Debug-NoCache-Auth "$http_authorization";
+  add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD; ### Nginx default, but added for clarity
   fastcgi_cache_min_uses 1;
@@ -1396,12 +1402,12 @@ location = /index.php {
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
   fastcgi_cache_lock on;
-  fastcgi_ignore_headers Cache-Control Expires;
+  fastcgi_ignore_headers Cache-Control Expires Vary;
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;
   fastcgi_pass_header X-Accel-Redirect;
-  fastcgi_no_cache $cookie_NoCacheID $http_authorization $http_pragma $nocache;
-  fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $http_pragma $nocache;
+  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
+  fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
 }
 <?php endif; ?>
