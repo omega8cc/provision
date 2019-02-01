@@ -1319,6 +1319,7 @@ location @cache {
 ###
 location @drupal {
   set $core_detected "Legacy";
+  set $location_detected "Nowhere";
   ###
   ### Detect
   ###
@@ -1343,6 +1344,7 @@ location @drupal {
   ###
   ### Fallback
   ###
+  set $location_detected "Fallback";
   rewrite ^ /index.php?$query_string last;
 }
 
@@ -1350,6 +1352,7 @@ location @drupal {
 ### Special location for Drupal 6.
 ###
 location @legacy {
+  set $location_detected "Legacy";
   rewrite ^/(.*)$ /index.php?q=$1 last;
 }
 
@@ -1357,6 +1360,7 @@ location @legacy {
 ### Special location for Drupal 7.
 ###
 location @regular {
+  set $location_detected "Regular";
   rewrite ^ /index.php?$query_string last;
 }
 
@@ -1364,6 +1368,7 @@ location @regular {
 ### Special location for Drupal 8.
 ###
 location @modern {
+  set $location_detected "Modern";
   try_files $uri /index.php?$query_string;
 }
 
@@ -1380,6 +1385,7 @@ location = /index.php {
 <?php endif; ?>
 <?php if ($nginx_config_mode == 'extended'): ?>
   add_header X-Core-Variant "$core_detected";
+  add_header X-Loc-Where "$location_detected";
   add_header X-Http-Pragma "$http_pragma";
   add_header X-Arg-Nocache "$arg_nocache";
   add_header X-Arg-Comment "$arg_comment";
