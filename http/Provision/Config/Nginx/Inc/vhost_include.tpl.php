@@ -1336,14 +1336,10 @@ location @drupal {
   if ( $core_detected = Regular ) {
     return 406;
   }
-  error_page 418 = @modern;
-  if ( $core_detected = Modern ) {
-    return 418;
-  }
   ###
-  ### Fallback
+  ### Fallback for D8
   ###
-  rewrite ^ /index.php?$query_string last;
+  try_files $uri /index.php?$query_string;
 }
 
 ###
@@ -1358,13 +1354,6 @@ location @legacy {
 ###
 location @regular {
   rewrite ^ /index.php?$query_string last;
-}
-
-###
-### Special location for Drupal 8.
-###
-location @modern {
-  try_files $uri /index.php?$query_string;
 }
 
 <?php if ($nginx_config_mode == 'extended'): ?>
