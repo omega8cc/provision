@@ -1320,7 +1320,7 @@ location @cache {
 location @drupal {
   set $core_detected "Legacy";
   ###
-  ### For Drupal >= 7
+  ### Detect
   ###
   if ( -e $document_root/web.config ) {
     set $core_detected "Regular";
@@ -1328,24 +1328,46 @@ location @drupal {
   if ( -e $document_root/core ) {
     set $core_detected "Modern";
   }
+  error_page 402 = @legacy;
+  if ( $core_detected = Legacy ) {
+    return 402;
+  }
+  error_page 406 = @regular;
+  if ( $core_detected = Regular ) {
+    return 406;
+  }
   error_page 418 = @modern;
-  if ( $core_detected ~ (?:Regular|Modern) ) {
+  if ( $core_detected = Modern ) {
     return 418;
   }
   ###
-  ### For Drupal 6
+  ### Fallback
   ###
+  rewrite ^ /index.php?$query_string last;
+}
+
+###
+### Special location for Drupal 6.
+###
+location @legacy {
   rewrite ^/(.*)$ /index.php?q=$1 last;
 }
 
-<?php if ($nginx_config_mode == 'extended'): ?>
 ###
-### Special location for Drupal 7+.
+### Special location for Drupal 7.
+###
+location @regular {
+  rewrite ^ /index.php?$query_string last;
+}
+
+###
+### Special location for Drupal 8.
 ###
 location @modern {
   try_files $uri /index.php?$query_string;
 }
 
+<?php if ($nginx_config_mode == 'extended'): ?>
 ###
 ### Send all non-static requests to php-fpm, restricted to known php file.
 ###
