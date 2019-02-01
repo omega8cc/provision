@@ -144,6 +144,12 @@ function provision_drupal_drush_exit() {
             ->succeed('Changed permissions of <code>@path</code> to @perm')
             ->fail('Could not change permissions of <code>@path</code> to @perm');
         }
+        // Delete solr.php to avoid outdated leftovers on clone etc.
+        $solr_info = d()->site_path . '/solr.php';
+        if (provision_file()->exists($solr_info)->status()) {
+          _provision_recursive_delete($solr_info);
+          drush_log(dt('Existing solr.php removed: !solrinfo', array('!solrinfo' => $solr_info)), 'message');
+        }
       }
       if (drush_get_option('installed')) {
         // Don't generate the drushrc.php on provision-save/delete commands.
