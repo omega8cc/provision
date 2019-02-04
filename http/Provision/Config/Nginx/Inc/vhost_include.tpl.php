@@ -1251,13 +1251,6 @@ if ( $args ~* "/autocomplete/" ) {
   return 405;
 }
 error_page 405 = @drupal;
-
-###
-### Rewrite legacy requests with /index.php to extension-free URL.
-###
-if ( $args ~* "^q=(?<query_value>.*)" ) {
-  rewrite ^/index.php$ $scheme://$host/?q=$query_value? permanent;
-}
 <?php endif; ?>
 <?php endif; ?>
 

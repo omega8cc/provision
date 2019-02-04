@@ -969,13 +969,6 @@ location ^~ /<?php print $subdir; ?> {
     return 405;
   }
   error_page 405 = @drupal_<?php print $subdir_loc; ?>;
-
-  ###
-  ### Rewrite legacy requests with /index.php to extension-free URL.
-  ###
-  if ( $args ~* "^q=(?<query_value>.*)" ) {
-    rewrite ^/<?php print $subdir; ?>/index.php$ $scheme://$host/<?php print $subdir; ?>/?q=$query_value? permanent;
-  }
 <?php endif; ?>
 
   ###
