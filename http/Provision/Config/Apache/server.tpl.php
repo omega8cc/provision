@@ -52,7 +52,7 @@ else {
 <?php print $include_statement . $http_platformd_path . $include_suffix ?>
 
 # other configuration, not touched by aegir
-# this allows to have default (for example during migrations) that are eventually overriden by aegir
+# this allows to have default (for example during migrations) that are eventually overridden by aegir
 <?php print $include_statement . $http_postd_path . $include_suffix ?>
 
 <?php print $extra_config; ?>
