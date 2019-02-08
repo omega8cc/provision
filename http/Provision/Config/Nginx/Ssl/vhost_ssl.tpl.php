@@ -63,7 +63,7 @@ server {
 <?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
-  resolver 8.8.8.8 8.8.4.4 valid=300s;
+  resolver 1.1.1.1 1.0.0.1 valid=300s;
   resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
@@ -157,7 +157,7 @@ server {
 <?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
-  resolver 8.8.8.8 8.8.4.4 valid=300s;
+  resolver 1.1.1.1 1.0.0.1 valid=300s;
   resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
