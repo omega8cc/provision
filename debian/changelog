@@ -1,3 +1,10 @@
+aegir3-provision (3.175) testing; urgency=medium
+
+  * Version bump to include Drupal 7.67 (security)
+  * Update minor releases for hosting_git and views
+
+ -- Herman van Rink <helmo@initfour.nl>  Fri, 07 Jun 2019 14:35:03 +0200
+
 aegir3-provision (3.174) testing; urgency=medium
 
   * Update to Hostmaster 7.x-3.174
