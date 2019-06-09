@@ -51,7 +51,30 @@ function drush_provision_drupal_pre_provision_verify() {
     }
   }
   elseif (d()->type === 'platform') {
-  
+
+    // Add platform root auto-discovery to avoid confusing
+    // Composer based D8 codebase root with Drupal real root.
+    $test_root_index = d()->root . '/index.php';
+    $test_root_docroot = d()->root . '/docroot/index.php';
+    $test_root_html = d()->root . '/html/index.php';
+    $test_root_web = d()->root . '/web/index.php';
+
+    if (!provision_file()->exists($test_root_index)->status()) {
+      drush_log(dt("Platform path needs correction, running auto-discovery.."), 'notice');
+      if (provision_file()->exists($test_root_docroot)->status()) {
+        drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_docroot)), 'debug');
+        d()->root = d()->root . '/docroot';
+      }
+      elseif (provision_file()->exists($test_root_html)->status()) {
+        drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_html)), 'debug');
+        d()->root = d()->root . '/html';
+      }
+      elseif (provision_file()->exists($test_root_web)->status()) {
+        drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_web)), 'debug');
+        d()->root = d()->root . '/web';
+      }
+    }
+
     drush_log(dt("Checking for platform at path @path...", array('@path' => d()->root)), 'debug');
     drush_log(dt("Platform makefile: @makefile", array('@makefile' => d()->makefile)), 'debug');
     
