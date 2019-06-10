@@ -1,9 +1,11 @@
+<?php provision_auto_fix_platform_root(); ?>
+
 <VirtualHost *:<?php print $http_port; ?>>
     <?php if ($this->site_mail) : ?>
-      ServerAdmin <?php  print $this->site_mail; ?> 
+      ServerAdmin <?php  print $this->site_mail; ?>
     <?php endif;?>
-    DocumentRoot <?php print $this->root; ?> 
-    
+    DocumentRoot <?php print $this->root; ?>
+
     ServerName <?php print $this->uri; ?>
 
     <?php

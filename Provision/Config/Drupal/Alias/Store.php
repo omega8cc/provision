@@ -10,6 +10,10 @@ class Provision_Config_Drupal_Alias_Store extends Provision_Config_Data_Store {
   public $key = 'sites';
   protected $mode = 0644;
 
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  provision_auto_fix_platform_root();
+
   function filename() {
     return $this->root . '/sites/sites.php';
   }

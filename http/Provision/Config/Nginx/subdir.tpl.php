@@ -1,3 +1,5 @@
+<?php provision_auto_fix_platform_root(); ?>
+
 <?php
 $script_user = drush_get_option('script_user');
 if (!$script_user && $server->script_user) {

@@ -1,3 +1,4 @@
+<?php provision_auto_fix_platform_root(); ?>
 
 <?php if ($this->ssl_enabled && $this->ssl_key) : ?>
 
@@ -126,7 +127,7 @@ server {
   // use this simple fallback to guarantee that empty db_port does not
   // break Nginx reload which results with downtime for the affected vhosts.
   if (!$db_port) {
-    $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt'; 
+    $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt';
     if (provision_file()->exists($ctrlf)->status()) {
       $db_port = '6033';
     }

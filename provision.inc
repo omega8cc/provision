@@ -159,7 +159,8 @@ function provision_auto_fix_platform_root() {
         drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_web)), 'debug');
         d()->root = d()->root . '/web';
       }
-      //return d()->root;
+      $this->platform->root = d()->root;
+      $this->root = d()->root;
     }
   }
 }
@@ -445,7 +446,7 @@ function _scrub_object($input) {
 
 /**
  * Execute a command against a specific context object.
- * 
+ *
  * @param $target
  *   the context to operate on, @ prefix is optional.
  * @param $command
@@ -466,11 +467,11 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
 
 /**
  * Run a command, sending output to drush logs in real time.
- * 
+ *
  * The Symfony\Component\Process\Process Object is used to run this command.
  * After implementing provision_process(), you can get the Process result object
  * via drush context:
- * 
+ *
  *   $process = drush_get_context('provision_process_result');
  *   print $process->getExitCode();
  *

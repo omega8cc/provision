@@ -190,6 +190,7 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
+  <?php provision_auto_fix_platform_root(); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
   }

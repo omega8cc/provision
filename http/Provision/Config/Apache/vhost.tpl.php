@@ -1,3 +1,5 @@
+<?php provision_auto_fix_platform_root(); ?>
+
 <VirtualHost *:<?php print $http_port; ?>>
 <?php if ($this->site_mail) : ?>
   ServerAdmin <?php  print $this->site_mail; ?>

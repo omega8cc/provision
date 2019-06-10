@@ -25,6 +25,10 @@ class Provision_Context_site extends Provision_Context {
   function init_site() {
     $this->setProperty('uri');
 
+    // Add platform root auto-discovery to avoid confusing
+    // Composer based D8 codebase root with Drupal real root.
+    provision_auto_fix_platform_root();
+
      // we need to set the alias root to the platform root, otherwise drush will cause problems.
     $this->root = $this->platform->root;
 
