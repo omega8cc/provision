@@ -157,6 +157,10 @@ function install_main() {
     ->set('path.temporary', "sites/$url/private/temp")
     ->save();
 
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  provision_auto_fix_platform_root();
+
   // Disable Redis integration until module is installed
   $redisCtrl = d()->root . '/sites/' . d()->uri . '/.redisOff';
   if (!provision_file()->exists($redisCtrl)->status()) {
