@@ -54,7 +54,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // Add platform root auto-discovery to avoid confusing
     // Composer based D8 codebase root with Drupal real root.
-    provision_auto_fix_platform_root();
+    d()->root = provision_auto_fix_platform_root(d()->root);
 
     drush_log(dt("Checking for platform at path @path...", array('@path' => d()->root)), 'debug');
     drush_log(dt("Platform makefile: @makefile", array('@makefile' => d()->makefile)), 'debug');
@@ -349,7 +349,7 @@ function drush_provision_drupal_post_provision_verify() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
     _provision_drupal_rebuild_caches();

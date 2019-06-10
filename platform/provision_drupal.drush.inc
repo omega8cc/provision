@@ -57,7 +57,7 @@ function provision_drupal_drush_exit() {
 
     // Add platform root auto-discovery to avoid confusing
     // Composer based D8 codebase root with Drupal real root.
-    provision_auto_fix_platform_root();
+    d()->root = provision_auto_fix_platform_root(d()->root);
 
     if (d()->type === 'site') {
       if (preg_match("/^provision-login-reset/", $command[0])) {
@@ -210,7 +210,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Sync the platform
   d()->service('http')->sync(d()->root, array('exclude-sites' => TRUE));
@@ -483,7 +483,7 @@ function _provision_drupal_ensure_htaccess_update() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (drush_drupal_major_version() == 7) {
 
@@ -575,7 +575,7 @@ function provision_drupal_find_aliases() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   $aliases = array();
   if (d()->type === 'site') {
@@ -612,7 +612,7 @@ function _provision_drupal_maintain_aliases() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
@@ -644,7 +644,7 @@ function _provision_drupal_delete_aliases() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {

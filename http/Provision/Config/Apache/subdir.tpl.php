@@ -1,4 +1,4 @@
-<?php provision_auto_fix_platform_root(); ?>
+<?php $this->root = provision_auto_fix_platform_root($this->root); ?>
 
 <?php
 $aegir_root = drush_get_option('aegir_root');

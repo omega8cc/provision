@@ -1,4 +1,4 @@
-<?php provision_auto_fix_platform_root(); ?>
+<?php $this->root = provision_auto_fix_platform_root($this->root); ?>
 
 <VirtualHost *:<?php print $http_port; ?>>
 <?php if ($this->site_mail) : ?>

@@ -15,7 +15,7 @@ class Provision_Config_Drushrc_Platform extends Provision_Config_Drushrc {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  $this->root = provision_auto_fix_platform_root($this->root);
 
   function filename() {
     return $this->root . '/sites/all/drush/drushrc.php';

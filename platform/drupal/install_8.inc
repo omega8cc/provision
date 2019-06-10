@@ -159,7 +159,7 @@ function install_main() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
-  provision_auto_fix_platform_root();
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Disable Redis integration until module is installed
   $redisCtrl = d()->root . '/sites/' . d()->uri . '/.redisOff';
