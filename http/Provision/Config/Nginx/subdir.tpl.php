@@ -342,7 +342,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
     tcp_nopush   off;
-    keepalive_requests 0;
+    keepalive_requests 99999;
 <?php if ($satellite_mode == 'boa'): ?>
     allow        127.0.0.1;
     deny         all;
@@ -836,7 +836,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
     tcp_nopush   off;
-    keepalive_requests 0;
+    keepalive_requests 99999;
     access_log   off;
     if ( $is_bot ) {
       return 403;
@@ -1035,7 +1035,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
     tcp_nopush   off;
-    keepalive_requests 0;
+    keepalive_requests 99999;
     access_log   off;
     try_files    /$1.php =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1117,7 +1117,7 @@ location ^~ /<?php print $subdir; ?> {
 
     add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
     tcp_nopush    off;
-    keepalive_requests 0;
+    keepalive_requests 99999;
     try_files     /index.php =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
@@ -1266,7 +1266,7 @@ location @allowupdate_<?php print $subdir_loc; ?> {
   fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
   tcp_nopush   off;
-  keepalive_requests 0;
+  keepalive_requests 99999;
   access_log   off;
   try_files    /$real_fastcgi_script_name =404; ### check for existence of php file first
 
