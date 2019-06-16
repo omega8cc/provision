@@ -189,7 +189,6 @@ location ^~ /admin/httprl-test {
 ### CDN Far Future expiration support.
 ###
 location ^~ /cdn/farfuture/ {
-  tcp_nodelay   off;
   access_log    off;
   log_not_found off;
 <?php if ($nginx_has_etag): ?>
@@ -295,7 +294,6 @@ location = /fpm-ping {
 ### for running sites cron.
 ###
 location = /cron.php {
-  tcp_nopush   off;
   keepalive_requests 99999;
 <?php if ($satellite_mode == 'boa'): ?>
   allow        127.0.0.1;
@@ -488,7 +486,6 @@ location ^~ /audio/download {
     if ( $is_bot ) {
       return 403;
     }
-    tcp_nopush off;
     access_log    off;
     log_not_found off;
     set $nocache_details "Skip";
@@ -780,7 +777,6 @@ location ~* \.css$ {
   }
   error_page  405 = @uncached;
   access_log  off;
-  tcp_nodelay off;
   expires     max; #if using aggregator
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -807,7 +803,6 @@ location ~* \.(?:js|htc)$ {
   }
   error_page  405 = @uncached;
   access_log  off;
-  tcp_nodelay off;
   expires     max; # if using aggregator
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -831,7 +826,6 @@ location ~* ^/sites/.*/files/.*\.json$ {
   }
   error_page  405 = @uncached;
   access_log  off;
-  tcp_nodelay off;
   expires     max; ### if using aggregator
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -863,8 +857,6 @@ location ^~ /files/ {
   ###
   location ~* /files/.+\.flv$ {
     flv;
-    tcp_nodelay off;
-    tcp_nopush off;
     expires 30d;
     access_log    off;
     log_not_found off;
@@ -882,8 +874,6 @@ location ^~ /files/ {
     mp4;
     mp4_buffer_size 1m;
     mp4_max_buffer_size 5m;
-    tcp_nodelay off;
-    tcp_nopush off;
     expires 30d;
     access_log    off;
     log_not_found off;
@@ -928,7 +918,6 @@ location ^~ /files/ {
 
   location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js)$ {
     expires       30d;
-    tcp_nodelay   off;
     access_log    off;
     log_not_found off;
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
@@ -947,7 +936,6 @@ location ^~ /files/ {
 location ^~ /downloads/ {
   location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa)$ {
     expires       30d;
-    tcp_nodelay   off;
     access_log    off;
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
@@ -969,7 +957,6 @@ location ^~ /downloads/ {
 ###
 location ~* ^.+\.(?:jpe?g|gif|png|ico|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|mp3|wav|midi)$ {
   expires       30d;
-  tcp_nodelay   off;
   access_log    off;
   log_not_found off;
   add_header Access-Control-Allow-Origin *;
@@ -986,8 +973,6 @@ location ~* ^.+\.(?:jpe?g|gif|png|ico|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rt
 ###
 location ~* ^.+\.(?:avi|mpe?g|mov|wmv|ogg|ogv|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa)$ {
   expires     30d;
-  tcp_nodelay off;
-  tcp_nopush  off;
   access_log    off;
   log_not_found off;
   add_header Access-Control-Allow-Origin *;
@@ -1005,7 +990,6 @@ location ~* ^.+\.(?:avi|mpe?g|mov|wmv|ogg|ogv|zip|tar|t?gz|rar|dmg|exe|apk|pxl|i
 ###
 location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
   expires       30d;
-  tcp_nodelay   off;
   access_log    off;
   log_not_found off;
   add_header Access-Control-Allow-Origin *;
@@ -1020,8 +1004,6 @@ location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
 ###
 location ~* ^.+\.flv$ {
   flv;
-  tcp_nodelay off;
-  tcp_nopush off;
   expires 30d;
   access_log    off;
   log_not_found off;
@@ -1038,8 +1020,6 @@ location ~* ^.+\.(?:mp4|m4a)$ {
   mp4;
   mp4_buffer_size 1m;
   mp4_max_buffer_size 5m;
-  tcp_nodelay off;
-  tcp_nopush off;
   expires 30d;
   access_log    off;
   log_not_found off;
@@ -1055,7 +1035,6 @@ location ~* ^.+\.(?:mp4|m4a)$ {
 ###
 location ~* /(?:cross-?domain)\.xml$ {
   access_log  off;
-  tcp_nodelay off;
   expires     30d;
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -1071,7 +1050,6 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
 <?php if ($satellite_mode == 'boa'): ?>
   limit_conn   limreq 88;
 <?php endif; ?>
-  tcp_nopush   off;
   keepalive_requests 99999;
   access_log   off;
   if ( $is_bot ) {
@@ -1112,7 +1090,6 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
     return 403;
   }
   access_log      off;
-  tcp_nodelay     off;
   expires         30d;
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -1125,7 +1102,6 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
 ###
 location ~* ^/sites/.*/files/ {
   access_log      off;
-  tcp_nodelay     off;
   expires         30d;
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
@@ -1275,7 +1251,6 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
-  tcp_nopush off;
   keepalive_requests 99999;
   expires epoch;
 }
@@ -1428,7 +1403,6 @@ location = /index.php {
   add_header X-XSS-Protection "1; mode=block";
 <?php endif; ?>
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
-  tcp_nopush    off;
   keepalive_requests 99999;
   try_files     $uri =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1483,7 +1457,6 @@ location ~* ^/(?:index|cron|boost_stats|update|authorize|xmlrpc)\.php$ {
     return 404;
   }
 <?php endif; ?>
-  tcp_nopush   off;
   keepalive_requests 99999;
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first
@@ -1513,7 +1486,6 @@ location ~* ^/(?:core/)?(?:authorize|update)\.php$ {
 ###
 location @allowupdate {
   limit_conn   limreq 88;
-  tcp_nopush   off;
   keepalive_requests 99999;
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first

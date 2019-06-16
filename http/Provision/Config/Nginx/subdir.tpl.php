@@ -249,7 +249,6 @@ location ^~ /<?php print $subdir; ?> {
   ### CDN Far Future expiration support.
   ###
   location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
-    tcp_nodelay   off;
     access_log    off;
     log_not_found off;
     etag          off;
@@ -341,7 +340,6 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name cron.php;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    tcp_nopush   off;
     keepalive_requests 99999;
 <?php if ($satellite_mode == 'boa'): ?>
     allow        127.0.0.1;
@@ -461,7 +459,6 @@ location ^~ /<?php print $subdir; ?> {
       if ( $is_bot ) {
         return 403;
       }
-      tcp_nopush off;
       access_log    off;
       log_not_found off;
       set $nocache_details "Skip";
@@ -573,7 +570,6 @@ location ^~ /<?php print $subdir; ?> {
 
     location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js)$ {
       expires       30d;
-      tcp_nodelay   off;
       access_log    off;
       log_not_found off;
       rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
@@ -716,7 +712,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.*\.css)$ {
     access_log  off;
-    tcp_nodelay off;
     expires     max; #if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -729,7 +724,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.*\.(?:js|htc))$ {
     access_log  off;
-    tcp_nodelay off;
     expires     max; # if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -742,7 +736,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/(.*\.json)$ {
     access_log  off;
-    tcp_nodelay off;
     expires     max; ### if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -764,7 +757,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.+\.(?:jpe?g|gif|png|ico|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|aspx?|class|otf|ttf|woff2?|eot|less))$ {
     expires       30d;
-    tcp_nodelay   off;
     access_log    off;
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
@@ -779,8 +771,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.+\.(?:avi|mpe?g|mov|wmv|mp3|mp4|m4a|ogg|ogv|flv|wav|midi|zip|tar|t?gz|rar|dmg|exe))$ {
     expires     30d;
-    tcp_nodelay off;
-    tcp_nopush  off;
     access_log    off;
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
@@ -794,7 +784,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/((?:cross-?domain)\.xml)$ {
     access_log  off;
-    tcp_nodelay off;
     expires     30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -835,7 +824,6 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name $1;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    tcp_nopush   off;
     keepalive_requests 99999;
     access_log   off;
     if ( $is_bot ) {
@@ -876,7 +864,6 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log      off;
-    tcp_nodelay     off;
     expires         30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -891,7 +878,6 @@ location ^~ /<?php print $subdir; ?> {
     root  <?php print "{$this->root}"; ?>;
     rewrite     ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
     access_log      off;
-    tcp_nodelay     off;
     expires         30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
@@ -1034,7 +1020,6 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name $1.php;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    tcp_nopush   off;
     keepalive_requests 99999;
     access_log   off;
     try_files    /$1.php =404; ### check for existence of php file first
@@ -1120,7 +1105,6 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_param  PHP_SELF            /<?php print $subdir; ?>/$real_fastcgi_script_name;
 
     add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
-    tcp_nopush    off;
     keepalive_requests 99999;
     try_files     /index.php =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1269,7 +1253,6 @@ location @allowupdate_<?php print $subdir_loc; ?> {
 
   fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-  tcp_nopush   off;
   keepalive_requests 99999;
   access_log   off;
   try_files    /$real_fastcgi_script_name =404; ### check for existence of php file first
