@@ -1142,9 +1142,8 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_cache_min_uses 1;
     fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg";
     fastcgi_cache_valid 200 10s;
-    fastcgi_cache_valid 301 1m;
-    fastcgi_cache_valid 302 403 404 1s;
-    fastcgi_cache_valid any 3s;
+    fastcgi_cache_valid 301 302 403 404 1s;
+    fastcgi_cache_valid any 1s;
     fastcgi_cache_lock on;
     fastcgi_ignore_headers Cache-Control Expires Vary;
     fastcgi_pass_header Set-Cookie;
