@@ -294,7 +294,6 @@ location = /fpm-ping {
 ### for running sites cron.
 ###
 location = /cron.php {
-  keepalive_requests 99999;
 <?php if ($satellite_mode == 'boa'): ?>
   allow        127.0.0.1;
   deny         all;
@@ -1050,7 +1049,6 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
 <?php if ($satellite_mode == 'boa'): ?>
   limit_conn   limreq 88;
 <?php endif; ?>
-  keepalive_requests 99999;
   access_log   off;
   if ( $is_bot ) {
     return 403;
@@ -1251,7 +1249,6 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
-  keepalive_requests 99999;
   expires epoch;
 }
 
@@ -1403,7 +1400,6 @@ location = /index.php {
   add_header X-XSS-Protection "1; mode=block";
 <?php endif; ?>
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
-  keepalive_requests 99999;
   try_files     $uri =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
@@ -1457,7 +1453,6 @@ location ~* ^/(?:index|cron|boost_stats|update|authorize|xmlrpc)\.php$ {
     return 404;
   }
 <?php endif; ?>
-  keepalive_requests 99999;
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1486,7 +1481,6 @@ location ~* ^/(?:core/)?(?:authorize|update)\.php$ {
 ###
 location @allowupdate {
   limit_conn   limreq 88;
-  keepalive_requests 99999;
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
