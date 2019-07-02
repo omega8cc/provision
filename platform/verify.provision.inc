@@ -234,10 +234,13 @@ function drush_provision_drupal_pre_provision_verify() {
 
       $core6_version_id = d()->root . '/modules/path_alias_cache';
       $core6_contrib_symlink = d()->root . '/modules/o_contrib';
+      $core6_contrib_dot = d()->root . '/modules/.o_contrib_dont_use';
       $core7_version_id = d()->root . '/modules/overlay';
       $core7_contrib_symlink = d()->root . '/modules/o_contrib_seven';
+      $core7_contrib_dot = d()->root . '/modules/.o_contrib_seven_dont_use';
       $core8_version_id = d()->root . '/core';
       $core8_contrib_symlink = d()->root . '/modules/o_contrib_eight';
+      $core8_contrib_dot = d()->root . '/modules/.o_contrib_eight_dont_use';
 
       $core6_contrib_js_file = $core6_contrib_dir . '/js/js.php';
       $core7_contrib_js_file = $core7_contrib_dir . '/js/js.php';
@@ -259,6 +262,18 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Add symlink to BOA specific contrib in Pressflow 6.
+      // Check if static copy exists first
+      if (is_dir($core6_contrib_symlink) && !is_link($core6_contrib_symlink)) {
+        // Run cleanup of previous dot dir if exists
+        // and current contrib is not a symlink again.
+        if (provision_file()->exists($core6_contrib_dot)->status()) {
+          _provision_recursive_delete($core6_contrib_dot);
+          drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $core6_contrib_dot)), 'message');
+        }
+        // Rename static contrib to dot dir if exists
+        rename($core6_contrib_symlink, $core6_contrib_dot);
+        drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core6_contrib_dot)), 'message');
+      }
       if (provision_file()->exists($core6_contrib_dir)->status() &&
           provision_file()->exists($core6_version_id)->status() &&
           !provision_file()->exists($core6_contrib_symlink)->status()) {
@@ -268,6 +283,18 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Add symlink to BOA specific contrib in Drupal 7.
+      // Check if static copy exists first
+      if (is_dir($core7_contrib_symlink) && !is_link($core7_contrib_symlink)) {
+        // Run cleanup of previous dot dir if exists
+        // and current contrib is not a symlink again.
+        if (provision_file()->exists($core7_contrib_dot)->status()) {
+          _provision_recursive_delete($core7_contrib_dot);
+          drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $core7_contrib_dot)), 'message');
+        }
+        // Rename static contrib to dot dir if exists
+        rename($core7_contrib_symlink, $core7_contrib_dot);
+        drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core7_contrib_dot)), 'message');
+      }
       if (provision_file()->exists($core7_contrib_dir)->status() &&
          provision_file()->exists($core7_version_id)->status() &&
          !provision_file()->exists($core7_contrib_symlink)->status()) {
@@ -277,6 +304,18 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Add symlink to BOA specific contrib in Drupal 8.
+      // Check if static copy exists first
+      if (is_dir($core8_contrib_symlink) && !is_link($core8_contrib_symlink)) {
+        // Run cleanup of previous dot dir if exists
+        // and current contrib is not a symlink again.
+        if (provision_file()->exists($core8_contrib_dot)->status()) {
+          _provision_recursive_delete($core8_contrib_dot);
+          drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $core8_contrib_dot)), 'message');
+        }
+        // Rename static contrib to dot dir if exists
+        rename($core8_contrib_symlink, $core8_contrib_dot);
+        drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core8_contrib_dot)), 'message');
+      }
       if (provision_file()->exists($core8_contrib_dir)->status() &&
           provision_file()->exists($core8_version_id)->status() &&
           !provision_file()->exists($core8_contrib_symlink)->status()) {
