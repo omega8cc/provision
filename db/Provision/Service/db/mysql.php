@@ -233,7 +233,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-    $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file);
+    $success = $this->safe_shell_exec($cmd, $db_host, $db_port, $db_user, $db_passwd, $dump_file);
 
     drush_log(sprintf("Importing database using command: %s", $cmd));
 
@@ -273,10 +273,26 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    * Generate the contents of a mysql config file containing database
    * credentials.
    */
-  function generate_mycnf($db_host = NULL, $db_user = NULL, $db_passwd = NULL, $db_port = NULL) {
+  function generate_mycnf($db_host = NULL, $db_port = NULL, $db_user = NULL, $db_passwd = NULL) {
     // Look up defaults, if no credentials are provided.
     if (is_null($db_host)) {
       $db_host = drush_get_option('db_host');
+    }
+    if (is_null($db_port)) {
+      $db_port = $this->server->db_port;
+      if (is_null($db_port)) {
+        $script_user = drush_get_option('script_user');
+        if (!$script_user && $server->script_user) {
+          $script_user = $server->script_user;
+        }
+        $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt';
+        if (provision_file()->exists($ctrlf)->status()) {
+          $db_port = '6033';
+        }
+        else {
+          $db_port = '3306';
+        }
+      }
     }
     if (is_null($db_user)) {
       $db_user = urldecode(drush_get_option('db_user'));
@@ -284,16 +300,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     if (is_null($db_passwd)) {
       $db_passwd = urldecode(drush_get_option('db_passwd'));
     }
-    if (is_null($db_port)) {
-      $db_port = $this->server->db_port;
-    }
 
     $mycnf = sprintf('[client]
 host=%s
+port=%s
 user=%s
 password="%s"
-port=%s
-', $db_host, $db_user, $db_passwd, $db_port);
+', $db_host, $db_port, $db_user, $db_passwd);
 
     return $mycnf;
   }
@@ -436,8 +449,8 @@ port=%s
    * just any command)
    *  - can be pushed upstream to drush (http://drupal.org/node/671906)
    */
-  function safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file = NULL) {
-    $mycnf = $this->generate_mycnf($db_host, $db_user, $db_passwd);
+  function safe_shell_exec($cmd, $db_host, $db_port, $db_user, $db_passwd, $dump_file = NULL) {
+    $mycnf = $this->generate_mycnf($db_host, $db_port, $db_user, $db_passwd);
     $descriptorspec = $this->generate_descriptorspec($dump_file);
     $pipes = array();
     $process = proc_open($cmd, $descriptorspec, $pipes);
