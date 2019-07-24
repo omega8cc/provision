@@ -174,7 +174,7 @@ if ($nginx_has_upload_progress) {
  ## Compression
   gzip_buffers      16 8k;
   gzip_comp_level   8;
-  gzip_http_version 1.1;
+  gzip_http_version 1.0;
   gzip_min_length   100;
   gzip_types
     application/atom+xml
