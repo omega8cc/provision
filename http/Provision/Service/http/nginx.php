@@ -29,7 +29,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->setProperty('nginx_has_http2', FALSE);
     $this->server->setProperty('nginx_has_gzip', FALSE);
     $this->server->setProperty('nginx_has_upload_progress', FALSE);
-    $this->server->setProperty('provision_db_cloaking', TRUE);
+    $this->server->setProperty('provision_db_cloaking', FALSE);
     $this->server->setProperty('phpfpm_mode', 'port');
     $this->server->setProperty('subdirs_support', FALSE);
     $this->server->setProperty('satellite_mode', 'vanilla');
@@ -43,7 +43,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
   function save_server() {
 
     // Set correct provision_db_cloaking value on server save.
-    $this->server->provision_db_cloaking = TRUE;
+    $this->server->provision_db_cloaking = FALSE;
 
     // Find nginx executable.
     if (provision_file()->exists('/usr/local/sbin/nginx')->status()) {
@@ -100,7 +100,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
   function verify_server_cmd() {
 
     // Set correct provision_db_cloaking value on server verify.
-    $this->server->provision_db_cloaking = TRUE;
+    $this->server->provision_db_cloaking = FALSE;
 
     // Find nginx executable.
     if (provision_file()->exists('/usr/local/sbin/nginx')->status()) {
