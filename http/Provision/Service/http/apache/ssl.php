@@ -22,7 +22,7 @@ class Provision_Service_http_apache_ssl extends Provision_Service_http_ssl {
   public $ssl_enabled = TRUE;
 
   function cloaked_db_creds() {
-    return TRUE;
+    return FALSE;
   }
 
   /**

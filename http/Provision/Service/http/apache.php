@@ -9,7 +9,7 @@ class Provision_Service_http_apache extends Provision_Service_http_public {
   }
 
   function cloaked_db_creds() {
-    return TRUE;
+    return FALSE;
   }
 
   function init_server() {
