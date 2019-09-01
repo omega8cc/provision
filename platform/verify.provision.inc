@@ -211,7 +211,11 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Built-in drush removed from: !vendor', array('!vendor' => $drupal8_vendor_drush_above)), 'message');
     }
 
-    if (provision_file()->exists($pathAll)->status() && preg_match("/\/static\//", d()->root)) {
+    $core8_version_id = d()->root . '/core';
+
+    if (provision_file()->exists($pathAll)->status() &&
+       (provision_file()->exists($core8_version_id)->status() ||
+        preg_match("/\/static\//", d()->root))) {
       $sortedDirs = array();
       foreach(scandir($pathAll) as $dir) {
         if(is_dir($pathAll . $dir)) {
