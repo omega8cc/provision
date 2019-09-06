@@ -395,7 +395,7 @@ port=%s
         // At this point we have opened a pipe to that mysqldump command. Now
         // we want to read it one line at a time and do our replacements.
         while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
-          // $this->filter_line($buffer);
+          $this->filter_line($buffer);
           // Write the resulting line in the backup file.
           if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
             drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
