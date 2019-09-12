@@ -921,6 +921,7 @@ location ^~ /files/ {
     # fix common problems with old paths after import from standalone to Aegir multisite
     rewrite ^/files/imagecache/(.*)/sites/default/files/(.*)$ /sites/$main_site_name/files/imagecache/$1/$2 last;
     rewrite ^/files/imagecache/(.*)/files/(.*)$               /sites/$main_site_name/files/imagecache/$1/$2 last;
+    rewrite ^/sites/(.*)/files/imagecache/(.*)/sites/(.*)/files/(.*)$ /sites/$main_site_name/files/imagecache/$2/$4 last;
     set $nocache_details "Skip";
 <?php endif; ?>
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
