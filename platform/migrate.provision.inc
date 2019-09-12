@@ -91,6 +91,14 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   if (!is_null($new_name) && ($new_name != d()->name)) {
     $options = d()->options;
+
+    // XXX: right now we just drop SSL configuration when migrating, because
+    // we do not check if the site name change is compatible with the
+    // certificate. This can be removed when we a) check for wildcard
+    // certs and b) allow the user to change the cert from the UI.
+    $options['ssl_enabled'] = 0;
+    unset($options['ssl_key']);
+
     $options['uri'] = ltrim($new_name, '@');
     $hash_name = drush_get_option('#name') ? '#name' : 'name';
     $options[$hash_name] = $new_name;
