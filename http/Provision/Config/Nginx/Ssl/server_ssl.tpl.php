@@ -23,7 +23,7 @@ else {
 }
 
 if ($satellite_mode == 'boa') {
-  $ssl_listen_ip = "*";
+  $ssl_listen_ip = "[::]";
 }
 ?>
 
