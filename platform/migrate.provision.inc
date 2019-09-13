@@ -75,6 +75,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   $target = drush_get_option('target_name');
   $options = array();
+  $options = d()->options;
   $options['uri'] = d()->uri;
 
   // If the site is migrated between platforms and not just renamed,
@@ -90,8 +91,6 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   }
 
   if (!is_null($new_name) && ($new_name != d()->name)) {
-    $options = d()->options;
-
     // XXX: right now we just drop SSL configuration when migrating, because
     // we do not check if the site name change is compatible with the
     // certificate. This can be removed when we a) check for wildcard
@@ -158,6 +157,30 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       // We should update also the info collected about the site before running migrate task.
       // Doing this is safe only when the site is migrated with the same name - see issue #1067702.
       $local_uri_verify = '@' . d()->uri;
+      // XXX: right now we just pause SSL configuration when migrating,
+      // even if the site name doesn't change, because of possible
+      // edge case situations where the task had errors preventing it
+      // from managing vhost and respective SSL keys updates properly.
+      if ($options['ssl_enabled'] && $options['ssl_key']) {
+        $encryption_was_enabled = "YES";
+        $temp_options_ssl_enabled = $options['ssl_enabled'];
+        $temp_options_ssl_key = $options['ssl_key'];
+        $temp_uri_verify = $local_uri_verify;
+        drush_log(dt("DEBUG TO DISABLE ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])));
+        drush_log(dt("DEBUG TO DISABLE ssl_key WAS @this", array('@this' => $options['ssl_key'])));
+        drush_log(dt("DEBUG TO DISABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)));
+        drush_set_option('encryption_was_enabled', TRUE);
+        drush_set_option('temp_options_ssl_enabled', $options['ssl_enabled']);
+        drush_set_option('temp_options_ssl_key', $options['ssl_key']);
+        drush_set_option('temp_uri_verify', $temp_uri_verify);
+        $options['ssl_enabled'] = 0;
+        unset($options['ssl_key']);
+        drush_log(dt("DEBUG DISABLED ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])));
+        drush_log(dt("DEBUG DISABLED ssl_key WAS @this", array('@this' => $options['ssl_key'])));
+        drush_log(dt("DEBUG DISABLED temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)));
+        drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
+        sleep(5); // A small trick to avoid high load and race conditions.
+      }
       provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
       sleep(5); // A small trick to avoid high load and race conditions.
     }
@@ -191,6 +214,26 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     d()->site_enabled = TRUE;
     drush_set_option('provision_save_config', FALSE);
     provision_backend_invoke($target, 'provision-verify');
+    sleep(5); // A small trick to avoid high load and race conditions.
+    // Re-enable encryption again if needed and only when platform has changed
+    $encryption_was_enabled = drush_get_option('encryption_was_enabled');
+    if ($encryption_was_enabled) {
+      drush_log(dt("DEBUG ENABLE encryption_was_enabled WAS @this", array('@this' => $encryption_was_enabled)));
+      $temp_options_ssl_enabled = drush_get_option('encryption_was_enabled');
+      $temp_options_ssl_key = drush_get_option('encryption_was_enabled');
+      $temp_uri_verify = drush_get_option('temp_uri_verify');
+      if ($temp_options_ssl_enabled && $temp_options_ssl_key) {
+        drush_log(dt("DEBUG ENABLE temp_options_ssl_enabled WAS @this", array('@this' => $temp_options_ssl_enabled)));
+        drush_log(dt("DEBUG ENABLE temp_options_ssl_key WAS @this", array('@this' => $temp_options_ssl_key)));
+        drush_log(dt("DEBUG ENABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)));
+        $options['ssl_enabled'] = $temp_options_ssl_enabled;
+        $options['ssl_key'] = $temp_options_ssl_key;
+        drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
+        sleep(5); // A small trick to avoid high load and race conditions.
+        provision_backend_invoke('@hostmaster', 'hosting-task', array($temp_uri_verify, 'verify'), array('force' => TRUE));
+        sleep(5); // A small trick to avoid high load and race conditions.
+      }
+    }
   }
 }
 
