@@ -28,7 +28,8 @@ else {
 }
 
 if ($satellite_mode == 'boa') {
-  $ssl_listen_ip = "*";
+  $ssl_listen_ipv4 = "*";
+  $ssl_listen_ipv6 = "[::]";
   $main_name = $this->uri;
   if ($this->redirection) {
     $main_name = $this->redirection;
@@ -40,14 +41,16 @@ if ($satellite_mode == 'boa') {
   }
 }
 else {
-  $ssl_listen_ip = $ip_address;
+  $ssl_listen_ipv4 = $ip_address;
+  $ssl_listen_ipv6 = "[::]";
 }
 ?>
 
 <?php if ($this->redirection): ?>
 <?php foreach ($this->aliases as $alias_url): ?>
 server {
-  listen       <?php print "{$ssl_listen_ip}:{$http_ssl_port} {$ssl_args}"; ?>;
+  listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
+  listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php
   // if we use redirections, we need to change the redirection
   // target to be the original site URL ($this->uri instead of
@@ -137,7 +140,8 @@ server {
   }
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
-  listen        <?php print "{$ssl_listen_ip}:{$http_ssl_port} {$ssl_args}"; ?>;
+  listen        <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
+  listen        <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
   server_name   <?php
     // this is the main vhost, so we need to put the redirection
     // target as the hostname (if it exists) and not the original URL
