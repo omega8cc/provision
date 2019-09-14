@@ -13,7 +13,7 @@ if ($this->redirection) {
   foreach ($this->aliases as $alias_url) {
     print "# alias redirection virtual host\n";
     print "server {\n";
-    print "  listen       [::]:{$http_port};\n";
+    print "  listen       *:{$http_port};\n";
     // if we use redirections, we need to change the redirection
     // target to be the original site URL ($this->uri instead of
     // $alias_url)
@@ -85,7 +85,7 @@ server {
   }
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
-  listen        [::]:<?php print $http_port; ?>;
+  listen        *:<?php print $http_port; ?>;
   server_name   <?php
     // this is the main vhost, so we need to put the redirection
     // target as the hostname (if it exists) and not the original URL
