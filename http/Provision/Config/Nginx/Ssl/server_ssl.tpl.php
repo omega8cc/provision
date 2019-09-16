@@ -41,8 +41,11 @@ server {
   server_name  _;
   location / {
 <?php if ($satellite_mode == 'boa'): ?>
-    root   /var/www/nginx-default;
-    index  index.html index.htm;
+    root                 /var/www/nginx-default;
+    index                index.html index.htm;
+    ssl_dhparam          /etc/ssl/private/nginx-wild-ssl.dhp;
+    ssl_certificate      /etc/ssl/private/nginx-wild-ssl.crt;
+    ssl_certificate_key  /etc/ssl/private/nginx-wild-ssl.key;
 <?php else: ?>
     return 404;
 <?php endif; ?>
