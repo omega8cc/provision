@@ -157,8 +157,8 @@ function provision_drupal_fetch_site($alias = NULL) {
 
   $site = d($alias);
   // synch filesystem changes back from the remote server.
-  $site->service('http')->fetch($site->site_path . '/files/');
-  $site->service('http')->fetch($site->site_path . '/private/');
+  $site->service('http')->fetch( d()->file_public_path);
+  $site->service('http')->fetch( d()->file_private_path);
   $site->service('http')->fetch($site->site_path . '/modules/');
   $site->service('http')->fetch($site->site_path . '/themes/');
   $site->service('http')->fetch($site->site_path . '/libraries/');
