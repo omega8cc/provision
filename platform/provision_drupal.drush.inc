@@ -108,7 +108,9 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   ));
 
   // Sync the platform
-  d()->service('http')->sync(d()->root, array('exclude-sites' => TRUE));
+  $sync_path = d()->root;
+  drush_command_invoke_all_ref('provision_platform_sync_path_alter', $sync_path, d());
+  d()->service('http')->sync($sync_path, array('exclude-sites' => TRUE));
 
   if (d()->type === 'site') {
     // Check whether we're hosted on a cluster, in which case, the master is
@@ -168,8 +170,12 @@ function provision_drupal_fetch_site($alias = NULL) {
  * Generate a settings file for the site.
  */
 function _provision_drupal_create_settings_file() {
-  $config = new Provision_Config_Drupal_Settings(d()->name, drush_get_context('site'));
-  $config->write();
+  $name = d()->name;
+  $context = drush_get_context('site');
+  $settings = new Provision_Config_Drupal_Settings($name, $context);
+  $settings->write();
+  $services = new Provision_Config_Drupal_Services($name, $context);
+  $services->write();
 }
 
 /**
@@ -593,6 +599,16 @@ function _provision_drupal_find_modules($scope, $key = '') {
       $source = file_get_contents(trim($install_file));
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
+      // Also search included files for function signature
+      $include_matches = array();
+      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
+      if (sizeof($include_matches[0])) {
+        foreach($include_matches[4] as $include) {
+          if ($include_file = realpath(dirname($info->filename) . DIRECTORY_SEPARATOR . $include)) {
+            $source .= "\n" . file_get_contents($include_file);
+          }
+        }
+      }
       $function_matches = array();
         preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
 

@@ -23,6 +23,7 @@ print '<?php' ?>
  */
 if (isset($_SERVER['SITE_SUBDIR']) && isset($_SERVER['RAW_HOST'])) {
   $base_url = 'http://' . $_SERVER['RAW_HOST'] . '/' . $_SERVER['SITE_SUBDIR'];
+  ini_set('session.cookie_path', '/' . $_SERVER['SITE_SUBDIR'] . '/');
 }
 <?php endif; ?>
 
@@ -110,9 +111,6 @@ if (isset($_SERVER['db_name'])) {
 
 <?php endif; ?>
 
-  $profile = "<?php print $this->profile ?>";
-  $install_profile = "<?php print $this->profile ?>";
-
   /**
   * PHP settings:
   *
@@ -133,7 +131,6 @@ if (isset($_SERVER['db_name'])) {
   */
   umask(0002);
 
-  $settings['install_profile'] = '<?php print $this->profile ?>';
   $settings['file_public_path'] = '<?php print $this->file_public_path ?>';
   $settings['file_private_path'] = '<?php print $this->file_private_path ?>';
   $config['system.file']['path']['temporary'] = '<?php print $this->file_temporary_path ?>';
@@ -163,6 +160,7 @@ if (isset($_SERVER['db_name'])) {
   /**
    * Load services definition file.
    */
+  $settings['container_yamls'][] = __DIR__ . '/aegir.services.yml';
   $settings['container_yamls'][] = __DIR__ . '/services.yml';
 
   /**
@@ -181,6 +179,11 @@ if (isset($_SERVER['db_name'])) {
     '^localhost\.*',
     '\.local$',
   );
+
+  /**
+   * Set the Syslog identity to the site name so it's not always "drupal".
+   */
+  $config['syslog.settings']['identity'] = '<?php print $this->uri ?>';
 
 <?php print $extra_config; ?>
 
