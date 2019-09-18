@@ -214,8 +214,8 @@ function _provision_drupal_create_directories($url = NULL) {
     $mkdir[$file_public_path]            = 02770;
     $chgrp[$file_public_path]            = d('@server_master')->web_group;
 
-    $mkdir[$file_public_path]        = 02770;
-    $chgrp[$file_public_path]        = d('@server_master')->web_group;
+    $mkdir["$file_public_path/tmp"]        = 02770;
+    $chgrp["$file_public_path/tmp"]        = d('@server_master')->web_group;
 
     $mkdir["$file_public_path/images"]     = 02770;
     $chgrp["$file_public_path/images"]     = d('@server_master')->web_group;
@@ -252,11 +252,11 @@ function _provision_drupal_create_directories($url = NULL) {
     $chgrp["$file_public_path/styles"]     = d('@server_master')->web_group;
 
     // d8 support
-    $mkdir["$file_temporary_path/config"]   = 02770;
-    $chgrp["$file_temporary_path/config"]   = d('@server_master')->web_group;
+    $mkdir["$file_private_path/config"]   = 02770;
+    $chgrp["$file_private_path/config"]   = d('@server_master')->web_group;
 
-    $mkdir["$file_temporary_path/config/sync"] = 02770;
-    $chgrp["$file_temporary_path/config/sync"] = d('@server_master')->web_group;
+    $mkdir["$file_private_path/config/sync"] = 02770;
+    $chgrp["$file_private_path/config/sync"] = d('@server_master')->web_group;
   }
 
   // These paths should not have recursive operations performed on them.
