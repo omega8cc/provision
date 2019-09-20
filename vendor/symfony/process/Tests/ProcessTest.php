@@ -1169,7 +1169,7 @@ class ProcessTest extends TestCase
             // Avoid XL buffers on Windows because of https://bugs.php.net/bug.php?id=65650
             $sizes = array(1, 2, 4, 8);
         } else {
-            $sizes = array(1, 16, 64, 1024, 4096);
+            $sizes = array(1, 16, 64, 1024, 4096, 8192);
         }
 
         $codes = array();

@@ -394,7 +394,7 @@ port=%s
 
         // At this point we have opened a pipe to that mysqldump command. Now
         // we want to read it one line at a time and do our replacements.
-        while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
+        while (($buffer = fgets($pipes[1], 8192)) !== FALSE) {
           $this->filter_line($buffer);
           // Write the resulting line in the backup file.
           if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
@@ -404,7 +404,7 @@ port=%s
         // Close stdout.
         fclose($pipes[1]);
         // Catch errors returned by mysqldump.
-        $err = fread($pipes[2], 4096);
+        $err = fread($pipes[2], 8192);
         // Close stderr as well.
         fclose($pipes[2]);
         if (proc_close($process) != 0) {
