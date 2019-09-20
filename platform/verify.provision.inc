@@ -178,5 +178,14 @@ function drush_provision_drupal_post_provision_verify() {
 
     _provision_client_create_symlink();
     drush_include_engine('drupal', 'cron_key');
+
+    # Cleanup useless `aegir.services.yml` files.
+    # See: https://www.drupal.org/project/provision/issues/3066538
+    $path = d()->site_path . '/aegir.services.yml';
+    if (provision_file()->exists($path)->status()) {
+      provision_file()->unlink($path)
+        ->succeed('Cleaned up unused Aegir services.yml file.')
+        ->fail('Failed to clean up unused Aegir services.yml file.', 'PROVISION_DELETE_AEGIR_SERVICES_YML_FAILED');
+    }
   }
 }
