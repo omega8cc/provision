@@ -232,8 +232,8 @@ function _provision_drupal_create_directories($url = NULL) {
     $mkdir["$file_public_path/ctools"]     = 02770;
     $chgrp["$file_public_path/ctools"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/imagecache"] = 02770;
-    $chgrp["sites/$url/files/imagecache"] = d('@server_master')->web_group;
+    $mkdir["$file_public_path/imagecache"] = 02770;
+    $chgrp["$file_public_path/imagecache"] = d('@server_master')->web_group;
 
     $mkdir["$file_public_path/locations"]  = 02770;
     $chgrp["$file_public_path/locations"]  = d('@server_master')->web_group;
