@@ -297,7 +297,7 @@ map $args $is_denied {
 
 server {
   listen       *:<?php print $http_port; ?>;
-  listen       [::]:<?php print $http_port; ?>;
+  #listen       [::]:<?php print $http_port; ?>;
   server_name  _;
   location / {
 <?php if ($satellite_mode == 'boa'): ?>
@@ -316,7 +316,7 @@ server {
 <?php if ($satellite_mode == 'boa'): ?>
 server {
   listen       *:<?php print $http_port; ?>;
-  listen       [::]:<?php print $http_port; ?>;
+  #listen       [::]:<?php print $http_port; ?>;
   server_name  127.0.0.1;
   location /nginx_status {
     stub_status on;

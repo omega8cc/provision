@@ -87,7 +87,7 @@ server {
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
   listen        *:<?php print $http_port; ?>;
-  listen        [::]:<?php print $http_port; ?>;
+  #listen        [::]:<?php print $http_port; ?>;
   server_name   <?php
     // this is the main vhost, so we need to put the redirection
     // target as the hostname (if it exists) and not the original URL
