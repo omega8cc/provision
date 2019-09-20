@@ -369,7 +369,7 @@ port=%s
     // If a database uses Global Transaction IDs (GTIDs), information about this is written to the dump
     // file by default.  Trying to import such a dump during a clone or migrate will fail.  So use the
     // '--set-gtid-purged=OFF' option to suppress the restoration of GTIDs.  GTIDs were added in MySQL version 5.6
-    if (drush_get_option('provision_mysqldump_suppress_gtid_restore', FALSE)) {
+    if (drush_get_option('provision_mysqldump_suppress_gtid_restore', TRUE)) {
       $gtid_option = '--set-gtid-purged=OFF';
     } // if
     else {
