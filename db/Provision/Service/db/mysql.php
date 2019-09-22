@@ -230,15 +230,62 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
   function import_dump($dump_file, $creds) {
     extract($creds);
+    $mydumper = '/usr/local/bin/mydumper';
+    $myloader = '/usr/local/bin/myloader';
+    $mysyuser = drush_get_option('script_user');
+    $aegiroot = drush_get_option('aegir_root');
+    $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
+    if (provision_file()->exists($mycrdnts)->status()) {
+      include_once('$mycrdnts');
+    }
+    if (!$oct_db_user ||
+      !$oct_db_pass ||
+      !$oct_db_host ||
+      !$oct_db_port ||
+      !$oct_db_dirs) {
+      //$mycnf = $this->generate_mycnf();
+      $oct_db_user = $db_user;
+      $oct_db_pass = $db_passwd;
+      $oct_db_host = $db_host;
+      $oct_db_port = $db_port;
+      $oct_db_dirs = $aegiroot . '/backups';
+    }
+    if (is_dir($oct_db_dirs)) {
+      $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+    }
+    if (!is_dir($oct_db_dirx)) {
+      drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
+    }
+    $ncpus = provision_count_cpus();
+    if (provision_file()->exists($mydumper)->status() &&
+      provision_file()->exists($myloader)->status() &&
+      is_dir($oct_db_dirx) &&
+      is_file($mycrdnts) &&
+      $db_name &&
+      $oct_db_user &&
+      $oct_db_pass &&
+      $oct_db_host &&
+      $oct_db_port &&
+      $oct_db_dirs) {
+      $command = sprintf($myloader . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+      drush_shell_exec($command);
+      $oct_db_test = $oct_db_dirx . '/.test.pid';
+      $pipes = array();
+      $err = fread($pipes[1], 2048);
+      if (!$command) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+      }
+    }
+    else {
+      $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-    $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
+      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file);
 
-    $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file);
+      drush_log(sprintf("Importing database using command: %s", $cmd));
 
-    drush_log(sprintf("Importing database using command: %s", $cmd));
-
-    if (!$success) {
-      drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
+      if (!$success) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
+      }
     }
   }
 
@@ -376,50 +423,105 @@ port=%s
       $gtid_option = '';
     } // else
 
-    // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
-    $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --single-transaction --quick --no-autocommit --skip-add-locks --hex-blob %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
-
-    // Fail if db file already exists.
-    $dump_file = fopen(d()->site_path . '/database.sql', 'x');
-    if ($dump_file === FALSE) {
-      drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
+    $mydumper = '/usr/local/bin/mydumper';
+    $myloader = '/usr/local/bin/myloader';
+    $mysyuser = drush_get_option('script_user');
+    $aegiroot = drush_get_option('aegir_root');
+    $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
+    if (provision_file()->exists($mycrdnts)->status()) {
+      include_once('$mycrdnts');
+    }
+    if (!$oct_db_user ||
+      !$oct_db_pass ||
+      !$oct_db_host ||
+      !$oct_db_port ||
+      !$oct_db_dirs) {
+      //$mycnf = $this->generate_mycnf();
+      $oct_db_user = $db_user;
+      $oct_db_pass = $db_passwd;
+      $oct_db_host = $db_host;
+      $oct_db_port = $db_port;
+      $oct_db_dirs = $aegiroot . '/backups';
+    }
+    if (is_dir($oct_db_dirs)) {
+      $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+    }
+    if (is_dir($oct_db_dirx)) {
+      _provision_recursive_delete($oct_db_dirx);
+      drush_log(dt('The tmp_expim dir removed: !tmp_expim', array('!tmp_expim' => $oct_db_dirx)), 'message');
+    }
+    if (!is_dir($oct_db_dirx)) {
+      provision_file()->mkdir($oct_db_dirx)
+        ->succeed('Created <code>@path</code>')
+        ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+    }
+    $ncpus = provision_count_cpus();
+    if (provision_file()->exists($mydumper)->status() &&
+      provision_file()->exists($myloader)->status() &&
+      is_dir($oct_db_dirx) &&
+      is_file($mycrdnts) &&
+      $db_name &&
+      $oct_db_user &&
+      $oct_db_pass &&
+      $oct_db_host &&
+      $oct_db_port &&
+      $oct_db_dirs) {
+      $command = sprintf($mydumper . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
+      drush_shell_exec($command);
+      $oct_db_test = $oct_db_dirx . '/.test.pid';
+      $pipes = array();
+      $err = fread($pipes[1], 2048);
+      if (is_file($oct_db_test)) {
+        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+      }
     }
     else {
-      $pipes = array();
-      $descriptorspec = $this->generate_descriptorspec();
-      $process = proc_open($cmd, $descriptorspec, $pipes);
-      if (is_resource($process)) {
-        fwrite($pipes[3], $this->generate_mycnf());
-        fclose($pipes[3]);
+      // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
+      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --single-transaction --quick --no-autocommit --skip-add-locks --hex-blob %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
 
-        // At this point we have opened a pipe to that mysqldump command. Now
-        // we want to read it one line at a time and do our replacements.
-        while (($buffer = fgets($pipes[1], 8192)) !== FALSE) {
-          $this->filter_line($buffer);
-          // Write the resulting line in the backup file.
-          if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
-            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
-          }
-        }
-        // Close stdout.
-        fclose($pipes[1]);
-        // Catch errors returned by mysqldump.
-        $err = fread($pipes[2], 8192);
-        // Close stderr as well.
-        fclose($pipes[2]);
-        if (proc_close($process) != 0) {
-          drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd)));
-        }
+      // Fail if db file already exists.
+      $dump_file = fopen(d()->site_path . '/database.sql', 'x');
+      if ($dump_file === FALSE) {
+        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
       }
       else {
-        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not run mysqldump for backups'));
+        $pipes = array();
+        $descriptorspec = $this->generate_descriptorspec();
+        $process = proc_open($cmd, $descriptorspec, $pipes);
+        if (is_resource($process)) {
+          fwrite($pipes[3], $this->generate_mycnf());
+          fclose($pipes[3]);
+
+          // At this point we have opened a pipe to that mysqldump command. Now
+          // we want to read it one line at a time and do our replacements.
+          while (($buffer = fgets($pipes[1], 8192)) !== FALSE) {
+            $this->filter_line($buffer);
+            // Write the resulting line in the backup file.
+            if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
+              drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
+            }
+          }
+          // Close stdout.
+          fclose($pipes[1]);
+          // Catch errors returned by mysqldump.
+          $err = fread($pipes[2], 2048);
+          // Close stderr as well.
+          fclose($pipes[2]);
+          if (proc_close($process) != 0) {
+            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd)));
+          }
+        }
+        else {
+          drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not run mysqldump for backups'));
+        }
+      }
+
+      $dump_size_too_small = filesize(d()->site_path . '/database.sql') < 1024;
+      if (($dump_size_too_small) && !drush_get_option('force', FALSE)) {
+        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not generate database backup from mysqldump. (error: %msg)', array('%msg' => $err)));
       }
     }
 
-    $dump_size_too_small = filesize(d()->site_path . '/database.sql') < 1024;
-    if (($dump_size_too_small) && !drush_get_option('force', FALSE)) {
-      drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not generate database backup from mysqldump. (error: %msg)', array('%msg' => $err)));
-    }
     // Reset the umask to normal permissions.
     umask(0022);
   }
