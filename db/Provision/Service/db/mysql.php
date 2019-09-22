@@ -235,45 +235,48 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $mysyuser = drush_get_option('script_user');
     $aegiroot = drush_get_option('aegir_root');
     $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
-    if (provision_file()->exists($mycrdnts)->status()) {
-      include_once('$mycrdnts');
-    }
-    if (!$oct_db_user ||
-      !$oct_db_pass ||
-      !$oct_db_host ||
-      !$oct_db_port ||
-      !$oct_db_dirs) {
-      //$mycnf = $this->generate_mycnf();
-      $oct_db_user = $db_user;
-      $oct_db_pass = $db_passwd;
-      $oct_db_host = $db_host;
-      $oct_db_port = $db_port;
-      $oct_db_dirs = $aegiroot . '/backups';
-    }
-    if (is_dir($oct_db_dirs)) {
-      $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
-    }
-    if (!is_dir($oct_db_dirx)) {
-      drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
-    }
-    $ncpus = provision_count_cpus();
-    if (provision_file()->exists($mydumper)->status() &&
-      provision_file()->exists($myloader)->status() &&
-      is_dir($oct_db_dirx) &&
-      is_file($mycrdnts) &&
-      $db_name &&
-      $oct_db_user &&
-      $oct_db_pass &&
-      $oct_db_host &&
-      $oct_db_port &&
-      $oct_db_dirs) {
-      $command = sprintf($myloader . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
-      drush_shell_exec($command);
-      $oct_db_test = $oct_db_dirx . '/.test.pid';
-      $pipes = array();
-      $err = fread($pipes[1], 2048);
-      if (!$command) {
-        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+    $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
+    if (is_file($mycntrlf) && is_executable($myloader)) {
+      if (provision_file()->exists($mycrdnts)->status()) {
+        include_once('$mycrdnts');
+      }
+      if (!$oct_db_user ||
+        !$oct_db_pass ||
+        !$oct_db_host ||
+        !$oct_db_port ||
+        !$oct_db_dirs) {
+        //$mycnf = $this->generate_mycnf();
+        $oct_db_user = $db_user;
+        $oct_db_pass = $db_passwd;
+        $oct_db_host = $db_host;
+        $oct_db_port = $db_port;
+        $oct_db_dirs = $aegiroot . '/backups';
+      }
+      if (is_dir($oct_db_dirs)) {
+        $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+      }
+      if (!is_dir($oct_db_dirx)) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
+      }
+      $ncpus = provision_count_cpus();
+      if (provision_file()->exists($mydumper)->status() &&
+        provision_file()->exists($myloader)->status() &&
+        is_dir($oct_db_dirx) &&
+        is_file($mycrdnts) &&
+        $db_name &&
+        $oct_db_user &&
+        $oct_db_pass &&
+        $oct_db_host &&
+        $oct_db_port &&
+        $oct_db_dirs) {
+        $command = sprintf($myloader . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+        drush_shell_exec($command);
+        $oct_db_test = $oct_db_dirx . '/.test.pid';
+        $pipes = array();
+        $err = fread($pipes[1], 2048);
+        if (!$command) {
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+        }
       }
     }
     else {
@@ -428,51 +431,54 @@ port=%s
     $mysyuser = drush_get_option('script_user');
     $aegiroot = drush_get_option('aegir_root');
     $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
-    if (provision_file()->exists($mycrdnts)->status()) {
-      include_once('$mycrdnts');
-    }
-    if (!$oct_db_user ||
-      !$oct_db_pass ||
-      !$oct_db_host ||
-      !$oct_db_port ||
-      !$oct_db_dirs) {
-      //$mycnf = $this->generate_mycnf();
-      $oct_db_user = $db_user;
-      $oct_db_pass = $db_passwd;
-      $oct_db_host = $db_host;
-      $oct_db_port = $db_port;
-      $oct_db_dirs = $aegiroot . '/backups';
-    }
-    if (is_dir($oct_db_dirs)) {
-      $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
-    }
-    if (is_dir($oct_db_dirx)) {
-      _provision_recursive_delete($oct_db_dirx);
-      drush_log(dt('The tmp_expim dir removed: !tmp_expim', array('!tmp_expim' => $oct_db_dirx)), 'message');
-    }
-    if (!is_dir($oct_db_dirx)) {
-      provision_file()->mkdir($oct_db_dirx)
-        ->succeed('Created <code>@path</code>')
-        ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
-    }
-    $ncpus = provision_count_cpus();
-    if (provision_file()->exists($mydumper)->status() &&
-      provision_file()->exists($myloader)->status() &&
-      is_dir($oct_db_dirx) &&
-      is_file($mycrdnts) &&
-      $db_name &&
-      $oct_db_user &&
-      $oct_db_pass &&
-      $oct_db_host &&
-      $oct_db_port &&
-      $oct_db_dirs) {
-      $command = sprintf($mydumper . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
-      drush_shell_exec($command);
-      $oct_db_test = $oct_db_dirx . '/.test.pid';
-      $pipes = array();
-      $err = fread($pipes[1], 2048);
-      if (is_file($oct_db_test)) {
-        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+    $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
+    if (is_file($mycntrlf) && is_executable($mydumper)) {
+      if (provision_file()->exists($mycrdnts)->status()) {
+        include_once('$mycrdnts');
+      }
+      if (!$oct_db_user ||
+        !$oct_db_pass ||
+        !$oct_db_host ||
+        !$oct_db_port ||
+        !$oct_db_dirs) {
+        //$mycnf = $this->generate_mycnf();
+        $oct_db_user = $db_user;
+        $oct_db_pass = $db_passwd;
+        $oct_db_host = $db_host;
+        $oct_db_port = $db_port;
+        $oct_db_dirs = $aegiroot . '/backups';
+      }
+      if (is_dir($oct_db_dirs)) {
+        $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+      }
+      if (is_dir($oct_db_dirx)) {
+        _provision_recursive_delete($oct_db_dirx);
+        drush_log(dt('The tmp_expim dir removed: !tmp_expim', array('!tmp_expim' => $oct_db_dirx)), 'message');
+      }
+      if (!is_dir($oct_db_dirx)) {
+        provision_file()->mkdir($oct_db_dirx)
+          ->succeed('Created <code>@path</code>')
+          ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+      }
+      $ncpus = provision_count_cpus();
+      if (provision_file()->exists($mydumper)->status() &&
+        provision_file()->exists($myloader)->status() &&
+        is_dir($oct_db_dirx) &&
+        is_file($mycrdnts) &&
+        $db_name &&
+        $oct_db_user &&
+        $oct_db_pass &&
+        $oct_db_host &&
+        $oct_db_port &&
+        $oct_db_dirs) {
+        $command = sprintf($mydumper . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
+        drush_shell_exec($command);
+        $oct_db_test = $oct_db_dirx . '/.test.pid';
+        $pipes = array();
+        $err = fread($pipes[1], 2048);
+        if (is_file($oct_db_test)) {
+          drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+        }
       }
     }
     else {
