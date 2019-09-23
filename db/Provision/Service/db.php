@@ -165,25 +165,78 @@ class Provision_Service_db extends Provision_Service {
 
 
   function import_site_database($dump_file = null, $creds = array()) {
-    if (is_null($dump_file)) {
-      $dump_file = d()->site_path . '/database.sql';
+    $mydumper = '/usr/local/bin/mydumper';
+    $myloader = '/usr/local/bin/myloader';
+    $mysyuser = drush_get_option('script_user');
+    $aegiroot = drush_get_option('aegir_root');
+    $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
+    drush_log(dt("DEBUG MyQuick import_site_database db.php @mycrdnts", array('@mycrdnts' => $mycrdnts)), 'info');
+    $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
+    drush_log(dt("DEBUG MyQuick import_site_database db.php @mycntrlf", array('@mycntrlf' => $mycntrlf)), 'info');
+    if (is_file($mycntrlf) && is_executable($myloader)) {
+      if (provision_file()->exists($mycrdnts)->status()) {
+        include_once('$mycrdnts');
+      }
+      if (!$oct_db_user ||
+        !$oct_db_pass ||
+        !$oct_db_host ||
+        !$oct_db_port ||
+        !$oct_db_dirs) {
+        //$mycnf = $this->generate_mycnf();
+        $oct_db_user = $db_user;
+        $oct_db_pass = $db_passwd;
+        $oct_db_host = $db_host;
+        $oct_db_port = $db_port;
+        $oct_db_dirs = $aegiroot . '/backups';
+      }
+      if (is_dir($oct_db_dirs)) {
+        $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+      }
+      if (!is_dir($oct_db_dirx)) {
+        drush_log(dt("DEBUG MyQuick import_site_database db.php check @oct_db_dirx", array('@oct_db_dirx' => $oct_db_dirx)), 'info');
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
+      }
+      $ncpus = provision_count_cpus();
+      if (provision_file()->exists($mydumper)->status() &&
+        provision_file()->exists($myloader)->status() &&
+        is_dir($oct_db_dirx) &&
+        is_file($mycrdnts) &&
+        $db_name &&
+        $oct_db_user &&
+        $oct_db_pass &&
+        $oct_db_host &&
+        $oct_db_port &&
+        $oct_db_dirs) {
+        $command = sprintf($myloader . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+        drush_log(dt("DEBUG MyQuick import_site_database db.php Cmd @command", array('@command' => $command)), 'info');
+        drush_shell_exec($command);
+        $oct_db_test = $oct_db_dirx . '/.test.pid';
+        $pipes = array();
+        $err = fread($pipes[1], 2048);
+        if (!$command) {
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+        }
+      }
     }
-
-    if (!sizeof($creds)) {
-      $creds = $this->fetch_site_credentials();
-    }
-
-    $exists = provision_file()->exists($dump_file)
-      ->succeed('Found database dump at @path.')
-      ->fail('No database dump was found at @path.', 'PROVISION_DB_DUMP_NOT_FOUND')
-      ->status();
-    if ($exists) {
-      $readable = provision_file()->readable($dump_file)
-        ->succeed('Database dump at @path is readable')
-        ->fail('The database dump at @path could not be read.', 'PROVISION_DB_DUMP_NOT_READABLE')
+    else {
+      if (is_null($dump_file)) {
+        $dump_file = d()->site_path . '/database.sql';
+      }
+      if (!sizeof($creds)) {
+        $creds = $this->fetch_site_credentials();
+      }
+      $exists = provision_file()->exists($dump_file)
+        ->succeed('Found database dump at @path.')
+        ->fail('No database dump was found at @path.', 'PROVISION_DB_DUMP_NOT_FOUND')
         ->status();
-      if ($readable) {
-        $this->import_dump($dump_file, $creds);
+      if ($exists) {
+        $readable = provision_file()->readable($dump_file)
+          ->succeed('Database dump at @path is readable')
+          ->fail('The database dump at @path could not be read.', 'PROVISION_DB_DUMP_NOT_READABLE')
+          ->status();
+        if ($readable) {
+          $this->import_dump($dump_file, $creds);
+        }
       }
     }
   }

@@ -20,7 +20,15 @@ function drush_db_provision_deploy() {
 // Rollback doesn't apply here yet. Unless we trigger a deploy of the first dump
 // made. Which could go on infinitely if something is really long.
 function drush_db_post_provision_deploy() {
-  provision_file()->unlink(d()->site_path . '/database.sql')
-    ->succeed('Removed dump file @path after restoring from it')
-    ->fail('Could not remove dump file @path', 'DRUSH_PERM_ERROR');
+  $myloader = '/usr/local/bin/myloader';
+  $aegiroot = drush_get_option('aegir_root');
+  $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
+  if (is_file($mycntrlf) && is_executable($myloader)) {
+    $do_nothing = TRUE;
+  }
+  else {
+    provision_file()->unlink(d()->site_path . '/database.sql')
+      ->succeed('Removed dump file @path after restoring from it')
+      ->fail('Could not remove dump file @path', 'DRUSH_PERM_ERROR');
+  }
 }
