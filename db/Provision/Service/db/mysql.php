@@ -276,7 +276,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // Create pre-db-import flag file.
       $pre_import_flag = $backup_path . '/.pre_import_flag.pid';
       $pre_import_flag_blank = "Starting Import \n";
-      $local_description = 'Pre-DB-Import Flag-File';
+      $local_description = 'Add Pre-DB-Import Flag-File import_dump mysql.php';
       if (!provision_file()->exists($pre_import_flag)->status()) {
         provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
       	->succeed('Generated blank ' . $local_description)
@@ -299,13 +299,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
         // Delete pre-db-import flag file.
         provision_file()->unlink($pre_import_flag)
-          ->succeed('Removed Pre-DB-Import Flag-File')
+          ->succeed('Remove Pre-DB-Import Flag-File')
           ->fail('Could not remove Pre-DB-Import Flag-File');
 
 		// Create post-db-import flag file.
 		$post_import_flag = $backup_path . '/.post_import_flag.pid';
 		$post_import_flag_blank = "Imported \n";
-		$local_description = 'Post-DB-Import Flag-File';
+		$local_description = 'Add Post-DB-Import Flag-File';
 		if (!provision_file()->exists($post_import_flag)->status()) {
 		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
 			->succeed('Generated blank ' . $local_description)
