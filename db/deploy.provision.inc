@@ -21,7 +21,7 @@ function drush_db_provision_deploy() {
 // made. Which could go on infinitely if something is really long.
 function drush_db_post_provision_deploy() {
   $myloader = '/usr/local/bin/myloader';
-  $aegiroot = drush_get_option('aegir_root');
+  $aegiroot = $server->aegir_root;
   $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
   if (is_file($mycntrlf) && is_executable($myloader)) {
     $do_nothing = TRUE;

@@ -167,8 +167,8 @@ class Provision_Service_db extends Provision_Service {
   function import_site_database($dump_file = null, $creds = array()) {
     $mydumper = '/usr/local/bin/mydumper';
     $myloader = '/usr/local/bin/myloader';
-    $mysyuser = drush_get_option('script_user');
-    $aegiroot = drush_get_option('aegir_root');
+    $mysyuser = $server->script_user;
+    $aegiroot = $server->aegir_root;
     $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
     drush_log(dt("DEBUG MyQuick import_site_database db.php @mycrdnts", array('@mycrdnts' => $mycrdnts)), 'info');
     $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
