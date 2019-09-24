@@ -242,9 +242,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
     drush_log(dt("DEBUG MyQuick import_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
-    $enable_myfast = $aegir_root . '/static/control/MyQuick.info';
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php enable_myfast @var", array('@var' => $enable_myfast)), 'info');
-    if (is_file($enable_myfast) && is_executable($myloader_path)) {
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    if (is_file($enable_myquick) && is_executable($myloader_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
         include_once($pass_php_inc);
       }
@@ -254,6 +254,14 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
+        $tst_db_dirx = drush_get_option('use_oct_db_dirx');
+        if (is_dir($tst_db_dirx)) {
+          $oct_db_dirx = $tst_db_dirx;
+          drush_log(dt("DEBUG MyQuick import_dump mysql.php tst_db_dirx @var", array('@var' => $tst_db_dirx)), 'info');
+        }
+        else {
+          drush_log(dt("DEBUG MyQuick import_dump mysql.php fail tst_db_dirx @var", array('@var' => $tst_db_dirx)), 'info');
+        }
       }
       else {
         drush_log(dt("DEBUG MyQuick import_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
@@ -445,9 +453,9 @@ port=%s
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
     drush_log(dt("DEBUG MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
-    $enable_myfast = $aegir_root . '/static/control/MyQuick.info';
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php enable_myfast @var", array('@var' => $enable_myfast)), 'info');
-    if (is_file($enable_myfast) && is_executable($mydumper_path)) {
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    if (is_file($enable_myquick) && is_executable($mydumper_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
         include_once($pass_php_inc);
       }
@@ -457,6 +465,8 @@ port=%s
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
+        $oct_db_dirx = $oct_db_dirx . '/' . $db_name;
+        drush_set_option('use_oct_db_dirx', $oct_db_dirx);
       }
       else {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');

@@ -22,8 +22,8 @@ function drush_db_provision_deploy() {
 function drush_db_post_provision_deploy() {
   $myloader_path = '/usr/local/bin/myloader';
   $aegir_root = d('@server_master')->aegir_root;
-  $enable_myfast = $aegir_root . '/static/control/MyQuick.info';
-  if (is_file($enable_myfast) && is_executable($myloader_path)) {
+  $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+  if (is_file($enable_myquick) && is_executable($myloader_path)) {
     $do_nothing = TRUE;
   }
   else {
