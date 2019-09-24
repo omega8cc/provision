@@ -240,7 +240,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     drush_log(dt("DEBUG MyQuick import_dump mysql.php @var", array('@var' => $enable_myfast)), 'info');
     if (is_file($enable_myfast) && is_executable($myloader_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
-        include_once('$pass_php_inc');
+        include_once($pass_php_inc);
       }
       if (!$oct_db_user ||
         !$oct_db_pass ||
@@ -262,16 +262,17 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
       $ncpus = provision_count_cpus();
-      if (provision_file()->exists($mydumper_path)->status() &&
-        provision_file()->exists($myloader_path)->status() &&
-        is_dir($oct_db_dirx) &&
-        is_file($pass_php_inc) &&
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      if (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
         $oct_db_host &&
-        $oct_db_port &&
-        $oct_db_dirs) {
+        $oct_db_port) {
         $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
@@ -440,7 +441,7 @@ port=%s
     drush_log(dt("DEBUG MyQuick generate_dump mysql.php @var", array('@var' => $enable_myfast)), 'info');
     if (is_file($enable_myfast) && is_executable($mydumper_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
-        include_once('$pass_php_inc');
+        include_once($pass_php_inc);
       }
       if (!$oct_db_user ||
         !$oct_db_pass ||
@@ -469,16 +470,17 @@ port=%s
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
       }
       $ncpus = provision_count_cpus();
-      if (provision_file()->exists($mydumper_path)->status() &&
-        provision_file()->exists($myloader_path)->status() &&
-        is_dir($oct_db_dirx) &&
-        is_file($pass_php_inc) &&
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      if (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
         $oct_db_host &&
-        $oct_db_port &&
-        $oct_db_dirs) {
+        $oct_db_port) {
         $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);

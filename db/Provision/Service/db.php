@@ -175,7 +175,7 @@ class Provision_Service_db extends Provision_Service {
     drush_log(dt("DEBUG MyQuick import_site_database db.php @var", array('@var' => $enable_myfast)), 'info');
     if (is_file($enable_myfast) && is_executable($myloader_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
-        include_once('$pass_php_inc');
+        include_once($pass_php_inc);
       }
       if (!$oct_db_user ||
         !$oct_db_pass ||
@@ -197,16 +197,17 @@ class Provision_Service_db extends Provision_Service {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
       $ncpus = provision_count_cpus();
-      if (provision_file()->exists($mydumper_path)->status() &&
-        provision_file()->exists($myloader_path)->status() &&
-        is_dir($oct_db_dirx) &&
-        is_file($pass_php_inc) &&
+      drush_log(dt("DEBUG MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
+      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
+      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
+      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      if (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
         $oct_db_host &&
-        $oct_db_port &&
-        $oct_db_dirs) {
+        $oct_db_port) {
         $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
