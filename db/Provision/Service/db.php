@@ -165,35 +165,37 @@ class Provision_Service_db extends Provision_Service {
 
 
   function import_site_database($dump_file = null, $creds = array()) {
+    if (!sizeof($creds)) {
+      $creds = $this->fetch_site_credentials();
+    }
+    extract($creds);
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
     $mydumper_path = '/usr/local/bin/mydumper';
     $myloader_path = '/usr/local/bin/myloader';
     $script_user = d('@server_master')->script_user;
     $aegir_root = d('@server_master')->aegir_root;
+    $backup_path = d('@server_master')->backup_path;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    drush_log(dt("DEBUG MyQuick import_site_database db.php @var", array('@var' => $pass_php_inc)), 'info');
+    drush_log(dt("DEBUG MyQuick import_site_database db.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
     $enable_myfast = $aegir_root . '/static/control/enable_myfast.txt';
-    drush_log(dt("DEBUG MyQuick import_site_database db.php @var", array('@var' => $enable_myfast)), 'info');
+    drush_log(dt("DEBUG MyQuick import_site_database db.php enable_myfast @var", array('@var' => $enable_myfast)), 'info');
     if (is_file($enable_myfast) && is_executable($myloader_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
         include_once($pass_php_inc);
       }
-      if (!$oct_db_user ||
-        !$oct_db_pass ||
-        !$oct_db_host ||
-        !$oct_db_port ||
-        !$oct_db_dirs) {
-        //$mycnf = $this->generate_mycnf();
+      if ($db_name) {
+        $mycnf = $this->generate_mycnf();
         $oct_db_user = $db_user;
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $oct_db_dirs = $aegir_root . '/backups';
       }
-      if (is_dir($oct_db_dirs)) {
-        $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
+      else {
+        drush_log(dt("DEBUG MyQuick import_site_database db.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
       }
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick import_site_database db.php check @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick import_site_database db.php fail @var", array('@var' => $oct_db_dirx)), 'info');
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
       $ncpus = provision_count_cpus();
