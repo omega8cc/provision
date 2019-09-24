@@ -481,7 +481,7 @@ port=%s
       while (is_file($oct_db_test) || $count >= 30) {
         $count++;
         sleep(10);
-        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @count times (max 30) in generate_dump", array('@var' => $count)), 'info');
+        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @var times (max 30) in generate_dump", array('@var' => $count)), 'info');
       }
 
       if (provision_file()->exists($pass_php_inc)->status()) {
