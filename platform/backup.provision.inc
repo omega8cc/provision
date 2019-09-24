@@ -46,7 +46,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  * Util function to suggest a filename for a new site backup.
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
-  $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+  $suffix = drush_get_option('provision_backup_suffix', '.tar');
   $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 
   // Use format of mysite.com-2008-01-02, if already existing, add number.
