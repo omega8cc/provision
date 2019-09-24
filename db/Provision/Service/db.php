@@ -187,7 +187,7 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $oct_db_dirs = $aegir_root; . '/backups';
+        $oct_db_dirs = $aegir_root . '/backups';
       }
       if (is_dir($oct_db_dirs)) {
         $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
