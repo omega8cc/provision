@@ -178,7 +178,7 @@ class Provision_Service_db extends Provision_Service {
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
     drush_log(dt("DEBUG MyQuick import_site_database db.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
-    $enable_myfast = $aegir_root . '/static/control/enable_myfast.txt';
+    $enable_myfast = $aegir_root . '/static/control/MyQuick.info';
     drush_log(dt("DEBUG MyQuick import_site_database db.php enable_myfast @var", array('@var' => $enable_myfast)), 'info');
     if (is_file($enable_myfast) && is_executable($myloader_path)) {
       if (provision_file()->exists($pass_php_inc)->status()) {
