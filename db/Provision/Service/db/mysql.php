@@ -233,7 +233,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
     $mydumper_path = '/usr/local/bin/mydumper';
     $myloader_path = '/usr/local/bin/myloader';
     $script_user = d('@server_master')->script_user;
@@ -245,37 +245,44 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
     drush_log(dt("DEBUG MyQuick import_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
+
       if (provision_file()->exists($pass_php_inc)->status()) {
         include_once($pass_php_inc);
       }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
         $oct_db_user = $db_user;
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $tst_db_dirx = drush_get_option('use_oct_db_dirx');
-        if (is_dir($tst_db_dirx)) {
-          $oct_db_dirx = $tst_db_dirx;
-          drush_log(dt("DEBUG MyQuick import_dump mysql.php tst_db_dirx @var", array('@var' => $tst_db_dirx)), 'info');
-        }
-        else {
-          drush_log(dt("DEBUG MyQuick import_dump mysql.php fail tst_db_dirx @var", array('@var' => $tst_db_dirx)), 'info');
-        }
       }
       else {
         drush_log(dt("DEBUG MyQuick import_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
       }
+
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php fail @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php fail oct_db_dirx @var", array('@var' => $oct_db_dirx)), 'info');
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
+
       $ncpus = provision_count_cpus();
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name second @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+
+      // Create pre-db-import flag file.
+      $pre_import_flag = $backup_path . '/.pre_import_flag.pid';
+      $pre_import_flag_blank = "Starting Import \n";
+      $local_description = 'Pre-DB-Import Flag-File';
+      if (!provision_file()->exists($pre_import_flag)->status()) {
+        provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
+      	->succeed('Generated blank ' . $local_description)
+      	->fail('Could not generate ' . $local_description);
+      }
+
       if (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
@@ -285,12 +292,25 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
-        $oct_db_test = $oct_db_dirx . '/.test.pid';
-        $pipes = array();
-        $err = fread($pipes[1], 2048);
+
         if (!$command) {
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
         }
+
+        // Delete pre-db-import flag file.
+        provision_file()->unlink($pre_import_flag)
+          ->succeed('Removed Pre-DB-Import Flag-File')
+          ->fail('Could not remove Pre-DB-Import Flag-File');
+
+		// Create post-db-import flag file.
+		$post_import_flag = $backup_path . '/.post_import_flag.pid';
+		$post_import_flag_blank = "Imported \n";
+		$local_description = 'Post-DB-Import Flag-File';
+		if (!provision_file()->exists($post_import_flag)->status()) {
+		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
+			->succeed('Generated blank ' . $local_description)
+			->fail('Could not generate ' . $local_description);
+		}
       }
     }
     else {
@@ -456,9 +476,18 @@ port=%s
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
     drush_log(dt("DEBUG MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
+
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      while (is_file($oct_db_test) || $count >= 30) {
+        $count++;
+        sleep(10);
+        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @count times (max 30) in generate_dump", array('@var' => $count)), 'info');
+      }
+
       if (provision_file()->exists($pass_php_inc)->status()) {
         include_once($pass_php_inc);
       }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
         $oct_db_user = $db_user;
@@ -471,23 +500,27 @@ port=%s
       else {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
       }
+
       if (is_dir($oct_db_dirx)) {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php delete @var", array('@var' => $oct_db_dirx)), 'info');
         _provision_recursive_delete($oct_db_dirx);
         drush_log(dt("DEBUG MyQuick tmp_expim dir removed @var", array('@var' => $oct_db_dirx)), 'info');
       }
+
       if (!is_dir($oct_db_dirx)) {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php create @var", array('@var' => $oct_db_dirx)), 'info');
         provision_file()->mkdir($oct_db_dirx)
           ->succeed('Created <code>@path</code>')
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
       }
+
       $ncpus = provision_count_cpus();
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+
       if (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
@@ -497,12 +530,6 @@ port=%s
         $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
-        $oct_db_test = $oct_db_dirx . '/.test.pid';
-        $pipes = array();
-        $err = fread($pipes[1], 2048);
-        if (is_file($oct_db_test)) {
-          drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $command)));
-        }
       }
     }
     else {
