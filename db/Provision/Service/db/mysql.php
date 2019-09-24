@@ -230,17 +230,17 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
   function import_dump($dump_file, $creds) {
     extract($creds);
-    $mydumper = '/usr/local/bin/mydumper';
-    $myloader = '/usr/local/bin/myloader';
-    $mysyuser = $server->script_user;
-    $aegiroot = $server->aegir_root;
-    $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php @mycrdnts", array('@mycrdnts' => $mycrdnts)), 'info');
-    $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php @mycntrlf", array('@mycntrlf' => $mycntrlf)), 'info');
-    if (is_file($mycntrlf) && is_executable($myloader)) {
-      if (provision_file()->exists($mycrdnts)->status()) {
-        include_once('$mycrdnts');
+    $mydumper_path = '/usr/local/bin/mydumper';
+    $myloader_path = '/usr/local/bin/myloader';
+    $script_user = d('@server_master')->script_user;
+    $aegir_root = d('@server_master')->aegir_root;
+    $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php @var", array('@var' => $pass_php_inc)), 'info');
+    $enable_myfast = $aegir_root . '/static/control/enable_myfast.txt';
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php @var", array('@var' => $enable_myfast)), 'info');
+    if (is_file($enable_myfast) && is_executable($myloader_path)) {
+      if (provision_file()->exists($pass_php_inc)->status()) {
+        include_once('$pass_php_inc');
       }
       if (!$oct_db_user ||
         !$oct_db_pass ||
@@ -252,28 +252,28 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $oct_db_dirs = $aegiroot . '/backups';
+        $oct_db_dirs = $aegir_root; . '/backups';
       }
       if (is_dir($oct_db_dirs)) {
         $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
       }
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php check @oct_db_dirx", array('@oct_db_dirx' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php check @var", array('@var' => $oct_db_dirx)), 'info');
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
       $ncpus = provision_count_cpus();
-      if (provision_file()->exists($mydumper)->status() &&
-        provision_file()->exists($myloader)->status() &&
+      if (provision_file()->exists($mydumper_path)->status() &&
+        provision_file()->exists($myloader_path)->status() &&
         is_dir($oct_db_dirx) &&
-        is_file($mycrdnts) &&
+        is_file($pass_php_inc) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port &&
         $oct_db_dirs) {
-        $command = sprintf($myloader . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @command", array('@command' => $command)), 'info');
+        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
         $oct_db_test = $oct_db_dirx . '/.test.pid';
         $pipes = array();
@@ -430,17 +430,17 @@ port=%s
       $gtid_option = '';
     } // else
 
-    $mydumper = '/usr/local/bin/mydumper';
-    $myloader = '/usr/local/bin/myloader';
-    $mysyuser = $server->script_user;
-    $aegiroot = $server->aegir_root;
-    $mycrdnts = $aegiroot . '/.' . $mysyuser . '.pass.php';
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php @mycrdnts", array('@mycrdnts' => $mycrdnts)), 'info');
-    $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php @mycntrlf", array('@mycntrlf' => $mycntrlf)), 'info');
-    if (is_file($mycntrlf) && is_executable($mydumper)) {
-      if (provision_file()->exists($mycrdnts)->status()) {
-        include_once('$mycrdnts');
+    $mydumper_path = '/usr/local/bin/mydumper';
+    $myloader_path = '/usr/local/bin/myloader';
+    $script_user = d('@server_master')->script_user;
+    $aegir_root = d('@server_master')->aegir_root;
+    $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php @var", array('@var' => $pass_php_inc)), 'info');
+    $enable_myfast = $aegir_root . '/static/control/enable_myfast.txt';
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php @var", array('@var' => $enable_myfast)), 'info');
+    if (is_file($enable_myfast) && is_executable($mydumper_path)) {
+      if (provision_file()->exists($pass_php_inc)->status()) {
+        include_once('$pass_php_inc');
       }
       if (!$oct_db_user ||
         !$oct_db_pass ||
@@ -452,35 +452,35 @@ port=%s
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $oct_db_dirs = $aegiroot . '/backups';
+        $oct_db_dirs = $aegir_root; . '/backups';
       }
       if (is_dir($oct_db_dirs)) {
         $oct_db_dirx = $oct_db_dirs . '/tmp_expim';
       }
       if (is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php delete @oct_db_dirx", array('@oct_db_dirx' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php delete @var", array('@var' => $oct_db_dirx)), 'info');
         _provision_recursive_delete($oct_db_dirx);
-        drush_log(dt('The tmp_expim dir removed: !tmp_expim', array('!tmp_expim' => $oct_db_dirx)), 'message');
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed @var", array('@var' => $oct_db_dirx)), 'info');
       }
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php create @oct_db_dirx", array('@oct_db_dirx' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php create @var", array('@var' => $oct_db_dirx)), 'info');
         provision_file()->mkdir($oct_db_dirx)
           ->succeed('Created <code>@path</code>')
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
       }
       $ncpus = provision_count_cpus();
-      if (provision_file()->exists($mydumper)->status() &&
-        provision_file()->exists($myloader)->status() &&
+      if (provision_file()->exists($mydumper_path)->status() &&
+        provision_file()->exists($myloader_path)->status() &&
         is_dir($oct_db_dirx) &&
-        is_file($mycrdnts) &&
+        is_file($pass_php_inc) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port &&
         $oct_db_dirs) {
-        $command = sprintf($mydumper . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @command", array('@command' => $command)), 'info');
+        $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
         $oct_db_test = $oct_db_dirx . '/.test.pid';
         $pipes = array();

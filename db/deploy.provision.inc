@@ -20,10 +20,10 @@ function drush_db_provision_deploy() {
 // Rollback doesn't apply here yet. Unless we trigger a deploy of the first dump
 // made. Which could go on infinitely if something is really long.
 function drush_db_post_provision_deploy() {
-  $myloader = '/usr/local/bin/myloader';
-  $aegiroot = $server->aegir_root;
-  $mycntrlf = $aegiroot . '/static/control/enable_myfast.txt';
-  if (is_file($mycntrlf) && is_executable($myloader)) {
+  $myloader_path = '/usr/local/bin/myloader';
+  $aegir_root = d('@server_master')->aegir_root;
+  $enable_myfast = $aegir_root . '/static/control/enable_myfast.txt';
+  if (is_file($enable_myfast) && is_executable($myloader_path)) {
     $do_nothing = TRUE;
   }
   else {
