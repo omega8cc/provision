@@ -494,8 +494,6 @@ port=%s
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        $oct_db_dirx = $oct_db_dirx . '/' . $db_name;
-        drush_set_option('use_oct_db_dirx', $oct_db_dirx);
       }
       else {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
