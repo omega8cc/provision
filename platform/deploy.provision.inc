@@ -181,10 +181,6 @@ function drush_provision_drupal_post_provision_deploy() {
   $post_import_flag = $backup_path . '/.post_import_flag.pid';
   $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
 
-  if (is_file($enable_myquick)) {
-    sleep(60);
-  }
-
   if (!is_file($enable_myquick)) {
     // Run registry-rebuild without cache-clear, if available.
     if (function_exists('drush_registry_rebuild')) {
@@ -206,10 +202,6 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
       }
     }
-  }
-
-  if (is_file($enable_myquick)) {
-    sleep(60);
   }
 
   // We should be able to fully load Drupal now.
