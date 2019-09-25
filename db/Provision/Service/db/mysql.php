@@ -256,6 +256,20 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
+
+        if ($this->server->db_port == '6033') {
+          if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
+            include('/opt/tools/drush/proxysql_adm_pwd.inc');
+            if ($writer_node_ip) {
+              drush_log('Skip ProxySQL in import_dump', 'notice');
+              $oct_db_host = $writer_node_ip;
+              $oct_db_port = '3306';
+            }
+            else {
+              drush_log('Using ProxySQL in import_dump', 'notice');
+            }
+          }
+        }
       }
       else {
         drush_log(dt("DEBUG MyQuick import_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
@@ -494,6 +508,20 @@ port=%s
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
+
+        if ($this->server->db_port == '6033') {
+          if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
+            include('/opt/tools/drush/proxysql_adm_pwd.inc');
+            if ($writer_node_ip) {
+              drush_log('Skip ProxySQL in generate_dump', 'notice');
+              $oct_db_host = $writer_node_ip;
+              $oct_db_port = '3306';
+            }
+            else {
+              drush_log('Using ProxySQL in generate_dump', 'notice');
+            }
+          }
+        }
       }
       else {
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');

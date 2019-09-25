@@ -193,6 +193,19 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
+        if ($this->server->db_port == '6033') {
+          if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
+            include('/opt/tools/drush/proxysql_adm_pwd.inc');
+            if ($writer_node_ip) {
+              drush_log('Skip ProxySQL in import_site_database', 'notice');
+              $oct_db_host = $writer_node_ip;
+              $oct_db_port = '3306';
+            }
+            else {
+              drush_log('Using ProxySQL in import_site_database', 'notice');
+            }
+          }
+        }
       }
       else {
         drush_log(dt("DEBUG MyQuick import_site_database db.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
