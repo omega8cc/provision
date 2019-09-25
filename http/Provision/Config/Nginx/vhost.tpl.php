@@ -14,7 +14,7 @@ if ($this->redirection) {
     print "# alias redirection virtual host\n";
     print "server {\n";
     print "  listen       *:{$http_port};\n";
-    print "  listen       [::]:{$http_port};\n";
+    print "  #listen       [::]:{$http_port};\n";
     // if we use redirections, we need to change the redirection
     // target to be the original site URL ($this->uri instead of
     // $alias_url)
