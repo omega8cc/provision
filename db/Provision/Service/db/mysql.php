@@ -280,7 +280,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
 
-      $ncpus = provision_count_cpus();
+      $threads = provision_count_cpus();
+      $threads = intval($threads / 2) + 1;
       drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name second @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
@@ -303,7 +304,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --compress-protocol --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
 
@@ -540,7 +541,8 @@ port=%s
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
       }
 
-      $ncpus = provision_count_cpus();
+      $threads = provision_count_cpus();
+      $threads = intval($threads / 2) + 1;
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
@@ -553,7 +555,7 @@ port=%s
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $ncpus . ' --compress-protocol --less-locking --verbose=1');
+        $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=500000 --build-empty-files --threads=' . $threads . ' --compress-protocol --less-locking --verbose=1');
         drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
       }

@@ -216,7 +216,8 @@ class Provision_Service_db extends Provision_Service {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
 
-      $ncpus = provision_count_cpus();
+      $threads = provision_count_cpus();
+      $threads = intval($threads / 2) + 1;
       drush_log(dt("DEBUG MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
@@ -239,7 +240,7 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $ncpus . ' --compress-protocol --overwrite-tables --verbose=1');
+        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --compress-protocol --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
 
