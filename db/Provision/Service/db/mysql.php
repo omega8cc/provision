@@ -478,10 +478,10 @@ port=%s
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
       $oct_db_test = $oct_db_dirx . '/metadata';
-      while (is_file($oct_db_test) || $count >= 30) {
+      while (is_file($oct_db_test) && $count <= 6) {
         $count++;
         sleep(10);
-        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @var times (max 30) in generate_dump", array('@var' => $count)), 'info');
+        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", array('@var' => $count)), 'info');
       }
 
       if (provision_file()->exists($pass_php_inc)->status()) {
