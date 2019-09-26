@@ -240,7 +240,7 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --compress-protocol --overwrite-tables --verbose=1');
+        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --overwrite-tables --verbose=1');
         drush_log(dt("DEBUG MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
 
