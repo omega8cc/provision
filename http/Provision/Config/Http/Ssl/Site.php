@@ -68,7 +68,11 @@ class Provision_Config_Http_Ssl_Site extends Provision_Config_Http_Site {
       // even if there is absolutely no reason to do so -- like when the site
       // is simply migrated to another platform, while its name doesn't change.
       //
-      Provision_Service_http_ssl::free_certificate_site($this->ssl_key, $this);
+      // Ignore if hosting_le configuration detected
+      $le_ctrl = d('@server_master')->aegir_root . "/tools/le/.ctrl";
+      if (!provision_file()->exists($le_ctrl)->status()) {
+        Provision_Service_http_ssl::free_certificate_site($this->ssl_key, $this);
+      }
     }
   }
   
