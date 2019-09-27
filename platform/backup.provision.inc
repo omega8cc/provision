@@ -91,17 +91,14 @@ function drush_provision_drupal_provision_backup() {
   if (!chdir(d()->site_path)) {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
-  // if (substr($backup_file, -2) == 'gz') {
-  //   // $command = 'tar cpfz %s .';
-  //   $command = 'tar cpf - . | gzip -c > %s';
-  // }
-  // elseif (substr($backup_file, -3) == 'bz2') {
-  //   // $command = 'tar cpfj %s .';
-  //   $command = 'tar cpf - . | bzip2 -c > %s';
-  // } else {
-  //   $command = 'tar cpf %s .';
-  // }
-  $command = 'tar cpf %s .';
+  if (substr($backup_file, -2) == 'gz') {
+    $command = 'tar cpfz %s .';
+  }
+  elseif (substr($backup_file, -3) == 'bz2') {
+    $command = 'tar cpfj %s .';
+  } else {
+    $command = 'tar cpf %s .';
+  }
   $result = drush_shell_exec($command,  $backup_file);
 
   // Get the size of the backup
