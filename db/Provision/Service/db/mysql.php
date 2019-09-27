@@ -281,7 +281,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
 
       $threads = provision_count_cpus();
-      $threads = intval($threads / 2) + 1;
+      $threads = intval($threads / 4) + 1;
       drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name second @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
@@ -542,7 +542,7 @@ port=%s
       }
 
       $threads = provision_count_cpus();
-      $threads = intval($threads / 2) + 1;
+      $threads = intval($threads / 4) + 1;
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');

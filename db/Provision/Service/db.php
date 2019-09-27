@@ -217,7 +217,7 @@ class Provision_Service_db extends Provision_Service {
       }
 
       $threads = provision_count_cpus();
-      $threads = intval($threads / 2) + 1;
+      $threads = intval($threads / 4) + 1;
       drush_log(dt("DEBUG MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
       drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
       drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
