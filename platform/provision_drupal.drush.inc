@@ -170,12 +170,8 @@ function provision_drupal_fetch_site($alias = NULL) {
  * Generate a settings file for the site.
  */
 function _provision_drupal_create_settings_file() {
-  $name = d()->name;
-  $context = drush_get_context('site');
-  $settings = new Provision_Config_Drupal_Settings($name, $context);
-  $settings->write();
-  $services = new Provision_Config_Drupal_Services($name, $context);
-  $services->write();
+  $config = new Provision_Config_Drupal_Settings(d()->name, drush_get_context('site'));
+  $config->write();
 }
 
 /**
