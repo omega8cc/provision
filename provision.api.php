@@ -318,6 +318,31 @@ function hook_provision_config_variables_alter(&$variables, $template, $config) 
 }
 
 /**
+ * Implements hook_provision_platform_sync_path_alter().
+ *
+ * Changes the sync_path to ensure that composer-built platforms get all of the
+ * code moved to remote servers.
+ *
+ * @see provision_git_provision_platform_sync_path_alter()
+ *`
+ * @param $sync_path
+ *   If the site is hosted on a remote server, this is the path that will be
+ *   rsync'd over.
+ */
+function hook_provision_platform_sync_path_alter(&$sync_path) {
+    $repo_path = d()->platform->repo_path;
+    if ($repo_path != d()->root) {
+        $sync_path = $repo_path;
+
+        if (!file_exists($repo_path)) {
+            return drush_set_error('PROVISION_ERROR',  dt("Platform !path does not exist.", array(
+              '!path' => $repo_path,
+            )));
+        }
+    }
+}
+
+/**
  * Alter the array of directories to create.
  *
  * @param $mkdir
