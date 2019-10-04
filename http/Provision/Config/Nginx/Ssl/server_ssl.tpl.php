@@ -39,13 +39,17 @@ server {
   #listen       <?php print "[::]:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php endif; ?>
   server_name  _;
+  ssl_stapling               on;
+  ssl_stapling_verify        on;
+  resolver 1.1.1.1 1.0.0.1 valid=300s;
+  resolver_timeout           5s;
+  ssl_dhparam          /etc/ssl/private/nginx-wild-ssl.dhp;
+  ssl_certificate      /etc/ssl/private/nginx-wild-ssl.crt;
+  ssl_certificate_key  /etc/ssl/private/nginx-wild-ssl.key;
   location / {
 <?php if ($satellite_mode == 'boa'): ?>
     root                 /var/www/nginx-default;
     index                index.html index.htm;
-    ssl_dhparam          /etc/ssl/private/nginx-wild-ssl.dhp;
-    ssl_certificate      /etc/ssl/private/nginx-wild-ssl.crt;
-    ssl_certificate_key  /etc/ssl/private/nginx-wild-ssl.key;
 <?php else: ?>
     return 404;
 <?php endif; ?>
