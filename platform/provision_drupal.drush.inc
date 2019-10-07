@@ -134,6 +134,14 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
     // Sync all filesystem changes to the remote server.
     d()->service('http')->sync(d()->site_path, $options);
 
+    // If this site's "file_public_path" is not the default site_path/files, sync it.
+    if (d()->site_path . '/files' != d()->file_public_path) {
+      d()->service('http')->sync(d()->file_public_path, $options);
+    }
+    if (d()->site_path . '/files/private' != d()->file_private_path) {
+      d()->service('http')->sync(d()->file_private_path, $options);
+    }
+
     // Reset the exclude-path option
     if(!is_null($exclude)) {
       if(empty($old_exclude)) {
