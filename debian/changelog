@@ -1,3 +1,9 @@
+aegir3-provision (3.182) testing; urgency=medium
+
+  * Mini-release to update the bundled dehydrated lib for LetsEncrypt.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 21:50:20 +0200
+
 aegir3-provision (3.181ubuntu1) testing; urgency=medium
 
   * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
