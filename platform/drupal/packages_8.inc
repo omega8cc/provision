@@ -19,7 +19,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
   }
   foreach ($files as $name => $file) {
-    $files[$name]->info = Symfony\Component\Yaml\Yaml::parse($file->filename);
+    $files[$name]->info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($file->filename));
     if (!empty($files[$name]->info['name'])) {
       $files[$name]->name = $files[$name]->info['name'];
     }
@@ -139,7 +139,7 @@ function _provision_find_profiles() {
     $info_files = drush_scan_directory($profile_dir, "/\.info.yml$/");
     foreach ($info_files as $path => $info_file) {
       $path = realpath($path);
-      $info = Symfony\Component\Yaml\Yaml::parse($path);
+      $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($path));
       if ($info['type'] == 'profile' && (!isset($info['hidden']) || !$info['hidden'])) {
         $profile = new stdClass();
         $profile->name = $info['name'];
@@ -149,7 +149,7 @@ function _provision_find_profiles() {
         $profile->info['languages'] = _provision_find_profile_languages($profile->path);
 
         $profiles[basename($profile->path)] = $profile;
-        drush_log(dt('Found install profile %name', array('%name' => $name)));
+        drush_log(dt('Found install profile %name', array('%name' => $profile->name)));
       }
     }
   }
@@ -169,8 +169,18 @@ function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
       $searchpaths[] = sprintf("%s/sites/all/%s", $drupal_root, $type);
       break;
     case 'profiles':
-      foreach (_provision_find_profiles() as $profile) {
-        $searchpaths[] = $profile->path;
+      $profiles = _provision_find_profiles();
+      if ($key) {
+        if (isset($profiles[$key])) {
+          // Find $type within this single profile.
+          $searchpaths[] = sprintf("%s/%s", $profiles[$key]->path, $type);
+        }
+      }
+      else {
+        // Find $type within all profiles.
+        foreach ($profiles as $profile) {
+          $searchpaths[] = sprintf("%s/%s", $profile->path, $type);
+        }
       }
       break;
     default:

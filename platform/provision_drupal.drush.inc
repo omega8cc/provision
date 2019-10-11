@@ -108,7 +108,9 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   ));
 
   // Sync the platform
-  d()->service('http')->sync(d()->root, array('exclude-sites' => TRUE));
+  $sync_path = d()->root;
+  drush_command_invoke_all_ref('provision_platform_sync_path_alter', $sync_path);
+  d()->service('http')->sync($sync_path, array('exclude-sites' => TRUE));
 
   if (d()->type === 'site') {
     // Check whether we're hosted on a cluster, in which case, the master is
@@ -284,18 +286,20 @@ function _provision_drupal_create_directories($url = NULL) {
         ->succeed('Created <code>@path</code>')
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
-
-    if ($perm !== FALSE) {
-      provision_file()->chmod($path, $perm, !in_array($path, $chmod_not_recursive))
-        ->succeed('Changed permissions of <code>@path</code> to @perm')
-        ->fail('Could not change permissions <code>@path</code> to @perm');
-    }
   }
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
       provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership <code>@path</code> to @gid');
+    }
+  }
+  // Apply chmod AFTER chgrp because chgrp strips special permissions.
+  foreach ($mkdir as $path => $perm) {
+    if ($perm !== FALSE) {
+      provision_file()->chmod($path, $perm, !in_array($path, $chmod_not_recursive))
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions <code>@path</code> to @perm');
     }
   }
 }
@@ -561,7 +565,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
         unset($files[$name]);
         continue;
       }
-      $files[$name]->info = Symfony\Component\Yaml\Yaml::parse($yaml_file);
+      $files[$name]->info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($yaml_file));
       if (!empty($files[$name]->info['name'])) {
         $files[$name]->name = $files[$name]->info['name'];
       }
@@ -576,16 +580,32 @@ function _provision_drupal_find_modules($scope, $key = '') {
       continue;
     }
     $install_file = sprintf("%s/%s.install", dirname($info->filename), $name);
-    $schema_version = 0;
+    // Drupal now enforces a minimum schema version see: https://www.drupal.org/node/2186315
+    if (drush_drupal_major_version() >= 8) {
+      $schema_version = drush_drupal_major_version() * 1000;
+    }
+    else {
+      $schema_version = 0;
+    }
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
+      // Also search included files for function signature
+      $include_matches = array();
+      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
+      if (sizeof($include_matches[0])) {
+        foreach($include_matches[4] as $include) {
+          if ($include_file = realpath(dirname($info->filename) . DIRECTORY_SEPARATOR . $include)) {
+            $source .= "\n" . file_get_contents($include_file);
+          }
+        }
+      }
       $function_matches = array();
         preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
 
       if (sizeof($function_matches[0])) {
-        $schema_version = max($function_matches[2]);
+        $schema_version = max($schema_version, max($function_matches[2]));
       }
     }
     $files[$name]->schema_version = $schema_version;
@@ -623,6 +643,9 @@ function provision_parse_info_file($filename) {
  * The real credentials are stored in the Apache vhost of the relevant site, to prevent leaking of
  * sensitive data to site administrators with PHP access who might otherwise access such credentials
  * potentially of other sites' settings.php in a multisite set-up.
+ *
+ * Fire hook_provision_prepare_environment() so other scripts can react to this
+ * step and add more information or take other actions.
  */
 function provision_prepare_environment() {
   $fields = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
@@ -634,6 +657,11 @@ function provision_prepare_environment() {
   if (drush_drupal_major_version() >= 7) {
     $_SERVER['db_type'] = ($_SERVER['db_type'] == 'mysqli') ? 'mysql' : $_SERVER['db_type'];
   }
+
+  // Invoke provision_prepare_environment: Allow other scripts to react to the
+  // preparation of the environment variables.
+  drush_command_invoke_all('provision_prepare_environment');
+
 }
 
 

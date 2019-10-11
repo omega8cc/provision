@@ -42,14 +42,18 @@ if ($this->redirection || $ssl_redirection) {
 
   if ($ssl_redirection && !$this->redirection) {
     print " # Redirect aliases in non-ssl to the same alias on ssl.\n";
+    print " # Except for /.well-known/acme-challenge/ to prevent potential problems with Let's Encrypt\n";
+    print " RewriteCond %{REQUEST_URI} '!/.well-known/acme-challenge/'\n";
     print " RewriteRule ^/*(.*)$ https://%{HTTP_HOST}/$1 [NE,L,R=301]\n";
   }
   elseif ($ssl_redirection && $this->redirection) {
-    print " # Redirect all aliases + main uri to the main https uri.\n";
-    print " RewriteRule ^/*(.*)$ https://{$this->uri}/$1 [NE,L,R=301]\n";
+    print " # Redirect all aliases + main uri to the selected alias https uri.\n";
+    print " # Except for /.well-known/acme-challenge/ to prevent potential problems with Let's Encrypt\n";
+    print " RewriteCond %{REQUEST_URI} '!/.well-known/acme-challenge/'\n";
+    print " RewriteRule ^/*(.*)$ https://{$this->redirection}/$1 [NE,L,R=301]\n";
   }
   elseif (!$ssl_redirection && $this->redirection) {
-    print " # Redirect all aliases to the main http url.\n";
+    print " # Redirect all aliases to the selected alias.\n";
     print " RewriteCond %{HTTP_HOST} !^{$this->redirection}$ [NC]\n";
     print " RewriteRule ^/*(.*)$ http://{$this->redirection}/$1 [NE,L,R=301]\n";
   }
@@ -79,7 +83,7 @@ if ($this->redirection || $ssl_redirection) {
     # Prevent direct reading of files in the private dir.
     # This is for Drupal7 compatibility, which would normally drop
     # a .htaccess in those directories, but we explicitly ignore those
-    <Directory "<?php print $this->site_path; ?>/private/" >
+    <Directory ~ "sites/.*/private">
       <Files *>
         SetHandler This_is_a_Drupal_security_line_do_not_remove
       </Files>

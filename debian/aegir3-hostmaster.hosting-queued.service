@@ -1,10 +1,15 @@
 [Unit]
 Description=Hosting queue daemon
+After=mysql.service
 
 [Service]
 ExecStart=/usr/local/bin/drush --quiet @hostmaster hosting-queued
 User=aegir
 Restart=on-failure
+RestartSec=3
+StartLimitInterval=60
+StartLimitBurst=5
+
 
 [Install]
 WantedBy=multi-user.target

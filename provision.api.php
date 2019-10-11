@@ -5,6 +5,7 @@
  *
  * @see drush.api.php
  * @see drush_command_invoke_all()
+ * @see http://docs.aegirproject.org/en/3.x/extend/altering-behaviours/
  */
 
 /**
@@ -22,11 +23,36 @@
  * provision_apache_conf_suffix
  *   Set to TRUE to generate apache vhost files with a .conf suffix, default FALSE.
  *   This takes advantage of the IncludeOptional statment introduced in Apache 2.3.6.
- *   WARNING: After turning this on you need to re-verify all your sites, then then servers,
+ *   WARNING: After turning this on you need to re-verify all your sites, then servers,
  *   and then cleanup the old configfiles (those without the .conf suffix).
+ *   Or run: `rename s/$/.conf/ /var/aegir/config/server_master/apache/vhost.d/*` for each server.
  *
  * provision_create_local_settings_file
  *   Create a site 'local.settings.php' file if one isn't found, default TRUE.
+ *
+ * provision_mysqldump_suppress_gtid_restore
+ *   Don't restore GTIDs from a database export.  Set to TRUE for MySQL versions 5.6 and above to
+ *   avoid having restores error out during operations such as cloning, migrating, and restoring from
+ *   backup.  Default is FALSE.
+ *
+ * provision_composer_install_platforms
+ *   Set to FALSE to prevent provision from ever running `composer install`.
+ *   Default is TRUE.
+ *
+ * provision_composer_install_platforms_verify_always
+ *   By default, provision will run `composer install` every time a platform
+ *   is verified.
+ *
+ *   Set to FALSE to only run `composer install` once. If composer.json
+ *   changes, you will have to run `composer install` manually.
+ *
+ *   Default is TRUE.
+ *
+ * provision_composer_install_command
+ *
+ *   The full command to run during platform verify.
+ *   Default is 'composer install --no-interaction --no-progress --no-dev'
+ *
  */
 
 /**
@@ -54,6 +80,22 @@ function hook_drush_load() {
  */
 function hook_provision_services() {
   return array('db' => NULL);
+}
+
+/**
+ * Alter a Context immediately after it is loaded and the 'init' methods are run.
+ *
+ * If replacing the context with a new object, be sure to implement the methods
+ * $context->method_invoke('init) and $context->type_invoke('init');
+ *
+ * @param $context \Provision_Context|\Provision_Context_server|\Provision_Context_site|\Provision_Context_platform
+ *
+ * @see provision.context.inc#72
+ */
+function hook_provision_context_alter(&$context) {
+  $context = new Provision_Context_Server_alternate($context->name);
+  $context->method_invoke('init');
+  $context->type_invoke('init');
 }
 
 /**
@@ -125,6 +167,30 @@ function drush_hook_provision_apache_dir_config($data) {
  *   URI for the site.
  * @param $data
  *   Associative array of data from Provision_Config_Apache_Site::data.
+ *   For example:
+ *   Array (
+ *       [server] => Provision_Context_server Object()
+ *       [application_name] => apache
+ *       [http_pred_path] => /var/aegir/config/server_master/apache/pre.d
+ *       [http_postd_path] => /var/aegir/config/server_master/apache/post.d
+ *       [http_platformd_path] => /var/aegir/config/server_master/apache/platform.d
+ *       [http_vhostd_path] => /var/aegir/config/server_master/apache/vhost.d
+ *       [http_subdird_path] => /var/aegir/config/server_master/apache/subdir.d
+ *       [http_port] => 80
+ *       [redirect_url] => http://example.com
+ *       [db_type] => mysql
+ *       [db_host] => localhost
+ *       [db_port] => 3306
+ *       [db_passwd] => ***
+ *       [db_name] => ***
+ *       [db_user] => ***
+ *       [packages] => Array of package information...
+ *       [installed] => 1
+ *       [config-file] => /var/aegir/platforms/drupal-7.58/sites/example.com/drushrc.php
+ *       [context-path] => /var/aegir/platforms/drupal-7.58/sites/example.com/drushrc.php
+ *       [https_port] => 443
+ *       [extra_config] => # Extra configuration from modules:
+ *   )
  *
  * @return
  *   Lines to add to the configuration file.
@@ -252,6 +318,31 @@ function hook_provision_config_variables_alter(&$variables, $template, $config) 
 }
 
 /**
+ * Implements hook_provision_platform_sync_path_alter().
+ *
+ * Changes the sync_path to ensure that composer-built platforms get all of the
+ * code moved to remote servers.
+ *
+ * @see provision_git_provision_platform_sync_path_alter()
+ *`
+ * @param $sync_path
+ *   If the site is hosted on a remote server, this is the path that will be
+ *   rsync'd over.
+ */
+function hook_provision_platform_sync_path_alter(&$sync_path) {
+    $repo_path = d()->platform->repo_path;
+    if ($repo_path != d()->root) {
+        $sync_path = $repo_path;
+
+        if (!file_exists($repo_path)) {
+            return drush_set_error('PROVISION_ERROR',  dt("Platform !path does not exist.", array(
+              '!path' => $repo_path,
+            )));
+        }
+    }
+}
+
+/**
  * Alter the array of directories to create.
  *
  * @param $mkdir
@@ -351,4 +442,35 @@ function hook_provision_mysql_regex_alter(&$regexes) {
     // replace matched content as needed
     '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
   );
+}
+
+/**
+ * Implements hook_provision_prepare_environment()
+ *
+ * React to the setting up of $_SERVER variables such as db_name and db_passwd.
+ *
+ * Runs right after writing sites/$URI/drushrc.php.
+ * Database credentials are available in the $_SERVER variables.
+ *
+ * @see provision_prepare_environment()
+ */
+function hook_provision_prepare_environment() {
+
+  // Write a .env file in the root of the project with the Drupal DB credentials.
+  // This file could be used by other tools to access the site's database.
+  $file_name = d()->root . '/.env';
+  $file_contents = <<<ENV
+MYSQL_DATABASE={$_SERVER['db_name']}
+MYSQL_USER={$_SERVER['db_name']}
+MYSQL_PASSWORD={$_SERVER['db_name']}
+ENV;
+
+  // Make writable, then write the file.
+  if (file_exists($file_name) && !is_writable($file_name)) {
+    provision_file()->chmod($file_name, 0660);
+  }
+  file_put_contents($file_name, $file_contents);
+
+  // Hide sensitive information from any other users.
+  provision_file()->chmod($file_name, 0400);
 }

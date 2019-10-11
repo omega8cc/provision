@@ -1,15 +1,41 @@
+#
+# CI for Aegir Hosting System
+#
+# For docs see http://docs.aegirproject.org
+# and http://docs.aegirproject.org/en/3.x/community/release-process/#setting-up-a-gitlab-runner
+
 # Is performed before the scripts in the stages step
 before_script:
   - source /etc/profile
 
 # Defines stages which are to be executed
 stages:
+  - syntax
   - build
   - test
   - publish
   - upgradetest
 
-# Stage "build"
+
+#
+### Stage syntax
+#
+
+syntax:lint:
+  stage: syntax
+  image: bobey/docker-gitlab-ci-runner-php7
+  allow_failure: false
+
+  script:
+    - composer require overtrue/phplint
+    - echo "Syntax checking PHP files"
+    - echo "For more information http://www.icosaedro.it/phplint/"
+    - vendor/bin/phplint ./ --exclude "vendor"
+
+#
+### Stage "build"
+#
+
 build:deb:
   stage: build
   image: aegir/hostmaster:packaging_base
@@ -21,6 +47,7 @@ build:deb:
     - dpkg-buildpackage
     - mkdir build
     - mv -v ../aegir3*.deb build/
+    - mv -v ../aegir-archive-keyring*.deb build/
     - mv -v ../aegir3*.tar.gz build/
     - mv -v ../aegir3*.dsc build/
     - mv -v ../aegir3*.changes build/
@@ -31,12 +58,20 @@ build:deb:
       - build/*
 
 
-# Stage "test"
+#
+### Stage "test"
+#
+
 test:debian-jessie-aegir3-apt:
   stage: test
   image: debian:jessie
+  allow_failure: true
   dependencies:
     - build:deb
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
 
   before_script:
     - apt-get update
@@ -50,11 +85,14 @@ test:debian-jessie-aegir3-apt:
 test:debian-stretch-aegir3-apt:
   stage: test
   image: debian:stretch
-  allow_failure: true
+  allow_failure: false
   dependencies:
     - build:deb
+
   only:
     - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
 
   before_script:
     - apt-get update
@@ -65,13 +103,12 @@ test:debian-stretch-aegir3-apt:
 
   script: "scripts/ci-aegir-dev-install-apt-debian9.sh"
 
-test:ubuntu-xenial-aegir3-apt:
+test:debian-buster-aegir3-apt:
   stage: test
-  image: ubuntu:xenial
+  image: debian:buster
+  allow_failure: false
   dependencies:
     - build:deb
-  only:
-    - 7.x-3.x
 
   before_script:
     - apt-get update
@@ -80,7 +117,68 @@ test:ubuntu-xenial-aegir3-apt:
     - echo "exit 0" >> /usr/sbin/policy-rc.d
     - apt-get install --yes sudo curl
 
-  script: "scripts/ci-aegir-dev-install-apt-ubuntu.sh"
+  script: "scripts/ci-aegir-dev-install-apt-debian10.sh"
+
+test:ubuntu-xenial-aegir3-apt:
+  stage: test
+  image: ubuntu:xenial
+  dependencies:
+    - build:deb
+
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
+
+  before_script:
+    - apt-get update
+    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+    - echo "exit 0" >> /usr/sbin/policy-rc.d
+    - apt-get install --yes sudo curl
+
+  script: "scripts/ci-aegir-dev-install-apt-ubuntu-xenial.sh"
+
+test:ubuntu-bionic-aegir3-apt:
+  stage: test
+  image: ubuntu:bionic
+  dependencies:
+    - build:deb
+
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
+
+  before_script:
+    - apt-get update
+    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+    - echo "exit 0" >> /usr/sbin/policy-rc.d
+    - apt-get install --yes sudo curl
+
+  script: "scripts/ci-aegir-dev-install-apt-ubuntu-bionic.sh"
+
+test:cluster-slave-debian-stretch-apt:
+  stage: test
+  image: debian:stretch
+  allow_failure: false
+  dependencies:
+    - build:deb
+
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
+
+  before_script:
+    - apt-get update
+    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+    - echo "exit 0" >> /usr/sbin/policy-rc.d
+    - apt-get install --yes sudo curl
+
+  script: "scripts/ci-aegir-dev-install-apt-debian9-cluster-slave.sh"
 
 test:behat:
   stage: test
@@ -115,13 +213,14 @@ test:behat:
     - sudo docker-compose -f docker-compose-provision.yml run hostmaster
 
 
-
+#
+### Stage "publish"
+#
 
 publish:unstable-repo:
   stage: publish
   dependencies:
     - build:deb
-  allow_failure: true
 
   only:
     - 7.x-3.x
@@ -149,14 +248,21 @@ publish:unstable-repo:
       # reprepro should pick this up in seconds and update the repository index.
 
 
+#
+### Stage "upgradetest"
+#
+
 # Upgrade the latest stable Aegir to our unstable repo.
-upgradetest:debian-jessie-aegir3-apt-upgrade:
+upgradetest:debian-stretch-aegir3-apt-upgrade:
   stage: upgradetest
-  image: debian:jessie
+  image: debian:stretch
   dependencies:
     - publish:unstable-repo
 
-  when: manual
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
 
   before_script:
     - apt-get update
@@ -166,7 +272,7 @@ upgradetest:debian-jessie-aegir3-apt-upgrade:
     - apt-get install --yes sudo curl cron
 
   script:
-    - "scripts/ci-aegir-stable-install-apt-debian8.sh"
+    - "scripts/ci-aegir-stable-install-apt-debian9.sh"
     # extra step to run the task queue.
     - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
     - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
@@ -178,6 +284,6 @@ upgradetest:debian-jessie-aegir3-apt-upgrade:
     - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
     # upgrade to the latest version from the unstable repo.
     - rm -v /etc/apt/sources.list.d/aegir-stable.list
-    - echo "deb http://debian2.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
+    - echo "deb [signed-by=/usr/share/keyrings/aegir-archive-keyring.gpg] http://debian.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
     - sudo apt-get update
-    - sudo apt-get --yes upgrade
+    - sudo apt-get --yes dist-upgrade

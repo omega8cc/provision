@@ -23,6 +23,8 @@ print '<?php' ?>
  */
 if (isset($_SERVER['SITE_SUBDIR']) && isset($_SERVER['RAW_HOST'])) {
   $base_url = 'http://' . $_SERVER['RAW_HOST'] . '/' . $_SERVER['SITE_SUBDIR'];
+  $cookie_domain = "." . $_SERVER['RAW_HOST'];
+  ini_set('session.cookie_path', '/' . $_SERVER['SITE_SUBDIR'] . '/');
 }
 <?php endif; ?>
 
@@ -155,11 +157,33 @@ if (isset($_SERVER['db_name'])) {
 <?php endif; ?>
 <?php endif; ?>
 
+  /**
+   * Set the Syslog identity to the site name so it's not always "drupal".
+   */
+  $conf['syslog_identity'] = '<?php print $this->uri ?>';
+
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+    $_SERVER['HTTPS'] = 'on';
+  }
+
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
   if (is_readable('<?php print $this->platform->server->include_path  ?>/global.inc')) {
     include_once('<?php print $this->platform->server->include_path  ?>/global.inc');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.

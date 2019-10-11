@@ -1,3 +1,150 @@
+aegir3-provision (3.183) testing; urgency=medium
+
+  * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
+  * 3.181ubuntu1 was missing the actual commit.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 22:41:17 +0200
+
+aegir3-provision (3.182) testing; urgency=medium
+
+  * Mini-release to update the bundled dehydrated lib for LetsEncrypt.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 21:50:20 +0200
+
+aegir3-provision (3.181ubuntu1) testing; urgency=medium
+
+  * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Fri, 04 Oct 2019 16:16:36 -0400
+
+aegir3-provision (3.180) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.18
+  * Include Drupal 7.67
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Thu, 27 Jun 2019 15:27:28 -0400
+
+aegir3-provision (3.174) testing; urgency=medium
+
+  * Update to Hostmaster 7.x-3.174
+  * Include an updated ctools, views, module_filter
+  * Include a new Golden Contrib module: Hosting Deploy
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 04 Apr 2019 15:48:32 +0200
+
+aegir3-provision (3.173) testing; urgency=medium
+
+  * Update to Hostmaster 7.x-3.173 & Drupal 7.63.
+
+ -- Jon Pugh <jon@thinkdrop.net>  Fri, 18 Jan 2019 14:37:21 -0500
+
+
+aegir3-provision (3.172) testing; urgency=medium
+
+  * Fix regression in legacy hosting_ssl: the logic for determining a certificate wasn't good, in the legacy module. #3020747
+
+ -- Jon Pugh <jon@thinkdrop.net>  Wed, 09 Jan 2019 10:50:08 -0500
+
+aegir3-provision (3.171) testing; urgency=medium
+
+  * Fix regression in hosting_https, #3020747
+
+ -- Herman van Rink <helmo@initfour.nl>  Sat, 22 Dec 2018 20:22:16 +0100
+
+aegir3-provision (3.170) unstable; urgency=high
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.17
+  * Fixes a number of security issues.
+  * Include Drupal 7.61
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 19 Dec 2018 16:50:53 +0100
+
+aegir3-provision (3.161) testing; urgency=medium
+
+  * Minor bugfix release
+  * Include Drupal 7.60 (security)
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 18 Oct 2018 19:29:19 +0200
+
+aegir3-provision (3.160) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.16
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 19 Sep 2018 10:05:55 +0200
+
+aegir3-provision (3.151) testing; urgency=medium
+
+  * Fixup the drupal-org.make file
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 02 May 2018 15:55:58 +0200
+
+aegir3-provision (3.150) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.15
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 02 May 2018 11:45:22 +0200
+
+aegir3-provision (3.146) testing; urgency=high
+
+  * Dummy release to include Drupal 7.59, see https://www.drupal.org/project/drupal/releases/7.59
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 25 Apr 2018 20:42:42 +0100
+
+aegir3-provision (3.145) testing; urgency=high
+
+  * Dummy release to include Drupal 7.58, see https://www.drupal.org/project/drupal/releases/7.58
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 28 Feb 2018 20:00:42 +0100
+
+aegir3-provision (3.144) testing; urgency=medium
+
+  * Dummy release to include Drupal 7.57, see https://www.drupal.org/project/drupal/releases/7.57
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 22 Feb 2018 13:53:18 +0100
+
+aegir3-provision (3.143) testing; urgency=medium
+
+  * Update Entity API, see SA-CONTRIB-2018-013 - https://www.drupal.org/sa-contrib-2018-013
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 15 Feb 2018 20:11:36 +0100
+
+aegir3-provision (3.142) testing; urgency=medium
+
+  * Drush download location is gone, see https://www.drupal.org/project/provision/issues/2942743
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 07 Feb 2018 21:56:26 +0100
+
+aegir3-provision (3.141) testing; urgency=medium
+
+  * Upgrade issue on a missing task_command property, see https://www.drupal.org/project/hostmaster/issues/2942500
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 06 Feb 2018 21:43:30 +0100
+
+aegir3-provision (3.140) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.14
+
+ -- Herman van Rink <helmo@initfour.nl>  Mon, 05 Feb 2018 13:39:54 +0100
+
+aegir3-provision (3.130) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.13
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 30 Nov 2017 19:46:04 +0100
+
+aegir3-provision (3.121) testing; urgency=medium
+
+  * Support Drupal 8.4 - See https://www.drupal.org/node/2911855
+
+ -- Herman van Rink <helmo@initfour.nl>  Fri, 29 Sep 2017 20:11:51 +0200
+
+aegir3-provision (3.120) unstable; urgency=medium
+
+  * Many bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.12
+  * Going for semi-semantic-verioning ... https://www.drupal.org/node/2168955
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 21 Sep 2017 15:53:50 +0200
+
 aegir3-provision (3.11.2) testing; urgency=medium
 
   * Version bump to get the Drupal core security update. 3.11.1 got stuck in our packaging system.

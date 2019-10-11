@@ -33,6 +33,9 @@ case "$1" in
         # this obviously doesn't work for git releases
         VERSION=`sed -n '/^version/{s/^.*= *//;p}' /usr/share/drush/commands/provision/provision.info`
 
+        # TODO: lookup? composer installs?
+        DRUSH_PATH="/usr/local/bin/drush"
+
         FLAGS="--yes"
         if [ "$DPKG_DEBUG" = "developer" ]; then
             FLAGS="$FLAGS --debug"
@@ -43,7 +46,10 @@ case "$1" in
         fi
         db_get "aegir/profile"
         if [ ! -z "$RET" ]; then
-            FLAGS="$FLAGS --profile='$RET'"
+            PROFILE=$RET
+            FLAGS="$FLAGS --profile='$PROFILE'"
+          else
+            PROFILE='hostmaster'
         fi
         db_get "aegir/webserver"
         if [ ! -z "$RET" ]; then
@@ -65,10 +71,10 @@ case "$1" in
         chown aegir:aegir "$AEGIRHOME" "$AEGIRHOME/config" "$AEGIRHOME/config/$WEBSERVER.conf"
 
         # flush the drush cache to find new commands
-        su -s /bin/sh aegir -c 'drush cache-clear drush'
+        su -s /bin/sh aegir -c "$DRUSH_PATH cache-clear drush"
 
-        site_uri=`su -s /bin/sh aegir -c 'drush @hostmaster status --fields="uri" --field-labels=0 2>/dev/null | tr "\n" " " | sed -e "s/^[[:space:]]*//g" -e "s/[[:space:]]*\$//g"'`
-        drupal_root=`su -s /bin/sh aegir -c 'drush @hostmaster status --fields="root" --field-labels=0 2>/dev/null | tr "\n" " " | sed -e "s/^[[:space:]]*//g" -e "s/[[:space:]]*\$//g"'`
+        site_uri=`su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster status --fields='uri' --field-labels=0 2>/dev/null | tr '\n' ' ' | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g'"`
+        drupal_root=`su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster status --fields='root' --field-labels=0 2>/dev/null | tr '\n' ' ' | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*\$//g'"`
 
         if [ -d "$drupal_root" ]; then
             # upgrade
@@ -92,14 +98,14 @@ case "$1" in
                 echo "it seems to be the same version as the one we're trying to install, not upgrading"
             else
                 echo "upgrading the frontend from $drupal_root to $NEW_PLATFORM"
-                if su -s /bin/sh aegir -c 'drush @hostmaster pm-list --status=enabled --pipe' | grep -q hosting_queued; then
+                if su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster pm-list --status=enabled --pipe" | grep -q hosting_queued; then
                     service hosting-queued stop
                 fi
                 cd "$drupal_root"
-                su -s /bin/sh aegir -c "drush hostmaster-migrate $FLAGS '$site_uri' '$NEW_PLATFORM'"
+                su -s /bin/sh aegir -c "$DRUSH_PATH hostmaster-migrate $FLAGS '$site_uri' '$NEW_PLATFORM'"
                 echo "upgrade finished, old platform left in $drupal_root"
                 # restart daemon if enabled
-                if su -s /bin/sh aegir -c 'drush @hostmaster pm-list --status=enabled --pipe' | grep -q hosting_queued; then
+                if su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster pm-list --status=enabled --pipe" | grep -q hosting_queued; then
                     service hosting-queued start
                 fi
             fi
@@ -111,34 +117,66 @@ case "$1" in
             fi
             db_get "aegir/db_host"
             AEGIR_DB_HOST="$RET"
-            db_get "aegir/db_user"
-            AEGIR_DB_USER="$RET"
-            db_get "aegir/db_password"
-            AEGIR_DB_PASS="$RET"
-            if [ -z "$AEGIR_DB_PASS" ]; then
-              echo EMPTY database password, can not be good.
+
+            # Read /etc/os-release to properly handle differences between distributions
+            OS_ID=$(grep ^ID /etc/os-release | cut -d= -f2)
+
+            # Determin if we create a db accoount or ask for it.
+            # Starting from MariaDB 10.1... https://www.drupal.org/node/2770819
+            # TODO: Work with future versions
+            if mysql --host=$AEGIR_DB_HOST --database=mysql --execute="show tables;" > /dev/null 2>&1
+            then
+              # MariaDB = 10.1
+              CREATEUSER=1
+            else
+              # Mysql & MariaDB < 10.1
+              CREATEUSER=0
             fi
+
+
+            if [ $CREATEUSER = 0 ]; then
+              db_get "aegir/db_user"
+              AEGIR_DB_USER="$RET"
+              db_get "aegir/db_password"
+              AEGIR_DB_PASS="$RET"
+              if [ -z "$AEGIR_DB_PASS" ]; then
+                echo EMPTY database password, can not be good.
+              fi
+            fi
+
             db_get "aegir/email"
             EMAIL="$RET"
 
             db_go
 
-            # forget the DB password in debconf storage
-            db_reset aegir/db_password || true
-            db_fset aegir/db_password "seen" "true" || true
+            if [ $CREATEUSER = 0 ]; then
+              # forget the DB password in debconf storage
+              db_reset aegir/db_password || true
+              db_fset aegir/db_password "seen" "true" || true
+            fi
+
             db_stop
+
+            if [ $CREATEUSER = 1 ]; then
+              AEGIR_DB_USER="aegir_root"
+
+              # Random password, will be stored in /var/aegir/.drush/server_localhost.alias.drushrc.php
+              AEGIR_DB_PASS=$(openssl rand -base64 12)
+
+              /usr/bin/mysql -e "GRANT ALL ON *.* TO '$AEGIR_DB_USER'@'$AEGIR_DB_HOST' IDENTIFIED BY '$AEGIR_DB_PASS' WITH GRANT OPTION"
+            fi
             
             if [ -d $AEGIRHOME/.drush/provision ]; then
                 echo "existing provision in $AEGIRHOME/.drush/provision detected, move away and try again"
                 exit 1
             fi
-            echo "installing the Aegir frontend (Drupal with the hostmaster profile), please wait..."
+            echo "installing the Aegir frontend (Drupal with the $PROFILE profile), please wait..."
             if [ "$DPKG_DEBUG" = "developer" ]; then
                 DEBUG="--debug"
             fi
 
             # pass data through JSON for extra security
-            su -s /bin/sh aegir -c "cd $AEGIRHOME && drush hostmaster-install $FLAGS --backend $site_uri 2>&1 | drush backend-parse $DEBUG" <<EOF
+            su -s /bin/sh aegir -c "cd $AEGIRHOME && $DRUSH_PATH hostmaster-install $FLAGS --backend $site_uri 2>&1 | $DRUSH_PATH backend-parse $DEBUG" <<EOF
 { "yes": 1,
   "version": "$VERSION",
   "aegir_db_host": "$AEGIR_DB_HOST",
@@ -148,11 +186,11 @@ case "$1" in
 }
 EOF
             # flush the drush cache to find new commands
-            su -s /bin/sh aegir -c 'drush cache-clear drush'
+            su -s /bin/sh aegir -c "$DRUSH_PATH cache-clear drush"
 
             # on new installs, we default to having the daemon enabled
             echo 'Enabling hosting-queued daemon'
-            su -s /bin/sh aegir -c 'drush @hostmaster pm-enable -y hosting_queued'
+            su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster pm-enable -y hosting_queued"
             service hosting-queued start
             if [ -f /bin/systemctl ]; then
               # There must be a better way, but we're trying to stay compatible with Debian Wheezy and Jessie.
@@ -180,10 +218,10 @@ EOF
         esac
 
         # this will ensure that this script aborts if the site can't be bootstrapped
-        if su -s /bin/sh aegir -c 'drush @hostmaster status' 2>&1 | grep -q 'Drupal bootstrap.*Successful'; then
+        if su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster status" 2>&1 | grep -q 'Drupal bootstrap.*Successful'; then
             echo 'Aegir frontend bootstrap correctly, operation was a success!'
             echo 'Use this URL to login on your new site:'
-            su -s /bin/sh aegir -c 'drush @hostmaster uli'
+            su -s /bin/sh aegir -c "$DRUSH_PATH @hostmaster uli"
         else
             echo 'Aegir frontend failed to bootstrap, something went wrong!'
             echo 'Look at the log above for clues or run with DPKG_DEBUG=developer'

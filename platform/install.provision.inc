@@ -25,16 +25,21 @@ function drush_provision_drupal_provision_install_validate() {
 
       drush_log(dt('Forcing reinstall...'), 'ok');
 
-      // Load the current database name from drushrc.php.
-      // I cannot find another way to find the current db_name!
-      require_once(d()->site_path . '/drushrc.php');
-      $old_db_name = $options['db_name'];
+      // Drop the database if we can figure out what it is.
+      // If last install failed, the database and the site folder is deleted.
+      if (file_exists(d()->site_path . '/drushrc.php')) {
 
-      if (d()->service('db')->database_exists($old_db_name)) {
-        d()->service('db')->drop_database($old_db_name);
-        drush_log(dt('Dropped database @database.', array(
-          '@database' => $old_db_name,
-        )), 'ok');
+        // Load the current database name from drushrc.php.
+        // I cannot find another way to find the current db_name!
+        require_once(d()->site_path . '/drushrc.php');
+        $old_db_name = $options['db_name'];
+
+        if (d()->service('db')->database_exists($old_db_name)) {
+          d()->service('db')->drop_database($old_db_name);
+          drush_log(dt('Dropped database @database.', array(
+            '@database' => $old_db_name,
+          )), 'ok');
+        }
       }
 
       // Destroy site_path.
@@ -46,7 +51,9 @@ function drush_provision_drupal_provision_install_validate() {
 
     // Check again if site does not exist after the forced reinstall.
     if (_provision_drupal_site_exists()) {
-      return drush_set_error('PROVISION_SITE_INSTALLED');
+      return drush_set_error('PROVISION_SITE_INSTALLED',  dt('The file !file still exists. Provision was unable to delete it.', array(
+        '!file' => d()->site_path . '/settings.php',
+      )));
     }
   }
 }
@@ -87,7 +94,7 @@ function drush_provision_drupal_provision_install() {
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
-  // Install site according to site_install_method.
+  // Install site according to install_method.
   drush_log(dt('Installing site with the "!method" method.', array(
     '!method' => d()->install_method,
   )), 'ok');
@@ -97,16 +104,19 @@ function drush_provision_drupal_provision_install() {
 
     // call a backend task to do the actual installation.
     $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
-    drush_set_option('installed', TRUE, 'site');
+    drush_set_option('profile_installed', TRUE, 'site');
   }
-  else {
+  // If install_method is 'manual', do nothing.
+  elseif (d()->install_method == 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
   }
-
+  
+  drush_set_option('installed', TRUE, 'site');
   _provision_drupal_maintain_aliases();
 
 }
@@ -118,7 +128,7 @@ function drush_provision_drupal_provision_install() {
 function drush_provision_drupal_post_provision_install() {
 
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
-  if (d()->install_method == 'profile' && drush_get_option('installed', FALSE, 'site')) {
+  if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
     _provision_drupal_rebuild_caches();
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
     _provision_client_create_symlink();

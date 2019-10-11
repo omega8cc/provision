@@ -117,7 +117,7 @@ function install_main() {
   $settings = array(
     'parameters' => array(
       'profile' => $profile,
-      'locale' => $install_locale,
+      'langcode' => $install_locale,
     ),
     'settings_verified' => TRUE,
     'forms' => array(
@@ -142,7 +142,8 @@ function install_main() {
     ),
   );
   try {
-    install_drupal($settings);
+    $class_loader = drush_drupal_load_autoloader(DRUPAL_ROOT);
+    install_drupal($class_loader, $settings);
   }
   catch (Exception $e) {
     drush_set_error('DRUPAL_INSTALL_FAILED');
@@ -158,8 +159,13 @@ function install_main() {
 
   $account = user_load(1);
 
-  $onetime = user_pass_reset_url($account);
-  // Store the one time login link in an option so the front end can direct the user to their new site.
+  // If a redirect is defined, the symlink to the alias needs to exist before
+  // we generate the login link, below.
+  _provision_drupal_maintain_aliases();
+
+  // Store the one time login link in an option so the front end can direct the
+  // user to their new site.
+  $onetime = provision_generate_login_reset();
   drush_set_option('login_link', $onetime);
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'message');
 

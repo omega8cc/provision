@@ -7,6 +7,8 @@
  * structure to the provisioning modules.
  */
 
+require_once __DIR__ . '/vendor/autoload.php';
+
 drush_errors_on();
 
 /**
@@ -18,8 +20,7 @@ function provision_autoload() {
   static $instance = NULL;
 
   if (is_null($instance)) {
-    require_once dirname(__FILE__) . '/Symfony/Component/ClassLoader/UniversalClassLoader.php';
-    $instance = new UniversalClassLoader();
+    $instance = new \Composer\Autoload\ClassLoader();
     // Activate the autoloader.
     $instance->register();
   }
@@ -58,7 +59,7 @@ function provision_autoload_register_prefix($prefix, $dir, $prepend = FALSE) {
   }
 
   // Set the prefixes.
-  provision_autoload()->registerPrefix($prefix, $dirs);
+  provision_autoload()->add($prefix, $dirs);
 }
 
 // Add our prefix to the autoloader.
@@ -412,7 +413,7 @@ function _scrub_object($input) {
 
 /**
  * Execute a command against a specific context object.
- *
+ * 
  * @param $target
  *   the context to operate on, @ prefix is optional.
  * @param $command
@@ -429,6 +430,88 @@ function _scrub_object($input) {
 function provision_backend_invoke($target, $command, $arguments = array(), $data = array(), $mode = 'GET') {
   $context = '@' . ltrim($target, '@');
   return drush_invoke_process($context, $command, $arguments, $data, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
+}
+
+/**
+ * Run a command, sending output to drush logs in real time.
+ * 
+ * The Symfony\Component\Process\Process Object is used to run this command.
+ * After implementing provision_process(), you can get the Process result object
+ * via drush context:
+ * 
+ *   $process = drush_get_context('provision_process_result');
+ *   print $process->getExitCode();
+ *
+ * @param string $command
+ *   The command to run
+ * @param null $cwd
+ *   The directory to run the command in.
+ * @param string $label
+ *   A string to display above the command block in the front-end.
+ * @param array $env
+ *   A list of environment variables to set for the process.
+ * @param bool $log_output
+ *   Whether or not to send output to drush_log in real time.
+ * @param null $error_message
+ *   The error message to show after a failure. Defaults to NULL because the UI turning red and the error output is usually enough.
+ * @param bool $throw_drush_error
+ *   Whether or not to throw a drush error if the process fails. Defaults to TRUE.
+ *
+ * @return string|void
+ *   The output or error output of the command.
+ */
+function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
+  if (empty($command)) {
+    return;
+  }
+
+  // Merge in env vars, inheriting the CLI's
+  if (is_array($env)) {
+    $env = array_merge($_SERVER, $env);
+  }
+  else {
+    $env = $_SERVER;
+  }
+
+  // Make sure colors always come through
+  $env['TERM'] = 'xterm';
+
+  $process = new \Symfony\Component\Process\Process(escapeshellcmd($command), $cwd, $env);
+  $process->setTimeout(NULL);
+  if ($log_output) {
+    drush_log("[$label] $command", 'p_command');
+
+    $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
+      drush_log($buffer, $log_type);
+    });
+  }
+  else {
+    $exit_code = $process->run();
+  }
+
+  // Save the Provision Process object to Drush Context so that implementors can access the full object.
+  drush_set_context('provision_process_result', $process);
+  drush_log("Provision process command exited with $exit_code", 'debug');
+
+  // check exit code
+  if ($exit_code === 0) {
+
+    if ($log_output) {
+      drush_log('', 'p_ok');
+    }
+    return $process->getOutput();
+  }
+  else {
+
+    if ($log_output) {
+      drush_log('', 'p_error');
+    }
+
+    if ($throw_drush_error) {
+      drush_set_error('PROVISION_PROCESS_ERROR', !empty($error_message)? $error_message: $process->getErrorOutput());
+    }
+    return $process->getErrorOutput();
+  }
 }
 
 /**
