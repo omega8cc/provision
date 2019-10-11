@@ -460,7 +460,7 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
  * @return string|void
  *   The output or error output of the command.
  */
-function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE) {
+function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
   if (empty($command)) {
     return;
   }
@@ -481,8 +481,8 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   if ($log_output) {
     drush_log("[$label] $command", 'p_command');
 
-    $exit_code = $process->run(function ($type, $buffer) {
-      drush_log($buffer, 'p_info');
+    $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
+      drush_log($buffer, $log_type);
     });
   }
   else {
@@ -508,7 +508,7 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
     }
 
     if ($throw_drush_error) {
-      drush_set_error('PROVISION_PROCESS_ERROR', dt($error_message));
+      drush_set_error('PROVISION_PROCESS_ERROR', !empty($error_message)? $error_message: $process->getErrorOutput());
     }
     return $process->getErrorOutput();
   }

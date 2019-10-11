@@ -23,6 +23,7 @@ print '<?php' ?>
  */
 if (isset($_SERVER['SITE_SUBDIR']) && isset($_SERVER['RAW_HOST'])) {
   $base_url = 'http://' . $_SERVER['RAW_HOST'] . '/' . $_SERVER['SITE_SUBDIR'];
+  ini_set('session.cookie_path', '/' . $_SERVER['SITE_SUBDIR'] . '/');
 }
 <?php endif; ?>
 
@@ -110,9 +111,6 @@ if (isset($_SERVER['db_name'])) {
 
 <?php endif; ?>
 
-  $profile = "<?php print $this->profile ?>";
-  $install_profile = "<?php print $this->profile ?>";
-
   /**
   * PHP settings:
   *
@@ -133,7 +131,6 @@ if (isset($_SERVER['db_name'])) {
   */
   umask(0002);
 
-  $settings['install_profile'] = '<?php print $this->profile ?>';
   $settings['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
   $settings['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
   $config['system.file']['path']['temporary'] = 'sites/<?php print $this->uri ?>/private/temp';
@@ -182,6 +179,18 @@ if (isset($_SERVER['db_name'])) {
     '\.local$',
   );
 
+  /**
+   * Set the Syslog identity to the site name so it's not always "drupal".
+   */
+  $config['syslog.settings']['identity'] = '<?php print $this->uri ?>';
+
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+    $_SERVER['HTTPS'] = 'on';
+  }
+
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
@@ -192,6 +201,11 @@ if (isset($_SERVER['db_name'])) {
   # Additional platform wide configuration settings.
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.

@@ -1,3 +1,57 @@
+aegir3-provision (3.182) testing; urgency=medium
+
+  * Mini-release to update the bundled dehydrated lib for LetsEncrypt.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 21:50:20 +0200
+
+aegir3-provision (3.181ubuntu1) testing; urgency=medium
+
+  * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Fri, 04 Oct 2019 16:16:36 -0400
+
+aegir3-provision (3.180) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.18
+  * Include Drupal 7.67
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Thu, 27 Jun 2019 15:27:28 -0400
+
+aegir3-provision (3.174) testing; urgency=medium
+
+  * Update to Hostmaster 7.x-3.174
+  * Include an updated ctools, views, module_filter
+  * Include a new Golden Contrib module: Hosting Deploy
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 04 Apr 2019 15:48:32 +0200
+
+aegir3-provision (3.173) testing; urgency=medium
+
+  * Update to Hostmaster 7.x-3.173 & Drupal 7.63.
+
+ -- Jon Pugh <jon@thinkdrop.net>  Fri, 18 Jan 2019 14:37:21 -0500
+
+
+aegir3-provision (3.172) testing; urgency=medium
+
+  * Fix regression in legacy hosting_ssl: the logic for determining a certificate wasn't good, in the legacy module. #3020747
+
+ -- Jon Pugh <jon@thinkdrop.net>  Wed, 09 Jan 2019 10:50:08 -0500
+
+aegir3-provision (3.171) testing; urgency=medium
+
+  * Fix regression in hosting_https, #3020747
+
+ -- Herman van Rink <helmo@initfour.nl>  Sat, 22 Dec 2018 20:22:16 +0100
+
+aegir3-provision (3.170) unstable; urgency=high
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.17
+  * Fixes a number of security issues.
+  * Include Drupal 7.61
+
+ -- Herman van Rink <helmo@initfour.nl>  Wed, 19 Dec 2018 16:50:53 +0100
+
 aegir3-provision (3.161) testing; urgency=medium
 
   * Minor bugfix release

@@ -9,9 +9,14 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
     if (!empty($backup_file) && !strpos($backup_file, '/')) {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
     }
-    else {
+    // If site database exists and is boostrapped, run a backup.
+    elseif (drush_bootstrap_max() == DRUSH_BOOTSTRAP_DRUPAL_LOGIN) {
+      drush_log(dt('Invoking drush provision-backup...'));
       drush_invoke("provision-backup", $backup_file);
       drush_unset_option('force', 'process');
+    }
+    else {
+      drush_log(dt('Warning: A site backup was not made because a site database was not found.'), 'warning');
     }
   }
 }
@@ -48,8 +53,12 @@ function drush_provision_drupal_provision_delete() {
       drush_set_error(dt('Existing sites were found on this platform. These sites will need to be deleted before this platform can be deleted.'));
     }
     else {
+      drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
       _provision_recursive_delete(d()->root);
       d()->service('http')->sync(d()->root);
     }
+  }
+  elseif (d()->type === 'server') {
+    drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
   }
 }

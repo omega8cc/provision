@@ -126,7 +126,6 @@ if (isset($_SERVER['db_name'])) {
   ini_set('session.cache_limiter',    'none');
   ini_set('session.cookie_lifetime',  0);
   ini_set('session.gc_maxlifetime',   200000);
-  ini_set('session.save_handler',     'user');
   ini_set('session.use_only_cookies', 1);
   ini_set('session.use_trans_sid',    0);
   ini_set('url_rewriter.tags',        '');
@@ -155,6 +154,13 @@ if (isset($_SERVER['db_name'])) {
 <?php endif; ?>
 <?php endif; ?>
 
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+    $_SERVER['HTTPS'] = 'on';
+  }
+
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
@@ -165,6 +171,11 @@ if (isset($_SERVER['db_name'])) {
   # Additional platform wide configuration settings.
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.
