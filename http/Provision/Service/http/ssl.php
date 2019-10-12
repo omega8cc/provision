@@ -134,8 +134,8 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
       )), 0700);
 
     if (provision_file()->exists($path)->status()) {
-      drush_log(dt('generating 2048 bit RSA key in %path/', array('%path' => $path)));
-      /* 
+      drush_log(dt('generating 2048 bit RSA key in %path/', array('%path' => $path)), 'info');
+      /*
        * according to RSA security and most sites I could read, 1024
        * was recommended until 2010-2015 and 2048 is now the
        * recommended length for more sensitive data. we are therefore
@@ -175,7 +175,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
    */
   static function assign_certificate_site($ssl_key, $site) {
     $path = $site->data['server']->http_ssld_path . "/" . $ssl_key . "/" . $site->uri . ".receipt";
-    drush_log(dt("registering site %site with SSL certificate %key with receipt file %path", array("%site" => $site->uri, "%key" => $ssl_key, "%path" => $path)));
+    drush_log(dt("registering site %site with SSL certificate %key with receipt file %path", array("%site" => $site->uri, "%key" => $ssl_key, "%path" => $path)), 'info');
     if (touch($path)) {
       return $path;
     }
@@ -203,7 +203,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
           '%site' => $site->uri,
           '%server' => $site->server->remote_host)))->status()) {
       if (!Provision_Service_http_ssl::certificate_in_use($ssl_key, $site->server)) {
-        drush_log(dt("Deleting unused SSL directory: %dir", array('%dir' => $ssl_dir)));
+        drush_log(dt("Deleting unused SSL directory: %dir", array('%dir' => $ssl_dir)), 'info');
         _provision_recursive_delete($ssl_dir);
         $site->server->sync($path);
       }

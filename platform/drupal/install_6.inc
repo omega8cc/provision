@@ -305,7 +305,7 @@ function install_main() {
 
   if (function_exists($function)) {
     while (!in_array($task, array('profile-finished', 'finished'))) {
-      drush_log(dt("Running profile specific task : !task", array('!task' => $task)));
+      drush_log(dt("Running profile specific task : !task", array('!task' => $task)), 'info');
       module_list(TRUE, FALSE);
       module_rebuild_cache();
       module_load_all();

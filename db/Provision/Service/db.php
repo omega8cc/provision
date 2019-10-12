@@ -69,19 +69,19 @@ class Provision_Service_db extends Provision_Service {
     $uri = $this->context->uri;
 
     if (!$uri) {
-      drush_log(dt("URI @uri is EMPTY...", array('@uri' => $uri)));
+      drush_log(dt("URI @uri is EMPTY...", array('@uri' => $uri)), 'info');
     }
     else {
-      drush_log(dt("URI is OK @uri", array('@uri' => $uri)));
+      drush_log(dt("URI is OK @uri", array('@uri' => $uri)), 'info');
     }
 
     $suggest_base = substr(str_replace(array('.', '-'), '' , preg_replace('/^www\./', '', $uri)), 0, 16);
 
     if (!$suggest_base) {
-      drush_log(dt("SUGGEST_BASE @suggest_base is EMPTY...", array('@suggest_base' => $suggest_base)));
+      drush_log(dt("SUGGEST_BASE @suggest_base is EMPTY...", array('@suggest_base' => $suggest_base)), 'info');
     }
     else {
-      drush_log(dt("SUGGEST_BASE is OK @suggest_base", array('@suggest_base' => $suggest_base)));
+      drush_log(dt("SUGGEST_BASE is OK @suggest_base", array('@suggest_base' => $suggest_base)), 'info');
     }
 
     if (!$this->database_exists($suggest_base)) {
@@ -115,7 +115,7 @@ class Provision_Service_db extends Provision_Service {
     }
 
     foreach ($this->grant_host_list() as $db_grant_host) {
-      drush_log(dt("Granting privileges to %user@%client on %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)));
+      drush_log(dt("Granting privileges to %user@%client on %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)), 'info');
       if (!$this->grant($db_name, $db_user, $db_passwd, $db_grant_host)) {
         drush_set_error('PROVISION_CREATE_DB_FAILED', dt("Could not create database user @user", array('@user' => $db_user)));
       }
@@ -144,7 +144,7 @@ class Provision_Service_db extends Provision_Service {
     extract($creds);
 
     if ( $this->database_exists($db_name) ) {
-      drush_log(dt("Dropping database @dbname", array('@dbname' => $db_name)));
+      drush_log(dt("Dropping database @dbname", array('@dbname' => $db_name)), 'info');
       if (!$this->drop_database($db_name)) {
         drush_log(dt("Failed to drop database @dbname", array('@dbname' => $db_name)), 'warning');
       }
@@ -156,7 +156,7 @@ class Provision_Service_db extends Provision_Service {
     }
 
     foreach ($this->grant_host_list() as $db_grant_host) {
-      drush_log(dt("Revoking privileges of %user@%client from %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)));
+      drush_log(dt("Revoking privileges of %user@%client from %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)), 'info');
       if (!$this->revoke($db_name, $db_user, $db_grant_host)) {
         drush_log(dt("Failed to revoke user privileges"), 'warning');
       }

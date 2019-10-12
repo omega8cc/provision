@@ -307,7 +307,7 @@ class Provision_FileSystem extends Provision_ChainedState {
           $command = 'tar -pxf %s';
         }
 
-        drush_log(dt('Running: %command in %target', array('%command' => sprintf($command, $path), '%target' => $target)));
+        drush_log(dt('Running: %command in %target', array('%command' => sprintf($command, $path), '%target' => $target)), 'info');
         $result = drush_shell_exec($command, $path);
         chdir($oldcwd);
 

@@ -111,7 +111,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
       foreach ($site_packages['modules'] as $name => $module) {
         if ($module['status'] == 1) {
           if (isset($module['platform']) && $module['platform'] != '-1') {
-            drush_log(dt("The !name module is installed in the site's modules directory. Skipping schema version check.", array('!name' => $name)));
+            drush_log(dt("The !name module is installed in the site's modules directory. Skipping schema version check.", array('!name' => $name)), 'info');
           }
           elseif (!array_key_exists($name, $merged_modules)) {
             drush_log(dt("Could not find a version of the !name module", array('!name' => $name)), 'warning');

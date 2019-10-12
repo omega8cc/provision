@@ -72,10 +72,10 @@ function _provision_drupal_system_map() {
   $packages['profiles'][$profile]->status = 1;
 
   $packages['modules'] = _provision_system_query('module');
-  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))));
+  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
 
   $packages['themes'] = _provision_system_query('theme');
-  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))));
+  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))), 'info');
 
   return $packages;
 }
@@ -149,7 +149,7 @@ function _provision_find_profiles() {
         $profile->info['languages'] = _provision_find_profile_languages($profile->path);
 
         $profiles[basename($profile->path)] = $profile;
-        drush_log(dt('Found install profile %name', array('%name' => $profile->name)));
+        drush_log(dt('Found install profile %name', array('%name' => $profile->name)), 'info');
       }
     }
   }

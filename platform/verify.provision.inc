@@ -160,7 +160,7 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())));
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'info');
     drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
 
     // Determine latest BOA contrib directory name and add INI template if missing.
