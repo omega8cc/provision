@@ -47,7 +47,7 @@ if ($this->redirection) {
       print "  listen       *:{$http_port};\n";
       print "  #listen       [::]:{$http_port};\n";
       print "  include       fastcgi_params;\n";
-      print "  fastcgi_param HTTP_PROXY "";\n";
+      print "  fastcgi_param HTTP_PROXY \"\";\n";
       print "  fastcgi_param MAIN_SITE_NAME {$this->uri};\n";
       print "  set \$main_site_name {$this->uri};\n";
       print "  fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;\n";
