@@ -99,15 +99,15 @@ server {
 <?php endif; ?>
 
 server {
+<?php if (!$this->redirection && !$ssl_redirection): ?>
   include       fastcgi_params;
-
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
-
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
   set $main_site_name "<?php print $this->uri; ?>";
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   fastcgi_param HTTPS on;
+<?php endif; ?>
 <?php
   // If any of those parameters is empty for any reason, like after an attempt
   // to import complete platform with sites without importing their databases,
@@ -122,11 +122,13 @@ server {
     $db_host = 'localhost';
   }
 ?>
+<?php if (!$this->redirection && !$ssl_redirection): ?>
   fastcgi_param db_type   <?php print urlencode($db_type); ?>;
   fastcgi_param db_name   <?php print urlencode($db_name); ?>;
   fastcgi_param db_user   <?php print urlencode($db_user); ?>;
   fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
   fastcgi_param db_host   <?php print urlencode($db_host); ?>;
+<?php endif; ?>
 <?php
   // Until the real source of this problem is fixed elsewhere, we have to
   // use this simple fallback to guarantee that empty db_port does not
@@ -141,7 +143,9 @@ server {
     }
   }
 ?>
+<?php if (!$this->redirection && !$ssl_redirection): ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+<?php endif; ?>
   listen        <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen        <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
   server_name   <?php
