@@ -12,7 +12,7 @@ if ($this->redirection) {
   // Redirect all aliases to the main http url using separate vhosts blocks to avoid if{} in Nginx.
   foreach ($this->aliases as $alias_url) {
     if (!preg_match("/\.(?:nodns)\./", $alias_url)) {
-      print "# alias redirection virtual host\n";
+      print "\n# alias redirection virtual host\n";
       print "server {\n";
       print "  listen       *:{$http_port};\n";
       print "  #listen       [::]:{$http_port};\n";
