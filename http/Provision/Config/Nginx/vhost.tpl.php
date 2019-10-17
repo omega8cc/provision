@@ -88,6 +88,7 @@ if ($this->redirection) {
 
       $alias_url = str_replace('/', '.', $alias_url);
       print "  server_name  {$alias_url};\n";
+      print "  root  {$this->root};\n";
       print "  include       " . $server->include_path . "/nginx_vhost_common.conf;\n";
       print "}\n";
     }
