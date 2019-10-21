@@ -42,7 +42,14 @@ if ($this->redirection) {
       print "  return 301 \$scheme://{$this->redirection}\$request_uri;\n";
       print "}\n";
     }
-    else {
+  }
+}
+
+if ($this->redirection || !$this->redirection) {
+  $aegir_root = d('@server_master')->aegir_root;
+  $satellite_mode = d('@server_master')->satellite_mode;
+  foreach ($this->aliases as $alias_url) {
+    if (preg_match("/\.(?:nodns)\./", $alias_url)) {
       print "\n";
       print "# nodns alias exception virtual host\n";
       print "server {\n";
