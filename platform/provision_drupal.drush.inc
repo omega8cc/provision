@@ -739,9 +739,23 @@ function provision_drupal_system_map() {
 function _provision_drupal_find_modules($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'modules');
   $files = array();
-  foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+
+  if (drush_drupal_major_version() >= 8) {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+    // Remove '.info' extension from the end of the file name.
+    foreach($files as $name => $file) {
+      $files[basename($name, '.info')] = $file;
+      unset($files[$name]);
+    }
   }
+  else {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+  } 
+
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {
       $yaml_file = sprintf("%s/%s.info.yml", dirname($info->filename), $name);

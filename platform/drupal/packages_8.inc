@@ -18,6 +18,13 @@ function _provision_drupal_find_themes($scope, $key = '') {
     $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
   }
+
+  // Remove '.info' extension from the end of the file name.
+  foreach($files as $name => $file) {
+    $files[basename($name, '.info')] = $file;
+    unset($files[$name]);
+  } 
+
   foreach ($files as $name => $file) {
     $files[$name]->info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($file->filename));
     if (!empty($files[$name]->info['name'])) {
@@ -105,6 +112,7 @@ function _provision_system_query($type) {
   foreach ($extensions_data as $name => $extension_data) {
     $package = (object) $extension_data->info;
     $package->filename = drupal_get_filename($type, $name);
+
     $frags = explode("/", $package->filename);
     // Flag site-specific packages.
     if ($frags[0] == 'sites' && $frags[1] != 'all') {
@@ -115,6 +123,23 @@ function _provision_system_query($type) {
 
     if ($type == 'module') {
       $package->schema_version = drupal_get_installed_schema_version($name);
+
+      if(!file_exists($package->filename)) {
+        drush_log(dt("@name.info.yml not found.", array("@name" => $name)), 'notice');
+        continue;
+      } 
+      else {
+        $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($package->filename));
+        // Skip hidden modules
+        if (isset($info['hidden']) && $info['hidden'] != FALSE) {
+          continue;
+        }
+        // The 'drupal_get_filename()' function is returning at least one profile as a module
+        // (profile 'standard').  Make sure this is really a module.  If not, skip it.
+        if (isset($info['type']) && $info['type'] != 'module') {
+          continue;
+        }
+      }
     }
 
     $packages[$name] = $package;
