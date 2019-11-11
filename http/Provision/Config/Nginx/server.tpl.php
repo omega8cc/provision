@@ -105,7 +105,7 @@ if ($nginx_has_upload_progress) {
   client_body_buffer_size        64k;
   client_header_buffer_size      32k;
 <?php if ($satellite_mode == 'boa'): ?>
-  client_max_body_size          100m;
+  client_max_body_size          150m;
 <?php endif; ?>
   connection_pool_size           256;
   fastcgi_buffer_size           512k;
