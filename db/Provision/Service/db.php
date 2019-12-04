@@ -145,7 +145,7 @@ class Provision_Service_db extends Provision_Service {
 
     // Do not attempt to continue if there is no db name.
     if (empty($db_name)) {
-      drush_log(dt("Unable to destoy the database because the database name is unknown.", array('@dbname' => $db_name)), 'warning');
+      drush_log(dt("Unable to destroy the database because the database name is unknown.", array('@dbname' => $db_name)), 'warning');
       return;
     }
 
