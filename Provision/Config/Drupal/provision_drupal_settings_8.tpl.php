@@ -133,6 +133,7 @@ if (isset($_SERVER['db_name'])) {
 
   $settings['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
   $settings['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
+  $settings['file_temp_path'] = 'sites/<?php print $this->uri ?>/private/temp';
   $config['system.file']['path']['temporary'] = 'sites/<?php print $this->uri ?>/private/temp';
   $config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/<?php print $this->uri ?>/private/config/sync';
   $settings['hash_salt'] = '<?php print $drupal_hash_salt_var ?>';
