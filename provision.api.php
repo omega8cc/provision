@@ -474,3 +474,17 @@ ENV;
   // Hide sensitive information from any other users.
   provision_file()->chmod($file_name, 0400);
 }
+
+/**
+ * Alter the list of directories excluded from site backups.
+ *
+ * @param $directories
+ *   An array of strings representing directories, which are relative to a
+ *   site directory.
+ *
+ * @see drush_provision_drupal_provision_backup_get_exclusions()
+ */
+function hook_provision_backup_exclusions_alter(&$directories) {
+  // Prevent backing up the CiviCRM Smarty cache.
+  $directories[] = './files/civicrm/templates_c';
+}
