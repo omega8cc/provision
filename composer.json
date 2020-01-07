@@ -14,7 +14,7 @@
         "docs": "http://docs.aegirproject.org/"
     },
     "require": {
-        "symfony/process": "^3.3"
+        "symfony/process": "~3"
     },
     "config": {
         "sort-packages": true,
