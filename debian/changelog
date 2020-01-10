@@ -1,3 +1,9 @@
+aegir3-provision (3.184) testing; urgency=medium
+
+  * Include Drupal 7.69
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 19 Dec 2019 15:57:43 +0100
+
 aegir3-provision (3.183) testing; urgency=medium
 
   * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
