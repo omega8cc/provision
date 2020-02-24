@@ -184,6 +184,13 @@ if (isset($_SERVER['db_name'])) {
    */
   $config['syslog.settings']['identity'] = '<?php print $this->uri ?>';
 
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+    $_SERVER['HTTPS'] = 'on';
+  }
+
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
@@ -194,6 +201,11 @@ if (isset($_SERVER['db_name'])) {
   # Additional platform wide configuration settings.
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.

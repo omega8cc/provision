@@ -124,7 +124,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $error = "$type: {$error[0]}";
       }
       return drush_set_error("DRUSH_INVALID_DRUPAL_ROOT",
-        dt("Drush could not bootstrap the platform at @path. Please check the platform directory exists and is readable. The errors were: @errors", array(
+        dt("A Drupal codebase was not found in @path. Please check that the directory exists and Drupal's index.php file is present. Check the Publish Path of the platform, the directory exists, contains Drupal, and is readable.  and try again. The errors were: @errors", array(
           '@path' => d()->root,
           '@errors' => implode('|', $errors)
         )));
@@ -157,7 +157,8 @@ function drush_provision_drupal_pre_provision_verify() {
     _provision_drupal_create_settings_file();
 
     // If this is the hostmaster site, save the ~/.drush/drushrc.php file.
-    if (d()->root == d('@hostmaster')->root && d()->uri == d('@hostmaster')->uri) {
+    $hostmaster = provision_sitealias_get_record('@hostmaster');
+    if (d()->root == $hostmaster['root'] && d()->uri == $hostmaster['uri']) {
       $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
       $aegir_drushrc->write();
 

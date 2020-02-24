@@ -6,6 +6,12 @@
  * Back up an existing site
  */
 
+const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
+  './files/css',
+  './files/js',
+  './private/temp',
+);
+
 /**
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.
  */
@@ -91,13 +97,16 @@ function drush_provision_drupal_provision_backup() {
   if (!chdir(d()->site_path)) {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
+
+  $command_base = "tar cpf";
+  $command_arguments = " %s" . drush_provision_drupal_provision_backup_get_exclusions() . " .";
   if (substr($backup_file, -2) == 'gz') {
-    $command = 'tar cpfz %s .';
+    $command = $command_base . 'z' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'bz2') {
-    $command = 'tar cpfj %s .';
+    $command = $command_base . 'j' . $command_arguments;
   } else {
-    $command = 'tar cpf %s .';
+    $command = $command_base . $command_arguments;
   }
   $result = drush_shell_exec($command,  $backup_file);
 
@@ -118,6 +127,17 @@ function drush_provision_drupal_provision_backup() {
   if (!$result && !drush_get_option('force', false)) {
     drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal"));
   }
+}
+
+function drush_provision_drupal_provision_backup_get_exclusions() {
+  $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
+  drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
+
+  $exclusions = "";
+  foreach ($directories as $directory) {
+    $exclusions .= " --exclude='$directory'";
+  }
+  return $exclusions;
 }
 
 function drush_provision_drupal_post_provision_backup() {
