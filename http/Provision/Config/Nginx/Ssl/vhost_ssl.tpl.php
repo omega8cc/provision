@@ -72,7 +72,7 @@ server {
   resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
-  ssl_protocols              TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+  ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
 <?php endif; ?>
 <?php endif; ?>
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
@@ -166,7 +166,7 @@ server {
   resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
-  ssl_protocols              TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+  ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
 <?php endif; ?>
 <?php endif; ?>
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
