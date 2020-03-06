@@ -24,13 +24,13 @@ function _provision_drupal_find_themes($scope, $key = '') {
       $files[$name]->name = $files[$name]->info['name'];
     }
 
-    if (!empty($files[$name]->info['version'])) {
-      $files[$name]->version = $files[$name]->info['version'];
-    }
-
-    // Resolve the 'VERSION' constant used in Git checkouts.
-    if ($files[$name]->version == 'VERSION') {
+    // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
+    // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    if (empty($files[$name]->info['version']) || !isset($files[$name]->version) || $files[$name]->version == 'VERSION') {
       $files[$name]->version = drush_drupal_version();
+    }
+    else {
+      $files[$name]->version = $files[$name]->info['version'];
     }
 
     // @TODO: This is copied from the D7 implementation and I'm almost certain
