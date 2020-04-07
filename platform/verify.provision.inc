@@ -165,9 +165,17 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // Determine latest BOA contrib directory name and add INI template if missing.
     $pathAll = '/data/all/';
+    $pathSal = d()->root . '/sites/all';
     $pathDrc = d()->root . '/sites/all/drush';
     $iniFile = d()->root . '/sites/all/modules/default.boa_platform_control.ini';
     $iniTpl = '/data/conf/default.boa_platform_control.ini';
+
+    if (!provision_file()->exists($pathSal)->status()) {
+      provision_file()->create_dir($pathSal, dt("Sites All dir created"), 0755);
+    }
+    if (!provision_file()->exists($pathDrc)->status()) {
+      provision_file()->create_dir($pathDrc, dt("Sites All Drush dir created"), 0755);
+    }
 
     if (!provision_file()->exists($iniFile)->status() && provision_file()->exists($iniTpl)->status()) {
       provision_file()->copy($iniTpl, $iniFile);
