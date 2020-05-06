@@ -51,13 +51,51 @@ function drush_provision_drupal_pre_provision_verify() {
     }
   }
   elseif (d()->type === 'platform') {
-  
-    drush_log(dt("Checking for platform at path @path...", array('@path' => d()->root)), 'debug');
-    drush_log(dt("Platform makefile: @makefile", array('@makefile' => d()->makefile)), 'debug');
-    
-    // Create a platform from a makefile, if it doesnt already exist and the makefile does.
-    if (!provision_file()->exists(d()->root)->status() && !empty(d()->makefile)) {
-      drush_log(dt("Platform path does not exist, fetching from drush makefile"), 'notice');
+
+    // Translation strings
+    $t = array();
+    $t['@root'] = d()->root;
+    $t['@makefile'] = d()->makefile;
+    $t['@git_root'] = d()->git_root;
+    $t['@git_remote'] = d()->git_remote;
+    $t['@git_reference'] = d()->git_reference;
+
+    // There are 6 states possible here:
+    // 1. Git Platform, path does not exist.
+    // 2. Git Platform, path does exist.
+    // 3. makefile platform, path does not exist.
+    // 4. makefile platform, path does exist.
+    // 5. adhoc platform, path does not exist.
+    // 6. adhoc platform, path does exist.
+
+    // 1. Git Platform, does not exist.
+    if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
+      drush_log(dt("Cloning git repository @git_remote to @git_root ...", $t), 'notice');
+
+      // git_remote is required if git_root is set.
+      if (empty(d()->git_remote)) {
+        return drush_set_error("DRUSH_GIT_FAILED", dt('The git_remote property is required when git_root is used.'));
+      }
+
+      // Clone the git repo.
+      provision_process([
+          "git",
+          "clone",
+          "--recursive",
+          d()->git_remote,
+          d()->git_root,
+      ]);
+    }
+
+    // 2. Git Platform, does exist.
+    elseif (!empty(d()->git_root) && file_exists(d()->git_root)) {
+      // @TODO: Confirm git remote and ref matches.
+      drush_log(dt('Platform git repo destination path (@git_root) already exists.', $t), 'notice');
+    }
+
+    // 3. makefile platform, path does not exist.
+    elseif (!empty(d()->makefile) && !file_exists(d()->root)) {
+      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), 'notice');
       $arguments = array();
       $options = array();
       // Propagate working-copy args downward.
@@ -78,6 +116,23 @@ function drush_provision_drupal_pre_provision_verify() {
         return drush_set_error("DRUSH_MAKE_FAILED",
           "Could not download platform using drush make. No platform present");
       }
+    }
+
+    // 4. makefile platform, path does exist.
+    elseif (!empty(d()->makefile) && file_exists(d()->root)) {
+      drush_log(dt('Platform makefile destination path (@root) already exists.'), 'notice');
+    }
+
+    // 5. adhoc platform, path does not exist.
+    elseif (!file_exists(d()->root)) {
+      return drush_set_error("DRUSH_PLATFORM_VERIFY_FAILED",
+          dt("Nothing found at platform root (@root). Install code manually or set 'makefile' or 'git_remote' properties.", $t));
+
+    }
+
+    // 6. adhoc platform, path does exist.
+    elseif (file_exists(d()->root)) {
+      drush_log(dt('Platform path found (@root).'), 'notice');
     }
 
     // Composer Install Support
