@@ -134,6 +134,14 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
     // Sync all filesystem changes to the remote server.
     d()->service('http')->sync(d()->site_path, $options);
 
+    // If this site's "file_public_path" is not the default site_path/files, sync it.
+    if (d()->site_path . '/files' != d()->file_public_path) {
+      d()->service('http')->sync(d()->file_public_path, $options);
+    }
+    if (d()->site_path . '/files/private' != d()->file_private_path) {
+      d()->service('http')->sync(d()->file_private_path, $options);
+    }
+
     // Reset the exclude-path option
     if(!is_null($exclude)) {
       if(empty($old_exclude)) {
@@ -157,8 +165,8 @@ function provision_drupal_fetch_site($alias = NULL) {
 
   $site = d($alias);
   // synch filesystem changes back from the remote server.
-  $site->service('http')->fetch($site->site_path . '/files/');
-  $site->service('http')->fetch($site->site_path . '/private/');
+  $site->service('http')->fetch( d()->file_public_path);
+  $site->service('http')->fetch( d()->file_private_path);
   $site->service('http')->fetch($site->site_path . '/modules/');
   $site->service('http')->fetch($site->site_path . '/themes/');
   $site->service('http')->fetch($site->site_path . '/libraries/');
@@ -200,76 +208,80 @@ function _provision_drupal_create_directories($url = NULL) {
     "sites/$url/libraries"       => 02775, # http://drupal.org/node/496240
   );
 
+  $file_public_path = d()->file_public_path;
+  $file_private_path = d()->file_private_path;
+  $file_temporary_path = d()->file_temporary_path;
+
   $chgrp = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
-    $mkdir["sites/$url/files"]            = 02770;
-    $chgrp["sites/$url/files"]            = d('@server_master')->web_group;
+    $mkdir[$file_public_path]            = 02770;
+    $chgrp[$file_public_path]            = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/tmp"]        = 02770;
-    $chgrp["sites/$url/files/tmp"]        = d('@server_master')->web_group;
+    $mkdir["$file_public_path/tmp"]        = 02770;
+    $chgrp["$file_public_path/tmp"]        = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/images"]     = 02770;
-    $chgrp["sites/$url/files/images"]     = d('@server_master')->web_group;
+    $mkdir["$file_public_path/images"]     = 02770;
+    $chgrp["$file_public_path/images"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/pictures"]   = 02770;
-    $chgrp["sites/$url/files/pictures"]   = d('@server_master')->web_group;
+    $mkdir["$file_public_path/pictures"]   = 02770;
+    $chgrp["$file_public_path/pictures"]   = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/css"]        = 02770;
-    $chgrp["sites/$url/files/css"]        = d('@server_master')->web_group;
+    $mkdir["$file_public_path/css"]        = 02770;
+    $chgrp["$file_public_path/css"]        = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/js"]         = 02770;
-    $chgrp["sites/$url/files/js"]         = d('@server_master')->web_group;
+    $mkdir["$file_public_path/js"]         = 02770;
+    $chgrp["$file_public_path/js"]         = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/ctools"]     = 02770;
-    $chgrp["sites/$url/files/ctools"]     = d('@server_master')->web_group;
+    $mkdir["$file_public_path/ctools"]     = 02770;
+    $chgrp["$file_public_path/ctools"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/imagecache"] = 02770;
-    $chgrp["sites/$url/files/imagecache"] = d('@server_master')->web_group;
+    $mkdir["$file_public_path/imagecache"] = 02770;
+    $chgrp["$file_public_path/imagecache"] = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/locations"]  = 02770;
-    $chgrp["sites/$url/files/locations"]  = d('@server_master')->web_group;
+    $mkdir["$file_public_path/locations"]  = 02770;
+    $chgrp["$file_public_path/locations"]  = d('@server_master')->web_group;
 
     // d7 support
-    $mkdir["sites/$url/private"]          = 02770;
-    $chgrp["sites/$url/private"]          = d('@server_master')->web_group;
+    $mkdir["$file_private_path"]          = 02770;
+    $chgrp["$file_private_path"]          = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/files"]    = 02770;
-    $chgrp["sites/$url/private/files"]    = d('@server_master')->web_group;
+    $mkdir["$file_private_path/files"]    = 02770;
+    $chgrp["$file_private_path/files"]    = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/temp"]     = 02770;
-    $chgrp["sites/$url/private/temp"]     = d('@server_master')->web_group;
+    $mkdir["$file_temporary_path"]     = 02770;
+    $chgrp["$file_temporary_path"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/styles"]     = 02770;
-    $chgrp["sites/$url/files/styles"]     = d('@server_master')->web_group;
+    $mkdir["$file_public_path/styles"]     = 02770;
+    $chgrp["$file_public_path/styles"]     = d('@server_master')->web_group;
 
     // d8 support
-    $mkdir["sites/$url/private/config"]   = 02770;
-    $chgrp["sites/$url/private/config"]   = d('@server_master')->web_group;
+    $mkdir["$file_private_path/config"]   = 02770;
+    $chgrp["$file_private_path/config"]   = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/config/sync"] = 02770;
-    $chgrp["sites/$url/private/config/sync"] = d('@server_master')->web_group;
+    $mkdir["$file_private_path/config/sync"] = 02770;
+    $chgrp["$file_private_path/config/sync"] = d('@server_master')->web_group;
   }
 
   // These paths should not have recursive operations performed on them.
   $chmod_not_recursive = $chgrp_not_recursive = array(
     "sites/$url",
-    "sites/$url/files",
-    "sites/$url/files/tmp",
-    "sites/$url/files/images",
-    "sites/$url/files/pictures",
-    "sites/$url/files/css",
-    "sites/$url/files/js",
-    "sites/$url/files/ctools",
-    "sites/$url/files/imagecache",
-    "sites/$url/files/locations",
-    "sites/$url/private",
-    "sites/$url/private/files",
-    "sites/$url/private/temp",
-    "sites/$url/files/styles",
-    "sites/$url/files/private",
-    "sites/$url/private/config",
-    "sites/$url/private/config/sync"
+    "$file_public_path",
+    "$file_public_path/tmp",
+    "$file_public_path/images",
+    "$file_public_path/pictures",
+    "$file_public_path/css",
+    "$file_public_path/js",
+    "$file_public_path/ctools",
+    "$file_public_path/imagecache",
+    "$file_public_path/locations",
+    "$file_public_path/styles",
+    "$file_public_path/private",
+    "$file_private_path",
+    "$file_private_path/files",
+    "$file_private_path/temp",
+    "$file_private_path/config",
+    "$file_private_path/config/sync"
   );
 
   // Allow other commands to add or alter the directories to be created,

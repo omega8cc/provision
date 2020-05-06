@@ -137,8 +137,8 @@ if (isset($_SERVER['db_name'])) {
 
   global $conf;
   $conf['install_profile'] = '<?php print $this->profile ?>';
-  $conf['file_directory_path'] = 'sites/<?php print $this->uri ?>/files';
-  $conf['file_directory_temp'] = 'sites/<?php print $this->uri ?>/private/temp';
+  $conf['file_directory_path'] = '<?php print $this->file_public_path ?>';
+  $conf['file_directory_temp'] = '<?php print $this->file_temporary_path ?>;
   $conf['clean_url'] = 1;
   $conf['aegir_api'] = <?php print $this->api_version ? $this->api_version : 0 ?>;
   $conf['allow_authorize_operations'] = FALSE;
