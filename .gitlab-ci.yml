@@ -138,7 +138,7 @@ test:ubuntu-bionic-aegir3-apt:
 
   script: "scripts/ci-aegir-dev-install-apt-ubuntu-bionic.sh"
 
-test:ubuntu-bionic-aegir3-apt:
+test:ubuntu-focal-aegir3-apt:
   stage: test
   image: ubuntu:focal
   dependencies:
