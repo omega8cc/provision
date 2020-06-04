@@ -167,7 +167,12 @@ function install_main() {
     provision_file()->create_dir($redisCtrl, dt("Redis tmp off ctrl dir created"), 0711);
   }
 
-  $account = user_load(1);
+  // $account = user_load(1);
+  // Deprecated in drupal:8.0.0 and is removed from drupal:9.0.0. Use Drupal\user\Entity\User::load().
+  // See also: https://www.drupal.org/node/2266845
+
+  use Drupal\user\Entity\User;
+  $account = User::load(1);
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
