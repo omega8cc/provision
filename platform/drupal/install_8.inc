@@ -13,6 +13,10 @@ $GLOBALS['base_url'] = provision_get_base_url();
 
 define('MAINTENANCE_MODE', 'install');
 
+function entity_user_load($euid) {
+  return Drupal\user\Entity\User::load($euid);
+}
+
 function install_send_welcome_mail($url, $account, $language, $client_email, $onetime) {
   global $base_url;
   if ($client_email) {
@@ -171,8 +175,8 @@ function install_main() {
   // Deprecated in drupal:8.0.0 and is removed from drupal:9.0.0. Use Drupal\user\Entity\User::load().
   // See also: https://www.drupal.org/node/2266845
 
-  use \Drupal\user\Entity\User;
-  $account = User::load(1);
+  $euid = "1";
+  $account = entity_user_load($euid)
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
