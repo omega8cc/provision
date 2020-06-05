@@ -61,26 +61,6 @@ build:deb:
 ### Stage "test"
 #
 
-test:debian-jessie-aegir3-apt:
-  stage: test
-  image: debian:jessie
-  allow_failure: true
-  dependencies:
-    - build:deb
-  only:
-    - 7.x-3.x
-    - /^7\.x-3\.\d+\.x/
-    - /-runalltests$/
-
-  before_script:
-    - apt-get update
-    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
-    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
-    - echo "exit 0" >> /usr/sbin/policy-rc.d
-    - apt-get install --yes sudo curl
-
-  script: "scripts/ci-aegir-dev-install-apt-debian8.sh"
-
 test:debian-stretch-aegir3-apt:
   stage: test
   image: debian:stretch
@@ -157,6 +137,26 @@ test:ubuntu-bionic-aegir3-apt:
     - apt-get install --yes sudo curl
 
   script: "scripts/ci-aegir-dev-install-apt-ubuntu-bionic.sh"
+
+test:ubuntu-focal-aegir3-apt:
+  stage: test
+  image: ubuntu:focal
+  dependencies:
+    - build:deb
+
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
+
+  before_script:
+    - apt-get update
+    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+    - echo "exit 0" >> /usr/sbin/policy-rc.d
+    - apt-get install --yes sudo curl
+
+  script: "scripts/ci-aegir-dev-install-apt-ubuntu-focal.sh"
 
 test:cluster-slave-debian-stretch-apt:
   stage: test
@@ -243,7 +243,7 @@ publish:unstable-repo:
 
   script:
     - ls -lah build/*
-    - scp build/* ci@aegir0.aegir.coop:/var/www/repos/incoming/
+    - scp build/* ci@aegir0.aegirproject.org:/var/www/repos/incoming/
       # reprepro should pick this up in seconds and update the repository index.
 
 

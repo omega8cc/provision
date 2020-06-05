@@ -1,3 +1,9 @@
+aegir3-provision (3.185) testing; urgency=medium
+
+  * Include Drupal 7.71
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 04 Jun 2020 20:30:17 +0200
+
 aegir3-provision (3.184) testing; urgency=medium
 
   * Include Drupal 7.69
