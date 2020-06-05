@@ -113,7 +113,8 @@ function _provision_system_query($type) {
     // $extensions_data = system_rebuild_module_data();
     // system_rebuild_module_data() is deprecated in D8 and removed in D9
     // https://www.drupal.org/project/drupal/issues/2926068
-    $extensions_data = \Drupal::service('extension.list.module')->reset();
+    $extensions_rset = \Drupal::service('extension.list.module')->reset();
+    $extensions_data = \Drupal::service('extension.list.module')->getList();
   }
 
   foreach ($extensions_data as $name => $extension_data) {
