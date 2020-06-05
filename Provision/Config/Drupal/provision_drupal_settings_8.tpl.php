@@ -135,6 +135,7 @@ if (isset($_SERVER['db_name'])) {
   $settings['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
   $settings['file_temp_path'] = 'sites/<?php print $this->uri ?>/private/temp';
   $config['system.file']['path']['temporary'] = 'sites/<?php print $this->uri ?>/private/temp';
+  $settings['config_sync_directory'] = 'sites/<?php print $this->uri ?>/private/config/sync';
   $config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/<?php print $this->uri ?>/private/config/sync';
   $settings['hash_salt'] = '<?php print $drupal_hash_salt_var ?>';
   $settings['aegir_api'] = <?php print $this->api_version ? $this->api_version : 0 ?>;
