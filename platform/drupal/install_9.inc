@@ -176,7 +176,7 @@ function install_main() {
   // See also: https://www.drupal.org/node/2266845
 
   $euid = "1";
-  $account = entity_user_load($euid)
+  $account = entity_user_load($euid);
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
