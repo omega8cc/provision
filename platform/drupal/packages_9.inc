@@ -101,12 +101,19 @@ function _provision_system_query($type) {
 
   if ($type == 'theme') {
     /** @var \Drupal\Core\Extension\Extension[] $extensions_data */
+    // Could be replaced with:
+    // \Drupal::service('extension.list.theme')->reset()
+    // \Drupal::service('extension.list.theme')->getList()
+    // https://www.drupal.org/project/drupal/issues/2942001
     $extensions_data = \Drupal::service('theme_handler')->rebuildThemeData();
   }
   // Modules.
   else {
     /** @var \Drupal\Core\Extension\Extension[] $extensions_data */
-    $extensions_data = system_rebuild_module_data();
+    // $extensions_data = system_rebuild_module_data();
+    // system_rebuild_module_data() is deprecated in D8 and removed in D9
+    // https://www.drupal.org/project/drupal/issues/2926068
+    $extensions_data = \Drupal::service('extension.list.module')->reset();
   }
 
   foreach ($extensions_data as $name => $extension_data) {
