@@ -207,78 +207,142 @@ function _provision_drupal_create_directories($url = NULL) {
     "sites/$url/themes"          => 02775,
     "sites/$url/modules"         => 02775,
     "sites/$url/libraries"       => 02775, # http://drupal.org/node/496240
+    "sites/$url/vendor"          => 02775, # https://github.com/omega8cc/boa/issues/385
   );
 
   $chgrp = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
-    $mkdir["sites/$url/files"]            = 02770;
+    $mkdir["sites/$url/files"]            = 02775;
     $chgrp["sites/$url/files"]            = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/tmp"]        = 02770;
+    $mkdir["sites/$url/files/tmp"]        = 02775;
     $chgrp["sites/$url/files/tmp"]        = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/images"]     = 02770;
+    $mkdir["sites/$url/files/images"]     = 02775;
     $chgrp["sites/$url/files/images"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/pictures"]   = 02770;
+    $mkdir["sites/$url/files/pictures"]   = 02775;
     $chgrp["sites/$url/files/pictures"]   = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/css"]        = 02770;
+    $mkdir["sites/$url/files/css"]        = 02775;
     $chgrp["sites/$url/files/css"]        = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/js"]         = 02770;
+    $mkdir["sites/$url/files/js"]         = 02775;
     $chgrp["sites/$url/files/js"]         = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/ctools"]     = 02770;
+    $mkdir["sites/$url/files/advagg_css"] = 02775;
+    $chgrp["sites/$url/files/advagg_css"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/advagg_js"]  = 02775;
+    $chgrp["sites/$url/files/advagg_js"]  = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/ctools"]     = 02775;
     $chgrp["sites/$url/files/ctools"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/imagecache"] = 02770;
+    $mkdir["sites/$url/files/imagecache"] = 02775;
     $chgrp["sites/$url/files/imagecache"] = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/locations"]  = 02770;
+    $mkdir["sites/$url/files/locations"]  = 02775;
     $chgrp["sites/$url/files/locations"]  = d('@server_master')->web_group;
 
+    $mkdir["sites/$url/files/xmlsitemap"] = 02775;
+    $chgrp["sites/$url/files/xmlsitemap"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/deployment"] = 02775;
+    $chgrp["sites/$url/files/deployment"] = d('@server_master')->web_group;
+
     // d7 support
-    $mkdir["sites/$url/private"]          = 02770;
+    $mkdir["sites/$url/private"]          = 02775;
     $chgrp["sites/$url/private"]          = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/files"]    = 02770;
+    $mkdir["sites/$url/private/files"]    = 02775;
     $chgrp["sites/$url/private/files"]    = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/temp"]     = 02770;
+    $mkdir["sites/$url/private/temp"]     = 02775;
     $chgrp["sites/$url/private/temp"]     = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/files/styles"]     = 02770;
+    $mkdir["sites/$url/files/styles"]     = 02775;
     $chgrp["sites/$url/files/styles"]     = d('@server_master')->web_group;
 
+    // backup_migrate support
+    $mkdir["sites/$url/private/files/backup_migrate"] = 02775;
+    $chgrp["sites/$url/private/files/backup_migrate"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/private/files/backup_migrate/manual"] = 02775;
+    $chgrp["sites/$url/private/files/backup_migrate/manual"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/private/files/backup_migrate/scheduled"] = 02775;
+    $chgrp["sites/$url/private/files/backup_migrate/scheduled"] = d('@server_master')->web_group;
+
+    // feeds support
+    $mkdir["sites/$url/files/feeds"] = 02775;
+    $chgrp["sites/$url/files/feeds"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/private/files/feeds"] = 02775;
+    $chgrp["sites/$url/private/files/feeds"] = d('@server_master')->web_group;
+
     // d8 support
-    $mkdir["sites/$url/private/config"]   = 02770;
+    $mkdir["sites/$url/private/config"]   = 02775;
     $chgrp["sites/$url/private/config"]   = d('@server_master')->web_group;
 
-    $mkdir["sites/$url/private/config/sync"] = 02770;
+    $mkdir["sites/$url/private/config/sync"] = 02775;
     $chgrp["sites/$url/private/config/sync"] = d('@server_master')->web_group;
+
+    // civicrm support
+    $mkdir["sites/$url/files/civicrm"] = 02775;
+    $chgrp["sites/$url/files/civicrm"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/civicrm/ConfigAndLog"] = 02775;
+    $chgrp["sites/$url/files/civicrm/ConfigAndLog"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/civicrm/custom"] = 02775;
+    $chgrp["sites/$url/files/civicrm/custom"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/civicrm/dynamic"] = 02775;
+    $chgrp["sites/$url/files/civicrm/dynamic"] = d('@server_master')->web_group;
+
+    $mkdir["sites/$url/files/civicrm/persist"] = 02775;
+    $chgrp["sites/$url/files/civicrm/persist"] = d('@server_master')->web_group;
   }
 
   // These paths should not have recursive operations performed on them.
   $chmod_not_recursive = $chgrp_not_recursive = array(
     "sites/$url",
     "sites/$url/files",
-    "sites/$url/files/tmp",
-    "sites/$url/files/images",
-    "sites/$url/files/pictures",
+    "sites/$url/files/advagg_css",
+    "sites/$url/files/advagg_js",
+    "sites/$url/files/civicrm",
+    "sites/$url/files/civicrm/ConfigAndLog",
+    "sites/$url/files/civicrm/custom",
+    "sites/$url/files/civicrm/dynamic",
+    "sites/$url/files/civicrm/persist",
     "sites/$url/files/css",
-    "sites/$url/files/js",
     "sites/$url/files/ctools",
+    "sites/$url/files/deployment",
+    "sites/$url/files/feeds",
     "sites/$url/files/imagecache",
+    "sites/$url/files/images",
+    "sites/$url/files/js",
     "sites/$url/files/locations",
-    "sites/$url/private",
-    "sites/$url/private/files",
-    "sites/$url/private/temp",
-    "sites/$url/files/styles",
+    "sites/$url/files/pictures",
     "sites/$url/files/private",
+    "sites/$url/files/styles",
+    "sites/$url/files/tmp",
+    "sites/$url/files/xmlsitemap",
+    "sites/$url/libraries",
+    "sites/$url/modules",
+    "sites/$url/private",
     "sites/$url/private/config",
-    "sites/$url/private/config/sync"
+    "sites/$url/private/config/sync",
+    "sites/$url/private/files",
+    "sites/$url/private/files/backup_migrate",
+    "sites/$url/private/files/backup_migrate/manual",
+    "sites/$url/private/files/backup_migrate/scheduled",
+    "sites/$url/private/files/feeds",
+    "sites/$url/private/temp",
+    "sites/$url/themes",
+    "sites/$url/vendor"
   );
 
   // Allow other commands to add or alter the directories to be created,
