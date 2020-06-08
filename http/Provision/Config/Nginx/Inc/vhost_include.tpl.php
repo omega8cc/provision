@@ -469,26 +469,26 @@ location ^~ /admin {
 }
 
 ###
-### Avoid caching /civicrm* and protect it from bots.
+### Do not log /civicrm* requests, but protect from bots.
 ###
 location ^~ /civicrm {
   if ( $is_bot ) {
     return 403;
   }
   access_log off;
-  set $nocache_details "Skip";
+  ### set $nocache_details "Skip";
   try_files $uri @drupal;
 }
 
 ###
-### Avoid caching /civicrm* and protect it from bots on a multi-lingual site
+### Do not log /civicrm* requests, but protect from bots on a multi-lingual site
 ###
 location ~* ^/\w\w/civicrm {
   if ( $is_bot ) {
     return 403;
   }
   access_log off;
-  set $nocache_details "Skip";
+  ### set $nocache_details "Skip";
   try_files $uri @drupal;
 }
 
