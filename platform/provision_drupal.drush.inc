@@ -581,9 +581,23 @@ function provision_drupal_system_map() {
 function _provision_drupal_find_modules($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'modules');
   $files = array();
-  foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+
+  if (drush_drupal_major_version() >= 8) {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+    // Remove '.info' extension from the end of the file name.
+    foreach($files as $name => $file) {
+      $files[basename($name, '.info')] = $file;
+      unset($files[$name]);
+    }
   }
+  else {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+  } 
+
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {
       $yaml_file = sprintf("%s/%s.info.yml", dirname($info->filename), $name);
@@ -616,6 +630,11 @@ function _provision_drupal_find_modules($scope, $key = '') {
     }
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
+      // Some modules keep update hooks in an include file (webform).
+      $install_file_include = sprintf("%s/includes/%s.install.update.inc", dirname($info->filename), $name);
+      if (file_exists($install_file_include)) {
+        $source .= "\n" . file_get_contents(trim($install_file_include));
+      }
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
       // Also search included files for function signature
@@ -636,13 +655,15 @@ function _provision_drupal_find_modules($scope, $key = '') {
       }
     }
     $files[$name]->schema_version = $schema_version;
-    $files[$name]->version = $files[$name]->info['version'];
 
-    // Resolve the 'VERSION' constant used in Git checkouts.
-    if ($files[$name]->version == 'VERSION') {
+    // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
+    // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    if (empty($files[$name]->info['version']) || !isset($files[$name]->version) || $files[$name]->version == 'VERSION') {
       $files[$name]->version = drush_drupal_version();
     }
-
+    else {
+      $files[$name]->version = $files[$name]->info['version'];
+    }
   }
   return $files;
 }
