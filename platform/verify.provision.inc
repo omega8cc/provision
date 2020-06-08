@@ -133,6 +133,20 @@ function drush_provision_drupal_pre_provision_verify() {
           '@errors' => implode('|', $errors)
         )));
     }
+
+    // Fix ownership early enough
+    $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
+    $result = drush_shell_exec_output();
+    foreach ($result as $index => $line) {
+      if (!$success) { // Log the entire error as a warning.
+        $line_status = 'warning';
+      }
+      else { // Only log the last line as success.
+        $line_status = $index+1 == count($result) ? 'success' : 'notice';
+      }
+      drush_log($line, $line_status);
+    }
+
     provision_file()->writable(d()->root . '/sites')
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
