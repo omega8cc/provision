@@ -251,7 +251,7 @@ location ^~ /<?php print $subdir; ?> {
     access_log    off;
     log_not_found off;
     etag          off;
-    gzip_http_version 1.0;
+    gzip_http_version 1.1;
     if_modified_since exact;
     set $nocache_details "Skip";
     location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less))$ {
