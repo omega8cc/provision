@@ -535,6 +535,34 @@ location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) 
 
 <?php if ($nginx_config_mode == 'extended'): ?>
 ###
+### [Option] Deny public access to webform uploaded files
+### for privacy reasons and to prevent phishing attacks.
+### The files uploaded should be available only via SFTP.
+###
+location ~* ^/sites/.*/files/webform/ {
+  access_log off;
+  log_not_found off;
+  expires 99s;
+  add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+  add_header X-Content-Type-Options nosniff;
+  add_header X-XSS-Protection "1; mode=block";
+  try_files $uri =404;
+  ### to deny the access replace the last line with:
+  ### return 404;
+}
+location ~* ^/files/webform/ {
+  access_log off;
+  log_not_found off;
+  expires 99s;
+  add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+  add_header X-Content-Type-Options nosniff;
+  add_header X-XSS-Protection "1; mode=block";
+  try_files $uri =404;
+  ### to deny the access replace the last line with:
+  ### return 404;
+}
+
+###
 ### Deny often flooded URI for performance reasons
 ###
 location = /autodiscover/autodiscover.xml {
