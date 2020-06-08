@@ -54,6 +54,11 @@ function provision_drupal_drush_exit() {
   $command = explode(" ", $command['command']);
 
   if (preg_match("/^provision-/", $command[0]) && drush_get_option('provision_save_config', TRUE)) {
+
+    // Add platform root auto-discovery to avoid confusing
+    // Composer based D8 codebase root with Drupal real root.
+    d()->root = provision_auto_fix_platform_root(d()->root);
+
     if (d()->type === 'site') {
       if (drush_get_option('installed')) {
         // Don't generate the drushrc.php on provision-save/delete commands.
@@ -106,6 +111,10 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   d()->server->sync(d()->server->http_platforms_path, array(
     'exclude' => d()->server->http_platforms_path . '/*',  // Make sure remote directory is created
   ));
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Sync the platform
   $sync_path = d()->root;
@@ -314,6 +323,10 @@ function _provision_drupal_create_directories($url = NULL) {
  */
 function _provision_drupal_ensure_htaccess_update() {
 
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   if (drush_drupal_major_version() == 7) {
 
     // Copied from modules/system/system.install system_requirements()
@@ -401,6 +414,11 @@ function provision_drupal_find_sites() {
  * Retrieve a list of aliases for the curent site.
  */
 function provision_drupal_find_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   $aliases = array();
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
@@ -433,6 +451,11 @@ function provision_drupal_find_aliases() {
  * existing site.
  */
 function _provision_drupal_maintain_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
       $config = new Provision_Config_Drupal_Alias_Store(d()->name);
@@ -460,6 +483,10 @@ function _provision_drupal_maintain_aliases() {
  * Delete a list of aliases
  */
 function _provision_drupal_delete_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
