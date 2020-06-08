@@ -52,34 +52,6 @@ function _provision_platform_drupal_deploy_8_replace($old_url, $new_url) {
     ':new' => 'sites/' . $new_url,
   );
 
-  if(db_table_exists('block_custom')) {
-    db_query("UPDATE {block_custom} SET body     = REPLACE(body,     :old, :new)", $replace_abs_patterns);
-    db_query("UPDATE {block_custom} SET body     = REPLACE(body,     :old, :new)", $replace_patterns);
-  }
-
-  if (function_exists('field_info_field_map')) {
-    $field_map = field_info_field_map();
-    foreach ($field_map as $key => $info) {
-      $tablekey = db_escape_table($key);
-      // Replace in all known text fields.
-      if (in_array($info['type'], array('text_long', 'text_with_summary'))) {
-        drush_log('Replacing in ' . $key, 'debug');
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_value     = REPLACE(${tablekey}_value,   :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_value = REPLACE(${tablekey}_value,   :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_value     = REPLACE(${tablekey}_value,   :old, :new)", $replace_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_value = REPLACE(${tablekey}_value,   :old, :new)", $replace_patterns);
-      }
-
-      // Replace in the optional summary.
-      if ($info['type'] == 'text_with_summary') {
-        drush_log('Replacing summary in ' . $key, 'debug');
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_summary     = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_summary = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_summary     = REPLACE(${tablekey}_summary, :old, :new)", $replace_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_summary = REPLACE(${tablekey}_summary, :old, :new)", $replace_patterns);
-      }
-    }
-  }
   drush_log(
     dt('Changed paths from sites/@old_url to sites/@new_url',
     array('@old_url' => $old_url, '@new_url' => $new_url)));
