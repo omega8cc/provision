@@ -255,6 +255,18 @@ location = /robots.txt {
 <?php endif; ?>
 }
 
+###
+### Support for static ads.txt file in the sites/domain/files directory.
+###
+location = /ads.txt {
+  access_log    off;
+  log_not_found off;
+  add_header Access-Control-Allow-Origin *;
+  add_header X-Content-Type-Options nosniff;
+  add_header X-XSS-Protection "1; mode=block";
+  try_files /sites/$main_site_name/files/$host.ads.txt /sites/$main_site_name/files/ads.txt $uri =404;
+}
+
 <?php if ($satellite_mode == 'boa'): ?>
 ###
 ### Allow local access to the FPM status page.
