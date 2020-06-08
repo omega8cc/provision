@@ -157,16 +157,6 @@ function install_main() {
     ->set('path.temporary', "sites/$url/private/temp")
     ->save();
 
-  // Add platform root auto-discovery to avoid confusing
-  // Composer based D9 codebase root with Drupal real root.
-  d()->root = provision_auto_fix_platform_root(d()->root);
-
-  // Disable Redis integration until module is installed
-  $redisCtrl = d()->root . '/sites/' . d()->uri . '/.redisOff';
-  if (!provision_file()->exists($redisCtrl)->status()) {
-    provision_file()->create_dir($redisCtrl, dt("Redis tmp off ctrl dir created"), 0711);
-  }
-
   $account = \Drupal\user\Entity\User::load(1);
 
   // If a redirect is defined, the symlink to the alias needs to exist before
