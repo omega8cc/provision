@@ -1,3 +1,5 @@
+<?php $this->root = provision_auto_fix_platform_root($this->root); ?>
+
 <?php
 if ($this->redirection) {
   $aegir_root = d('@server_master')->aegir_root;
