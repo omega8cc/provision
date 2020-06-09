@@ -5,7 +5,6 @@
  */
 
 use \Drupal\Core\Url;
-use \Drupal\Core\Session;
 use \Drupal\user\Entity\User;
 
 $GLOBALS['url'] = d()->uri;
@@ -20,15 +19,11 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
   if ($client_email) {
     // Mail one time login URL and instructions.
     $from = \Drupal::config('system.site')->get('mail');
-
     $username = "admin";
-    //$username = $account->getUsername();
-    //$username = \Drupal\Core\Session\AccountInterface::getAccountName(1);
     $site = \Drupal::config('system.site')->get('name');
     $uri_brief = preg_replace('!^https?://!', '', $base_url);
     $edit_uri = $base_url . '/user/1/edit';
     $mailto = $account->getEmail();
-    //$date = format_date(time());
     $date = \Drupal::service('date.formatter')->format(time());
 
     $mail_params['variables'] = array(
@@ -158,7 +153,7 @@ function install_main() {
 
   // Set files paths
   \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$url/privats/files")
+    ->set('path.private', "sites/$url/private/files")
     ->set('path.temporary', "sites/$url/private/temp")
     ->save();
 
