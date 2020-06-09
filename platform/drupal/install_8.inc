@@ -4,7 +4,9 @@
  *    Rebuild all the caches
  */
 
-use Drupal\Core\Url;
+use \Drupal\Core\Url;
+use \Drupal\Core\Session;
+use \Drupal\user\Entity\User;
 
 $GLOBALS['url'] = d()->uri;
 $GLOBALS['profile'] = d()->profile;
@@ -13,22 +15,21 @@ $GLOBALS['base_url'] = provision_get_base_url();
 
 define('MAINTENANCE_MODE', 'install');
 
-function entity_user_load($euid) {
-  return Drupal\user\Entity\User::load($euid);
-}
-
 function install_send_welcome_mail($url, $account, $language, $client_email, $onetime) {
   global $base_url;
   if ($client_email) {
     // Mail one time login URL and instructions.
     $from = \Drupal::config('system.site')->get('mail');
 
-    $username = $account->getUsername();
+    $username = "admin";
+    //$username = $account->getUsername();
+    //$username = \Drupal\Core\Session\AccountInterface::getAccountName(1);
     $site = \Drupal::config('system.site')->get('name');
     $uri_brief = preg_replace('!^https?://!', '', $base_url);
     $edit_uri = $base_url . '/user/1/edit';
     $mailto = $account->getEmail();
-    $date = format_date(time());
+    //$date = format_date(time());
+    $date = \Drupal::service('date.formatter')->format(time());
 
     $mail_params['variables'] = array(
       '!username' => $username,
@@ -157,12 +158,12 @@ function install_main() {
 
   // Set files paths
   \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$url/private/files")
+    ->set('path.private', "sites/$url/privats/files")
     ->set('path.temporary', "sites/$url/private/temp")
     ->save();
 
   // Add platform root auto-discovery to avoid confusing
-  // Composer based D8 codebase root with Drupal real root.
+  // Composer based D9 codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Disable Redis integration until module is installed
@@ -171,12 +172,7 @@ function install_main() {
     provision_file()->create_dir($redisCtrl, dt("Redis tmp off ctrl dir created"), 0711);
   }
 
-  // $account = user_load(1);
-  // Deprecated in drupal:8.0.0 and is removed from drupal:9.0.0. Use Drupal\user\Entity\User::load().
-  // See also: https://www.drupal.org/node/2266845
-
-  $euid = "1";
-  $account = entity_user_load($euid);
+  $account = \Drupal\user\Entity\User::load(1);
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
