@@ -25,12 +25,21 @@ function drush_db_post_provision_deploy() {
   $backup_path = d('@server_master')->backup_path;
   $oct_db_dirx = $backup_path . '/tmp_expim';
   $oct_db_test = $oct_db_dirx . '/metadata';
+  $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_' . date("Ymd.His", time());
   $post_import_flag = $backup_path . '/.post_import_flag.pid';
   $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
   if (is_file($enable_myquick) && is_executable($myloader_path)) {
     if (is_file($oct_db_test)) {
-      _provision_recursive_delete($oct_db_dirx);
-      drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", array('@var' => $oct_db_dirx)), 'info');
+      // Rename temporary sql dump dir to site/date specific backup.
+      $old = $oct_db_dirx;
+      $new = $uri_db_dirz;
+      provision_file()->switch_paths($old, $new)
+        ->succeed('Moving the Post-DB-Import @path1 to @path2 was successful.')
+        ->fail('Moving the Post-DB-Import @path1 to @path2 has failed.');
+      if (is_file($oct_db_test)) {
+        _provision_recursive_delete($oct_db_dirx);
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", array('@var' => $oct_db_dirx)), 'info');
+      }
       provision_file()->unlink($post_import_flag)
         ->succeed('Removed Post-DB-Import Flag-File')
         ->fail('Could not remove Post-DB-Import Flag-File');
