@@ -23,11 +23,10 @@ stages:
 
 syntax:lint:
   stage: syntax
-  image: bobey/docker-gitlab-ci-runner-php7
+  image: php:7.3-cli
   allow_failure: false
 
   script:
-    - composer require overtrue/phplint
     - echo "Syntax checking PHP files"
     - echo "For more information http://www.icosaedro.it/phplint/"
     - vendor/bin/phplint ./ --exclude "vendor"

@@ -30,5 +30,8 @@
                 "Provision"
             ]
         }
+    },
+    "require-dev": {
+        "overtrue/phplint": "^1.2"
     }
 }
