@@ -35,7 +35,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function can_create_database() {
-    $test = drush_get_option('aegir_db_prefix', 'site_') . 'test';
+    $test = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
     $this->create_database($test);
 
     if ($this->database_exists($test)) {
@@ -54,13 +54,14 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    *   TRUE if the check was successful.
    */
   function can_grant_privileges() {
-    $dbname   = drush_get_option('aegir_db_prefix', 'site_');
+    $dbname   = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
+    $this->create_database($dbname);
     $user     = $dbname . '_user';
     $password = $dbname . '_password';
     $host     = $dbname . '_host';
-    if ($status = $this->grant($dbname, $user, $password, $host)) {
-      $this->revoke($dbname, $user, $host);
-    }
+    $status = $this->grant($dbname, $user, $password, $host);
+    $this->revoke($dbname, $user, $host);
+    $this->drop_database($dbname);
     return $status;
   }
 
@@ -69,9 +70,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $host = '%';
     }
     $host = ($host) ? $host : '%';
+
     if ($host != "127.0.0.1") {
       $extra_host = "127.0.0.1";
-      $success_extra_host = $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $extra_host, $password);
+      $this->grant_privileges($name, $username, $password, $extra_host);
     }
 
     // Support for ProxySQL integration
@@ -130,8 +132,24 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
       }
     }
-    // Issue: https://github.com/omega8cc/provision/issues/2
-    return $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $host, $password);
+
+    return $this->grant_privileges($name, $username, $password, $host);
+  }
+
+  function create_user($username, $host, $password) {
+    $statement = "CREATE USER IF NOT EXISTS `%s`@`%s` IDENTIFIED BY '%s'";
+    return $this->query($statement, $username, $host, $password);
+  }
+
+  function grant_privileges($name, $username, $password, $host) {
+    $user_created = $this->create_user($username, $host, $password);
+    if (!$user_created) {
+      drush_log(dt("Failed to create database user @name", array('@name' => $username)), 'error');
+      return $user_created;
+    }
+
+    $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
+    return $this->query($statement, $name, $username, $host);
   }
 
   function revoke($name, $username, $host = '') {
