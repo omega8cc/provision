@@ -1,3 +1,9 @@
+aegir3-provision (3.186) testing; urgency=medium
+
+  * Include Drupal 7.72
+
+ -- Kienan Stewart <kienan@koumbit.org>  Thu, 18 Jun 2020 14:36:32 -0400
+
 aegir3-provision (3.185) testing; urgency=medium
 
   * Include Drupal 7.71
