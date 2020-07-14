@@ -71,7 +71,6 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $host = ($host) ? $host : '%';
     if ($host != "127.0.0.1") {
       $extra_host = "127.0.0.1";
-      $success_extra_host = $this->query("CREATE USER `%s`@`%s` IDENTIFIED BY '%s'", $username, $extra_host, $password);
       $success_extra_host = $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $extra_host, $password);
     }
 
@@ -132,7 +131,6 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
     // Issue: https://github.com/omega8cc/provision/issues/2
-    $success_base_host = $this->query("CREATE USER `%s`@`%s` IDENTIFIED BY '%s'", $username, $host, $password);
     return $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $host, $password);
   }
 
