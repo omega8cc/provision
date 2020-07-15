@@ -136,16 +136,26 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     return $this->grant_privileges($name, $username, $password, $host);
   }
 
-  function create_user($username, $host, $password) {
-    $statement = "CREATE USER IF NOT EXISTS `%s`@`%s` IDENTIFIED BY '%s'";
+  function create_user($username, $host) {
+    $statement = "CREATE USER IF NOT EXISTS `%s`@`%s`";
+    return $this->query($statement, $username, $host);
+  }
+
+  function alter_user($username, $host, $password) {
+    $statement = "ALTER USER `%s`@`%s` IDENTIFIED BY '%s'";
     return $this->query($statement, $username, $host, $password);
   }
 
   function grant_privileges($name, $username, $password, $host) {
-    $user_created = $this->create_user($username, $host, $password);
+    $user_created = $this->create_user($username, $host);
+    $user_altered = $this->alter_user($username, $host, $password);
     if (!$user_created) {
-      drush_log(dt("Failed to create database user @name", array('@name' => $username)), 'error');
+      drush_log(dt("Failed to create db_user @name", array('@name' => $username)), 'error');
       return $user_created;
+    }
+    if (!$user_altered) {
+      drush_log(dt("Failed to alter db_user @name", array('@name' => $username)), 'error');
+      return $user_altered;
     }
 
     $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
