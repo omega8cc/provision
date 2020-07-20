@@ -100,8 +100,10 @@ if (isset($_SERVER['db_name'])) {
     'password' => "<?php print $this->creds['db_passwd']; ?>",
     'host' => "<?php print $this->creds['db_host']; ?>",
     'port' => "<?php print $this->creds['db_port']; ?>",
+<?php if ($utf8mb4_is_configurable && $utf8mb4_is_supported): ?>
     'charset' => 'utf8mb4',
     'collation' => 'utf8mb4_general_ci',
+<?php endif; ?>
    );
   $db_url['default'] = "<?php print strtr("%db_type://%db_user:%db_passwd@%db_host:%db_port/%db_name", array(
     '%db_type' => $this->creds['db_type'],
