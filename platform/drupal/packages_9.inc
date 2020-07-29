@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Package management code for Drupal 8.
+ * Package management code for Drupal 9.
  */
 
 /**
@@ -23,7 +23,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
   foreach($files as $name => $file) {
     $files[basename($name, '.info')] = $file;
     unset($files[$name]);
-  } 
+  }
 
   foreach ($files as $name => $file) {
     $files[$name]->info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($file->filename));
@@ -79,10 +79,10 @@ function _provision_drupal_system_map() {
   $packages['profiles'][$profile]->status = 1;
 
   $packages['modules'] = _provision_system_query('module');
-  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))));
+  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
 
   $packages['themes'] = _provision_system_query('theme');
-  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))));
+  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))), 'info');
 
   return $packages;
 }
@@ -135,7 +135,7 @@ function _provision_system_query($type) {
       if(!file_exists($package->filename)) {
         drush_log(dt("@name.info.yml not found.", array("@name" => $name)), 'notice');
         continue;
-      } 
+      }
       else {
         $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($package->filename));
         // Skip hidden modules
@@ -182,7 +182,7 @@ function _provision_find_profiles() {
         $profile->info['languages'] = _provision_find_profile_languages($profile->path);
 
         $profiles[basename($profile->path)] = $profile;
-        drush_log(dt('Found install profile %name', array('%name' => $profile->name)));
+        drush_log(dt('Found install profile %name', array('%name' => $profile->name)), 'info');
       }
     }
   }

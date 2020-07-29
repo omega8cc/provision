@@ -157,8 +157,10 @@ if (isset($_SERVER['db_name'])) {
   /**
    * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
    */
-  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
-    $_SERVER['HTTPS'] = 'on';
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && isset($_SERVER['REQUEST_SCHEME'])) {
+    if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+      $_SERVER['HTTPS'] = 'on';
+    }
   }
 
 <?php print $extra_config; ?>
@@ -169,6 +171,7 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
+  <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
   }

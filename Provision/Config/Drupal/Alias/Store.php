@@ -11,6 +11,7 @@ class Provision_Config_Drupal_Alias_Store extends Provision_Config_Data_Store {
   protected $mode = 0644;
 
   function filename() {
+    $this->root = provision_auto_fix_platform_root($this->root);
     return $this->root . '/sites/sites.php';
   }
 

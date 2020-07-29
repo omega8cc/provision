@@ -130,7 +130,6 @@ if (isset($_SERVER['db_name'])) {
   ini_set('session.gc_maxlifetime', 200000);
   ini_set('session.cookie_lifetime', 2000000);
 
-
   /**
   * Set the umask so that new directories created by Drupal have the correct permissions
   */
@@ -150,7 +149,7 @@ if (isset($_SERVER['db_name'])) {
   $conf['admin_menu_cache_client'] = FALSE;
 
 <?php if (!$this->site_enabled) : ?>
-<?php if (isset($drupal_hash_salt_var)): ?>
+<?php if (isset($maintenance_var_new)): ?>
   $conf['maintenance_mode'] = 1;
 <?php else: ?>
   $conf['site_offline'] = 1;
@@ -165,8 +164,10 @@ if (isset($_SERVER['db_name'])) {
   /**
    * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
    */
-  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
-    $_SERVER['HTTPS'] = 'on';
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && isset($_SERVER['REQUEST_SCHEME'])) {
+    if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+      $_SERVER['HTTPS'] = 'on';
+    }
   }
 
 <?php print $extra_config; ?>
@@ -177,6 +178,7 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
+  <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
   }

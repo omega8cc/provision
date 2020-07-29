@@ -51,6 +51,9 @@ function drush_provision_drupal_pre_provision_verify() {
     }
   }
   elseif (d()->type === 'platform') {
+    // Add platform root auto-discovery to avoid confusing
+    // Composer based D8 codebase root with Drupal real root.
+    d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Translation strings
     $t = array();
@@ -184,6 +187,20 @@ function drush_provision_drupal_pre_provision_verify() {
           '@errors' => implode('|', $errors)
         )));
     }
+
+    // Fix ownership early enough
+    $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
+    $result = drush_shell_exec_output();
+    foreach ($result as $index => $line) {
+      if (!$success) { // Log the entire error as a warning.
+        $line_status = 'warning';
+      }
+      else { // Only log the last line as success.
+        $line_status = $index+1 == count($result) ? 'success' : 'notice';
+      }
+      drush_log($line, $line_status);
+    }
+
     provision_file()->writable(d()->root . '/sites')
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
@@ -202,6 +219,12 @@ function drush_provision_drupal_pre_provision_verify() {
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
+
+    // Re-set the ROOT PATH for Drush.
+    // In cases where we just build the platform Drush would have cleared this value.
+    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
+    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
@@ -228,6 +251,11 @@ function drush_provision_drupal_pre_provision_verify() {
  * Implements drush_hook_provision_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_verify() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   if (d()->type === 'site') {
     _provision_drupal_rebuild_caches();
     drush_set_option('installed', TRUE, 'site');

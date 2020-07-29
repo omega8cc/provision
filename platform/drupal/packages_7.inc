@@ -258,6 +258,8 @@ function _provision_find_profiles() {
       if ($profile->name == 'standard') {
         $profile->info['old_short_name'] = 'default';
       }
+      $profile->info['old_short_name'] = isset($profile->info['old_short_name']) ? $profile->info['old_short_name'] : 'standard';
+
 
       $profiles[$name] = $profile;
       drush_log(dt('Found install profile %name', array('%name' => $name)));

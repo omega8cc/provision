@@ -54,6 +54,11 @@ function provision_drupal_drush_exit() {
   $command = explode(" ", $command['command']);
 
   if (preg_match("/^provision-/", $command[0]) && drush_get_option('provision_save_config', TRUE)) {
+
+    // Add platform root auto-discovery to avoid confusing
+    // Composer based D8 codebase root with Drupal real root.
+    d()->root = provision_auto_fix_platform_root(d()->root);
+
     if (d()->type === 'site') {
       if (drush_get_option('installed')) {
         // Don't generate the drushrc.php on provision-save/delete commands.
@@ -106,6 +111,10 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   d()->server->sync(d()->server->http_platforms_path, array(
     'exclude' => d()->server->http_platforms_path . '/*',  // Make sure remote directory is created
   ));
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Sync the platform
   $sync_path = d()->root;
@@ -206,6 +215,7 @@ function _provision_drupal_create_directories($url = NULL) {
     "sites/$url/themes"          => 02775,
     "sites/$url/modules"         => 02775,
     "sites/$url/libraries"       => 02775, # http://drupal.org/node/496240
+    "sites/$url/vendor"          => 02775, # https://github.com/omega8cc/boa/issues/385
   );
 
   $file_public_path = d()->file_public_path;
@@ -215,73 +225,132 @@ function _provision_drupal_create_directories($url = NULL) {
   $chgrp = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
-    $mkdir[$file_public_path]            = 02770;
+    $mkdir[$file_public_path]            = 02775;
     $chgrp[$file_public_path]            = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/tmp"]        = 02770;
+    $mkdir["$file_public_path/tmp"]        = 02775;
     $chgrp["$file_public_path/tmp"]        = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/images"]     = 02770;
+    $mkdir["$file_public_path/images"]     = 02775;
     $chgrp["$file_public_path/images"]     = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/pictures"]   = 02770;
+    $mkdir["$file_public_path/pictures"]   = 02775;
     $chgrp["$file_public_path/pictures"]   = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/css"]        = 02770;
+    $mkdir["$file_public_path/css"]        = 02775;
     $chgrp["$file_public_path/css"]        = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/js"]         = 02770;
+    $mkdir["$file_public_path/js"]         = 02775;
     $chgrp["$file_public_path/js"]         = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/ctools"]     = 02770;
+    $mkdir["$file_public_path/advagg_css"] = 02775;
+    $chgrp["$file_public_path/advagg_css"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/advagg_js"]  = 02775;
+    $chgrp["$file_public_path/advagg_js"]  = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/ctools"]     = 02775;
     $chgrp["$file_public_path/ctools"]     = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/imagecache"] = 02770;
+    $mkdir["$file_public_path/imagecache"] = 02775;
     $chgrp["$file_public_path/imagecache"] = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/locations"]  = 02770;
+    $mkdir["$file_public_path/locations"]  = 02775;
     $chgrp["$file_public_path/locations"]  = d('@server_master')->web_group;
 
+    $mkdir["$file_public_path/xmlsitemap"] = 02775;
+    $chgrp["$file_public_path/xmlsitemap"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/deployment"] = 02775;
+    $chgrp["$file_public_path/deployment"] = d('@server_master')->web_group;
+
     // d7 support
-    $mkdir["$file_private_path"]          = 02770;
+    $mkdir["$file_private_path"]          = 02775;
     $chgrp["$file_private_path"]          = d('@server_master')->web_group;
 
-    $mkdir["$file_private_path/files"]    = 02770;
+    $mkdir["$file_private_path/files"]    = 02775;
     $chgrp["$file_private_path/files"]    = d('@server_master')->web_group;
 
-    $mkdir["$file_temporary_path"]     = 02770;
+    $mkdir["$file_temporary_path"]     = 02775;
     $chgrp["$file_temporary_path"]     = d('@server_master')->web_group;
 
-    $mkdir["$file_public_path/styles"]     = 02770;
+    $mkdir["$file_public_path/styles"]     = 02775;
     $chgrp["$file_public_path/styles"]     = d('@server_master')->web_group;
 
+    // backup_migrate support
+    $mkdir["$file_private_path/files/backup_migrate"] = 02775;
+    $chgrp["$file_private_path/files/backup_migrate"] = d('@server_master')->web_group;
+
+    $mkdir["$file_private_path/files/backup_migrate/manual"] = 02775;
+    $chgrp["$file_private_path/files/backup_migrate/manual"] = d('@server_master')->web_group;
+
+    $mkdir["$file_private_path/files/backup_migrate/scheduled"] = 02775;
+    $chgrp["$file_private_path/files/backup_migrate/scheduled"] = d('@server_master')->web_group;
+
+    // feeds support
+    $mkdir["$file_public_path/feeds"] = 02775;
+    $chgrp["$file_public_path/feeds"] = d('@server_master')->web_group;
+
+    $mkdir["$file_private_path/files/feeds"] = 02775;
+    $chgrp["$file_private_path/files/feeds"] = d('@server_master')->web_group;
+
     // d8 support
-    $mkdir["$file_private_path/config"]   = 02770;
+    $mkdir["$file_private_path/config"]   = 02775;
     $chgrp["$file_private_path/config"]   = d('@server_master')->web_group;
 
-    $mkdir["$file_private_path/config/sync"] = 02770;
+    $mkdir["$file_private_path/config/sync"] = 02775;
     $chgrp["$file_private_path/config/sync"] = d('@server_master')->web_group;
+
+    // @TODO: THERE IS A HOOK FOR THIS! Now every single Aegir site will have civicrm folder in it?
+    /*
+    // civicrm support
+    $mkdir["$file_public_path/civicrm"] = 02775;
+    $chgrp["$file_public_path/civicrm"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/ConfigAndLog"] = 02775;
+    $chgrp["$file_public_path/civicrm/ConfigAndLog"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/custom"] = 02775;
+    $chgrp["$file_public_path/civicrm/custom"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/dynamic"] = 02775;
+    $chgrp["$file_public_path/civicrm/dynamic"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/persist"] = 02775;
+    $chgrp["$file_public_path/civicrm/persist"] = d('@server_master')->web_group;
+    */
   }
 
   // These paths should not have recursive operations performed on them.
   $chmod_not_recursive = $chgrp_not_recursive = array(
     "sites/$url",
     "$file_public_path",
-    "$file_public_path/tmp",
-    "$file_public_path/images",
-    "$file_public_path/pictures",
     "$file_public_path/css",
-    "$file_public_path/js",
     "$file_public_path/ctools",
+    "$file_public_path/deployment",
+    "$file_public_path/feeds",
     "$file_public_path/imagecache",
+    "$file_public_path/images",
+    "$file_public_path/js",
     "$file_public_path/locations",
-    "$file_public_path/styles",
+    "$file_public_path/pictures",
     "$file_public_path/private",
+    "$file_public_path/styles",
+    "$file_public_path/tmp",
+    "$file_public_path/xmlsitemap",
+    "sites/$url/libraries",
+    "sites/$url/modules",
     "$file_private_path",
-    "$file_private_path/files",
-    "$file_private_path/temp",
     "$file_private_path/config",
-    "$file_private_path/config/sync"
+    "$file_private_path/config/sync",
+    "$file_private_path/files",
+    "$file_private_path/files/backup_migrate",
+    "$file_private_path/files/backup_migrate/manual",
+    "$file_private_path/files/backup_migrate/scheduled",
+    "$file_private_path/files/feeds",
+    "$file_private_path/temp",
+    "sites/$url/themes",
+    "sites/$url/vendor"
   );
 
   // Allow other commands to add or alter the directories to be created,
@@ -325,6 +394,10 @@ function _provision_drupal_create_directories($url = NULL) {
  * @see https://drupal.org/SA-CORE-2013-003
  */
 function _provision_drupal_ensure_htaccess_update() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (drush_drupal_major_version() == 7) {
 
@@ -413,6 +486,11 @@ function provision_drupal_find_sites() {
  * Retrieve a list of aliases for the curent site.
  */
 function provision_drupal_find_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   $aliases = array();
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
@@ -445,6 +523,11 @@ function provision_drupal_find_aliases() {
  * existing site.
  */
 function _provision_drupal_maintain_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
       $config = new Provision_Config_Drupal_Alias_Store(d()->name);
@@ -472,6 +555,10 @@ function _provision_drupal_maintain_aliases() {
  * Delete a list of aliases
  */
 function _provision_drupal_delete_aliases() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
@@ -566,9 +653,23 @@ function provision_drupal_system_map() {
 function _provision_drupal_find_modules($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'modules');
   $files = array();
-  foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+
+  if (drush_drupal_major_version() >= 8) {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+    // Remove '.info' extension from the end of the file name.
+    foreach($files as $name => $file) {
+      $files[basename($name, '.info')] = $file;
+      unset($files[$name]);
+    }
   }
+  else {
+    foreach ($paths as $path) {
+      $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+    }
+  } 
+
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {
       $yaml_file = sprintf("%s/%s.info.yml", dirname($info->filename), $name);
@@ -601,6 +702,11 @@ function _provision_drupal_find_modules($scope, $key = '') {
     }
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
+      // Some modules keep update hooks in an include file (webform).
+      $install_file_include = sprintf("%s/includes/%s.install.update.inc", dirname($info->filename), $name);
+      if (file_exists($install_file_include)) {
+        $source .= "\n" . file_get_contents(trim($install_file_include));
+      }
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
       // Also search included files for function signature
@@ -621,13 +727,15 @@ function _provision_drupal_find_modules($scope, $key = '') {
       }
     }
     $files[$name]->schema_version = $schema_version;
-    $files[$name]->version = $files[$name]->info['version'];
 
-    // Resolve the 'VERSION' constant used in Git checkouts.
-    if ($files[$name]->version == 'VERSION') {
+    // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
+    // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    if (empty($files[$name]->info['version']) || !isset($files[$name]->version) || $files[$name]->version == 'VERSION') {
       $files[$name]->version = drush_drupal_version();
     }
-
+    else {
+      $files[$name]->version = $files[$name]->info['version'];
+    }
   }
   return $files;
 }

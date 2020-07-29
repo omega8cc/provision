@@ -45,7 +45,7 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
       drush_log(dt('Sent welcome mail to @client', array('@client' => $client_email)), 'message');
     }
     else {
-      drush_log(dt('Could not send welcome mail to @client', array('@client' => $client_email)));
+      drush_log(dt('Could not send welcome mail to @client', array('@client' => $client_email)), 'info');
     }
   }
 }

@@ -1,6 +1,16 @@
 <?php
 
 function drush_http_provision_delete() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8 codebase root with Drupal real root.
+  d()->root = provision_auto_fix_platform_root(d()->root);
+
+  // Re-set the ROOT PATH for Drush.
+  // In cases where we just build the platform Drush would have cleared this value.
+  // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
+  drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+
   if (d()->type === 'site') {
     d()->service('http')->delete_config('site')
         ->succeed('Deleted platform configuration file', 'success')

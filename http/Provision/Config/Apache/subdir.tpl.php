@@ -1,3 +1,5 @@
+<?php $this->root = provision_auto_fix_platform_root($this->root); ?>
+
 <?php
 $aegir_root = drush_get_option('aegir_root');
 if (!$aegir_root && $server->aegir_root) {

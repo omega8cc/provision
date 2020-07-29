@@ -1,7 +1,13 @@
+<?php $this->root = provision_auto_fix_platform_root($this->root); ?>
 
 <?php if ($this->ssl_enabled && $this->ssl_key) : ?>
 
 <?php
+$script_user = drush_get_option('script_user');
+if (!$script_user && $server->script_user) {
+  $script_user = $server->script_user;
+}
+
 $satellite_mode = drush_get_option('satellite_mode');
 if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
