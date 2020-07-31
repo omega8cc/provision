@@ -50,7 +50,10 @@ function drush_provision_drupal_pre_provision_packages() {
   }
 
   // Using drush_set_option makes the data visible when using "--backend" option.
-  drush_set_option('packages', $packages_list);
+  // drush_set_option('packages', $packages_list);
+
+  // Using drush set_context seems to make it available to provision_backend_invoke, see hosting_platform.drush
+  drush_set_context('packages', $packages_list);
 
 }
 
