@@ -214,18 +214,18 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'success');
-    $packages_list =  _scrub_object(provision_find_packages());
-    foreach ($packages_list as $type => $packages) {
-      drush_log(dt("Found @count '@type' packages in platform: @packages", array(
-          '@count' => count($packages),
-          '@type' => $type,
-          '@packages' => implode(', ', array_keys($packages)))
-      ), 'ok');
 
-    }
-
-    drush_set_option('packages', $packages_list, 'drupal');
+    // @TODO: Remove once we are sure provision-packages works.
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'ok');
+//    $packages_list =  _scrub_object(provision_find_packages());
+//    foreach ($packages_list as $type => $packages) {
+//      drush_log(dt("Found @count '@type' packages in platform: @packages", array(
+//          '@count' => count($packages),
+//          '@type' => $type,
+//          '@packages' => implode(', ', array_keys($packages)))
+//      ), 'ok');
+//    }
+//    drush_set_option('packages', $packages_list, 'drupal');
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
@@ -235,7 +235,9 @@ function drush_provision_drupal_pre_provision_verify() {
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
-    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+// @TODO: Remove once we are sure provision-packages works.
+//    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
