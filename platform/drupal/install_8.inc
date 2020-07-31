@@ -4,7 +4,8 @@
  *    Rebuild all the caches
  */
 
-use Drupal\Core\Url;
+use \Drupal\Core\Url;
+use \Drupal\user\Entity\User;
 
 $GLOBALS['url'] = d()->uri;
 $GLOBALS['profile'] = d()->profile;
@@ -18,13 +19,12 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
   if ($client_email) {
     // Mail one time login URL and instructions.
     $from = \Drupal::config('system.site')->get('mail');
-
-    $username = $account->getUsername();
+    $username = "admin";
     $site = \Drupal::config('system.site')->get('name');
     $uri_brief = preg_replace('!^https?://!', '', $base_url);
     $edit_uri = $base_url . '/user/1/edit';
     $mailto = $account->getEmail();
-    $date = format_date(time());
+    $date = \Drupal::service('date.formatter')->format(time());
 
     $mail_params['variables'] = array(
       '!username' => $username,
@@ -157,10 +157,15 @@ function install_main() {
     ->set('path.temporary', "sites/$url/private/temp")
     ->save();
 
-  $account = user_load(1);
+  $account = \Drupal\user\Entity\User::load(1);
 
-  $onetime = user_pass_reset_url($account);
-  // Store the one time login link in an option so the front end can direct the user to their new site.
+  // If a redirect is defined, the symlink to the alias needs to exist before
+  // we generate the login link, below.
+  _provision_drupal_maintain_aliases();
+
+  // Store the one time login link in an option so the front end can direct the
+  // user to their new site.
+  $onetime = provision_generate_login_reset();
   drush_set_option('login_link', $onetime);
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'message');
 

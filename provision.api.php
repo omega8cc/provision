@@ -318,6 +318,31 @@ function hook_provision_config_variables_alter(&$variables, $template, $config) 
 }
 
 /**
+ * Implements hook_provision_platform_sync_path_alter().
+ *
+ * Changes the sync_path to ensure that composer-built platforms get all of the
+ * code moved to remote servers.
+ *
+ * @see provision_git_provision_platform_sync_path_alter()
+ *`
+ * @param $sync_path
+ *   If the site is hosted on a remote server, this is the path that will be
+ *   rsync'd over.
+ */
+function hook_provision_platform_sync_path_alter(&$sync_path) {
+    $repo_path = d()->platform->git_root;
+    if ($repo_path != d()->root) {
+        $sync_path = $repo_path;
+
+        if (!file_exists($repo_path)) {
+            return drush_set_error('PROVISION_ERROR',  dt("Platform !path does not exist.", array(
+              '!path' => $repo_path,
+            )));
+        }
+    }
+}
+
+/**
  * Alter the array of directories to create.
  *
  * @param $mkdir
@@ -417,4 +442,49 @@ function hook_provision_mysql_regex_alter(&$regexes) {
     // replace matched content as needed
     '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
   );
+}
+
+/**
+ * Implements hook_provision_prepare_environment()
+ *
+ * React to the setting up of $_SERVER variables such as db_name and db_passwd.
+ *
+ * Runs right after writing sites/$URI/drushrc.php.
+ * Database credentials are available in the $_SERVER variables.
+ *
+ * @see provision_prepare_environment()
+ */
+function hook_provision_prepare_environment() {
+
+  // Write a .env file in the root of the project with the Drupal DB credentials.
+  // This file could be used by other tools to access the site's database.
+  $file_name = d()->root . '/.env';
+  $file_contents = <<<ENV
+MYSQL_DATABASE={$_SERVER['db_name']}
+MYSQL_USER={$_SERVER['db_name']}
+MYSQL_PASSWORD={$_SERVER['db_name']}
+ENV;
+
+  // Make writable, then write the file.
+  if (file_exists($file_name) && !is_writable($file_name)) {
+    provision_file()->chmod($file_name, 0660);
+  }
+  file_put_contents($file_name, $file_contents);
+
+  // Hide sensitive information from any other users.
+  provision_file()->chmod($file_name, 0400);
+}
+
+/**
+ * Alter the list of directories excluded from site backups.
+ *
+ * @param $directories
+ *   An array of strings representing directories, which are relative to a
+ *   site directory.
+ *
+ * @see drush_provision_drupal_provision_backup_get_exclusions()
+ */
+function hook_provision_backup_exclusions_alter(&$directories) {
+  // Prevent backing up the CiviCRM Smarty cache.
+  $directories[] = './files/civicrm/templates_c';
 }

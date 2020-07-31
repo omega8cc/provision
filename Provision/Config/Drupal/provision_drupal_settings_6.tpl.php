@@ -137,8 +137,8 @@ if (isset($_SERVER['db_name'])) {
 
   global $conf;
   $conf['install_profile'] = '<?php print $this->profile ?>';
-  $conf['file_directory_path'] = 'sites/<?php print $this->uri ?>/files';
-  $conf['file_directory_temp'] = 'sites/<?php print $this->uri ?>/private/temp';
+  $conf['file_directory_path'] = '<?php print $this->file_public_path ?>';
+  $conf['file_directory_temp'] = '<?php print $this->file_temporary_path ?>;
   $conf['clean_url'] = 1;
   $conf['aegir_api'] = <?php print $this->api_version ? $this->api_version : 0 ?>;
   $conf['allow_authorize_operations'] = FALSE;
@@ -154,6 +154,15 @@ if (isset($_SERVER['db_name'])) {
 <?php endif; ?>
 <?php endif; ?>
 
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && isset($_SERVER['REQUEST_SCHEME'])) {
+    if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+      $_SERVER['HTTPS'] = 'on';
+    }
+  }
+
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
@@ -162,8 +171,14 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
+  <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.

@@ -1,3 +1,55 @@
+aegir3-provision (3.186) testing; urgency=medium
+
+  * Include Drupal 7.72
+
+ -- Kienan Stewart <kienan@koumbit.org>  Thu, 18 Jun 2020 14:36:32 -0400
+
+aegir3-provision (3.185) testing; urgency=medium
+
+  * Include Drupal 7.71
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 04 Jun 2020 20:30:17 +0200
+
+aegir3-provision (3.184) testing; urgency=medium
+
+  * Include Drupal 7.69
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 19 Dec 2019 15:57:43 +0100
+
+aegir3-provision (3.183) testing; urgency=medium
+
+  * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
+  * 3.181ubuntu1 was missing the actual commit.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 22:41:17 +0200
+
+aegir3-provision (3.182) testing; urgency=medium
+
+  * Mini-release to update the bundled dehydrated lib for LetsEncrypt.
+
+ -- Herman van Rink <helmo@initfour.nl>  Tue, 08 Oct 2019 21:50:20 +0200
+
+aegir3-provision (3.181ubuntu1) testing; urgency=medium
+
+  * New mini-release required for update to Debian repo PGP key (https://www.drupal.org/project/hostmaster/issues/3085544)
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Fri, 04 Oct 2019 16:16:36 -0400
+
+aegir3-provision (3.180) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see http://aegir.readthedocs.org/en/3.x/release-notes/3.18
+  * Include Drupal 7.67
+
+ -- Colan Schwartz <13228-colan@users.noreply.gitlab.com>  Thu, 27 Jun 2019 15:27:28 -0400
+
+aegir3-provision (3.174) testing; urgency=medium
+
+  * Update to Hostmaster 7.x-3.174
+  * Include an updated ctools, views, module_filter
+  * Include a new Golden Contrib module: Hosting Deploy
+
+ -- Herman van Rink <helmo@initfour.nl>  Thu, 04 Apr 2019 15:48:32 +0200
+
 aegir3-provision (3.173) testing; urgency=medium
 
   * Update to Hostmaster 7.x-3.173 & Drupal 7.63.

@@ -130,7 +130,6 @@ if (isset($_SERVER['db_name'])) {
   ini_set('session.gc_maxlifetime', 200000);
   ini_set('session.cookie_lifetime', 2000000);
 
-
   /**
   * Set the umask so that new directories created by Drupal have the correct permissions
   */
@@ -138,9 +137,9 @@ if (isset($_SERVER['db_name'])) {
 
   global $conf;
   $conf['install_profile'] = '<?php print $this->profile ?>';
-  $conf['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
-  $conf['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
-  $conf['file_temporary_path'] = 'sites/<?php print $this->uri ?>/private/temp';
+  $conf['file_public_path'] = '<?php print $this->file_public_path ?>';
+  $conf['file_private_path'] = '<?php print $this->file_private_path ?>';
+  $conf['file_temporary_path'] = '<?php print $this->file_temporary_path ?>';
   $drupal_hash_salt = '';
   $conf['clean_url'] = 1;
   $conf['aegir_api'] = <?php print $this->api_version ? $this->api_version : 0 ?>;
@@ -150,12 +149,26 @@ if (isset($_SERVER['db_name'])) {
   $conf['admin_menu_cache_client'] = FALSE;
 
 <?php if (!$this->site_enabled) : ?>
-<?php if (isset($drupal_hash_salt_var)): ?>
+<?php if (isset($maintenance_var_new)): ?>
   $conf['maintenance_mode'] = 1;
 <?php else: ?>
   $conf['site_offline'] = 1;
 <?php endif; ?>
 <?php endif; ?>
+
+  /**
+   * Set the Syslog identity to the site name so it's not always "drupal".
+   */
+  $conf['syslog_identity'] = '<?php print $this->uri ?>';
+
+  /**
+   * If external request was HTTPS but internal request is HTTP, set $_SERVER['HTTPS'] so Drupal detects the right scheme.
+   */
+  if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && isset($_SERVER['REQUEST_SCHEME'])) {
+    if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER["REQUEST_SCHEME"] == 'http') {
+      $_SERVER['HTTPS'] = 'on';
+    }
+  }
 
 <?php print $extra_config; ?>
 
@@ -165,8 +178,14 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
+  <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
     include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+  }
+
+  # Additional platform wide configuration settings.
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.

@@ -23,11 +23,10 @@ stages:
 
 syntax:lint:
   stage: syntax
-  image: bobey/docker-gitlab-ci-runner-php7
+  image: php:7.3-cli
   allow_failure: false
 
   script:
-    - composer require overtrue/phplint
     - echo "Syntax checking PHP files"
     - echo "For more information http://www.icosaedro.it/phplint/"
     - vendor/bin/phplint ./ --exclude "vendor"
@@ -61,25 +60,6 @@ build:deb:
 #
 ### Stage "test"
 #
-
-test:debian-jessie-aegir3-apt:
-  stage: test
-  image: debian:jessie
-  dependencies:
-    - build:deb
-  only:
-    - 7.x-3.x
-    - /^7\.x-3\.\d+\.x/
-    - /-runalltests$/
-
-  before_script:
-    - apt-get update
-    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
-    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
-    - echo "exit 0" >> /usr/sbin/policy-rc.d
-    - apt-get install --yes sudo curl
-
-  script: "scripts/ci-aegir-dev-install-apt-debian8.sh"
 
 test:debian-stretch-aegir3-apt:
   stage: test
@@ -157,6 +137,27 @@ test:ubuntu-bionic-aegir3-apt:
     - apt-get install --yes sudo curl
 
   script: "scripts/ci-aegir-dev-install-apt-ubuntu-bionic.sh"
+
+test:ubuntu-focal-aegir3-apt:
+  stage: test
+  image: ubuntu:focal
+  dependencies:
+    - build:deb
+  allow_failure: true
+
+  only:
+    - 7.x-3.x
+    - /^7\.x-3\.\d+\.x/
+    - /-runalltests$/
+
+  before_script:
+    - apt-get update
+    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+    - echo "exit 0" >> /usr/sbin/policy-rc.d
+    - apt-get install --yes sudo curl
+
+  script: "scripts/ci-aegir-dev-install-apt-ubuntu-focal.sh"
 
 test:cluster-slave-debian-stretch-apt:
   stage: test
@@ -243,7 +244,7 @@ publish:unstable-repo:
 
   script:
     - ls -lah build/*
-    - scp build/* ci@aegir0.aegir.coop:/var/www/repos/incoming/
+    - scp build/* ci@aegir0.aegirproject.org:/var/www/repos/incoming/
       # reprepro should pick this up in seconds and update the repository index.
 
 
@@ -252,9 +253,9 @@ publish:unstable-repo:
 #
 
 # Upgrade the latest stable Aegir to our unstable repo.
-upgradetest:debian-jessie-aegir3-apt-upgrade:
+upgradetest:debian-stretch-aegir3-apt-upgrade:
   stage: upgradetest
-  image: debian:jessie
+  image: debian:stretch
   dependencies:
     - publish:unstable-repo
 
@@ -271,7 +272,7 @@ upgradetest:debian-jessie-aegir3-apt-upgrade:
     - apt-get install --yes sudo curl cron
 
   script:
-    - "scripts/ci-aegir-stable-install-apt-debian8.sh"
+    - "scripts/ci-aegir-stable-install-apt-debian9.sh"
     # extra step to run the task queue.
     - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
     - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
@@ -283,6 +284,6 @@ upgradetest:debian-jessie-aegir3-apt-upgrade:
     - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
     # upgrade to the latest version from the unstable repo.
     - rm -v /etc/apt/sources.list.d/aegir-stable.list
-    - echo "deb http://debian.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
+    - echo "deb [signed-by=/usr/share/keyrings/aegir-archive-keyring.gpg] http://debian.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
     - sudo apt-get update
     - sudo apt-get --yes dist-upgrade
