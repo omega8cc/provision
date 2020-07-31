@@ -141,6 +141,14 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
   );
 
+  $items['provision-packages'] = array(
+    'description' => dt('Find and output the list of packages in this site or platform.'),
+    'examples' => array(
+      'drush @platform provision-packages' => 'Print out a JSON array of all packages found in the platform. To be consumed by platform verify hosting-tasks.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+  );
+
   $items['provision-backup'] = array(
     'optional arguments' => array('backup-file' => dt('The file to save the backup to. This will be a gzipped tarball.')),
     'options' => array(
