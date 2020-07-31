@@ -214,8 +214,18 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())));
-    drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'success');
+    $packages_list =  _scrub_object(provision_find_packages());
+    foreach ($packages_list as $type => $packages) {
+      drush_log(dt("Found @count '@type' packages in platform: @packages", array(
+          '@count' => count($packages),
+          '@type' => $type,
+          '@packages' => implode(', ', array_keys($packages)))
+      ), 'ok');
+
+    }
+
+    drush_set_option('packages', $packages_list, 'drupal');
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
