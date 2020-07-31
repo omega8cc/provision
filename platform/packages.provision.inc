@@ -17,12 +17,14 @@ function drush_provision_drupal_provision_packages_validate() {
 }
 
 /**
- * Implements drush_hook_pre_COMMAND().
+ * Implements drush_COMMAND().
  */
-function drush_provision_drupal_pre_provision_packages() {
+function drush_provision_packages() {
   if (d()->type === 'platform') {
+
     drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'ok');
     $packages_list =  _scrub_object(provision_find_packages());
+
     foreach ($packages_list as $type => $packages) {
 
       // Print out human readable messages about the packages.
