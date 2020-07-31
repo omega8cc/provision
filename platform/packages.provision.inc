@@ -2,15 +2,15 @@
 
 /**
  * @file
- * Code related to verify tasks.
+ * Code related to provision-packages tasks.
  */
 
 /**
- * Provision verify command.
+ * Provision packages command.
  *
  * Disable an enabled and installed site
  */
-function drush_provision_drupal_provision_verify_validate() {
+function drush_provision_drupal_provision_packages_validate() {
   if (d()->type === 'site') {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -27,7 +27,7 @@ function drush_provision_drupal_provision_verify_validate() {
 /**
  * Implements drush_hook_pre_COMMAND().
  */
-function drush_provision_drupal_pre_provision_verify() {
+function drush_provision_drupal_pre_provision_packages() {
   if (d()->type === 'server') {
 
     $config_root = dirname(d()->config_path);
@@ -128,7 +128,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 5. adhoc platform, path does not exist.
     elseif (!file_exists(d()->root)) {
-      return drush_set_error("DRUSH_PLATFORM_VERIFY_FAILED",
+      return drush_set_error("DRUSH_PLATFORM_PACKAGES_FAILED",
           dt("Nothing found at platform root (@root). Install code manually or set 'makefile' or 'git_remote' properties.", $t));
 
     }
@@ -155,9 +155,9 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Step 2: Run composer install if composer.json is present.
-      // If drush option provision_composer_install_platforms_verify_always is set to
+      // If drush option provision_composer_install_platforms_packages_always is set to
       // false, only run `composer-install` if ./vendor directory is missing.
-      if (isset($composer_directory) && (!file_exists($composer_directory . DIRECTORY_SEPARATOR . 'vendor') || drush_get_option('provision_composer_install_platforms_verify_always', TRUE))) {
+      if (isset($composer_directory) && (!file_exists($composer_directory . DIRECTORY_SEPARATOR . 'vendor') || drush_get_option('provision_composer_install_platforms_packages_always', TRUE))) {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
@@ -264,7 +264,7 @@ function drush_provision_drupal_pre_provision_verify() {
 /**
  * Implements drush_hook_provision_post_COMMAND().
  */
-function drush_provision_drupal_post_provision_verify() {
+function drush_provision_drupal_post_provision_packages() {
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.
