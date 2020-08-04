@@ -51,9 +51,6 @@ function drush_provision_drupal_pre_provision_verify() {
     }
   }
   elseif (d()->type === 'platform') {
-    // Add platform root auto-discovery to avoid confusing
-    // Composer based D8 codebase root with Drupal real root.
-    d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Translation strings
     $t = array();
