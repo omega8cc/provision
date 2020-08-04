@@ -169,11 +169,6 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
 
-    // Re-set the ROOT PATH for Drush.
-    // In cases where we just build the platform Drush would have cleared this value.
-    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
-    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
-
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
     // If we couldn't bootstrap, there's no sense in continuing past this point.
     if (drush_get_error()) {
@@ -233,12 +228,7 @@ function drush_provision_drupal_pre_provision_verify() {
   }
   elseif (d()->type === 'site') {
 
-    // Re-set the ROOT PATH for Drush.
-    // In cases where we just build the platform Drush would have cleared this value.
-    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
-    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
-
-// @TODO: Remove once we are sure provision-packages works.
+    // @TODO: Remove once we are sure provision-packages works.
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
 
     // This is the actual drupal provisioning requirements.
@@ -266,11 +256,6 @@ function drush_provision_drupal_pre_provision_verify() {
  * Implements drush_hook_provision_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_verify() {
-
-  // Add platform root auto-discovery to avoid confusing
-  // Composer based D8 codebase root with Drupal real root.
-  d()->root = provision_auto_fix_platform_root(d()->root);
-
   if (d()->type === 'site') {
     _provision_drupal_rebuild_caches();
     drush_set_option('installed', TRUE, 'site');

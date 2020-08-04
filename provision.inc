@@ -133,35 +133,6 @@ function provision_is_local_host($host) {
 }
 
 /**
- * Add platform root auto-discovery to avoid confusing
- * Composer based D8 codebase root with Drupal real root.
- */
-function provision_auto_fix_platform_root($isroot) {
-
-  $test_root_index = $isroot . '/index.php';
-  $test_root_docroot = $isroot . '/docroot/index.php';
-  $test_root_html = $isroot . '/html/index.php';
-  $test_root_web = $isroot . '/web/index.php';
-
-  if (!provision_file()->exists($test_root_index)->status()) {
-    drush_log(dt("Platform path needs correction, running auto-discovery.."), 'notice');
-    if (provision_file()->exists($test_root_docroot)->status()) {
-      drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_docroot)), 'debug');
-      $isroot = $isroot . '/docroot';
-    }
-    elseif (provision_file()->exists($test_root_html)->status()) {
-      drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_html)), 'debug');
-      $isroot = $isroot . '/html';
-    }
-    elseif (provision_file()->exists($test_root_web)->status()) {
-      drush_log(dt("Platform real root index: @realroot", array('@realroot' => $test_root_web)), 'debug');
-      $isroot = $isroot . '/web';
-    }
-  }
-  return $isroot;
-}
-
-/**
  * Determine if the currently acting context is the server's hostmaster site.
  *
  * @return
