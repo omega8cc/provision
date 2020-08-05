@@ -479,7 +479,7 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   $process = new \Symfony\Component\Process\Process($command, $cwd, $env);
   $process->setTimeout(NULL);
   if ($log_output) {
-    drush_log("[$label] $command", 'p_command');
+    drush_log("[$label] {$process->getCommandLine()}", 'p_command');
 
     $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
       drush_log($buffer, $log_type);
