@@ -159,17 +159,21 @@ function drush_provision_drupal_pre_provision_verify() {
         $composer_directory = NULL;
       }
 
-      // Step 2: Run composer install if composer.json is present.
-      // If drush option provision_composer_install_platforms_verify_always is set to
-      // false, only run `composer-install` if ./vendor directory is missing.
-      if (isset($composer_directory) && (!file_exists($composer_directory . DIRECTORY_SEPARATOR . 'vendor') || drush_get_option('provision_composer_install_platforms_verify_always', TRUE))) {
+      // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
+      if ($composer_directory && drush_get_option('provision_composer_install_platforms_verify_always', TRUE)) {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev');
 
         // Implement Symfony Process component for line-by-line output logging.
+        drush_log(dt('Running composer install command (@command) in directory (@directory)...', array(
+          '@command' => $composer_command,
+          '@directory' => $composer_directory,
+        )), 'ok');
         provision_process($composer_command, $composer_directory);
+
+        drush_log(dt('Composer install complete.'), 'ok');
 
       }
     }
