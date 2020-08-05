@@ -142,12 +142,14 @@ function drush_provision_drupal_pre_provision_verify() {
     }
     // If drush variable allows composer install on platforms (and composer exec passed)...
     elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
-      // Detect composer-based platform and run composer install if it has not been run yet.
-      // Step 1: Look for composer directory. Could be Drupal root. Could be the git_root.
-      if (provision_file()->exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
-        $composer_directory = d()->root;
-      }
-      elseif (d()->git_root && provision_file()->exists(d()->git_root . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
+      $composer_bin = shell_exec('which composer');
+      drush_log(dt('Composer bin found: @composer_bin', array(
+        '@composer_bin' => $composer_bin,
+      )), 'ok');
+
+      // Detect composer.json and run composer install.
+      // Step 1: Look for composer directory in git_root or root.
+      if (!empty(d()->git_root) && file_exists(d()->git_root . DIRECTORY_SEPARATOR . 'composer.json')) {
         $composer_directory = d()->git_root;
       }
 
