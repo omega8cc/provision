@@ -14,14 +14,18 @@ print "# A list of Aegir features and their enabled status.\n";
 print "\$options['hosting_features'] = ". var_export($hosting_features, TRUE) . ";\n\n";
 
 print "# A list of modules to be excluded because the hosting feature is not enabled.\n";
-print "\$options['exclude'] = ". var_export($drush_exclude, TRUE) . ";\n\n";
+foreach ($drush_exclude as $key => $value) {
+  print "\$options['exclude'][$key] = $value;\n";
+}
 
 print "# Drush 8 looks at ignored-modules instead of exclude.\n";
 print "\$options['ignored-modules'] = \$options['exclude'];\n\n";
 
 print "# A list of paths that drush should include even when working outside\n";
 print "# the context of the hostmaster site.\n";
-print "\$options['include'] = ". var_export($drush_include, TRUE) . ";\n";
+foreach ($drush_include as $key => $value) {
+  print "\$options['include'][$key] = $value;\n";
+}
 
 print "# Local non-aegir-generated additions.\n";
 print "@include_once(dirname(__FILE__) . '/local.drushrc.php');\n";
