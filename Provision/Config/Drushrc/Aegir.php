@@ -28,7 +28,6 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
 
     $this->data['drush_exclude'] = array();
     $this->data['drush_include'] = array();
-
     foreach($enabled_features as $feature => $status) {
       if ($status === '0') {
         $this->data['drush_exclude'][] = $feature;
@@ -40,8 +39,5 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
         }
       }
     }
-
-    # Ensure provision is included first by putting it at the end of the "include" options array.
-    $this->data['drush_include']['provision'] = DRUPAL_ROOT . '/sites/all/drush/provision';
   }
 }
