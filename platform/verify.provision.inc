@@ -152,7 +152,7 @@ function drush_provision_drupal_pre_provision_verify() {
       if (!empty(d()->git_root) && file_exists(d()->git_root . DIRECTORY_SEPARATOR . 'composer.json')) {
         $composer_directory = d()->git_root;
       }
-      elseif (!empty(d()->root) && file_exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
+      elseif (!empty(d()->root) && file_exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')) {
         $composer_directory = d()->root;
       }
       else {
