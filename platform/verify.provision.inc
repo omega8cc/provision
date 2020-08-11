@@ -135,6 +135,49 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Platform path found (@root).'), 'notice');
     }
 
+
+    // Checkout git_reference
+    drush_log("git_reference: " . d()->git_reference, 'ok');
+    drush_log("git_root: " . d()->git_root, 'ok');
+    if (d()->git_reference) {
+
+      // Fetch latest changes
+      drush_log(dt('Fetching latest changes:'), 'ok');
+      provision_process([
+        "git",
+        "fetch",
+        "-a",
+        "-v",
+      ],
+        d()->git_root, 'Fetch Latest Changes', [], TRUE, NULL, TRUE, 'ok'
+      );
+
+      // Output Git Information
+      drush_log(dt('Current working copy status:'), 'ok');
+      foreach ([
+                 ['git', 'show', '-q'],
+                 ['git', 'status'],
+                 ['git', 'remote',  '-v'],
+               ] as $command) {
+        provision_process($command, d()->git_root);
+        /** @var \Symfony\Component\Process\Process $process */
+        $process = drush_get_context('provision_process_result');
+        drush_log($process->getOutput(), 'ok');
+      }
+
+      // Check out the git reference.
+      // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
+      drush_log(dt('Checking out:'), 'ok');
+      $checkout_option = drush_get_option('git_checkout_option', NULL);
+      provision_process([
+        "git",
+        "checkout",
+        d()->git_reference
+      ],
+        d()->git_root, 'Checkout', [], TRUE, NULL, TRUE, 'ok'
+      );
+    }
+
     // Composer Install Support
     // Step 0: if drush variable allows composer install on platforms, and check for composer executable fails, show warning.
     $composer_bin = shell_exec('which composer');
