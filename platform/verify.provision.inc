@@ -136,10 +136,8 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
 
-    // Checkout git_reference
-    drush_log("git_reference: " . d()->git_reference, 'ok');
-    drush_log("git_root: " . d()->git_root, 'ok');
-    if (d()->git_reference) {
+    // Run things if git  git_reference
+    if (!empty(d()->git_root)) {
 
       // Fetch latest changes
       drush_log(dt('Fetching latest changes:'), 'ok');
@@ -166,16 +164,18 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Check out the git reference.
-      // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
-      drush_log(dt('Checking out:'), 'ok');
-      $checkout_option = drush_get_option('git_checkout_option', NULL);
-      provision_process([
-        "git",
-        "checkout",
-        d()->git_reference
-      ],
-        d()->git_root, 'Checkout', [], TRUE, NULL, TRUE, 'ok'
-      );
+      if (!empty(d()->git_reference)) {
+        // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
+        drush_log(dt('Checking out:'), 'ok');
+        $checkout_option = drush_get_option('git_checkout_option', NULL);
+        provision_process([
+          "git",
+          "checkout",
+          d()->git_reference
+        ],
+          d()->git_root, 'Checkout', [], TRUE, NULL, TRUE, 'ok'
+        );
+      }
     }
 
     // Composer Install Support
