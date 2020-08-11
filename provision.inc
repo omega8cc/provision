@@ -460,7 +460,7 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
  * @return string|void
  *   The output or error output of the command.
  */
-function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
+function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = FALSE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
   if (empty($command)) {
     return;
   }
@@ -486,7 +486,9 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
     });
   }
   else {
-    $exit_code = $process->run();
+    $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
+      echo $buffer;
+    });
   }
 
   // Save the Provision Process object to Drush Context so that implementors can access the full object.

@@ -147,8 +147,7 @@ function drush_provision_drupal_pre_provision_verify() {
         "-a",
         "-v",
       ],
-        d()->git_root, 'Fetch Latest Changes', [], TRUE, NULL, TRUE, 'ok'
-      );
+        d()->git_root);
 
       // Output Git Information
       drush_log(dt('Current working copy status:'), 'ok');
@@ -173,7 +172,7 @@ function drush_provision_drupal_pre_provision_verify() {
           "checkout",
           d()->git_reference
         ],
-          d()->git_root, 'Checkout', [], TRUE, NULL, TRUE, 'ok'
+          d()->git_root
         );
       }
     }
