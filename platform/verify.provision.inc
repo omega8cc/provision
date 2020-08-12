@@ -140,17 +140,17 @@ function drush_provision_drupal_pre_provision_verify() {
     if (!empty(d()->git_root)) {
 
       // Fetch latest changes
-      drush_log(dt('Fetching latest changes:'), 'ok');
+      drush_log(dt('Fetching latest changes...'), 'ok');
       provision_process([
         "git",
         "fetch",
         "-a",
-        "-v",
       ],
         d()->git_root);
+      drush_log(dt('Fetching latest changes... Done'), 'ok');
 
       // Output Git Information
-      drush_log(dt('Current working copy status:'), 'ok');
+      drush_log(dt('Current working copy status'), 'ok');
       foreach ([
                  ['git', 'show', '-q'],
                  ['git', 'status'],
@@ -206,14 +206,13 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
-        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev');
+        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
         // Implement Symfony Process component for line-by-line output logging.
-        drush_log(dt('Running composer install command (@command) in directory (@directory)...', array(
-          '@command' => $composer_command,
+        drush_log(dt('Running composer install in directory (@directory)...', array(
           '@directory' => $composer_directory,
         )), 'ok');
-        provision_process($composer_command, $composer_directory);
+        provision_process($composer_command, $composer_directory, 'Build');
 
         drush_log(dt('Composer install complete.'), 'ok');
 
