@@ -227,6 +227,15 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
   );
 
+  $items['provision-deploy'] = array(
+    'description' => 'Checkout code and run site deploy hooks',
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @site provision-deploy' => 'Checkout the git_reference defined in @sites platform context and run site deploy hooks.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+  );
+
   // @TODO: This is renamed to provision-deploy-backup as a temporary bridge to nowhere.
   $items['provision-deploy-backup'] = array(
     'description' => 'Deploy an existing backup to a new url.',
@@ -378,6 +387,15 @@ function drush_provision_save($alias = NULL) {
 function drush_provision_verify() {
   provision_backend_invoke(d()->name, 'provision-save');
   d()->command_invoke('verify');
+}
+
+/**
+ * drush provision-deploy command.
+ *
+ * Kicks off to platform/deploy.provision.inc
+ */
+function drush_provision_deploy() {
+  d()->command_invoke('deploy');
 }
 
 function _provision_default_web_group() {
