@@ -167,7 +167,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
-  provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  provision_backend_invoke($target, 'provision-deploy-backup', array(drush_get_option('backup_file')), $deploy_options);
   if (!drush_get_error()) {
     drush_log(dt("Bringing site out of maintenance"));
     d()->site_enabled = TRUE;

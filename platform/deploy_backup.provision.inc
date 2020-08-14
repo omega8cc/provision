@@ -21,7 +21,7 @@
  *
  * Implementation of drush_hook_COMMAND_validate().
  */
-function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
+function drush_provision_drupal_provision_deploy_backup_validate($backup_file = NULL) {
   $exists = provision_file()->exists($backup_file)
     ->succeed('Deploying site from @path')
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
@@ -50,7 +50,7 @@ function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
  *
  * Implements drush_hook_pre_COMMAND().
  */
-function drush_provision_drupal_pre_provision_deploy($backup_file) {
+function drush_provision_drupal_pre_provision_deploy_backup($backup_file) {
   $extracted = provision_file()->extract($backup_file, drush_get_option('extract_path'))
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
@@ -135,7 +135,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
  *
  * Implementation of drush_hook_pre_COMMAND_rollback().
  */
-function drush_provision_drupal_pre_provision_deploy_rollback() {
+function drush_provision_drupal_pre_provision_deploy_backup_rollback() {
   if (drush_get_option('deploy_replace_site', FALSE)) {
     if (drush_get_option('site_dirs_swapped', FALSE)) {
 
@@ -160,7 +160,7 @@ function drush_provision_drupal_pre_provision_deploy_rollback() {
 /**
  * Implements drush_hook_COMMAND().
  */
-function drush_provision_drupal_provision_deploy() {
+function drush_provision_drupal_provision_deploy_backup() {
   _provision_drupal_maintain_aliases();
   _provision_drupal_create_directories();
 }
@@ -168,12 +168,12 @@ function drush_provision_drupal_provision_deploy() {
 /**
  * Implements drush_hook_post_COMMAND().
  */
-function drush_provision_drupal_post_provision_deploy() {
+function drush_provision_drupal_post_provision_deploy_backup() {
   // Run registry-rebuild without cache-clear, if available.
   if (function_exists('drush_registry_rebuild')) {
     if (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
       provision_backend_invoke(d()->name, 'registry-rebuild --no-cache-clear');
-      drush_log(dt('Registry rebuilt with --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
+      drush_log(dt('Registry rebuilt with --no-cache-clear in drush_provision_drupal_post_provision_deploy_backup'));
     }
   }
   // Call the drush updatedb command.
@@ -182,12 +182,12 @@ function drush_provision_drupal_post_provision_deploy() {
   if (function_exists('drush_registry_rebuild')) {
     if (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
       provision_backend_invoke(d()->name, 'registry-rebuild');
-      drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
+      drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy_backup'));
     }
   }
   // We should be able to fully load Drupal now.
   if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
-    drush_include_engine('drupal', 'deploy');
+    drush_include_engine('drupal', 'deploy_backup');
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
     _provision_drupal_rebuild_caches();
 

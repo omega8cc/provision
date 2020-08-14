@@ -227,7 +227,8 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
   );
 
-  $items['provision-deploy'] = array(
+  // @TODO: This is renamed to provision-deploy-backup as a temporary bridge to nowhere.
+  $items['provision-deploy-backup'] = array(
     'description' => 'Deploy an existing backup to a new url.',
     'arguments' => array(
       'site_backup.tar.gz' => dt('The backup to deploy.')),
@@ -236,7 +237,7 @@ function provision_drush_command() {
     ),
     'allow-additional-options' => TRUE,
     'examples' => array(
-      'drush @site provision-deploy ~/backups/some_site.tar.gz' => 'Deploy the site as defined by the site Drush alias, from the backup in ~/backups/some_site.tar.gz.',
+      'drush @site provision-deploy-backup ~/backups/some_site.tar.gz' => 'Deploy the site as defined by the site Drush alias, from the backup in ~/backups/some_site.tar.gz.',
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
   );
