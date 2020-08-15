@@ -155,6 +155,20 @@ function drush_provision_drupal_pre_provision_verify() {
     // Run things if git  git_reference
     if (!empty(d()->git_root)) {
 
+      // Set git remote
+      if (!empty(d()->git_remote)) {
+        drush_log(dt('Setting git remote...'), 'ok');
+        provision_process([
+          "git",
+          "remote",
+          "set-url",
+          "origin",
+          d()->git_remote
+        ],
+          d()->git_root);
+        drush_log(dt('Setting git remote... Done'), 'ok');
+      }
+
       // Fetch latest changes
       drush_log(dt('Fetching latest changes...'), 'ok');
       provision_process([
