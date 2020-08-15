@@ -157,16 +157,24 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // Set git remote
       if (!empty(d()->git_remote)) {
+
+        // Check that git_root is an actual .git working copy first
         drush_log(dt('Setting git remote...'), 'ok');
-        provision_process([
-          "git",
-          "remote",
-          "set-url",
-          "origin",
-          d()->git_remote
-        ],
-          d()->git_root);
-        drush_log(dt('Setting git remote... Done'), 'ok');
+        $expected_git_config_path = d()->git_root . '/.git/config';
+        if (file_exists($expected_git_config_path)) {
+          provision_process([
+            "git",
+            "remote",
+            "set-url",
+            "origin",
+            d()->git_remote
+          ],
+            d()->git_root);
+          drush_log(dt('Setting git remote... Done'), 'ok');
+        }
+        else {
+          drush_log(dt('Setting git remote... Skipped because no .git/config file was found in git_root.'), 'warning');
+        }
       }
 
       // Fetch latest changes
