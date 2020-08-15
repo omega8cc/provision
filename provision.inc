@@ -413,6 +413,8 @@ function _scrub_object($input) {
 
 /**
  * Execute a command against a specific context object.
+ *
+ * Returns the entire "drush context" object.
  * 
  * @param $target
  *   the context to operate on, @ prefix is optional.
@@ -424,6 +426,9 @@ function _scrub_object($input) {
  *   drush data passed to drush_invoke_process().
  * @param $mode
  *   drush IPC mode (GET/POST) passed to drush_invoke_process().
+ * @return array
+ *   The entire drush context from the command. This allows commands to call "drush_set_context" and return their data
+ *   to the caller of provision_backend_context.
  *
  * @see drush_invoke_process()
  */
