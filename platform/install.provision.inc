@@ -56,22 +56,6 @@ function drush_provision_drupal_provision_install_validate() {
       )));
     }
   }
-
-  // @TODO: Create a helper function/method for this. It is duplicating verify.provision.inc
-  // Verify the platform first.
-  drush_log(dt('Verifying platform before site...'), 'ok');
-  $result = provision_backend_invoke(d()->platform->name, 'provision-verify');
-  if ($result['error_status']) {
-    drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
-      '@alias' => d()->platform->name,
-    )), 'error');
-    return drush_get_error();
-  }
-  else {
-    drush_log("", 'ok');
-    drush_log(dt('Platform verified without error. Continuing on to site.'), 'ok');
-    drush_log("", 'ok');
-  }
 }
 
 /**
