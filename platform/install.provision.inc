@@ -94,6 +94,8 @@ function drush_provision_drupal_provision_install() {
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
+  // @TODO: modernize install method by using "install_command" property instead.
+
   // Install site according to install_method.
   drush_log(dt('Installing site with the "!method" method.', array(
     '!method' => d()->install_method,

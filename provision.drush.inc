@@ -384,6 +384,9 @@ function drush_provision_save($alias = NULL) {
   }
 }
 
+/**
+ * @TODO: Verify that these run. If not delete them.
+ */
 function drush_provision_verify() {
   provision_backend_invoke(d()->name, 'provision-save');
   d()->command_invoke('verify');
@@ -393,6 +396,7 @@ function drush_provision_verify() {
  * drush provision-deploy command.
  *
  * Kicks off to platform/deploy.provision.inc
+ * @TODO: Verify that these run. If not delete them.
  */
 function drush_provision_deploy() {
   d()->command_invoke('deploy');
