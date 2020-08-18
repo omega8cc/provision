@@ -392,16 +392,6 @@ function drush_provision_verify() {
   d()->command_invoke('verify');
 }
 
-/**
- * drush provision-deploy command.
- *
- * Kicks off to platform/deploy.provision.inc
- * @TODO: Verify that these run. If not delete them.
- */
-function drush_provision_deploy() {
-  d()->command_invoke('deploy');
-}
-
 function _provision_default_web_group() {
   $info = posix_getgrgid(posix_getgid());
   $common_groups = array(
