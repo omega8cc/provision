@@ -23,13 +23,100 @@ function drush_provision_deploy_validate($target_git_reference = '') {
       '@reset' => drush_get_option('reset', 0)? dt('Yes'): dt('No'),
     )), 'ok');
   }
+
+  // Load deploy commands from possible locations.
+  $site_deploy_commands = provision_deploy_find_site_commands();
+  $rows = array();
+
+  // Parse deploy options and commands.
+  foreach (array(
+    'build' => 'pre',
+    'install' => 'pre',
+    'deploy' => 'deploy',
+    'test' => 'post',
+  ) as $command_name => $phase) {
+    // Did the user specify --COMMAND? Does the site have a "COMMAND_command" configured?
+    if (drush_get_option($command_name)) {
+      // Step number
+      $i++;
+      $suffix = $phase != 'pre'? dt('(May change after git checkout.)'): '';
+
+      // Check if command exists
+      if (empty($site_deploy_commands[$command_name])) {
+        // Save rows to output to users.
+        $rows[] = array("{$i}. {$command_name}: ","**MISSING**" . ' ' . $suffix);
+
+        // Save a warning.
+        $warnings[] = dt('Command "@name" was requested, but not defined. Define commands in composer.json:config.devshop.commands.@name', array(
+          '@name' => $command_name,
+        ));
+      }
+      else {
+        // Save rows to output to users.
+        $rows[] = array("{$i}. {$command_name}: ", $site_deploy_commands[$command_name] . ' ' . $suffix);
+
+        // Save actual commands to run to an array.
+        $deploy_commands[$command_name] = $site_deploy_commands[$command_name];
+      }
+    }
+  }
+
+  // Save to drush option
+  drush_set_option('deploy_commands', $deploy_commands);
+
+  drush_log(dt('Deploy commands requested:') . PHP_EOL . drush_format_table($rows), 'ok');
+
+  foreach ($warnings as $warning) {
+    drush_log(dt('Warning: @warning', array(
+      '@warning' => $warning,
+    )) . PHP_EOL, 'warning');
+  }
+}
+
+/**
+ * Load deploy command from site source code.
+ *
+ * Possible sources:
+ *   composer.json: extra.devshop.deploy_commands.$COMMAND_NAME
+ *
+ * @TODO: Allow more sources.
+ */
+function provision_deploy_find_site_commands(){
+  // Load "$command_name" from composer.json "scripts".
+  $composer_json_path = d()->git_root . DIRECTORY_SEPARATOR . 'composer.json';
+  if (file_exists($composer_json_path)) {
+    $composer_data = json_decode(file_get_contents($composer_json_path), TRUE);
+    return $composer_data['extra']['devshop']['commands']?: array();
+  }
 }
 
 /**
  * Implements drush_pre_COMMAND().
+ *
+ * Pre-deploy phase. Deployment options:
+ *   1. Build: composer install
+ *   2. Install: drush site-install / sql-sync
  */
 function drush_provision_pre_provision_deploy() {
-  drush_log(dt('Pre-deploy phase begun...'), 'ok');
+  drush_log(PHP_EOL . PHP_EOL . dt('Pre-deploy phase begun...'), 'ok');
+  drush_provision_run_deploy_command('build');
+  drush_provision_run_deploy_command('install');
+}
+
+/**
+ * Check for and run a deploy command, if the command exists and --COMMAND option was passed.
+ * @param $command_name
+ */
+function drush_provision_run_deploy_command($command_name) {
+  $deploy_commands = drush_get_option('deploy_commands', array());
+  if (!empty($deploy_commands[$command_name]) && drush_get_option($command_name)) {
+    provision_process($deploy_commands[$command_name], d()->git_root, dt('Running Deploy Hook:') . ' ' . $command_name);
+  }
+  elseif (empty($deploy_commands[$command_name])) {
+    drush_log(dt('No commands specified for "%command_name" phase.', array(
+      '%command_name' => $command_name,
+    )) . PHP_EOL, 'warning');
+  }
 }
 
 /**
@@ -53,7 +140,7 @@ function drush_provision_pre_provision_deploy() {
  *
  */
 function drush_provision_deploy($target_git_reference = '') {
-  drush_log(dt('Deploy phase begun...'), 'ok');
+  drush_log( dt('Deploy phase begun...'), 'ok');
 }
 
 /**
