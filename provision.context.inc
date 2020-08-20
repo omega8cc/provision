@@ -91,7 +91,7 @@ function provision_sitealias_get_record($name) {
 
   $name = provision_normalise_context_name($name);
 
-  if (!isset($cache[$name])) {
+  if (function_exists('drush_sitealias_get_record') && !isset($cache[$name])) {
     $cache[$name] = drush_sitealias_get_record($name);
   }
 
