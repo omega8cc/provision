@@ -92,7 +92,7 @@ function drush_provision_pre_provision_deploy() {
 function drush_provision_run_deploy_command($command_name) {
   $deploy_commands = drush_get_option('deploy_commands', array());
   if (!empty($deploy_commands[$command_name]) && drush_get_option($command_name)) {
-    provision_process($deploy_commands[$command_name], d()->git_root, dt('Running Deploy Hook:') . ' ' . $command_name);
+    provision_process($deploy_commands[$command_name], d()->git_root, $command_name);
   }
   elseif (empty($deploy_commands[$command_name])) {
     drush_log(dt('No commands specified for "%command_name" phase.', array(
