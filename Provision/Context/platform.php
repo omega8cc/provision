@@ -62,10 +62,27 @@ class Provision_Context_platform extends Provision_Context {
    */
   public function defaultCommands() {
     return array(
+      'git' => $this->isDetached()
+        ? 'echo "HEAD is Detached:" && git status'
+        : 'git fetch --all && git checkout $GIT_REFERENCE && git reset FETCH_HEAD',
       'build' => 'composer install --no-dev --no-progress --no-suggest --ansi',
       'install' => 'bin/drush site-install -y',
       'deploy' => 'bin/drush updb -y',
       'test' => 'bin/phpunit --help',
     );
+  }
+
+  /**
+   * Return TRUE if git_root is in DETACHED HEAD state.
+   * https://stackoverflow.com/questions/52221558/programmatically-check-if-head-is-detached
+   */
+  public function isDetached() {
+    try {
+      $process = new \Symfony\Component\Process\Process('git symbolic-ref -q HEAD', $this->git_root);
+      $process->mustRun();
+      return FALSE;
+    } catch (\Exception $e) {
+      return TRUE;
+    }
   }
 }
