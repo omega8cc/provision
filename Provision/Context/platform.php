@@ -42,7 +42,7 @@ class Provision_Context_platform extends Provision_Context {
   public function findCommands() {
     $default_commands = $this->defaultCommands();
 
-    $composer_json_path = $node->git_root . DIRECTORY_SEPARATOR . 'composer.json';
+    $composer_json_path = $this->git_root . DIRECTORY_SEPARATOR . 'composer.json';
     if (file_exists($composer_json_path)) {
       $composer_data = json_decode(file_get_contents($composer_json_path), TRUE);
       $commands = isset($composer_data['extra']['devshop']['commands'])
