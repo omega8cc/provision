@@ -25,7 +25,6 @@ function drush_provision_deploy_validate($target_git_reference = '') {
   }
 
   // Load deploy commands from possible locations.
-  $site_deploy_commands = provision_deploy_find_site_commands();
   $rows = array();
 
   // Parse deploy options and commands.
@@ -39,12 +38,11 @@ function drush_provision_deploy_validate($target_git_reference = '') {
     if (drush_get_option($command_name)) {
       // Step number
       $i++;
-      $suffix = $phase != 'pre'? dt('(May change after git checkout.)'): '';
 
       // Check if command exists
-      if (empty($site_deploy_commands[$command_name])) {
+      if (empty(d()->commands[$command_name])) {
         // Save rows to output to users.
-        $rows[] = array("{$i}. {$command_name}: ","**MISSING**" . ' ' . $suffix);
+        $rows[] = array("{$i}. {$command_name}: ","**MISSING**");
 
         // Save a warning.
         $warnings[] = dt('Command "@name" was requested, but not defined. Define commands in composer.json:config.devshop.commands.@name', array(
@@ -53,10 +51,10 @@ function drush_provision_deploy_validate($target_git_reference = '') {
       }
       else {
         // Save rows to output to users.
-        $rows[] = array("{$i}. {$command_name}: ", $site_deploy_commands[$command_name] . ' ' . $suffix);
+        $rows[] = array("{$i}. {$command_name}: ", d()->commands[$command_name] . ' ' . $suffix);
 
         // Save actual commands to run to an array.
-        $deploy_commands[$command_name] = $site_deploy_commands[$command_name];
+        $deploy_commands[$command_name] = d()->commands[$command_name];
       }
     }
   }
@@ -64,29 +62,12 @@ function drush_provision_deploy_validate($target_git_reference = '') {
   // Save to drush option
   drush_set_option('deploy_commands', $deploy_commands);
 
-  drush_log(dt('Deploy commands requested:') . PHP_EOL . drush_format_table($rows), 'ok');
+  drush_log(dt('Deploy phases requested:') . PHP_EOL . drush_format_table($rows), 'ok');
 
   foreach ($warnings as $warning) {
     drush_log(dt('Warning: @warning', array(
       '@warning' => $warning,
     )) . PHP_EOL, 'warning');
-  }
-}
-
-/**
- * Load deploy command from site source code.
- *
- * Possible sources:
- *   composer.json: extra.devshop.deploy_commands.$COMMAND_NAME
- *
- * @TODO: Allow more sources.
- */
-function provision_deploy_find_site_commands(){
-  // Load "$command_name" from composer.json "scripts".
-  $composer_json_path = d()->git_root . DIRECTORY_SEPARATOR . 'composer.json';
-  if (file_exists($composer_json_path)) {
-    $composer_data = json_decode(file_get_contents($composer_json_path), TRUE);
-    return $composer_data['extra']['devshop']['commands']?: array();
   }
 }
 
@@ -99,6 +80,7 @@ function provision_deploy_find_site_commands(){
  */
 function drush_provision_pre_provision_deploy() {
   drush_log(PHP_EOL . PHP_EOL . dt('Pre-deploy phase begun...'), 'ok');
+  drush_provision_run_deploy_command('git');
   drush_provision_run_deploy_command('build');
   drush_provision_run_deploy_command('install');
 }
@@ -141,6 +123,7 @@ function drush_provision_run_deploy_command($command_name) {
  */
 function drush_provision_deploy($target_git_reference = '') {
   drush_log( dt('Deploy phase begun...'), 'ok');
+  drush_provision_run_deploy_command('deploy');
 }
 
 /**
@@ -148,6 +131,7 @@ function drush_provision_deploy($target_git_reference = '') {
  */
 function drush_provision_post_provision_deploy() {
   drush_log(dt('Post-deploy phase begun...'), 'ok');
+  drush_provision_run_deploy_command('test');
 }
 
 

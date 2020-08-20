@@ -48,6 +48,9 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_public_path', 'sites/' . $this->uri . '/files');
     $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
+
+    // Load commands from platform, but allow site to retain it's own.
+    $this->setProperty('commands', $this->platform->findCommands());
   }
 
   /**

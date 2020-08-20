@@ -31,5 +31,41 @@ class Provision_Context_platform extends Provision_Context {
     $this->setProperty('git_root');
     $this->setProperty('git_remote');
     $this->setProperty('git_reference');
+
+    // Load properties from composer
+    $this->setProperty('commands', $this->findCommands());
+  }
+
+  /**
+   * @see hosting_find_deploy_commands()
+   */
+  public function findCommands() {
+    $default_commands = $this->defaultCommands();
+
+    $composer_json_path = $node->git_root . DIRECTORY_SEPARATOR . 'composer.json';
+    if (file_exists($composer_json_path)) {
+      $composer_data = json_decode(file_get_contents($composer_json_path), TRUE);
+      $commands = isset($composer_data['extra']['devshop']['commands'])
+        ? $composer_data['extra']['devshop']['commands']
+        : array();
+    }
+    else {
+      $commands = array();
+    }
+    return array_merge($default_commands, $commands);
+  }
+
+  /**
+   * Define default commands for this platform type.
+   *
+   * @return array
+   */
+  public function defaultCommands() {
+    return array(
+      'build' => 'composer install --no-dev --no-progress --no-suggest --ansi',
+      'install' => 'bin/drush site-install -y',
+      'deploy' => 'bin/drush updb -y',
+      'test' => 'bin/phpunit --help',
+    );
   }
 }
