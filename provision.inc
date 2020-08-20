@@ -7,7 +7,11 @@
  * structure to the provisioning modules.
  */
 
+// Check if autoloader exists before including it
+if (file_exists( __DIR__ . '/vendor/autoload.php')) {
+# @TODO: remove refactor move forward.
 require_once __DIR__ . '/vendor/autoload.php';
+}
 
 drush_errors_on();
 
