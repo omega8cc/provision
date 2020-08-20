@@ -13,7 +13,9 @@ if (file_exists( __DIR__ . '/vendor/autoload.php')) {
 require_once __DIR__ . '/vendor/autoload.php';
 }
 
-drush_errors_on();
+if (function_exists('drush_errors_on')) {
+  drush_errors_on();
+}
 
 /**
  * Return an instance of the provision autoloader.
