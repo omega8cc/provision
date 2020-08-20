@@ -100,6 +100,7 @@ function drush_provision_run_deploy_command($command_name) {
     // @TODO: Convert all d() properties to ENV VARS.
     $environment = array(
       'GIT_REFERENCE' => d()->git_reference,
+      'DRUSH_ALIAS' => '@' . d()->name,
     );
     provision_process($deploy_commands[$command_name], d()->git_root, $command_name, $environment);
   }

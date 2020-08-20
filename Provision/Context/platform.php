@@ -4,7 +4,6 @@
  * @file Provision named context platform class.
  */
 
-
 /**
  * Class for the platform context.
  */
@@ -66,8 +65,8 @@ class Provision_Context_platform extends Provision_Context {
         ? 'echo "HEAD is Detached:" && git status'
         : 'git fetch --all && git checkout $GIT_REFERENCE && git reset FETCH_HEAD',
       'build' => 'composer install --no-dev --no-progress --no-suggest --ansi',
-      'install' => 'bin/drush site-install -y',
-      'deploy' => 'bin/drush updb -y',
+      'install' => 'drush $DRUSH_ALIAS provision-install',
+      'deploy' => 'drush updb -y',
       'test' => 'bin/phpunit --help',
     );
   }
