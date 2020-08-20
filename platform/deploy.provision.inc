@@ -26,16 +26,18 @@ function drush_provision_deploy_validate($target_git_reference = '') {
 
   // Load deploy commands from possible locations.
   $rows = array();
+  $warnings = array();
 
   // Parse deploy options and commands.
   foreach (array(
-    'build' => 'pre',
-    'install' => 'pre',
-    'deploy' => 'deploy',
-    'test' => 'post',
+    'git' => 1,
+    'build' => 2,
+    'install' => 3,
+    'deploy' => 4,
+    'test' => 5
   ) as $command_name => $phase) {
     // Did the user specify --COMMAND? Does the site have a "COMMAND_command" configured?
-    if (drush_get_option($command_name)) {
+    if (drush_get_option($command_name) || $command_name == 'git') {
       // Step number
       $i++;
 
@@ -79,9 +81,12 @@ function drush_provision_deploy_validate($target_git_reference = '') {
  *   2. Install: drush site-install / sql-sync
  */
 function drush_provision_pre_provision_deploy() {
-  drush_log(PHP_EOL . PHP_EOL . dt('Pre-deploy phase begun...'), 'ok');
+  drush_log(dt('Pre-deploy phase begun...'), 'ok');
+  sleep(1);
   drush_provision_run_deploy_command('git');
+  sleep(1);
   drush_provision_run_deploy_command('build');
+  sleep(1);
   drush_provision_run_deploy_command('install');
 }
 
@@ -91,8 +96,12 @@ function drush_provision_pre_provision_deploy() {
  */
 function drush_provision_run_deploy_command($command_name) {
   $deploy_commands = drush_get_option('deploy_commands', array());
-  if (!empty($deploy_commands[$command_name]) && drush_get_option($command_name)) {
-    provision_process($deploy_commands[$command_name], d()->git_root, $command_name);
+  if (!empty($deploy_commands[$command_name])) {
+    // @TODO: Convert all d() properties to ENV VARS.
+    $environment = array(
+      'GIT_REFERENCE' => d()->git_reference,
+    );
+    provision_process($deploy_commands[$command_name], d()->git_root, $command_name, $environment);
   }
   elseif (empty($deploy_commands[$command_name])) {
     drush_log(dt('No commands specified for "%command_name" phase.', array(
