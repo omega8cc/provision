@@ -87,6 +87,7 @@ server {
   ### Allow access to letsencrypt.org ACME challenges directory.
   ###
   location ^~ /.well-known/acme-challenge {
+    allow all;
     alias <?php print $aegir_root; ?>/tools/le/.acme-challenges;
     try_files $uri 404;
   }

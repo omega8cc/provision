@@ -34,6 +34,7 @@ if ($this->redirection) {
         print "  ### Allow access to letsencrypt.org ACME challenges directory.\n";
         print "  ###\n";
         print "  location ^~ /.well-known/acme-challenge {\n";
+        print "    allow all;\n";
         print "    alias {$aegir_root}/tools/le/.acme-challenges;\n";
         print "    try_files \$uri 404;\n";
         print "  }\n";
