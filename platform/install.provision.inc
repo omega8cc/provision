@@ -51,7 +51,7 @@ function drush_provision_drupal_provision_install_validate() {
 
     // Check again if site does not exist after the forced reinstall.
     if (_provision_drupal_site_exists()) {
-      return drush_set_error('PROVISION_SITE_INSTALLED',  dt('The file !file still exists. Provision was unable to delete it.', array(
+      return drush_set_error('PROVISION_SITE_INSTALLED',  dt('The site still exists (Assumed because the file !file exists). Use the --force-reinstall option to destroy the existing site and reinstall.', array(
         '!file' => d()->site_path . '/settings.php',
       )));
     }
@@ -106,7 +106,7 @@ function drush_provision_drupal_provision_install() {
 
     // call a backend task to do the actual installation.
     $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
-    
+
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
@@ -117,7 +117,7 @@ function drush_provision_drupal_provision_install() {
   elseif (d()->install_method == 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
   }
-  
+
   drush_set_option('installed', TRUE, 'site');
   _provision_drupal_maintain_aliases();
 
