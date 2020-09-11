@@ -91,8 +91,14 @@ function provision_sitealias_get_record($name) {
 
   $name = provision_normalise_context_name($name);
 
-  if (function_exists('drush_sitealias_get_record') && !isset($cache[$name])) {
-    $cache[$name] = drush_sitealias_get_record($name);
+  // Set cache (if drush_sitealias_get_record function exists)
+  if (!isset($cache[$name])) {
+    if (function_exists('drush_sitealias_get_record')) {
+      $cache[$name] = drush_sitealias_get_record($name);
+    }
+    else {
+      $cache[$name] = drush_sitealias_get_record($name);
+    }
   }
 
   return $cache[$name];
