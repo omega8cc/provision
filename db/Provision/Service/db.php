@@ -2,6 +2,7 @@
 
 class Provision_Service_db extends Provision_Service {
   protected $service = 'db';
+  protected $creds;
 
   /**
    * Register the db handler for sites, based on the db_server option.
@@ -32,6 +33,13 @@ class Provision_Service_db extends Provision_Service {
   function save_server() {
     // Check database 4 byte UTF-8 support and save it for later.
     $this->server->utf8mb4_is_supported = $this->utf8mb4_is_supported();
+  }
+
+  /**
+   * Return the creds array.
+   */
+  function getCreds() {
+    return $this->creds;
   }
 
   /**
