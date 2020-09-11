@@ -4,7 +4,6 @@
 
 class Provision_Service_db_pdo extends Provision_Service_db {
   public $conn;
-  protected $creds;
   private $dsn;
 
   function init_server() {
