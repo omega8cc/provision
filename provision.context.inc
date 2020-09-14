@@ -97,7 +97,7 @@ function provision_sitealias_get_record($name) {
       $cache[$name] = drush_sitealias_get_record($name);
     }
     else {
-      $cache[$name] = drush_sitealias_get_record($name);
+      $cache[$name] = array();
     }
   }
 
