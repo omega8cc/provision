@@ -1,3 +1,9 @@
+aegir3-provision (3.190~beta1) unstable; urgency=medium
+
+  * Beta for upcomming maintenance release
+
+ -- Herman van Rink <helmo@initfour.nl>  Mon, 14 Sep 2020 21:35:52 +0200
+
 aegir3-provision (3.186) testing; urgency=medium
 
   * Include Drupal 7.72
