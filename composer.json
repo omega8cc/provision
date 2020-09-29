@@ -1,5 +1,5 @@
 {
-    "name": "aegir/provision",
+    "name": "drupal/provision",
     "description": "Drush commands powering the back-end of Aegir",
     "type": "drupal-drush",
     "license": "GPL-2.0-or-later",
