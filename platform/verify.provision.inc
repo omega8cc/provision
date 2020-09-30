@@ -250,7 +250,7 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt('Running composer install in directory (@directory)...', array(
           '@directory' => $composer_directory,
         )), 'ok');
-        provision_process($composer_command, $composer_directory, 'Composer Install', array(), TRUE);
+        provision_process($composer_command, $composer_directory, 'Composer Install', array(), TRUE, dt('Composer Install failed.'));
 
         drush_log(dt('Composer install complete.'), 'ok');
 
