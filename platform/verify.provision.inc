@@ -14,6 +14,26 @@ function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
 
     // Verify the platform first.
+    _drush_provision_verify_current_platform();
+
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+    provision_prepare_environment();
+
+    _provision_drupal_create_settings_file();
+    provision_drupal_push_site();
+
+    drush_errors_on();
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+  }
+}
+
+/**
+ * Helper function to run provision-verify logic on the current site's platform.
+ * Can only be used when a Site context is active.
+ * Called before from site verify and site install commands.
+ */
+function _drush_provision_verify_current_platform() {
+  if (d()->type == 'site' && d()->platform) {
     drush_log(dt('Verifying platform before site...'), 'ok');
     $result = provision_backend_invoke(d()->platform->name, 'provision-verify');
     if ($result['error_status']) {
@@ -27,18 +47,8 @@ function drush_provision_drupal_provision_verify_validate() {
       drush_log(dt('Platform verified without error. Continuing on to site.'), 'ok');
       drush_log("", 'ok');
     }
-
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
-    provision_prepare_environment();
-
-    _provision_drupal_create_settings_file();
-    provision_drupal_push_site();
-
-    drush_errors_on();
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
   }
 }
-
 
 /**
  * Implements drush_hook_pre_COMMAND().
@@ -100,7 +110,7 @@ function drush_provision_drupal_pre_provision_verify() {
           "--recursive",
           d()->git_remote,
           d()->git_root,
-      ]);
+      ], null, dt('Cloning git repository to @directory ...', array('@directory' => d()->git_root)), [], TRUE);
     }
 
     // 2. Git Platform, does exist.
