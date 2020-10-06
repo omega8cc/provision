@@ -56,6 +56,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('git_root', d()->platform->git_root);
     $this->setProperty('git_remote', d()->platform->git_remote);
     $this->setProperty('git_reference', d()->platform->git_reference);
+    $this->setProperty('git_docroot', d()->platform->git_docroot);
 
   }
 
