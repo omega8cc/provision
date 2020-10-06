@@ -159,8 +159,14 @@ function drush_provision_drupal_pre_provision_verify() {
       if (!empty(d()->git_remote)) {
 
         // Check that git_root is an actual .git working copy first
-        drush_log(dt('Setting git remote...'), 'ok');
-        $expected_git_config_path = d()->git_root . '/.git/config';
+        $t = [
+          '%git_remote' => d()->git_remote,
+          '%git_root' => d()->git_root,
+          '%git_reference' => d()->git_reference,
+          '%git_docroot' => d()->git_docroot,
+        ];
+        drush_log(dt('Setting git remote to %git_remote...', $t), 'ok');
+        $expected_git_config_path = d()->git_root . '/.git';
         if (file_exists($expected_git_config_path)) {
           provision_process([
             "git",
@@ -170,12 +176,10 @@ function drush_provision_drupal_pre_provision_verify() {
             d()->git_remote
           ],
             d()->git_root);
-          drush_log(dt('Setting git remote... Done'), 'ok');
+          drush_log(dt('Setting git remote to %git_remote... Done', $t), 'ok');
         }
         else {
-          drush_log(dt('Setting git remote... Skipped because no .git/config file was found in the path %git_root.', [
-            '%git_root' => d()->git_root
-          ]), 'warning');
+          drush_log(dt('Setting git remote to %git_remote... Skipped because the folder %git_root is not a local git repository. Run "git init" in that path if you wish to put the codebase into a git repository.', $t), 'warning');
         }
       }
 
