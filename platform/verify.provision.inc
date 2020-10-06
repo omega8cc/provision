@@ -173,7 +173,9 @@ function drush_provision_drupal_pre_provision_verify() {
           drush_log(dt('Setting git remote... Done'), 'ok');
         }
         else {
-          drush_log(dt('Setting git remote... Skipped because no .git/config file was found in git_root.'), 'warning');
+          drush_log(dt('Setting git remote... Skipped because no .git/config file was found in the path %git_root.', [
+            '%git_root' => d()->git_root
+          ]), 'warning');
         }
       }
 
