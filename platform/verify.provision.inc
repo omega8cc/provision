@@ -251,15 +251,8 @@ function drush_provision_drupal_pre_provision_verify() {
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-
-        // Implement Symfony Process component for line-by-line output logging.
-        drush_log(dt('Running composer install in directory (@directory)...', array(
-          '@directory' => $composer_directory,
-        )), 'ok');
-        provision_process($composer_command, $composer_directory, 'Composer Install', array(), TRUE, dt('Composer Install failed.'));
-
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @directory ...', array('@directory' => $composer_directory)), array(), TRUE, dt('Composer Install failed.'));
         drush_log(dt('Composer install complete.'), 'ok');
-
       }
     }
 
