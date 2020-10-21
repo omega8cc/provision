@@ -189,7 +189,7 @@ function drush_provision_drupal_pre_provision_verify() {
           drush_log(dt('Setting git remote to %git_remote... Done', $t), 'ok');
         }
         else {
-          drush_log(dt('Setting git remote to %git_remote... Skipped because the folder %git_root is not a local git repository. Run "git init" in that path if you wish to put the codebase into a git repository.', $t), 'warning');
+          drush_log(dt('Skipped setting git remote to %git_remote because the folder %git_root is not a local git repository. Run "git init" in that path if you wish to put the codebase into a git repository.', $t), 'warning');
         }
       }
 
@@ -206,7 +206,7 @@ function drush_provision_drupal_pre_provision_verify() {
       // Output Git Information
       drush_log(dt('Current working copy status'), 'ok');
       foreach ([
-                 ['git', 'show', '-q'],
+                 ['git', 'log', '-3'],
                  ['git', 'status'],
                  ['git', 'remote',  '-v'],
                ] as $command) {
