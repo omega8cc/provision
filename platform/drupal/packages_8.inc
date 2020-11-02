@@ -113,8 +113,13 @@ function _provision_system_query($type) {
     // $extensions_data = system_rebuild_module_data();
     // system_rebuild_module_data() is deprecated in D8 and removed in D9
     // https://www.drupal.org/project/drupal/issues/2926068
-    $extensions_rset = \Drupal::service('extension.list.module')->reset();
-    $extensions_data = \Drupal::service('extension.list.module')->getList();
+    if (version_compare(drush_drupal_version(), '8.7.0', '>=') ||
+      !function_exists('system_rebuild_module_data')) {
+      $extensions_rset = \Drupal::service('extension.list.module')->reset();
+      $extensions_data = \Drupal::service('extension.list.module')->getList();
+    else {
+      $extensions_data = system_rebuild_module_data();
+    }
   }
 
   foreach ($extensions_data as $name => $extension_data) {

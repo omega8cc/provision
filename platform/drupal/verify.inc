@@ -7,8 +7,14 @@
 if (drush_drupal_major_version() >= 8) {
   // system_rebuild_module_data() is deprecated in D8 and removed from D9
   // https://www.drupal.org/project/drupal/issues/2926068
-  $extensions_rset = \Drupal::service('extension.list.module')->reset();
-  drush_set_option('modules', _scrub_object(\Drupal::service('extension.list.module')->getList()), 'site');
+  if (version_compare(drush_drupal_version(), '8.7.0', '>=') ||
+    !function_exists('system_rebuild_module_data')) {
+    $extensions_rset = \Drupal::service('extension.list.module')->reset();
+    $extensions_data = \Drupal::service('extension.list.module')->getList();
+  else {
+    $extensions_data = system_rebuild_module_data();
+  }
+  drush_set_option('modules', _scrub_object($extensions_data), 'site');
   // Could be replaced with:
   // \Drupal::service('extension.list.theme')->reset()
   // \Drupal::service('extension.list.theme')->getList()
