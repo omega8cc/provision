@@ -590,7 +590,7 @@ port=%s
     }
     else {
       // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
-      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --single-transaction --quick --no-autocommit --skip-add-locks --hex-blob %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
+      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
 
       // Fail if db file already exists.
       $dump_file = fopen(d()->site_path . '/database.sql', 'x');
