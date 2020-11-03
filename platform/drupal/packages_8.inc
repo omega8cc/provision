@@ -117,6 +117,7 @@ function _provision_system_query($type) {
       !function_exists('system_rebuild_module_data')) {
       $extensions_rset = \Drupal::service('extension.list.module')->reset();
       $extensions_data = \Drupal::service('extension.list.module')->getList();
+    }
     else {
       $extensions_data = system_rebuild_module_data();
     }

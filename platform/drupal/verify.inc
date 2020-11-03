@@ -11,6 +11,7 @@ if (drush_drupal_major_version() >= 8) {
     !function_exists('system_rebuild_module_data')) {
     $extensions_rset = \Drupal::service('extension.list.module')->reset();
     $extensions_data = \Drupal::service('extension.list.module')->getList();
+  }
   else {
     $extensions_data = system_rebuild_module_data();
   }
