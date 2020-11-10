@@ -488,3 +488,36 @@ function hook_provision_backup_exclusions_alter(&$directories) {
   // Prevent backing up the CiviCRM Smarty cache.
   $directories[] = './files/civicrm/templates_c';
 }
+
+/**
+ * Alter the db options.
+ *
+ * @param $options
+ *   The options array to alter. This is empty by default.
+ * @param $dsn
+ *   The db data source name. For more info see
+ *   https://www.php.net/manual/en/pdo.construct.php.
+ */
+function hook_provision_db_options_alter(&$options, $dsn) {
+  // Azure requires specifying a SSL cert
+  // see https://docs.microsoft.com/en-us/azure/mysql/howto-configure-ssl
+
+  // List any servers that need the certificate here using their FQDN and/or
+  // their private/internal endpoints.
+  $servers = [
+    '10.0.0.1',
+    'my-prod-db-server.mysql.database.azure.com'
+  ];
+
+  // If the $dsn references one of the above servers, add the certificate.
+  // Sometimes things don't work as they should, hence the second line,
+  // via https://owendavies.net/articles/azure-php-mysql-ssl/.
+  foreach ($servers as $server) {
+    if (strpos($dsn, $server)) {
+      $options = array(
+        PDO::MYSQL_ATTR_SSL_CA => '/var/aegir/config/ssl.d/Combined.crt.pem',
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false
+      );
+    }
+  }
+}
