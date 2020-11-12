@@ -496,8 +496,10 @@ function hook_provision_backup_exclusions_alter(&$directories) {
  *   The user string to alter.
  * @param string $host
  *   The remote host, for reference.
+ * @param string $op
+ *   Optionally, the operation being performed.
  */
-function hook_provision_db_username_alter(&$user, $host) {
+function hook_provision_db_username_alter(&$user, $host, $op = '') {
   // Azure requires username@server
   // see http://bit.ly/azure-username-servername
 
@@ -509,7 +511,17 @@ function hook_provision_db_username_alter(&$user, $host) {
     '10.0.1.1' => 'my-stage-db-server',
     'my-stage-db-server.mysql.database.azure.com' => 'my-stage-db-server',
   ];
-  if (isset($servers[$host])) {
-    $user = $user . '@' . $servers[$host];
+  // On grant and revoke we need to make sure we're NOT sending the username
+  // in the username@host format.
+  if ($op == 'grant' || $op == 'revoke') {
+    $user = explode('@', $user)[0];
+  }
+  else {
+    if (isset($servers[$host])) {
+      // Only alter if it hasn't been altered before.
+      if (strpos($user, $servers[$host]) === FALSE) {
+        $user = $user . '@' . $servers[$host];
+      }
+    }
   }
 }
