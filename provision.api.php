@@ -488,3 +488,28 @@ function hook_provision_backup_exclusions_alter(&$directories) {
   // Prevent backing up the CiviCRM Smarty cache.
   $directories[] = './files/civicrm/templates_c';
 }
+
+/**
+ * Alter the db username.
+ *
+ * @param string $user
+ *   The user string to alter.
+ * @param string $host
+ *   The remote host, for reference.
+ */
+function hook_provision_db_username_alter(&$user, $host) {
+  // Azure requires username@server
+  // see http://bit.ly/azure-username-servername
+
+  // Figure out what IPs correspond to which servers, as they may be mapped as
+  // IP or may be FQDN. As host_in_aegir => server_short_name.
+  $servers = [
+    '10.0.0.1' => 'my-prod-db-server',
+    'my-prod-db-server.mysql.database.azure.com' => 'my-prod-db-server',
+    '10.0.1.1' => 'my-stage-db-server',
+    'my-stage-db-server.mysql.database.azure.com' => 'my-stage-db-server',
+  ];
+  if (isset($servers[$host])) {
+    $user = $user . '@' . $servers[$host];
+  }
+}
