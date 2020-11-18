@@ -203,19 +203,6 @@ function drush_provision_drupal_pre_provision_verify() {
         d()->git_root);
       drush_log(dt('Fetching latest changes... Done'), 'ok');
 
-      // Output Git Information
-      drush_log(dt('Current working copy status'), 'ok');
-      foreach ([
-                 ['git', 'log', '-3'],
-                 ['git', 'status'],
-                 ['git', 'remote',  '-v'],
-               ] as $command) {
-        provision_process($command, d()->git_root);
-        /** @var \Symfony\Component\Process\Process $process */
-        $process = drush_get_context('provision_process_result');
-        drush_log($process->getOutput(), 'ok');
-      }
-
       // Check out the git reference.
       if (!empty(d()->git_reference)) {
         // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
@@ -228,6 +215,19 @@ function drush_provision_drupal_pre_provision_verify() {
         ],
           d()->git_root
         );
+      }
+
+      // Output Git Information
+      drush_log(dt('Current working copy status'), 'ok');
+      foreach ([
+                 ['git', 'log', '-3'],
+                 ['git', 'status'],
+                 ['git', 'remote',  '-v'],
+               ] as $command) {
+        provision_process($command, d()->git_root);
+        /** @var \Symfony\Component\Process\Process $process */
+        $process = drush_get_context('provision_process_result');
+        drush_log($process->getOutput(), 'ok');
       }
     }
 
