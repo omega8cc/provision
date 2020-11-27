@@ -52,16 +52,50 @@ function drush_provision_drupal_pre_provision_verify() {
   }
   elseif (d()->type === 'platform') {
 
-    // Add platform root auto-discovery to avoid confusing
-    // Composer based D8 codebase root with Drupal real root.
-    d()->root = provision_auto_fix_platform_root(d()->root);
+    // Translation strings
+    $t = array();
+    $t['@root'] = d()->root;
+    $t['@makefile'] = d()->makefile;
+    $t['@git_root'] = d()->git_root;
+    $t['@git_remote'] = d()->git_remote;
+    $t['@git_reference'] = d()->git_reference;
 
-    drush_log(dt("Checking for platform at path @path...", array('@path' => d()->root)), 'debug');
-    drush_log(dt("Platform makefile: @makefile", array('@makefile' => d()->makefile)), 'debug');
-    
-    // Create a platform from a makefile, if it doesnt already exist and the makefile does.
-    if (!provision_file()->exists(d()->root)->status() && !empty(d()->makefile)) {
-      drush_log(dt("Platform path does not exist, fetching from drush makefile"), 'notice');
+    // There are 6 states possible here:
+    // 1. Git Platform, path does not exist.
+    // 2. Git Platform, path does exist.
+    // 3. makefile platform, path does not exist.
+    // 4. makefile platform, path does exist.
+    // 5. adhoc platform, path does not exist.
+    // 6. adhoc platform, path does exist.
+
+    // 1. Git Platform, does not exist.
+    if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
+      drush_log(dt("Directory @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), 'ok');
+
+      // git_remote is required if git_root is set.
+      if (empty(d()->git_remote)) {
+        return drush_set_error("DRUSH_GIT_FAILED", dt('The git_remote property is required when git_root is used.'));
+      }
+
+      // Clone the git repo.
+      provision_process([
+          "git",
+          "clone",
+          "--recursive",
+          d()->git_remote,
+          d()->git_root,
+      ]);
+    }
+
+    // 2. Git Platform, does exist.
+    elseif (!empty(d()->git_root) && file_exists(d()->git_root)) {
+      // @TODO: Confirm git remote and ref matches.
+      drush_log(dt('Directory already exists at specified git_root: @git_root', $t), 'ok');
+    }
+
+    // 3. makefile platform, path does not exist.
+    elseif (!empty(d()->makefile) && !file_exists(d()->root)) {
+      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), 'notice');
       $arguments = array();
       $options = array();
       // Propagate working-copy args downward.
@@ -70,7 +104,7 @@ function drush_provision_drupal_pre_provision_verify() {
       }
       $arguments[] = d()->makefile;
       $arguments[] = d()->root;
-      
+
       // Change current directory to makefile's directory until Drush fixes this bug: https://github.com/drush-ops/drush/issues/2482
       // @TODO: Remove this once is committed.
       if (!empty(d()->makefile) && file_exists(dirname(d()->makefile))) {
@@ -84,33 +118,125 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
 
+    // 4. makefile platform, path does exist.
+    elseif (!empty(d()->makefile) && file_exists(d()->root)) {
+      drush_log(dt('Platform makefile destination path (@root) already exists.'), 'notice');
+    }
+
+    // 5. adhoc platform, path does not exist.
+    elseif (empty(d()->git_root) && !file_exists(d()->root)) {
+      return drush_set_error("DRUSH_PLATFORM_VERIFY_FAILED",
+          dt("Nothing found at platform root (@root). Install code manually or set 'makefile' or 'git_remote' properties.", $t));
+
+    }
+
+    // 6. adhoc platform, path does exist.
+    elseif (empty(d()->git_root) && file_exists(d()->root)) {
+      drush_log(dt('Platform path found (@root).'), 'notice');
+    }
+
+
+    // Run things if git  git_reference
+    if (!empty(d()->git_root)) {
+
+      // Set git remote
+      if (!empty(d()->git_remote)) {
+
+        // Check that git_root is an actual .git working copy first
+        drush_log(dt('Setting git remote...'), 'ok');
+        $expected_git_config_path = d()->git_root . '/.git/config';
+        if (file_exists($expected_git_config_path)) {
+          provision_process([
+            "git",
+            "remote",
+            "set-url",
+            "origin",
+            d()->git_remote
+          ],
+            d()->git_root);
+          drush_log(dt('Setting git remote... Done'), 'ok');
+        }
+        else {
+          drush_log(dt('Setting git remote... Skipped because no .git/config file was found in git_root.'), 'warning');
+        }
+      }
+
+      // Fetch latest changes
+      drush_log(dt('Fetching latest changes...'), 'ok');
+      provision_process([
+        "git",
+        "fetch",
+        "-a",
+      ],
+        d()->git_root);
+      drush_log(dt('Fetching latest changes... Done'), 'ok');
+
+      // Output Git Information
+      drush_log(dt('Current working copy status'), 'ok');
+      foreach ([
+                 ['git', 'show', '-q'],
+                 ['git', 'status'],
+                 ['git', 'remote',  '-v'],
+               ] as $command) {
+        provision_process($command, d()->git_root);
+        /** @var \Symfony\Component\Process\Process $process */
+        $process = drush_get_context('provision_process_result');
+        drush_log($process->getOutput(), 'ok');
+      }
+
+      // Check out the git reference.
+      if (!empty(d()->git_reference)) {
+        // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
+        drush_log(dt('Checking out:'), 'ok');
+        $checkout_option = drush_get_option('git_checkout_option', NULL);
+        provision_process([
+          "git",
+          "checkout",
+          d()->git_reference
+        ],
+          d()->git_root
+        );
+      }
+    }
+
     // Composer Install Support
     // Step 0: if drush variable allows composer install on platforms, and check for composer executable fails, show warning.
-    if (drush_get_option('provision_composer_install_platforms', TRUE) && !shell_exec('composer')) {
+    $composer_bin = shell_exec('which composer');
+    if (drush_get_option('provision_composer_install_platforms', TRUE) && !shell_exec($composer_bin)) {
       drush_log(dt('The composer executable was not found. Install composer using instructions located at https://getcomposer.org/doc/00-intro.md#globally or, if you wish to disable composer install, set "provision_composer_install_platforms" to FALSE in the ~/.drush/drushrc.php file.'), 'warning');
     }
     // If drush variable allows composer install on platforms (and composer exec passed)...
     elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
-      // Detect composer-based platform and run composer install if it has not been run yet.
-      // Step 1: Look for composer directory. Could be Drupal root. Could be the git repo_root.
-      if (provision_file()->exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
+      drush_log(dt('Composer bin found: @composer_bin', array(
+        '@composer_bin' => $composer_bin,
+      )), 'ok');
+
+      // Detect composer.json and run composer install.
+      // Step 1: Look for composer directory in git_root or root.
+      if (!empty(d()->git_root) && file_exists(d()->git_root . DIRECTORY_SEPARATOR . 'composer.json')) {
+        $composer_directory = d()->git_root;
+      }
+      elseif (!empty(d()->root) && file_exists(d()->root . DIRECTORY_SEPARATOR . 'composer.json')) {
         $composer_directory = d()->root;
       }
-      elseif (d()->repo_path && provision_file()->exists(d()->repo_path . DIRECTORY_SEPARATOR . 'composer.json')->status()) {
-        $composer_directory = d()->repo_path;
+      else {
+        $composer_directory = NULL;
       }
 
-      // Step 2: Run composer install if composer.json is present.
-      // If drush option provision_composer_install_platforms_verify_always is set to
-      // false, only run `composer-install` if ./vendor directory is missing.
-      if (isset($composer_directory) && (!file_exists($composer_directory . DIRECTORY_SEPARATOR . 'vendor') || drush_get_option('provision_composer_install_platforms_verify_always', TRUE))) {
+      // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
+      if ($composer_directory && drush_get_option('provision_composer_install_platforms_verify_always', TRUE)) {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
-        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev');
+        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
         // Implement Symfony Process component for line-by-line output logging.
-        provision_process($composer_command, $composer_directory);
+        drush_log(dt('Running composer install in directory (@directory)...', array(
+          '@directory' => $composer_directory,
+        )), 'ok');
+        provision_process($composer_command, $composer_directory, 'Build');
+
+        drush_log(dt('Composer install complete.'), 'ok');
 
       }
     }
@@ -166,12 +292,9 @@ function drush_provision_drupal_pre_provision_verify() {
   }
   elseif (d()->type === 'site') {
 
-    // Re-set the ROOT PATH for Drush.
-    // In cases where we just build the platform Drush would have cleared this value.
-    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
-    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
-
+    // @TODO: Remove once we are sure provision-packages works.
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
@@ -197,11 +320,6 @@ function drush_provision_drupal_pre_provision_verify() {
  * Implements drush_hook_provision_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_verify() {
-
-  // Add platform root auto-discovery to avoid confusing
-  // Composer based D8 codebase root with Drupal real root.
-  d()->root = provision_auto_fix_platform_root(d()->root);
-
   if (d()->type === 'site') {
     _provision_drupal_rebuild_caches();
     drush_set_option('installed', TRUE, 'site');

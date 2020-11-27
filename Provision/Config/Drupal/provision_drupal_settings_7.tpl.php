@@ -137,9 +137,9 @@ if (isset($_SERVER['db_name'])) {
 
   global $conf;
   $conf['install_profile'] = '<?php print $this->profile ?>';
-  $conf['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
-  $conf['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
-  $conf['file_temporary_path'] = 'sites/<?php print $this->uri ?>/private/temp';
+  $conf['file_public_path'] = '<?php print $this->file_public_path ?>';
+  $conf['file_private_path'] = '<?php print $this->file_private_path ?>';
+  $conf['file_temporary_path'] = '<?php print $this->file_temporary_path ?>';
   $drupal_hash_salt = '';
   $conf['clean_url'] = 1;
   $conf['aegir_api'] = <?php print $this->api_version ? $this->api_version : 0 ?>;
