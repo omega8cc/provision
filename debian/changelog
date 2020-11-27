@@ -1,3 +1,10 @@
+aegir3-provision (3.190) unstable; urgency=medium
+
+  * Bugfixes and UI improvements, see https://docs.aegirproject.org/release-notes/3.19/
+  * Include Drupal 7.75
+
+ -- Herman van Rink <helmo@initfour.nl>  Fri, 27 Nov 2020 14:54:31 +0100
+
 aegir3-provision (3.190~beta1) unstable; urgency=medium
 
   * Beta for upcomming maintenance release
