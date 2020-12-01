@@ -175,7 +175,6 @@ function drush_provision_drupal_pre_provision_verify() {
           '%git_reference' => d()->git_reference,
           '%git_docroot' => d()->git_docroot,
         ];
-        drush_log(dt('Setting git remote to %git_remote...', $t), 'ok');
         $expected_git_config_path = d()->git_root . '/.git';
         if (file_exists($expected_git_config_path)) {
           provision_process([
@@ -185,8 +184,7 @@ function drush_provision_drupal_pre_provision_verify() {
             "origin",
             d()->git_remote
           ],
-            d()->git_root);
-          drush_log(dt('Setting git remote to %git_remote... Done', $t), 'ok');
+            d()->git_root, dt('Setting git remote to %git_remote...', $t), [], TRUE);
         }
         else {
           drush_log(dt('Skipped setting git remote to %git_remote because the folder %git_root is not a local git repository. Run "git init" in that path if you wish to put the codebase into a git repository.', $t), 'warning');
@@ -194,27 +192,23 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Fetch latest changes
-      drush_log(dt('Fetching latest changes...'), 'ok');
       provision_process([
         "git",
         "fetch",
         "-a",
       ],
-        d()->git_root);
-      drush_log(dt('Fetching latest changes... Done'), 'ok');
+        d()->git_root, dt('Fetching latest changes...'), [], TRUE);
 
       // Check out the git reference.
       if (!empty(d()->git_reference)) {
         // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
-        drush_log(dt('Checking out:'), 'ok');
         $checkout_option = drush_get_option('git_checkout_option', NULL);
         provision_process([
           "git",
           "checkout",
           d()->git_reference
         ],
-          d()->git_root
-        );
+          d()->git_root, dt('Checking out git reference %git_reference ...', $t), [], TRUE);
       }
 
       // Output Git Information
@@ -224,7 +218,7 @@ function drush_provision_drupal_pre_provision_verify() {
                  ['git', 'status'],
                  ['git', 'remote',  '-v'],
                ] as $command) {
-        provision_process($command, d()->git_root);
+        provision_process($command, d()->git_root, t('Git Information'), [], TRUE);
         /** @var \Symfony\Component\Process\Process $process */
         $process = drush_get_context('provision_process_result');
         drush_log($process->getOutput(), 'ok');
@@ -261,7 +255,7 @@ function drush_provision_drupal_pre_provision_verify() {
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @directory ...', array('@directory' => $composer_directory)), array(), FALSE, dt('Composer Install failed.'));
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @directory ...', array('@directory' => $composer_directory)), array(), TRUE, dt('Composer Install failed.'));
         drush_log(dt('Composer install complete.'), 'ok');
       }
     }
