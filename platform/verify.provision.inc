@@ -218,7 +218,7 @@ function drush_provision_drupal_pre_provision_verify() {
                  ['git', 'status'],
                  ['git', 'remote',  '-v'],
                ] as $command) {
-        provision_process($command, d()->git_root, t('Git Information'), [], TRUE);
+        provision_process($command, d()->git_root, dt('Git Information'), [], TRUE);
         /** @var \Symfony\Component\Process\Process $process */
         $process = drush_get_context('provision_process_result');
         drush_log($process->getOutput(), 'ok');
