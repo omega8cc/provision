@@ -35,7 +35,12 @@ function drush_provision_drupal_provision_verify_validate() {
 function _drush_provision_verify_current_platform() {
   if (d()->type == 'site' && d()->platform) {
     drush_log(dt('Verifying platform before site...'), 'ok');
-    $result = provision_backend_invoke(d()->platform->name, 'provision-verify');
+    $args = array();
+    $options = array();
+    $options['runner'] = drush_get_option('runner');
+    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+
+    $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
     if ($result['error_status']) {
       drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
         '@alias' => d()->platform->name,
@@ -43,9 +48,8 @@ function _drush_provision_verify_current_platform() {
       return drush_get_error();
     }
     else {
-      drush_log("", 'ok');
-      drush_log(dt('Platform verified without error. Continuing on to site.'), 'ok');
-      drush_log("", 'ok');
+      # @TODO: Platforms are not receiving package data when sites are verifying.
+      drush_log(dt('Platform verified without error. Continuing on to site.'), $provision_log_type);
     }
   }
 }
@@ -57,8 +61,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
-  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
-
+  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
   if (d()->type === 'server') {
 
     $config_root = dirname(d()->config_path);
