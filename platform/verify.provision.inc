@@ -176,7 +176,7 @@ function drush_provision_drupal_pre_provision_verify() {
           '%git_docroot' => d()->git_docroot,
         ];
         $expected_git_config_path = d()->git_root . '/.git';
-        if (file_exists($expected_git_config_path)) {
+        if (drush_get_option('provision_set_remote_url', false) && file_exists($expected_git_config_path)) {
           provision_process([
             "git",
             "remote",
@@ -185,9 +185,6 @@ function drush_provision_drupal_pre_provision_verify() {
             d()->git_remote
           ],
             d()->git_root, dt('Setting git remote to %git_remote...', $t), [], TRUE);
-        }
-        else {
-          drush_log(dt('Skipped setting git remote to %git_remote because the folder %git_root is not a local git repository. Run "git init" in that path if you wish to put the codebase into a git repository.', $t), 'warning');
         }
       }
 
