@@ -21,8 +21,9 @@ function drush_provision_drupal_provision_packages_validate() {
  */
 function drush_provision_packages() {
   if (d()->type === 'platform') {
+    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
 
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'ok');
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), $provision_log_type);
     $packages_list =  _scrub_object(provision_find_packages());
 
     foreach ($packages_list as $type => $packages) {
@@ -33,7 +34,7 @@ function drush_provision_packages() {
             '@count' => count($packages),
             '@type' => $type,
             '@packages' => implode(', ', array_keys($packages)))
-        ), 'ok');
+        ), $provision_log_type);
       }
       else {
         foreach ($packages as $package_type => $type_list) {
@@ -42,7 +43,7 @@ function drush_provision_packages() {
               '@type' => $type,
               '@package_type' => $package_type,
               '@packages' => implode(', ', array_keys($type_list)))
-          ), 'ok');
+          ), $provision_log_type);
         }
       }
     }
