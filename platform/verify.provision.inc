@@ -54,6 +54,11 @@ function _drush_provision_verify_current_platform() {
  * Implements drush_hook_pre_COMMAND().
  */
 function drush_provision_drupal_pre_provision_verify() {
+
+  // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
+  // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
+  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+
   if (d()->type === 'server') {
 
     $config_root = dirname(d()->config_path);
@@ -110,7 +115,7 @@ function drush_provision_drupal_pre_provision_verify() {
           "--recursive",
           d()->git_remote,
           d()->git_root,
-      ], null, dt('Cloning git repository to @directory ...', array('@directory' => d()->git_root)), [], TRUE);
+      ], null, dt('Cloning git repository to @directory ...', array('@directory' => d()->git_root)), [], TRUE, NULL, TRUE, $provision_log_type);
     }
 
     // 2. Git Platform, does exist.
@@ -184,7 +189,7 @@ function drush_provision_drupal_pre_provision_verify() {
             "origin",
             d()->git_remote
           ],
-            d()->git_root, dt('Setting git remote to %git_remote...', $t), [], TRUE);
+            d()->git_root, dt('Setting git remote to %git_remote...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
         }
       }
 
@@ -194,7 +199,7 @@ function drush_provision_drupal_pre_provision_verify() {
         "fetch",
         "-a",
       ],
-        d()->git_root, dt('Fetching latest changes...'), [], TRUE);
+        d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
       // Check out the git reference.
       if (!empty(d()->git_reference)) {
@@ -205,7 +210,7 @@ function drush_provision_drupal_pre_provision_verify() {
           "checkout",
           d()->git_reference
         ],
-          d()->git_root, dt('Checking out git reference %git_reference ...', $t), [], TRUE);
+          d()->git_root, dt('Checking out git reference %git_reference ...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
       }
 
       // Output Git Information
@@ -215,7 +220,7 @@ function drush_provision_drupal_pre_provision_verify() {
                  ['git', 'status'],
                  ['git', 'remote',  '-v'],
                ] as $command) {
-        provision_process($command, d()->git_root, dt('Git Information'), [], TRUE);
+        provision_process($command, d()->git_root, dt('Git Information'), [], TRUE, NULL, TRUE, $provision_log_type);
         /** @var \Symfony\Component\Process\Process $process */
         $process = drush_get_context('provision_process_result');
         drush_log($process->getOutput(), 'ok');
@@ -252,10 +257,6 @@ function drush_provision_drupal_pre_provision_verify() {
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-
-        // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
-        // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
-        $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
 
         provision_process($composer_command, $composer_directory, dt('Running command in @directory: @command', array(
           '@directory' => $composer_directory,
