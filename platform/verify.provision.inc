@@ -255,7 +255,15 @@ function drush_provision_drupal_pre_provision_verify() {
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @directory ...', array('@directory' => $composer_directory)), array(), TRUE, dt('Composer Install failed.'));
+
+        // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
+        // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
+        $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+
+        provision_process($composer_command, $composer_directory, dt('Running command in @directory: @command', array(
+          '@directory' => $composer_directory,
+          '@command' => $composer_command,
+        )), array(), TRUE, dt('Composer Install failed.'), TRUE, $provision_log_type);
         drush_log(dt('Composer install complete.'), 'ok');
       }
     }
