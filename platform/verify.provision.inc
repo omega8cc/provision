@@ -184,7 +184,9 @@ function drush_provision_drupal_pre_provision_verify() {
           '%git_docroot' => d()->git_docroot,
         ];
         $expected_git_config_path = d()->git_root . '/.git';
-        if (drush_get_option('provision_set_remote_url', false) && file_exists($expected_git_config_path)) {
+
+        // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
+        if (drush_get_option('set-remote', false) && file_exists($expected_git_config_path)) {
           provision_process([
             "git",
             "remote",
