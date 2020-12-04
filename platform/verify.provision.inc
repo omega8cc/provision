@@ -206,6 +206,7 @@ function drush_provision_drupal_pre_provision_verify() {
       ],
         d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
+      // @TODO: Use logic to determine what commands to run here.
       // Check out the git reference.
       if (!empty(d()->git_reference)) {
         // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
@@ -226,9 +227,6 @@ function drush_provision_drupal_pre_provision_verify() {
                  ['git', 'remote',  '-v'],
                ] as $command) {
         provision_process($command, d()->git_root, dt('Git Information'), [], TRUE, NULL, TRUE, $provision_log_type);
-        /** @var \Symfony\Component\Process\Process $process */
-        $process = drush_get_context('provision_process_result');
-        drush_log($process->getOutput(), 'ok');
       }
     }
 
