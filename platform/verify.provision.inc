@@ -127,14 +127,14 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     // 5. adhoc platform, path does not exist.
-    elseif (empty(d()->git_root) && !file_exists(d()->root)) {
+    elseif (!file_exists(d()->root)) {
       return drush_set_error("DRUSH_PLATFORM_VERIFY_FAILED",
           dt("Nothing found at platform root (@root). Install code manually or set 'makefile' or 'git_remote' properties.", $t));
 
     }
 
     // 6. adhoc platform, path does exist.
-    elseif (empty(d()->git_root) && file_exists(d()->root)) {
+    elseif (file_exists(d()->root)) {
       drush_log(dt('Platform path found (@root).'), 'notice');
     }
 
