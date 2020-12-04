@@ -213,7 +213,14 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // @TODO: Fix provision's composer autoloader so we can integrate devshop components to reuse GitRepository stuff.
       // Check out the git reference.
-      $current_branch = d()->platform->getBranch();
+      $current_branch = trim(d()->getBranch());
+      drush_log(dt('Current Reference: %branch', [
+        '%branch' => $current_branch,
+      ]), $provision_log_type);
+
+      drush_log(dt('Desired Reference: %branch', [
+        '%branch' => d()->git_reference,
+      ]), $provision_log_type);
 
       // If d()->git_reference does not match current git branch, checkout.
       if (!empty(d()->git_reference)) {
@@ -234,7 +241,7 @@ function drush_provision_drupal_pre_provision_verify() {
         "reset",
         $provision_git_reset? "--hard": "",
         "origin/" . d()->git_reference,
-      ], d()->platform->repo_path, dt('Reset code to match upstream reference...'), [], TRUE, NULL, TRUE, $provision_log_type);
+      ], d()->git_root, dt('Reset code to match upstream reference...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
       // Update submodules.
       provision_process([
@@ -244,8 +251,7 @@ function drush_provision_drupal_pre_provision_verify() {
         "--init",
         "--recursive",
         $provision_git_reset? "--force": "",
-        "origin/" . d()->git_reference,
-      ], d()->platform->repo_path, dt('Init and update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
+      ], d()->git_root, dt('Init and update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
       // Output Git Information
       drush_log(dt('Current working copy status'), 'ok');
