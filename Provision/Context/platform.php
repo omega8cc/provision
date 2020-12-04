@@ -107,16 +107,12 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
-   * Return TRUE if git_root is on a branch.
-   */
-  public function isBranch() {
-    $this->execSuccess('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
-  }
-
-  /**
    * Return the branch name.
    */
-  public function getBranch() {
-    $this->execOutput('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
+  public function getBranch()
+  {
+    if (!empty($this->git_root)) {
+      return provision_process('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
+    }
   }
 }
