@@ -73,16 +73,50 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
-   * Return TRUE if git_root is in DETACHED HEAD state.
-   * https://stackoverflow.com/questions/52221558/programmatically-check-if-head-is-detached
+   * Run a command and return true or false if it worked.
    */
-  public function isDetached() {
+  public function execSuccess($command, $pwd) {
     try {
-      $process = new \Symfony\Component\Process\Process('git symbolic-ref -q HEAD', $this->git_root);
+      $process = new \Symfony\Component\Process\Process($command, $pwd);
       $process->mustRun();
       return FALSE;
     } catch (\Exception $e) {
       return TRUE;
     }
+  }
+
+  /**
+   * Run a command and return true or false if it worked.
+   */
+  public function execOutput($command, $pwd) {
+    try {
+      $process = new \Symfony\Component\Process\Process($command, $pwd);
+      $process->mustRun();
+      return $process->getOutput();
+    } catch (\Exception $e) {
+      return TRUE;
+    }
+  }
+
+  /**
+   * Return TRUE if git_root is in DETACHED HEAD state.
+   * https://stackoverflow.com/questions/52221558/programmatically-check-if-head-is-detached
+   */
+  public function isDetached() {
+    $this->execSuccess('git symbolic-ref -q HEAD', $this->git_root);
+  }
+
+  /**
+   * Return TRUE if git_root is on a branch.
+   */
+  public function isBranch() {
+    $this->execSuccess('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
+  }
+
+  /**
+   * Return the branch name.
+   */
+  public function getBranch() {
+    $this->execOutput('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
   }
 }
