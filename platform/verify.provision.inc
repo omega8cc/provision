@@ -246,6 +246,7 @@ function drush_provision_drupal_pre_provision_verify() {
       // Step 1: Look for composer directory in git_root or root.
       // Copied from composer Application.php
       $dir = d()->root;
+      $home = realpath(getenv('HOME') ?: getenv('USERPROFILE') ?: '/');
       while (dirname($dir) !== $dir && $dir !== $home) {
         // Copied from Factory::getComposerFile()
         $getComposerFile = trim(getenv('COMPOSER')) ?: './composer.json';
