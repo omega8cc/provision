@@ -98,8 +98,11 @@ function drush_provision_drupal_provision_backup() {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
 
+  $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+  drush_shell_exec($exclude_tag);
+
   $command_base = "tar cpf";
-  $command_arguments = " %s" . drush_provision_drupal_provision_backup_get_exclusions() . " .";
+  $command_arguments = " %s --exclude-tag=exclude.tag .";
   if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
   }
@@ -135,7 +138,7 @@ function drush_provision_drupal_provision_backup_get_exclusions() {
 
   $exclusions = "";
   foreach ($directories as $directory) {
-    $exclusions .= " --exclude='$directory'";
+    $exclusions .= " '$directory'/exclude.tag";
   }
   return $exclusions;
 }
