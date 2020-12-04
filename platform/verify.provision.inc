@@ -62,6 +62,9 @@ function drush_provision_drupal_pre_provision_verify() {
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
   $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+  // Reset if --git-reset was passed.
+  $provision_git_reset = drush_get_option('git-reset', TRUE);
+
   if (d()->type === 'server') {
 
     $config_root = dirname(d()->config_path);
@@ -202,22 +205,47 @@ function drush_provision_drupal_pre_provision_verify() {
       provision_process([
         "git",
         "fetch",
-        "-a",
+        "--all",
+        "--tags",
+        "--recurse-submodules",
       ],
         d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
-      // @TODO: Use logic to determine what commands to run here.
+      // @TODO: Fix provision's composer autoloader so we can integrate devshop components to reuse GitRepository stuff.
       // Check out the git reference.
+      $current_branch = d()->platform->getBranch();
+
+      // If d()->git_reference does not match current git branch, checkout.
       if (!empty(d()->git_reference)) {
         // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
         $checkout_option = drush_get_option('git_checkout_option', NULL);
         provision_process([
           "git",
           "checkout",
-          d()->git_reference
+          d()->git_reference,
+          $provision_git_reset? "--force": "",
         ],
-          d()->git_root, dt('Checking out git reference %git_reference ...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+          d()->git_root, dt('Checking out git reference %git_reference...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
       }
+
+      // Reset Code to match desired remote git_reference
+      provision_process([
+        "git",
+        "reset",
+        $provision_git_reset? "--hard": "",
+        "origin/" . d()->git_reference,
+      ], d()->platform->repo_path, dt('Reset code to match upstream reference...'), [], TRUE, NULL, TRUE, $provision_log_type);
+
+      // Update submodules.
+      provision_process([
+        "git",
+        "submodule",
+        "update",
+        "--init",
+        "--recursive",
+        $provision_git_reset? "--force": "",
+        "origin/" . d()->git_reference,
+      ], d()->platform->repo_path, dt('Init and update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
 
       // Output Git Information
       drush_log(dt('Current working copy status'), 'ok');
