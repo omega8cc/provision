@@ -155,6 +155,9 @@ function install_main() {
     drush_log('Site installation caused an exception: ' . $e->getMessage(), 'error');
     drush_log("Trace: \n" . $e->getTraceAsString(), 'error');
     dlm($e);
+
+    # Site install failed. Do no proceed further through install_main();
+    return;
   }
   _provision_drupal_create_directories();
 
