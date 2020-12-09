@@ -73,6 +73,7 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
+   * @TODO: Implement GitRepoAwareTrait.
    * Run a command and return true or false if it worked.
    */
   public function execSuccess($command, $pwd) {
@@ -112,7 +113,7 @@ class Provision_Context_platform extends Provision_Context {
   public function getBranch()
   {
     if (!empty($this->git_root)) {
-      return provision_process('git symbolic-ref --quiet --short HEAD 2> /dev/null', $this->git_root);
+      return shell_exec("cd $this->git_root && git symbolic-ref --quiet --short HEAD 2> /dev/null");
     }
   }
 }
