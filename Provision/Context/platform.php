@@ -113,7 +113,37 @@ class Provision_Context_platform extends Provision_Context {
   public function getBranch()
   {
     if (!empty($this->git_root)) {
-      return shell_exec("cd $this->git_root && git symbolic-ref --quiet --short HEAD 2> /dev/null");
+      return trim(shell_exec("cd $this->git_root && git symbolic-ref --quiet --short HEAD 2> /dev/null"));
+    }
+  }
+
+  /**
+   * Return the branch name.
+   * @TODO: Implement branch-or-tag.
+   */
+  public function getTag()
+  {
+    if (!empty($this->git_root)) {
+      return trim(shell_exec("cd $this->git_root && git describe --tags --exact-match 2> /dev/null"));
+    }
+  }
+
+  /**
+   * Return the currently checked out branch or tag.
+   */
+  public function getBranchOrTag()
+  {
+    $branch = $this->getBranch();
+    $tag = $this->getTag();
+
+    if ($branch) {
+      return $branch;
+    }
+    elseif ($tag) {
+      return $tag;
+    }
+    else {
+      return FALSE;
     }
   }
 }

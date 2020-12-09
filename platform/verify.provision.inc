@@ -213,9 +213,8 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // @TODO: Fix provision's composer autoloader so we can integrate devshop components to reuse GitRepository stuff.
       // Check out the git reference.
-      $current_branch = trim(d()->getBranch());
       drush_log(dt('Current Reference: %branch', [
-        '%branch' => $current_branch,
+        '%branch' => d()->getBranchOrTag(),
       ]), $provision_log_type);
 
       drush_log(dt('Desired Reference: %branch', [
