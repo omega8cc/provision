@@ -148,7 +148,6 @@ function install_main() {
   catch (Exception $e) {
     drush_log('Site installation caused an exception: ' . $e->getMessage(), 'error');
     drush_log("Trace: \n" . $e->getTraceAsString(), 'debug');
-    dlm($e);
 
     # Site install failed. Do no proceed further through install_main();
     return;
