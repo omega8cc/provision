@@ -492,7 +492,8 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   $commandLine = $process->getCommandLine();
   $message = "[{$label}] {$commandLine}";
   if ($log_output) {
-    drush_log($message, 'p_command');
+    // If $log_type is specified other than the default, use that so it is visible. p_command is piped to aegir UI.
+    drush_log($message, $log_type != 'p_info'? $log_type: 'p_command');
 
     $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
       drush_log($buffer, $log_type);
