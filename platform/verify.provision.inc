@@ -415,3 +415,61 @@ function drush_provision_drupal_post_provision_verify() {
     }
   }
 }
+
+/**
+ * Helper for verifying the chosen path is a git repo.
+ *
+ * @param bool $set_error
+ *   Use drush_set_error when it's not a repo, default to TRUE.
+ *   Set to FALSE to silently check if a directory is a Git repo.
+ *
+ * @return bool
+ *   TRUE if it's a functional Git repository, FALSE otherwise.
+ *
+ */
+function provision_git_is_repo($repo_path = NULL, $set_error = TRUE) {
+  // If no path specified, use the site or platform path of the alias.
+  if (!$repo_path) {
+    $repo_path = drush_get_option('repo_path');
+  }
+  if (!$repo_path) {
+    if (d()->type === 'site') {
+      $repo_path = d()->site_path ? d()->site_path : d()->root;
+    } elseif (d()->type == 'platform') {
+      $repo_path = d()->platform->root ? d()->platform->root : d()->root;
+    }
+  }
+
+  // Do not allow /var/aegir to be repo_path.
+  // See https://www.drupal.org/node/2893588
+  if ($repo_path == '/var/aegir') {
+    $repo_path = NULL;
+    drush_set_option('repo_path', $repo_path);
+    return drush_set_error('PROVISION_GIT_ERROR', dt('Warning: The "repo_path" for this !type is set to "/var/aegir". This is not allowed. Please manually edit the drush alias file in /var/aegir/.drush/!file.alias.drushrc.php.  Option repo_path has been unset.', array(
+      '!file' => ltrim(d()->name, '@'),
+      '!type' => d()->type,
+    )));
+  }
+
+  // If repo_path does not exist, or git status returns False, this is not a git repo
+  if (!file_exists($repo_path . '/.git/config') || !drush_shell_cd_and_exec($repo_path, 'git status')) {
+    if ($set_error) {
+      drush_set_error('DRUSH_PROVISION_GIT_PULL_FAILED', dt("Git repository not found in: !path", array('!path' => $repo_path)));
+    }
+    return FALSE;
+  } else {
+    // Find the toplevel directory for this git repository
+    if (drush_shell_cd_and_exec($repo_path, 'git rev-parse --show-toplevel')) {
+      $top_repo_path = implode("\n", drush_shell_exec_output());
+    }
+    if (drush_get_option('force_repo_path_as_toplevel', FALSE) && realpath($repo_path) != $top_repo_path) {
+      if ($set_error) {
+        drush_set_error('DRUSH_PROVISION_GIT_PULL_FAILED', dt("Path !path is not the toplevel dir of this Git repository.", array('!path' => $repo_path)));
+      }
+      return FALSE;
+    }
+    drush_log(dt("Git repository found in !path", array('!path' => $top_repo_path)), 'ok');
+    drush_set_option('repo_path', $top_repo_path);
+    return TRUE;
+  }
+}
