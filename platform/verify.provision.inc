@@ -62,8 +62,6 @@ function drush_provision_drupal_pre_provision_verify() {
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
   $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
-  // Reset if --git-reset was passed.
-  $provision_git_reset = drush_get_option('git-reset', TRUE);
 
   if (d()->type === 'server') {
 
@@ -93,12 +91,19 @@ function drush_provision_drupal_pre_provision_verify() {
     $t = array();
     $t['@root'] = d()->root;
     $t['@makefile'] = d()->makefile;
-    $t['@git_root'] = d()->git_root;
-    $t['@git_remote'] = d()->git_remote;
-    $t['@git_reference'] = d()->git_reference;
+
+    // Add git info to translations. (Working copy might not exist yet.)
+    if (!empty(d()->git_root)) {
+      // Desired state.
+      $t['@git_root'] = d()->git_root;
+      $t['@git_remote'] = d()->git_remote;
+      $t['@git_reference'] = d()->git_reference;
+      $t['@git_docroot'] = d()->git_docroot;
+    }
 
     // There are 6 states possible here:
     // 1. Git Platform, path does not exist.
+    // 2. Git Platform, path does exist, but is not a git repo. (error)
     // 2. Git Platform, path does exist.
     // 3. makefile platform, path does not exist.
     // 4. makefile platform, path does exist.
@@ -107,11 +112,11 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 1. Git Platform, does not exist.
     if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
-      drush_log(dt("Directory @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), 'ok');
+      drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), $provision_log_type);
 
       // git_remote is required if git_root is set.
       if (empty(d()->git_remote)) {
-        return drush_set_error("DRUSH_GIT_FAILED", dt('The git_remote property is required when git_root is used.'));
+        return drush_set_error("DRUSH_GIT_FAILED", dt('The git_remote property is empty. Cannot continue.'));
       }
 
       // Clone the git repo.
@@ -121,18 +126,23 @@ function drush_provision_drupal_pre_provision_verify() {
           "--recursive",
           d()->git_remote,
           d()->git_root,
-      ], null, dt('Cloning git repository to @directory ...', array('@directory' => d()->git_root)), [], TRUE, NULL, TRUE, $provision_log_type);
+      ], null, dt('Cloning @git_remote to @git_root...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+    }
+
+    // 2. Git Platform, path does exist, but is not a git repo.
+    elseif (!empty(d()->git_root) && !provision_git_is_repo()) {
+      return drush_set_error("DRUSH_GIT_FAILED", dt('The path @git_root exists, but is not a git repository. Check the path and try again.'));
     }
 
     // 2. Git Platform, does exist.
-    elseif (!empty(d()->git_root) && file_exists(d()->git_root)) {
+    elseif (!empty(d()->git_root) && provision_git_is_repo()) {
       // @TODO: Confirm git remote and ref matches.
-      drush_log(dt('Directory already exists at specified git_root: @git_root', $t), 'ok');
+      drush_log(dt('Existing git repository found at @git_root.', $t), $provision_log_type);
     }
 
     // 3. makefile platform, path does not exist.
     elseif (!empty(d()->makefile) && !file_exists(d()->root)) {
-      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), 'notice');
+      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), $provision_log_type);
       $arguments = array();
       $options = array();
       // Propagate working-copy args downward.
@@ -172,108 +182,146 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Platform path found (@root).'), 'notice');
     }
 
+    // If this is a git platform...
+    if (provision_git_is_repo()) {
 
-    // Run things if git  git_reference
-    if (!empty(d()->git_root)) {
+      // Current State
+      $t['@git_reference_current'] = d()->getBranchOrTag();
+      // Only branch checkouts have "current" remotes.
+      $git_branch = d()->getBranch();
+      if ($git_branch) {
+        $t['@git_remote_current_name'] = d()->getCurrentRemoteName();
+        $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
+      }
+
+      drush_log(dt('Git repository clone detected.'), $provision_log_type);
+      drush_log(dt('Git Path: @root', $t), $provision_log_type);
+      drush_log(dt('Current State:'), $provision_log_type);
+      drush_log(dt('    Git Reference: @git_reference_current', $t), $provision_log_type);
+      if ($git_branch) {
+        drush_log(dt('    Git Remote: @git_remote_current', $t), $provision_log_type);
+      }
+      else {
+        drush_log(dt('    Git Remote: None (detached HEAD)', $t), $provision_log_type);
+      }
+
+      drush_log(dt('Desired State:'), $provision_log_type);
+      drush_log(dt('    Git Reference: @git_reference', $t), $provision_log_type);
+      drush_log(dt('    Git Remote: @git_remote', $t), $provision_log_type);
+
+      // Show git status, without "remote show" detail.
+      d()->displayGitStatus(FALSE);
 
       // Set git remote
-      if (!empty(d()->git_remote)) {
-
-        // Check that git_root is an actual .git working copy first
-        $t = [
-          '%git_remote' => d()->git_remote,
-          '%git_root' => d()->git_root,
-          '%git_reference' => d()->git_reference,
-          '%git_docroot' => d()->git_docroot,
-        ];
-        $expected_git_config_path = d()->git_root . '/.git';
-
-        // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
-        if (drush_get_option('set-remote', false) && file_exists($expected_git_config_path)) {
+      // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
+      // If there is a current and desired git_remote...
+      if (!empty($t['@git_remote_current']) && !empty($t['@git_remote'])) {
+        // and the current remote differs from the desired remote, throw a warning.
+        $remotes_differ = $t['@git_remote_current'] != $t['@git_remote'];
+        if ($remotes_differ && drush_get_option('set-remote', false) == FALSE) {
+          drush_log(dt('The desired and current git remotes differ, but will not be changed. Use the --set-remote option to change the remote URL to @git_remote.', $t), 'warning');
+        }
+        // If remotes differ, and set-remote was set to TRUE, set the remote URL.
+        elseif ($remotes_differ && drush_get_option('set-remote', false) == TRUE) {
           provision_process([
             "git",
             "remote",
             "set-url",
-            "origin",
+            $t['@git_remote_current_name'],
             d()->git_remote
           ],
-            d()->git_root, dt('Setting git remote to %git_remote...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+            d()->git_root, dt('Setting git remote @git_remote_current_name to @git_remote...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
         }
       }
 
-      // Fetch latest changes
-      provision_process([
-        "git",
-        "fetch",
-        "--all",
-        "--tags",
-        "--recurse-submodules",
-      ],
-        d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
-
-      // @TODO: Fix provision's composer autoloader so we can integrate devshop components to reuse GitRepository stuff.
-      // Check out the git reference.
-      drush_log(dt('Current Reference: %branch', [
-        '%branch' => d()->getBranchOrTag(),
-      ]), $provision_log_type);
-
-      drush_log(dt('Desired Reference: %branch', [
-        '%branch' => d()->git_reference,
-      ]), $provision_log_type);
-
-      // If d()->git_reference does not match current git branch, checkout.
-      if (!empty(d()->git_reference)) {
-        // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
-        $checkout_option = drush_get_option('git_checkout_option', NULL);
+      // Fetch all remote changes.
+      if (drush_get_option('no-fetch', FALSE)) {
+        drush_log(dt('Skipping git fetch due to --no-fetch option.'), $provision_log_type);
+      } else {
+        // Fetch latest changes
         provision_process([
+          "git",
+          "fetch",
+          "--all",
+          "--tags",
+          "--recurse-submodules",
+        ],
+          d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
+      }
+
+      // @TODO: Check dirty git status before checkout force and throw a warning.
+
+      // Check out the git reference, unless --no-checkout was specified or git_reference is empty.
+      if (drush_get_option('no-checkout', FALSE)) {
+        drush_log(dt('Skipping git checkout due to --no-checkout option.'), $provision_log_type);
+      }
+      elseif (empty(d()->git_reference)) {
+        drush_log(dt("Skipping git checkout because the platform's git_reference is empty."), $provision_log_type);
+      }
+      else {
+        // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
+        $checkout_options = explode(' ', drush_get_option('git_checkout_option', NULL));
+        $checkout_command = [
           "git",
           "checkout",
           d()->git_reference,
-          $provision_git_reset? "--force": "",
-        ],
-          d()->git_root, dt('Checking out git reference %git_reference...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+        ];
+        // If git_reset is set, show the diff and a message.
+        // We don't need to run git reset, git checkout --force is used instead.
+        if (d()->git_reset && drush_get_option('no-reset', FALSE) == TRUE) {
+          $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to --no-reset option.', $t);
+        }
+        elseif (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
+          $log_message = dt('Checking out git reference @git_reference, discarding local changes.', $t);
+          $checkout_command[] = '--force';
+          provision_process([
+            "git",
+            "diff",
+          ],
+            d()->git_root, dt('Git repository changes to be reset', $t), [], TRUE, dt('git diff failed.'), FALSE, $provision_log_type);
+        }
+        else {
+          $log_message = dt('Checking out git reference @git_reference...', $t);
+        }
+
+        $checkout_command = array_filter(array_merge($checkout_command, $checkout_options));
+        provision_process($checkout_command, d()->git_root, $log_message, [], TRUE, dt('Unable to checkout.'), TRUE, $provision_log_type);
       }
 
-      // Reset Code to match desired remote git_reference
-      provision_process([
-        "git",
-        "reset",
-        $provision_git_reset? "--hard": "",
-        "origin/" . d()->git_reference,
-      ], d()->git_root, dt('Reset code to match upstream reference...'), [], TRUE, NULL, TRUE, $provision_log_type);
-
-      // Update submodules.
-      provision_process([
-        "git",
-        "submodule",
-        "update",
-        "--init",
-        "--recursive",
-        $provision_git_reset? "--force": "",
-      ], d()->git_root, dt('Init and update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
-
-      // Output Git Information
-      drush_log(dt('Current working copy status'), 'ok');
-      foreach ([
-                 ['git', 'log', '-3'],
-                 ['git', 'status'],
-                 ['git', 'remote',  '-v'],
-               ] as $command) {
-        provision_process($command, d()->git_root, dt('Git Information'), [], TRUE, NULL, TRUE, $provision_log_type);
+      // Use Git Submodules
+      if (d()->hasGitSubmodules() && drush_get_option('no-submodules', FALSE) == TRUE) {
+        drush_log(dt('Git Submodules file was found, but submodules were not updated due to --no-submodules option.', $t), 'warning');
       }
+      elseif (d()->hasGitSubmodules() && drush_get_option('no-submodules', FALSE) == FALSE) {
+        $submodules_command = [
+          "git",
+          "submodule",
+          "update",
+          "--init",
+          "--recursive",
+        ];
+        // If git_reset is true and the --no-reset option was not used, add "force" to submodules.
+        if (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
+          $submodules_command[] = '--force';
+        }
+        provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
+      }
+      drush_log(dt('Post Git operations status:'), $provision_log_type);
+      d()->displayGitStatus(FALSE);
+      drush_log(dt('Git operations complete.'), $provision_log_type);
     }
 
     // Composer Install Support
     // Step 0: if drush variable allows composer install on platforms, and check for composer executable fails, show warning.
     $composer_bin = shell_exec('which composer');
     if (drush_get_option('provision_composer_install_platforms', TRUE) && !shell_exec($composer_bin)) {
-      drush_log(dt('The composer executable was not found. Install composer using instructions located at https://getcomposer.org/doc/00-intro.md#globally or, if you wish to disable composer install, set "provision_composer_install_platforms" to FALSE in the ~/.drush/drushrc.php file.'), 'warning');
+      return drush_set_error('DRUSH_COMPOSER_ERROR', dt('The composer executable was not found. Install composer using instructions located at https://getcomposer.org/doc/00-intro.md#globally or, if you wish to disable composer install, set "provision_composer_install_platforms" to FALSE in the ~/.drush/drushrc.php file.'));
     }
     // If drush variable allows composer install on platforms (and composer exec passed)...
     elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
       drush_log(dt('Composer bin found: @composer_bin', array(
         '@composer_bin' => $composer_bin,
-      )), 'ok');
+      )), $provision_log_type);
 
       // Detect composer.json and run composer install.
       // Step 1: Look for composer directory in git_root or root.
@@ -290,19 +338,23 @@ function drush_provision_drupal_pre_provision_verify() {
         $dir = dirname($dir);
       }
       $composer_directory = $dir;
+      $t['@composer_root'] = $composer_directory;
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
-      if ($composer_directory && drush_get_option('provision_composer_install_platforms_verify_always', TRUE)) {
+      if ($composer_directory && drush_get_option('no-composer-install', FALSE) == FALSE) {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
-        provision_process($composer_command, $composer_directory, dt('Running command in @directory: @command', array(
-          '@directory' => $composer_directory,
-          '@command' => $composer_command,
-        )), array(), TRUE, dt('Composer Install failed.'), TRUE, $provision_log_type);
-        drush_log(dt('Composer install complete.'), 'ok');
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], TRUE, dt('Composer Install failed.'), TRUE, $provision_log_type);
+        drush_log(dt('Composer install complete.'), $provision_log_type);
+      }
+      elseif (!$composer_directory) {
+        drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
+      }
+      elseif ($composer_directory && drush_get_option('no-composer-install', FALSE) == TRUE) {
+        drush_log(dt('Composer file was found, but composer install was not run due to --no-composer-install option.'), 'warning');
       }
     }
 
@@ -468,7 +520,6 @@ function provision_git_is_repo($repo_path = NULL, $set_error = TRUE) {
       }
       return FALSE;
     }
-    drush_log(dt("Git repository found in !path", array('!path' => $top_repo_path)), 'ok');
     drush_set_option('repo_path', $top_repo_path);
     return TRUE;
   }
