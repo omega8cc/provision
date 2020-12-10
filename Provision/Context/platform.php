@@ -21,6 +21,7 @@ class Provision_Context_platform extends Provision_Context {
       'git_remote' => 'platform: The URL of the git repository to use when creating this platform.',
       'git_reference' => 'platform: The git reference to check out. Can be a branch, tag or SHA. Defaults to the git repository default branch.',
       'git_docroot' => 'platform: The relative path within the git repository to expose to the web server.',
+      'git_reset' => 'platform: If true, reset any changes to this platform when verifying.',
     );
   }
 
@@ -32,6 +33,7 @@ class Provision_Context_platform extends Provision_Context {
     $this->setProperty('git_remote');
     $this->setProperty('git_reference');
     $this->setProperty('git_docroot');
+    $this->setProperty('git_reset', FALSE);
 
     // Load properties from composer
     $this->setProperty('commands', $this->findCommands());
