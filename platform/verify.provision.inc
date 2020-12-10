@@ -270,9 +270,11 @@ function drush_provision_drupal_pre_provision_verify() {
         // We don't need to run git reset, git checkout --force is used instead.
         if (d()->git_reset && drush_get_option('no-reset', FALSE) == TRUE) {
           $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to --no-reset option.', $t);
+          $run_git_reset = FALSE;
         }
         elseif (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
           $log_message = dt('Checking out git reference @git_reference, discarding local changes.', $t);
+          $run_git_reset = TRUE;
           $checkout_command[] = '--force';
           provision_process([
             "git",
@@ -280,12 +282,35 @@ function drush_provision_drupal_pre_provision_verify() {
           ],
             d()->git_root, dt('Git repository changes to be reset', $t), [], TRUE, dt('git diff failed.'), FALSE, $provision_log_type);
         }
+        elseif (!d()->git_reset) {
+          $run_git_reset = FALSE;
+          $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to git_reset == false.', $t);
+        }
         else {
+          $run_git_reset = FALSE;
           $log_message = dt('Checking out git reference @git_reference...', $t);
         }
 
         $checkout_command = array_filter(array_merge($checkout_command, $checkout_options));
         provision_process($checkout_command, d()->git_root, $log_message, [], TRUE, dt('Unable to checkout.'), TRUE, $provision_log_type);
+
+        // Reset to @{upstream}, only if there are not un-pushed commits.
+        if ($run_git_reset) {
+          if (d()->isAhead()) {
+            drush_log(dt('Skipping git reset because git repository has un-pushed commits.'), 'warning');
+          }
+          else {
+            // @TODO: Check if BEHIND: RESET will lose commits if repo is behind the remote.
+            $log_message = dt('Resetting to git upstream...');
+            $reset_command = [
+              "git",
+              "reset",
+              "--hard",
+              "@{upstream}"
+            ];
+            provision_process($reset_command, d()->git_root, $log_message, [], TRUE, dt('Unable to reset.'), TRUE, $provision_log_type);
+          }
+        }
       }
 
       // Use Git Submodules
