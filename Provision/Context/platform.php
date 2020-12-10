@@ -209,4 +209,18 @@ class Provision_Context_platform extends Provision_Context {
   public function hasGitSubmodules() {
     return file_exists(d()->git_root . DIRECTORY_SEPARATOR . '.gitmodules');
   }
+
+  /**
+   * Returns TRUE if the working directory has commits that have not been pushed to the remote.
+   *
+   * @return  boolean
+   */
+  public function isAhead()
+  {
+    $output = $this->execOutput("git status -sb");
+    if (strpos($output, 'ahead') !== FALSE) {
+      return TRUE;
+    }
+  }
+
 }
