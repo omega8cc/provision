@@ -79,8 +79,11 @@ class Provision_Context_platform extends Provision_Context {
    * @TODO: Implement GitRepoAwareTrait.
    * Run a command and return true or false if it worked.
    */
-  public function execSuccess($command, $pwd) {
+  public function execSuccess($command, $pwd = NULL) {
     try {
+      if (!$pwd) {
+        $pwd = $this->git_root;
+      }
       $process = new \Symfony\Component\Process\Process($command, $pwd);
       $process->mustRun();
       return FALSE;
@@ -90,16 +93,14 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
-   * Run a command and return true or false if it worked.
+   * Run a command and return output.
    */
-  public function execOutput($command, $pwd) {
-    try {
-      $process = new \Symfony\Component\Process\Process($command, $pwd);
-      $process->mustRun();
-      return $process->getOutput();
-    } catch (\Exception $e) {
-      return TRUE;
+  public function execOutput($command, $pwd = NULL) {
+    if (!$pwd) {
+      $pwd = $this->git_root;
     }
+    $command = "cd $pwd && $command 2> /dev/null";
+    return trim(shell_exec($command));
   }
 
   /**
@@ -148,5 +149,64 @@ class Provision_Context_platform extends Provision_Context {
     else {
       return FALSE;
     }
+  }
+
+  /**
+   * Returns the remote name, usually "origin".
+   * @return  array
+   */
+  public function getCurrentRemoteUrl()
+  {
+    // Only branch checkouts can have a remote.
+    $remote = $this->getCurrentRemoteName();
+    if (empty($remote)) {
+      return;
+    }
+    else {
+      $command = "git config remote.{$remote}.url";
+      return $this->execOutput($command);
+    }
+  }
+
+  /**
+   * Returns the remote name, usually "origin".
+   * @return  array
+   */
+  public function getCurrentRemoteName()
+  {
+    // Only branch checkouts can have a remote.
+    $branch = $this->getBranch();
+    if (empty($branch)) {
+      return;
+    }
+    else {
+      $command = "git config branch.{$branch}.remote";
+      return $this->execOutput($command);
+    }
+  }
+
+  /**
+   * Print out current git status, git remotes, and logs.
+   */
+  public function displayGitStatus($remote_show = false) {
+
+    // Output Git Information
+    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+    provision_process(['git', 'status', '--ahead-behind'], $this->git_root, dt('Git status'), [], TRUE, NULL, TRUE, $provision_log_type);
+    provision_process(['git', 'remote',  '--verbose'], $this->git_root, dt('Git Remotes'), [], TRUE, NULL, TRUE, $provision_log_type);
+    provision_process(['git', 'log',  '-2'], $this->git_root, dt('Git Log'), [], TRUE, NULL, TRUE, $provision_log_type);
+
+    // If there is a current remote, show it (includes access check.)
+    if ($remote_show && $remote_name = $this->getCurrentRemoteName()) {
+      provision_process(['git', 'remote', 'show', $remote_name], $this->git_root, dt('Current Remote Status'), [], TRUE, NULL, TRUE, $provision_log_type);
+    }
+  }
+
+  /**
+   * Return true if there is a .gitmodules folder in the root.
+   * @return bool
+   */
+  public function hasGitSubmodules() {
+    return file_exists(d()->git_root . DIRECTORY_SEPARATOR . '.gitmodules');
   }
 }
