@@ -430,7 +430,7 @@ function drush_provision_drupal_post_provision_verify() {
 function provision_git_is_repo($repo_path = NULL, $set_error = TRUE) {
   // If no path specified, use the site or platform path of the alias.
   if (!$repo_path) {
-    $repo_path = drush_get_option('repo_path');
+    $repo_path = d()->git_root;
   }
   if (!$repo_path) {
     if (d()->type === 'site') {
