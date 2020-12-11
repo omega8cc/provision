@@ -33,8 +33,9 @@ function drush_provision_drupal_provision_verify_validate() {
  * Called before from site verify and site install commands.
  */
 function _drush_provision_verify_current_platform() {
+  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
   if (d()->type == 'site' && d()->platform) {
-    drush_log(dt('Verifying platform before site...'), 'ok');
+    drush_log(dt('Verifying platform before site...'), $drush_log_type);
     $args = array();
     $options = array();
     $options['runner'] = drush_get_option('runner');
@@ -49,7 +50,7 @@ function _drush_provision_verify_current_platform() {
     }
     else {
       # @TODO: Platforms are not receiving package data when sites are verifying.
-      drush_log(dt('Platform verified without error. Continuing on to site.'), $provision_log_type);
+      drush_log(dt('Platform verified without error. Continuing on to site.'), $drush_log_type);
     }
   }
 }
@@ -62,6 +63,10 @@ function drush_provision_drupal_pre_provision_verify() {
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
   $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_notice': 'ok';
+
+  // If the runner of this command was hosting_task, use drush log to print processes.
+  $log_output = drush_get_option('runner') == 'hosting_task';
 
   if (d()->type === 'server') {
 
@@ -112,7 +117,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 1. Git Platform, does not exist.
     if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
-      drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), $provision_log_type);
+      drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), $drush_log_type);
 
       // git_remote is required if git_root is set.
       if (empty(d()->git_remote)) {
@@ -126,7 +131,7 @@ function drush_provision_drupal_pre_provision_verify() {
           "--recursive",
           d()->git_remote,
           d()->git_root,
-      ], null, dt('Cloning @git_remote to @git_root...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+      ], null, dt('Cloning @git_remote to @git_root...', $t), [], $log_output, NULL, TRUE, $provision_log_type);
     }
 
     // 2. Git Platform, path does exist, but is not a git repo.
@@ -137,12 +142,12 @@ function drush_provision_drupal_pre_provision_verify() {
     // 2. Git Platform, does exist.
     elseif (!empty(d()->git_root) && d()->isRepo()) {
       // @TODO: Confirm git remote and ref matches.
-      drush_log(dt('Existing git repository found at @git_root.', $t), $provision_log_type);
+      drush_log(dt('Existing git repository found at @git_root.', $t), $drush_log_type);
     }
 
     // 3. makefile platform, path does not exist.
     elseif (!empty(d()->makefile) && !file_exists(d()->root)) {
-      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), $provision_log_type);
+      drush_log(dt('Platform makefile destination path (@root) does not exist, building from drush makefile (@makefile)', $t), $drush_log_type);
       $arguments = array();
       $options = array();
       // Propagate working-copy args downward.
@@ -194,20 +199,20 @@ function drush_provision_drupal_pre_provision_verify() {
         $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
       }
 
-      drush_log(dt('Git repository clone detected.'), $provision_log_type);
-      drush_log(dt('Git Path: @root', $t), $provision_log_type);
-      drush_log(dt('Current State:'), $provision_log_type);
-      drush_log(dt('    Git Reference: @git_reference_current', $t), $provision_log_type);
+      drush_log(dt('Git repository clone detected.'), $drush_log_type);
+      drush_log(dt('Git Path: @root', $t), $drush_log_type);
+      drush_log(dt('Current State:'), $drush_log_type);
+      drush_log(dt('    Git Reference: @git_reference_current', $t), $drush_log_type);
       if ($git_branch) {
-        drush_log(dt('    Git Remote: @git_remote_current', $t), $provision_log_type);
+        drush_log(dt('    Git Remote: @git_remote_current', $t), $drush_log_type);
       }
       else {
-        drush_log(dt('    Git Remote: None (detached HEAD)', $t), $provision_log_type);
+        drush_log(dt('    Git Remote: None (detached HEAD)', $t), $drush_log_type);
       }
 
-      drush_log(dt('Desired State:'), $provision_log_type);
-      drush_log(dt('    Git Reference: @git_reference', $t), $provision_log_type);
-      drush_log(dt('    Git Remote: @git_remote', $t), $provision_log_type);
+      drush_log(dt('Desired State:'), $drush_log_type);
+      drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
+      drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
 
       // Show git status, without "remote show" detail.
       d()->displayGitStatus(FALSE);
@@ -230,13 +235,13 @@ function drush_provision_drupal_pre_provision_verify() {
             $t['@git_remote_current_name'],
             d()->git_remote
           ],
-            d()->git_root, dt('Setting git remote @git_remote_current_name to @git_remote...', $t), [], TRUE, NULL, TRUE, $provision_log_type);
+            d()->git_root, dt('Setting git remote @git_remote_current_name to @git_remote...', $t), [], $log_output, NULL, TRUE, $provision_log_type);
         }
       }
 
       // Fetch all remote changes.
       if (drush_get_option('no-fetch', FALSE)) {
-        drush_log(dt('Skipping git fetch due to --no-fetch option.'), $provision_log_type);
+        drush_log(dt('Skipping git fetch due to --no-fetch option.'), $drush_log_type);
       } else {
         // Fetch latest changes
         provision_process([
@@ -246,17 +251,17 @@ function drush_provision_drupal_pre_provision_verify() {
           "--tags",
           "--recurse-submodules",
         ],
-          d()->git_root, dt('Fetching latest changes...'), [], TRUE, NULL, TRUE, $provision_log_type);
+          d()->git_root, dt('Fetching latest changes...'), [], $log_output, NULL, TRUE, $provision_log_type);
       }
 
       // @TODO: Check dirty git status before checkout force and throw a warning.
 
       // Check out the git reference, unless --no-checkout was specified or git_reference is empty.
       if (drush_get_option('no-checkout', FALSE)) {
-        drush_log(dt('Skipping git checkout due to --no-checkout option.'), $provision_log_type);
+        drush_log(dt('Skipping git checkout due to --no-checkout option.'), $drush_log_type);
       }
       elseif (empty(d()->git_reference)) {
-        drush_log(dt("Skipping git checkout because the platform's git_reference is empty."), $provision_log_type);
+        drush_log(dt("Skipping git checkout because the platform's git_reference is empty."), $drush_log_type);
       }
       else {
         // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
@@ -280,7 +285,7 @@ function drush_provision_drupal_pre_provision_verify() {
             "git",
             "diff",
           ],
-            d()->git_root, dt('Git repository changes to be reset', $t), [], TRUE, dt('git diff failed.'), FALSE, $provision_log_type);
+            d()->git_root, dt('Git repository changes to be reset', $t), [], $log_output, dt('git diff failed.'), FALSE, $provision_log_type);
         }
         elseif (!d()->git_reset) {
           $run_git_reset = FALSE;
@@ -292,7 +297,7 @@ function drush_provision_drupal_pre_provision_verify() {
         }
 
         $checkout_command = array_filter(array_merge($checkout_command, $checkout_options));
-        provision_process($checkout_command, d()->git_root, $log_message, [], TRUE, dt('Unable to checkout.'), TRUE, $provision_log_type);
+        provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Unable to checkout.'), TRUE, $provision_log_type);
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
         if ($run_git_reset) {
@@ -308,7 +313,7 @@ function drush_provision_drupal_pre_provision_verify() {
               "--hard",
               "@{upstream}"
             ];
-            provision_process($reset_command, d()->git_root, $log_message, [], TRUE, dt('Unable to reset.'), TRUE, $provision_log_type);
+            provision_process($reset_command, d()->git_root, $log_message, [], $log_output, dt('Unable to reset.'), TRUE, $provision_log_type);
           }
         }
       }
@@ -329,11 +334,10 @@ function drush_provision_drupal_pre_provision_verify() {
         if (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
           $submodules_command[] = '--force';
         }
-        provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], TRUE, NULL, TRUE, $provision_log_type);
+        provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], $log_output, NULL, TRUE, $provision_log_type);
       }
-      drush_log(dt('Post Git operations status:'), $provision_log_type);
       d()->displayGitStatus(FALSE);
-      drush_log(dt('Git operations complete.'), $provision_log_type);
+      drush_log(dt('Git operations complete.'), $drush_log_type);
     }
 
     // Composer Install Support
@@ -346,7 +350,7 @@ function drush_provision_drupal_pre_provision_verify() {
     elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
       drush_log(dt('Composer bin found: @composer_bin', array(
         '@composer_bin' => $composer_bin,
-      )), $provision_log_type);
+      )), $drush_log_type);
 
       // Detect composer.json and run composer install.
       // Step 1: Look for composer directory in git_root or root.
@@ -372,8 +376,8 @@ function drush_provision_drupal_pre_provision_verify() {
         // Customizable by setting drush option 'provision_composer_install_command'
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], TRUE, dt('Composer Install failed.'), TRUE, $provision_log_type);
-        drush_log(dt('Composer install complete.'), $provision_log_type);
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), TRUE, $provision_log_type);
+        drush_log(dt('Composer install complete.'), $drush_log_type);
       }
       elseif (!$composer_directory) {
         drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
@@ -430,7 +434,7 @@ function drush_provision_drupal_pre_provision_verify() {
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
 
     // @TODO: Convert to a call to "provision-packages".
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), 'ok');
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), $drush_log_type);
     // THIS WORKS:
     // Found 3 'profiles' packages in platform: standard, minimal, devmaster[ok]
     // THIS IS NO LONGER RUN IN PROVISION_BACKEND_INVOKE so ...
@@ -440,7 +444,7 @@ function drush_provision_drupal_pre_provision_verify() {
           '@count' => count($packages),
           '@type' => $type,
           '@packages' => implode(', ', array_keys($packages)))
-      ), 'ok');
+      ), $drush_log_type);
     }
     drush_set_option('packages', $packages_list, 'drupal');
     provision_drupal_push_site();
