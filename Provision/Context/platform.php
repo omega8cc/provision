@@ -234,7 +234,7 @@ class Provision_Context_platform extends Provision_Context {
    *   TRUE if it's a functional Git repository, FALSE otherwise.
    *
    */
-  public function isRepo($repo_path, $set_error = TRUE) {
+  public function isRepo($repo_path = null, $set_error = TRUE) {
     // If no path specified, use the site or platform path of the alias.
     if (!$repo_path) {
       $repo_path = d()->git_root;
