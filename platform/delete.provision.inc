@@ -49,27 +49,6 @@ function drush_provision_drupal_provision_delete() {
     drush_set_option('provision_save_config', false);
 
     _provision_recursive_delete(d()->site_path);
-
-    // If files paths are not in the default location, throw a warning saying
-    // they will not be deleted automatically.
-    foreach (array('file_public_path', 'file_private_path', 'file_temporary_path') as $property_name) {
-      $path = d()->{$property_name};
-
-      if (!drush_is_absolute_path($path)) {
-        $path = d()->root . DIRECTORY_SEPARATOR . '';
-      }
-
-      // If files path is not inside site path, don't delete it because there
-      // may be files from other sites.
-      // @TODO: Create a site property like 'file_directory_force_delete' to force
-      // deletion of files dirs that are outside of the site root.
-      if (strpos($path, d()->site_path) !== 0) {
-        drush_log(dt('Warning: File path "!name" was not deleted, because it may contain files from other sites. You must manually delete the folder.', array(
-          '!name' => $path,
-        )), 'warning');
-      }
-    }
-
     // we remove the aliases even if redirection is enabled as a precaution
     // if redirection is enabled, keep silent about errors
     _provision_drupal_delete_aliases();

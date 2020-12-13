@@ -330,7 +330,7 @@ function hook_provision_config_variables_alter(&$variables, $template, $config) 
  *   rsync'd over.
  */
 function hook_provision_platform_sync_path_alter(&$sync_path) {
-    $repo_path = d()->platform->git_root;
+    $repo_path = d()->platform->repo_path;
     if ($repo_path != d()->root) {
         $sync_path = $repo_path;
 

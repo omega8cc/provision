@@ -12,9 +12,6 @@ class Provision_Context_site extends Provision_Context {
       'platform' => 'site: the platform the site is run on',
       'db_server' => 'site: the db server the site is run on',
       'uri' => 'site: example.com URI, no http:// or trailing /',
-      'file_public_path' => 'site: path to public files folder. Defaults to sites/example.com/files',
-      'file_private_path' => 'site: path to private files folder. Defaults to sites/example.com/private/files',
-      'file_temporary_path' => 'site: path to temporary files folder. Defaults to sites/example.com/private/temp',
       'language' => 'site: site language; default en',
       'aliases' => 'site: comma-separated URIs',
       'redirection' => 'site: boolean for whether --aliases should redirect; default false',
@@ -49,9 +46,6 @@ class Provision_Context_site extends Provision_Context {
     // this can potentially be handled by a Drupal sub class
     $this->setProperty('profile', 'standard');
     $this->setProperty('install_method', 'profile');
-    $this->setProperty('file_public_path', 'sites/' . $this->uri . '/files');
-    $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
-    $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
   }
 
   /**
