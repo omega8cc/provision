@@ -1,3 +1,10 @@
+aegir3-provision (3.192) testing; urgency=medium
+
+  * Issue #3186056: Undo the rest of the 7.x-3.x-devshop merge 
+  * Include Drupal 7.77
+
+ -- Herman van Rink <helmo@initfour.nl>  Sun, 13 Dec 2020 12:43:24 +0100
+
 aegir3-provision (3.191) testing; urgency=medium
 
   * Fix #3186056: Error Verify Site
