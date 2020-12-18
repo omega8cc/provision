@@ -210,6 +210,37 @@ function provision_drush_command() {
       ),
       'override_slave_authority' => array(
         'description' => dt('Push the site specific files directory to a slave. This overrides the slaves authority.'),
+        'hidden' => TRUE,
+      ),
+      'runner' => array(
+        'description' => dt('Tell provision what tool is running this command. Used by hosting_task so provision knows to log things differently.'),
+        'hidden' => TRUE,
+        'example-value' => 'hosting_task',
+      ),
+      'no-reset' => array(
+        'description' => dt('Preserve any working copy changes by skipping git reset and not forcing checkout.'),
+      ),
+      'no-fetch' => array(
+        'description' => dt('Skip fetching changes from the git remote.'),
+      ),
+      'no-checkout' => array(
+        'description' => dt('Skip checking out the git_reference.'),
+      ),
+      'no-submodules' => array(
+        'description' => dt('Skip updating and resetting submodules along with the main code.'),
+      ),
+      // @TODO: change to no-build.
+      'no-composer-install' => array(
+        'description' => dt('Skip running the codebase building command. (Typically "composer install")'),
+      ),
+      'require-checkout' => array(
+        'description' => dt('If the git checkout fails, exit the verify process with an error. For example, if --no-reset is used but git repo has working copy changes, stop running the verify task.'),
+      ),
+      'set-remote' => array(
+        'description' => dt("Change the current git remote to match the site or platform's 'git_remote'."),
+      ),
+      'git-checkout-options' => array(
+        'description' => dt("Additional options to add to the git checkout command that is run. For example, if you want to create the branch specified by 'git_reference', you can set --git-checkout-options=-b"),
       ),
     ),
     'allow-additional-options' => TRUE,

@@ -264,8 +264,8 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt("Skipping git checkout because the platform's git_reference is empty."), $drush_log_type);
       }
       else {
-        // Allow callers to set git_checkout_option drush option. For example, set to "-b" to create a branch.
-        $checkout_options = explode(' ', drush_get_option('git_checkout_option', NULL));
+        // Allow callers to set git-checkout-options drush option. For example, set to "-b" to create a branch.
+        $checkout_options = explode(' ', drush_get_option('git-checkout-options', NULL));
         $checkout_command = [
           "git",
           "checkout",
@@ -290,7 +290,7 @@ function drush_provision_drupal_pre_provision_verify() {
         elseif (!d()->git_reset) {
           $run_git_reset = FALSE;
           // @TODO: Detect if this will fail because --force wasn't used.
-          $log_message = dt('Checking out git reference @git_reference...', $t);
+          $log_message = dt('Checking out git reference @git_reference, preserving any working copy changes...', $t);
         }
         else {
           $run_git_reset = FALSE;
@@ -377,6 +377,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
+        // @TODO: Change to provision platform property "build_command".
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
         provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), TRUE, $provision_log_type);
