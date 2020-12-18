@@ -278,7 +278,7 @@ function drush_provision_drupal_pre_provision_verify() {
           $run_git_reset = FALSE;
         }
         elseif (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
-          $log_message = dt('Checking out git reference @git_reference, discarding local changes.', $t);
+          $log_message = dt('Checking out git reference @git_reference, discarding local changes (--force)...', $t);
           $run_git_reset = TRUE;
           $checkout_command[] = '--force';
           provision_process([
@@ -289,15 +289,18 @@ function drush_provision_drupal_pre_provision_verify() {
         }
         elseif (!d()->git_reset) {
           $run_git_reset = FALSE;
-          $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to git_reset == false.', $t);
+          // @TODO: Detect if this will fail because --force wasn't used.
+          $log_message = dt('Checking out git reference @git_reference...', $t);
         }
         else {
           $run_git_reset = FALSE;
           $log_message = dt('Checking out git reference @git_reference...', $t);
         }
 
+        // Checkout could fail for many reasons so lets allow it to continue.
+        $exit_if_checkout_failed = drush_get_option('require-checkout', FALSE);
         $checkout_command = array_filter(array_merge($checkout_command, $checkout_options));
-        provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Unable to checkout.'), TRUE, $provision_log_type);
+        provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Git checkout failed.'), $exit_if_checkout_failed, $provision_log_type);
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
         if ($run_git_reset) {
