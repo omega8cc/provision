@@ -7,7 +7,7 @@
 
 /**
  * Implements drush_hook_COMMAND_validate().
- */
+ * @TODO: Finish this later
 function drush_provision_deploy_validate($target_git_reference = '') {
   if (empty($target_git_reference)) {
     drush_log(dt('No target git reference specified. Using stored git_reference @branch', array(
@@ -79,7 +79,6 @@ function drush_provision_deploy_validate($target_git_reference = '') {
  * Pre-deploy phase. Deployment options:
  *   1. Build: composer install
  *   2. Install: drush site-install / sql-sync
- */
 function drush_provision_pre_provision_deploy() {
   drush_log(dt('Pre-deploy phase begun...'), 'ok');
   sleep(1);
@@ -89,11 +88,11 @@ function drush_provision_pre_provision_deploy() {
   sleep(1);
   drush_provision_run_deploy_command('install');
 }
+ */
 
 /**
  * Check for and run a deploy command, if the command exists and --COMMAND option was passed.
  * @param $command_name
- */
 function drush_provision_run_deploy_command($command_name) {
   $deploy_commands = drush_get_option('deploy_commands', array());
   if (!empty($deploy_commands[$command_name])) {
@@ -127,21 +126,20 @@ function drush_provision_run_deploy_command($command_name) {
  *   3. Reset to origin/$git_reference (--hard if drush_option git_reset)
  *   4.
  *
- *
- *
- *
  */
 function drush_provision_deploy($target_git_reference = '') {
-  drush_log( dt('Deploy phase begun...'), 'ok');
-  drush_provision_run_deploy_command('deploy');
+  drush_log( dt('Deploy task begun...'), 'p_ok');
+  // drush_provision_run_deploy_command('deploy');
+  $options['runner'] = drush_get_option('runner');
+  provision_backend_invoke(d()->name, 'provision-verify', [], $options);
 }
 
 /**
  * Implements drush_post_COMMAND().
  */
 function drush_provision_post_provision_deploy() {
-  drush_log(dt('Post-deploy phase begun...'), 'ok');
-  drush_provision_run_deploy_command('test');
+  drush_log(dt('Deploy task complete, running post hooks...'), 'ok');
+  // drush_provision_run_deploy_command('test');
 }
 
 
