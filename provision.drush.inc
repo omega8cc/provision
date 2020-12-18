@@ -197,6 +197,7 @@ function provision_drush_command() {
   );
 
   $items['provision-verify'] = array(
+    'aliases' => array('v', 'pv', 'verify'),
     'arguments' => array('domain.com' => dt('The domain of the site to verify).')),
     'description' => 'Verify that the provisioning framework is correctly installed.',
     'examples' => array(
