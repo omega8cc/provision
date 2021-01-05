@@ -35,7 +35,7 @@ function drush_provision_drupal_provision_verify_validate() {
 function _drush_provision_verify_current_platform() {
   $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
   if (d()->type == 'site' && d()->platform) {
-    drush_log(dt('Verifying platform before site...'), $drush_log_type);
+    drush_log(dt('Verifying platform...'), $drush_log_type);
     $args = array();
     $options = array();
     $options['runner'] = drush_get_option('runner');
@@ -50,7 +50,7 @@ function _drush_provision_verify_current_platform() {
     }
     else {
       # @TODO: Platforms are not receiving package data when sites are verifying.
-      drush_log(dt('Platform verified without error. Continuing on to site.'), $drush_log_type);
+      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
     }
   }
 }
@@ -67,6 +67,10 @@ function drush_provision_drupal_pre_provision_verify() {
 
   // If the runner of this command was hosting_task, use drush log to print processes.
   $log_output = drush_get_option('runner') == 'hosting_task';
+
+  if ($log_output) {
+    drush_log(dt('Task is being run from Aegir hosting-task command.'), $drush_log_type);
+  }
 
   if (d()->type === 'server') {
 
