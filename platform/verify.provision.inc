@@ -315,7 +315,11 @@ function drush_provision_drupal_pre_provision_verify() {
               "--hard",
               "@{upstream}"
             ];
-            provision_process($reset_command, d()->git_root, $log_message, [], $log_output, dt('Unable to reset.'), TRUE, $provision_log_type);
+
+            // If the repo cannot be written to, git reset will fail.
+            // Ths code assumes allowing the `git reset` command to fail with a warning is the desired behavior.
+            $error_on_reset_fail = drush_get_option('error_on_git_reset_fail', false);
+            provision_process($reset_command, d()->git_root, $log_message, [], $log_output, dt('Unable to reset.'), $error_on_reset_fail, $provision_log_type);
           }
         }
       }
