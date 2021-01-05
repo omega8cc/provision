@@ -214,20 +214,15 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
 
-      // Show git status, without "remote show" detail.
-      d()->displayGitStatus(FALSE);
-
       // Set git remote
       // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
       // If there is a current and desired git_remote...
       if (!empty($t['@git_remote_current']) && !empty($t['@git_remote'])) {
         // and the current remote differs from the desired remote, throw a warning.
         $remotes_differ = $t['@git_remote_current'] != $t['@git_remote'];
-        if ($remotes_differ && drush_get_option('set-remote', false) == FALSE) {
-          drush_log(dt('The desired and current git remotes differ, but will not be changed. Use the --set-remote option to change the remote URL to @git_remote.', $t), 'warning');
-        }
-        // If remotes differ, and set-remote was set to TRUE, set the remote URL.
-        elseif ($remotes_differ && drush_get_option('set-remote', false) == TRUE) {
+
+        // If remotes differ, and site is not "protected", update remote.
+        if ($remotes_differ) {
           provision_process([
             "git",
             "remote",
