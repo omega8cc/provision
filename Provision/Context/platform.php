@@ -33,7 +33,7 @@ class Provision_Context_platform extends Provision_Context {
     $this->setProperty('git_remote');
     $this->setProperty('git_reference');
     $this->setProperty('git_docroot');
-    $this->setProperty('git_reset', FALSE);
+    $this->setProperty('git_reset', TRUE);
 
     // Load properties from composer
     $this->setProperty('commands', $this->findCommands());
