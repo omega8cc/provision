@@ -218,6 +218,8 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
 
+      d()->displayGitStatus(FALSE);
+
       // Set git remote
       // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
       // If there is a current and desired git_remote...

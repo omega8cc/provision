@@ -192,9 +192,12 @@ class Provision_Context_platform extends Provision_Context {
 
     // Output Git Information
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+    provision_process(['git', 'show',  '--compact-summary'], $this->git_root, dt('Current HEAD'), [], TRUE, NULL, TRUE, $provision_log_type);
     provision_process(['git', 'status', '--ahead-behind'], $this->git_root, dt('Git status'), [], TRUE, NULL, TRUE, $provision_log_type);
-    provision_process(['git', 'remote',  '--verbose'], $this->git_root, dt('Git Remotes'), [], TRUE, NULL, TRUE, $provision_log_type);
-    provision_process(['git', 'log',  '-2'], $this->git_root, dt('Git Log'), [], TRUE, NULL, TRUE, $provision_log_type);
+
+    if ($remote_show) {
+      provision_process(['git', 'remote',  '--verbose'], $this->git_root, dt('Git Remotes'), [], TRUE, NULL, TRUE, $provision_log_type);
+    }
 
     // If there is a current remote, show it (includes access check.)
     if ($remote_show && $remote_name = $this->getCurrentRemoteName()) {
