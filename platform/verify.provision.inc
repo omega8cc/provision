@@ -206,8 +206,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
       drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
 
-      drush_log(dt('Git repository clone detected.'), $drush_log_type);
-      drush_log(dt('Git Path: @root', $t), $drush_log_type);
+      drush_log(dt('Git repository clone detected in @git_root', $t), $drush_log_type);
       drush_log(dt('Current State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference_current', $t), $drush_log_type);
       if ($git_branch) {
