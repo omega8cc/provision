@@ -202,6 +202,9 @@ function drush_provision_drupal_pre_provision_verify() {
         $t['@git_remote_current_name'] = d()->getCurrentRemoteName();
         $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
       }
+      $t['@date'] = date('r');
+
+      drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
 
       drush_log(dt('Git repository clone detected.'), $drush_log_type);
       drush_log(dt('Git Path: @root', $t), $drush_log_type);
@@ -217,6 +220,11 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Desired State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
+
+      $remote_references_output = d()->getRemoteReferences();
+      drush_set_option('git_remote_references', $remote_references_output, 'drupal');
+      drush_log(dt("Current remote references as of @date:", $t), $drush_log_type);
+      drush_log(dt($remote_references_output), $drush_log_type);
 
       d()->displayGitStatus(FALSE);
 

@@ -206,6 +206,14 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
+   * Use git-ls remote to read all available git references.
+   */
+  public function getRemoteReferences()
+  {
+    return $this->execOutput("git ls-remote $this->git_remote");
+  }
+
+  /**
    * Return true if there is a .gitmodules folder in the root.
    * @return bool
    */
