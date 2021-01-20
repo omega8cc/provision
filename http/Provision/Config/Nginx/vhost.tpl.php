@@ -11,7 +11,7 @@ if ($this->redirection) {
   $satellite_mode = d('@server_master')->satellite_mode;
   // Redirect all aliases to the main http url using separate vhosts blocks to avoid if{} in Nginx.
   foreach ($this->aliases as $alias_url) {
-    if (!preg_match("/\.(?:nodns)\./", $alias_url)) {
+    if (!preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)) {
       print "\n";
       print "# alias redirection virtual host\n";
       print "server {\n";
@@ -156,9 +156,16 @@ server {
     } else {
       print $this->uri;
     }
+    if (is_array($this->aliases)) {
+      foreach ($this->aliases as $alias_url) {
+        if (trim($alias_url) && preg_match("/\.(?:dev|devel)\./", $alias_url)) {
+          print " " . str_replace('/', '.', $alias_url);
+        }
+      }
+    }
     if (!$this->redirection && is_array($this->aliases)) {
       foreach ($this->aliases as $alias_url) {
-        if (trim($alias_url)) {
+        if (trim($alias_url) && !preg_match("/\.(?:dev|devel)\./", $alias_url)) {
           print " " . str_replace('/', '.', $alias_url);
         }
       }

@@ -48,7 +48,7 @@ else {
 
 <?php if ($this->redirection): ?>
 <?php foreach ($this->aliases as $alias_url): ?>
-<?php if (!preg_match("/\.(?:nodns)\./", $alias_url)): ?>
+<?php if (!preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)): ?>
 server {
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
@@ -152,9 +152,16 @@ server {
     } else {
       print $this->uri;
     }
+    if (is_array($this->aliases)) {
+      foreach ($this->aliases as $alias_url) {
+        if (trim($alias_url) && preg_match("/\.(?:dev|devel)\./", $alias_url)) {
+          print " " . str_replace('/', '.', $alias_url);
+        }
+      }
+    }
     if (!$this->redirection && is_array($this->aliases)) {
       foreach ($this->aliases as $alias_url) {
-        if (trim($alias_url) && !preg_match("/\.(?:nodns)\./", $alias_url)) {
+        if (trim($alias_url) && !preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)) {
           print " " . str_replace('/', '.', $alias_url);
         }
       }
