@@ -75,7 +75,7 @@ class Provision_Service_db extends Provision_Service {
       drush_log(dt("URI is OK @uri", array('@uri' => $uri)), 'info');
     }
 
-    $suggest_base = substr(str_replace(array('.', '-'), '' , preg_replace('/^www\./', '', $uri)), 0, 16);
+    $suggest_base = substr(str_replace(array('.', '-'), '' , preg_replace('/^www\./', '', $uri)), 0, 63);
 
     if (!$suggest_base) {
       drush_log(dt("SUGGEST_BASE @suggest_base is EMPTY...", array('@suggest_base' => $suggest_base)), 'info');
@@ -89,7 +89,7 @@ class Provision_Service_db extends Provision_Service {
     }
 
     for ($i = 0; $i < 100; $i++) {
-      $option = sprintf("%s_%d", substr($suggest_base, 0, 15 - strlen( (string) $i) ), $i);
+      $option = sprintf("%s_%d", substr($suggest_base, 0, 63 - strlen( (string) $i) ), $i);
       if (!$this->database_exists($option)) {
         return $option;
       }
