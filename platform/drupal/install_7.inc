@@ -175,6 +175,28 @@ function install_main() {
 }
 install_main();
 
+function install_civicrm_dashboard() {
+  // Create a CiviCRM dashboard link in the navigation menu.
+  $options = array(
+    'link_title' => 'CiviCRM',
+    'link_path' => 'civicrm/dashboard',
+    'module' => 'civicrm',
+    'menu_name' => 'navigation',
+    'options' => array('alter' => TRUE),
+  );
+  menu_link_save($options);
+
+  // Update the menu router and cache information.
+  menu_rebuild();
+  menu_cache_clear_all();
+
+  drush_log(dt("CiviCRM: dashboard link in the navigation menu added in install_civicrm_dashboard."), 'ok');
+}
+
+if (provision_file()->exists(DRUPAL_ROOT . '/sites/all/modules/civicrm/drupal/civicrm.install')->status()) {
+  install_civicrm_dashboard();
+}
+
 function install_exception_handler() {
   dlm(func_get_args());
 }
