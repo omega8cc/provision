@@ -180,9 +180,6 @@ function install_civicrm_dashboard() {
   $options = array(
     'link_title' => 'CiviCRM',
     'link_path' => 'civicrm/dashboard',
-    'module' => 'civicrm',
-    'menu_name' => 'navigation',
-    'options' => array('alter' => TRUE),
   );
   menu_link_save($options);
 
