@@ -446,8 +446,21 @@ location ^~ /<?php print $subdir; ?> {
     if ( $is_bot ) {
       return 403;
     }
+    access_log off;
     set $nocache_details "Skip";
-    try_files /civicrm $uri @drupal_<?php print $subdir_loc; ?>;
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
+  }
+
+  ###
+  ### Avoid caching /civicrm* requests, but protect from bots on a multi-lingual site
+  ###
+  location ^~ /<?php print $subdir; ?>/\w\w/civicrm {
+    if ( $is_bot ) {
+      return 403;
+    }
+    access_log off;
+    set $nocache_details "Skip";
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
