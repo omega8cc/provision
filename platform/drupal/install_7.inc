@@ -184,7 +184,6 @@ function install_civicrm_dashboard() {
   menu_link_save($options);
 
   // Update the menu router and cache information.
-  menu_rebuild();
   menu_cache_clear_all();
 
   drush_log(dt("CiviCRM: dashboard link in the navigation menu added in install_civicrm_dashboard."), 'ok');

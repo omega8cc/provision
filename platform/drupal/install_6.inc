@@ -295,7 +295,7 @@ function install_main() {
   $tz_offset = date('Z');
   variable_set('date_default_timezone', $tz_offset);
 
-  menu_rebuild();
+  menu_cache_clear_all();
 
   // profile task
   // @TODO support install profiles with multiple additional tasks
@@ -353,7 +353,7 @@ function install_main() {
   // done task
   // Rebuild menu to get content type links registered by the profile,
   // and possibly any other menu items created through the tasks.
-  menu_rebuild();
+  menu_cache_clear_all();
 
   // Register actions declared by any modules.
   actions_synchronize();
