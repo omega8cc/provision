@@ -853,7 +853,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   ### Deny crawlers and never cache known AJAX requests.
   ###
-  location ~* ^/<?php print $subdir; ?>/(.*(?:ahah|ajax|batch|autocomplete|done|progress/|x-progress-id|js/.*).*)$ {
+  location ~* ^/<?php print $subdir; ?>/(.*(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*).*)$ {
     if ( $is_bot ) {
       return 403;
     }
