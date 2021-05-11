@@ -1359,7 +1359,7 @@ location @drupal {
   ### Fallback
   ###
   set $location_detected "Fallback";
-  rewrite ^ /index.php?$query_string last;
+  rewrite ^ /index.php?$query_string? last;
 }
 
 ###
@@ -1367,7 +1367,7 @@ location @drupal {
 ###
 location @legacy {
   set $location_detected "Legacy";
-  rewrite ^/(.*)$ /index.php?q=$1 last;
+  rewrite ^/(.*)$ /index.php?q=$1? last;
 }
 
 ###
@@ -1375,7 +1375,7 @@ location @legacy {
 ###
 location @regular {
   set $location_detected "Regular";
-  rewrite ^ /index.php?$query_string last;
+  rewrite ^ /index.php?$query_string? last;
 }
 
 ###
