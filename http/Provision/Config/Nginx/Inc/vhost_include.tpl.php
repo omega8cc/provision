@@ -356,7 +356,7 @@ location ^~ /js/ {
     if ( $is_bot ) {
       return 403;
     }
-    rewrite ^/(.*)$ /js.php?q=$1 last;
+    rewrite ^/(.*)$ /js.php?q=$1? last;
   }
 }
 

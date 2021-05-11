@@ -388,7 +388,7 @@ location ^~ /<?php print $subdir; ?> {
       if ( $is_bot ) {
         return 403;
       }
-      rewrite ^/<?php print $subdir; ?>/(.*)$ /js.php?q=$1 last;
+      rewrite ^/<?php print $subdir; ?>/(.*)$ /js.php?q=$1? last;
     }
   }
 
@@ -1222,7 +1222,7 @@ location @drupal_<?php print $subdir_loc; ?> {
   ###
   ### For Drupal 6
   ###
-  rewrite ^/<?php print $subdir; ?>/(.*)$  /<?php print $subdir; ?>/index.php?q=$1 last;
+  rewrite ^/<?php print $subdir; ?>/(.*)$  /<?php print $subdir; ?>/index.php?q=$1? last;
 }
 
 ###

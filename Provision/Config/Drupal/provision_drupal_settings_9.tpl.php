@@ -150,7 +150,7 @@ if (isset($_SERVER['db_name'])) {
    * depending on the request, so we should force this by redirecting
    * non-clean to clean URLs on the web server level - Nginx example:
    *
-   *   rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
+   *   rewrite ^/index.php/(.*)$ $scheme://$host/$1? permanent;
    *
    */
   $settings['clean_url'] = 1;
