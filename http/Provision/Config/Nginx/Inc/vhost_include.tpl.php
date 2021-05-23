@@ -356,7 +356,7 @@ location ^~ /js/ {
     if ( $is_bot ) {
       return 403;
     }
-    rewrite ^/(.*)$ /js.php?q=$1? last;
+    rewrite ^/(.*)$ /js.php?q=$1 last;
   }
 }
 
@@ -1367,7 +1367,7 @@ location @drupal {
 ###
 location @legacy {
   set $location_detected "Legacy";
-  rewrite ^/(.*)$ /index.php?q=$1? last;
+  rewrite ^/(.*)$ /index.php?q=$1 last;
 }
 
 ###
