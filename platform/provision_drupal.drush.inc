@@ -108,7 +108,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   ));
 
   // Sync the platform
-  $sync_path = d()->root;
+  $sync_path = d()->git_root;
   drush_command_invoke_all_ref('provision_platform_sync_path_alter', $sync_path);
   d()->service('http')->sync($sync_path, array('exclude-sites' => TRUE));
 
