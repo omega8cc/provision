@@ -428,6 +428,10 @@ password="%s"
 port=%s
 ', $db_host, $db_user, $db_passwd, $db_port);
 
+    if ($this->server->utf8mb4_is_supported) {
+      $mycnf .= "default-character-set=utf8mb4" . PHP_EOL;
+    }
+
     return $mycnf;
   }
 
