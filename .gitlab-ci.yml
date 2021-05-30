@@ -188,6 +188,8 @@ test:behat:
   allow_failure: true
   variables:
     AEGIR_TESTS_VERSION: "master"
+  only:
+    - /-runalltests$/
 
   before_script:
     - sudo apt-get update

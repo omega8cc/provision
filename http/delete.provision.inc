@@ -1,6 +1,10 @@
 <?php
 
 function drush_http_provision_delete() {
+  // We don't need to propagate server deletion.
+  if (d()->type === 'server') {
+    return;
+  }
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8 codebase root with Drupal real root.

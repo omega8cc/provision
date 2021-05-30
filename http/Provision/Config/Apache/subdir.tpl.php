@@ -15,7 +15,7 @@ Alias /<?php print $subdir; ?> <?php print $this->root; ?>
 
   SetEnv db_name  <?php print urlencode($db_name); ?>
 
-  SetEnv db_user  <?php print urlencode($db_user); ?>
+  SetEnv db_user  <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>
 
   SetEnv db_passwd  <?php print urlencode($db_passwd); ?>
 

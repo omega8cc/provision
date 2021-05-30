@@ -324,7 +324,7 @@ location ^~ /<?php print $subdir; ?> {
 
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
-    fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+    fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
     fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
     fastcgi_param db_host   <?php print urlencode($db_host); ?>;
     fastcgi_param db_port   <?php print urlencode($db_port); ?>;
@@ -820,7 +820,7 @@ location ^~ /<?php print $subdir; ?> {
 
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
-    fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+    fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
     fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
     fastcgi_param db_host   <?php print urlencode($db_host); ?>;
     fastcgi_param db_port   <?php print urlencode($db_port); ?>;
@@ -1015,7 +1015,7 @@ location ^~ /<?php print $subdir; ?> {
 
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
-    fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+    fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
     fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
     fastcgi_param db_host   <?php print urlencode($db_host); ?>;
     fastcgi_param db_port   <?php print urlencode($db_port); ?>;
@@ -1094,7 +1094,7 @@ location ^~ /<?php print $subdir; ?> {
 
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
-    fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+    fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
     fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
     fastcgi_param db_host   <?php print urlencode($db_host); ?>;
     fastcgi_param db_port   <?php print urlencode($db_port); ?>;
@@ -1247,7 +1247,7 @@ location @allowupdate_<?php print $subdir_loc; ?> {
 
   fastcgi_param db_type   <?php print urlencode($db_type); ?>;
   fastcgi_param db_name   <?php print urlencode($db_name); ?>;
-  fastcgi_param db_user   <?php print urlencode($db_user); ?>;
+  fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
   fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
   fastcgi_param db_host   <?php print urlencode($db_host); ?>;
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;

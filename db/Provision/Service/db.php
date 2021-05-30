@@ -308,7 +308,9 @@ class Provision_Service_db extends Provision_Service {
     $creds['db_port'] = drush_set_option('db_port', $this->server->db_port, 'site');
     $creds['db_passwd'] = drush_set_option('db_passwd', provision_password(), 'site');
     $creds['db_name'] = drush_set_option('db_name', $this->suggest_db_name(), 'site');
-    $creds['db_user'] = drush_set_option('db_user', $creds['db_name'], 'site');
+    $user = $creds['db_name'];
+    drush_command_invoke_all_ref('provision_db_username_alter', $user, $creds['db_host']);
+    $creds['db_user'] = drush_set_option('db_user', $user, 'site');
 
     return $creds;
   }
