@@ -167,6 +167,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $host = '%';
     }
     $host = ($host) ? $host : '%';
+    drush_command_invoke_all_ref('provision_db_username_alter', $username, '', 'revoke');
     $success = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $host);
 
     // check if there are any privileges left for the user
@@ -370,7 +371,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function grant_host(Provision_Context_server $server) {
-    $command = sprintf('mysql -u intntnllyInvalid -h %s -P %s -e "SELECT VERSION()"',
+    $user = 'intntnllyInvalid';
+    drush_command_invoke_all_ref('provision_db_username_alter', $user, $this->server->remote_host);
+
+    $command = sprintf('mysql -u %s -h %s -P %s -e "SELECT VERSION()"',
+      escapeshellarg($user),
       escapeshellarg($this->server->remote_host),
       escapeshellarg($this->server->db_port));
 
@@ -408,6 +413,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     if (is_null($db_user)) {
       $db_user = urldecode(drush_get_option('db_user'));
     }
+    drush_command_invoke_all_ref('provision_db_username_alter', $db_user, $db_host);
     if (is_null($db_passwd)) {
       $db_passwd = urldecode(drush_get_option('db_passwd'));
     }

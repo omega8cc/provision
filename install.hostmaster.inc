@@ -28,10 +28,12 @@ function drush_provision_hostmaster_install_pre_validate() {
     $db_host = 'localhost';
   }
 
-  $command = sprintf('mysql -u intntnllyInvalid -h %s -P %s -e "SELECT VERSION()"', drush_get_option('aegir_db_host', $db_host), drush_get_option('aegir_db_port', $db_port));
+  $user = 'intntnllyInvalid';
+  drush_command_invoke_all_ref('provision_db_username_alter', $user, drush_get_option('aegir_db_host', $db_host));
+  $command = sprintf('mysql -u %s -h %s -P %s -e "SELECT VERSION()"', $user, drush_get_option('aegir_db_host', $db_host), drush_get_option('aegir_db_port', $db_port));
   drush_shell_exec($command);
 
-  if (preg_match("/Access denied for user 'intntnllyInvalid'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
+  if (preg_match("/Access denied for user '{$user}'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
     return;
   }
   elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
