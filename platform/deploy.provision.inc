@@ -171,7 +171,7 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
 
   // Clear the whole cache, unless option is false
   if ($cache) {
-    if (drush_drupal_major_version(d()->root) == 8) {
+    if (drush_drupal_major_version(d()->root) >= 8) {
       $commands[] = "drush {$drush_alias} cache-rebuild";
     }
     else {
