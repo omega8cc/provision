@@ -18,15 +18,18 @@ class Provision_Service_db_pdo extends Provision_Service_db {
   function connect() {
     $user = isset($this->creds['user']) ? $this->creds['user'] : '';
     $pass = isset($this->creds['pass']) ? $this->creds['pass'] : '';
+    $options = [];
+
+    drush_command_invoke_all_ref('provision_db_options_alter', $options, $this->dsn);
     try {
-      $this->conn = new PDO($this->dsn, $user, $pass);
+      $this->conn = new PDO($this->dsn, $user, $pass, $options);
       return $this->conn;
     }
     catch (PDOException $e) {
       return drush_set_error('PROVISION_DB_CONNECT_FAIL', $e->getMessage());
     }
   }
-  
+
   function ensure_connected() {
     if (is_null($this->conn)) {
       $this->connect();
@@ -83,9 +86,11 @@ class Provision_Service_db_pdo extends Provision_Service_db {
   
   function database_exists($name) {
     $dsn = $this->dsn . ';dbname=' . $name;
+    $options = [];
+    drush_command_invoke_all_ref('provision_db_options_alter', $options, $dsn);
     try {
       // Try to connect to the DB to test if it exists.
-      $conn = new PDO($dsn, $this->creds['user'], $this->creds['pass']);
+      $conn = new PDO($dsn, $this->creds['user'], $this->creds['pass'], $options);
       // Free the $conn memory.
       $conn = NULL;
       return TRUE;
