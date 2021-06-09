@@ -1,6 +1,11 @@
 <?php
 
 function drush_http_provision_delete() {
+  // We don't need to propagate server deletion.
+  if (d()->type === 'server') {
+    return;
+  }
+
   if (d()->type === 'site') {
     d()->service('http')->delete_config('site')
         ->succeed('Deleted platform configuration file', 'success')

@@ -25,7 +25,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function can_create_database() {
-    $test = drush_get_option('aegir_db_prefix', 'site_') . 'test';
+    $test = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
     $this->create_database($test);
 
     if ($this->database_exists($test)) {
@@ -44,28 +44,57 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    *   TRUE if the check was successful.
    */
   function can_grant_privileges() {
-    $dbname   = drush_get_option('aegir_db_prefix', 'site_');
+    $dbname   = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
+    $this->create_database($dbname);
     $user     = $dbname . '_user';
     $password = $dbname . '_password';
     $host     = $dbname . '_host';
-    if ($status = $this->grant($dbname, $user, $password, $host)) {
-      $this->revoke($dbname, $user, $host);
-    }
+    $status = $this->grant($dbname, $user, $password, $host);
+    $this->revoke($dbname, $user, $host);
+    $this->drop_database($dbname);
     return $status;
   }
 
   function grant($name, $username, $password, $host = '') {
     $host = ($host) ? $host : '%';
+
     if ($host != "127.0.0.1") {
       $extra_host = "127.0.0.1";
-      $success_extra_host = $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $extra_host, $password);
+      $this->grant_privileges($name, $username, $password, $extra_host);
     }
-    // Issue: https://github.com/omega8cc/provision/issues/2
-    return $this->query("GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s` IDENTIFIED BY '%s'", $name, $username, $host, $password);
+
+    return $this->grant_privileges($name, $username, $password, $host);
+  }
+
+  function create_user($username, $host) {
+    $statement = "CREATE USER IF NOT EXISTS `%s`@`%s`";
+    return $this->query($statement, $username, $host);
+  }
+
+  function alter_user($username, $host, $password) {
+    $statement = "ALTER USER `%s`@`%s` IDENTIFIED BY '%s'";
+    return $this->query($statement, $username, $host, $password);
+  }
+
+  function grant_privileges($name, $username, $password, $host) {
+    $user_created = $this->create_user($username, $host);
+    $user_altered = $this->alter_user($username, $host, $password);
+    if (!$user_created) {
+      drush_log(dt("Failed to create db_user @name", array('@name' => $username)), 'error');
+      return $user_created;
+    }
+    if (!$user_altered) {
+      drush_log(dt("Failed to alter db_user @name", array('@name' => $username)), 'error');
+      return $user_altered;
+    }
+
+    $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
+    return $this->query($statement, $name, $username, $host);
   }
 
   function revoke($name, $username, $host = '') {
     $host = ($host) ? $host : '%';
+    drush_command_invoke_all_ref('provision_db_username_alter', $username, '', 'revoke');
     $success = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $host);
 
     // check if there are any privileges left for the user
@@ -126,7 +155,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function grant_host(Provision_Context_server $server) {
-    $command = sprintf('mysql -u intntnllyInvalid -h %s -P %s -e "SELECT VERSION()"',
+    $user = 'intntnllyInvalid';
+    drush_command_invoke_all_ref('provision_db_username_alter', $user, $this->server->remote_host);
+
+    $command = sprintf('mysql -u %s -h %s -P %s -e "SELECT VERSION()"',
+      escapeshellarg($user),
       escapeshellarg($this->server->remote_host),
       escapeshellarg($this->server->db_port));
 
@@ -164,6 +197,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     if (is_null($db_user)) {
       $db_user = urldecode(drush_get_option('db_user'));
     }
+    drush_command_invoke_all_ref('provision_db_username_alter', $db_user, $db_host);
     if (is_null($db_passwd)) {
       $db_passwd = urldecode(drush_get_option('db_passwd'));
     }
@@ -177,6 +211,10 @@ user=%s
 password="%s"
 port=%s
 ', $db_host, $db_user, $db_passwd, $db_port);
+
+    if ($this->server->utf8mb4_is_supported) {
+      $mycnf .= "default-character-set=utf8mb4" . PHP_EOL;
+    }
 
     return $mycnf;
   }

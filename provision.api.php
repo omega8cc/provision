@@ -488,3 +488,73 @@ function hook_provision_backup_exclusions_alter(&$directories) {
   // Prevent backing up the CiviCRM Smarty cache.
   $directories[] = './files/civicrm/templates_c';
 }
+
+/**
+ * Alter the db options.
+ *
+ * @param $options
+ *   The options array to alter. This is empty by default.
+ * @param $dsn
+ *   The db data source name. For more info see
+ *   https://www.php.net/manual/en/pdo.construct.php.
+ */
+function hook_provision_db_options_alter(&$options, $dsn) {
+  // Azure requires specifying a SSL cert
+  // see https://docs.microsoft.com/en-us/azure/mysql/howto-configure-ssl
+
+  // List any servers that need the certificate here using their FQDN and/or
+  // their private/internal endpoints.
+  $servers = [
+    '10.0.0.1',
+    'my-prod-db-server.mysql.database.azure.com'
+  ];
+
+  // If the $dsn references one of the above servers, add the certificate.
+  // Sometimes things don't work as they should, hence the second line,
+  // via https://owendavies.net/articles/azure-php-mysql-ssl/.
+  foreach ($servers as $server) {
+    if (strpos($dsn, $server)) {
+      $options = array(
+        PDO::MYSQL_ATTR_SSL_CA => '/var/aegir/config/ssl.d/Combined.crt.pem',
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false
+      );
+    }
+  }
+}
+
+/**
+ * Alter the db username.
+ *
+ * @param string $user
+ *   The user string to alter.
+ * @param string $host
+ *   The remote host, for reference.
+ * @param string $op
+ *   Optionally, the operation being performed.
+ */
+function hook_provision_db_username_alter(&$user, $host, $op = '') {
+  // Azure requires username@server
+  // see http://bit.ly/azure-username-servername
+
+  // Figure out what IPs correspond to which servers, as they may be mapped as
+  // IP or may be FQDN. As host_in_aegir => server_short_name.
+  $servers = [
+    '10.0.0.1' => 'my-prod-db-server',
+    'my-prod-db-server.mysql.database.azure.com' => 'my-prod-db-server',
+    '10.0.1.1' => 'my-stage-db-server',
+    'my-stage-db-server.mysql.database.azure.com' => 'my-stage-db-server',
+  ];
+  // On grant and revoke we need to make sure we're NOT sending the username
+  // in the username@host format.
+  if ($op == 'grant' || $op == 'revoke') {
+    $user = explode('@', $user)[0];
+  }
+  else {
+    if (isset($servers[$host])) {
+      // Only alter if it hasn't been altered before.
+      if (strpos($user, $servers[$host]) === FALSE) {
+        $user = $user . '@' . $servers[$host];
+      }
+    }
+  }
+}

@@ -235,7 +235,11 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
   public static function getPhp7FpmSocketPath() {
     foreach (scandir(static::SOCKET_PATH_PHP7_BASE, SCANDIR_SORT_DESCENDING) as $file) {
       if (strpos($file, 'fpm.sock')) {
-        return static::SOCKET_PATH_PHP7_BASE . '/' . $file;
+        $path = static::SOCKET_PATH_PHP7_BASE . '/' . $file;
+        # Confirm the socket file actually exists before returning it.
+        if (file_exists($path)) {
+          return $path;
+        }
       }
     }
     return FALSE;
