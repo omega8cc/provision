@@ -453,7 +453,7 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
  *   $process = drush_get_context('provision_process_result');
  *   print $process->getExitCode();
  *
- * @param string $command
+ * @param string|array $command
  *   The command to run
  * @param null $cwd
  *   The directory to run the command in.
@@ -487,7 +487,7 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   // Make sure colors always come through
   $env['TERM'] = 'xterm';
 
-  $process = new \Symfony\Component\Process\Process(escapeshellcmd($command), $cwd, $env);
+  $process = new \Symfony\Component\Process\Process($command, $cwd, $env);
   $process->setTimeout(NULL);
   $commandLine = $process->getCommandLine();
   $message = "[{$label}] {$commandLine}";
