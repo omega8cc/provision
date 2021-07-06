@@ -710,7 +710,7 @@ port=%s
     // Ensure that the MySQL server supports large prefixes and utf8mb4.
     $dbname = uniqid(drush_get_option('aegir_db_prefix', 'site_'));
     $this->create_database($dbname);
-    $success = $this->query("CREATE TABLE `%s`.`drupal_utf8mb4_test` (id VARCHAR(255), PRIMARY KEY(id(255))) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci ROW_FORMAT=DYNAMIC", $dbname);
+    $success = $this->query("CREATE TABLE `%s`.`drupal_utf8mb4_test` (id VARCHAR(255), PRIMARY KEY(id(255))) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC", $dbname);
     if (!$this->drop_database($dbname)) {
       drush_log(dt("Failed to drop database @dbname", array('@dbname' => $dbname)), 'warning');
     }

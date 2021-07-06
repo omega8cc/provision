@@ -51,7 +51,7 @@ if (isset($_SERVER['db_name'])) {
     'port' => (string) $_SERVER['db_port'],
 <?php if ($utf8mb4_is_configurable && $utf8mb4_is_supported): ?>
     'charset' => 'utf8mb4',
-    'collation' => 'utf8mb4_general_ci',
+    'collation' => 'utf8mb4_unicode_ci',
 <?php endif; ?>
   );
   $db_url['default'] = $_SERVER['db_type'] . '://' . $_SERVER['db_user'] . ':' . $_SERVER['db_passwd'] . '@' . $_SERVER['db_host'] . ':' . $_SERVER['db_port'] . '/' . $_SERVER['db_name'];
@@ -102,7 +102,7 @@ if (isset($_SERVER['db_name'])) {
     'port' => "<?php print $this->creds['db_port']; ?>",
 <?php if ($utf8mb4_is_configurable && $utf8mb4_is_supported): ?>
     'charset' => 'utf8mb4',
-    'collation' => 'utf8mb4_general_ci',
+    'collation' => 'utf8mb4_unicode_ci',
 <?php endif; ?>
    );
   $db_url['default'] = "<?php print strtr("%db_type://%db_user:%db_passwd@%db_host:%db_port/%db_name", array(
