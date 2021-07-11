@@ -102,7 +102,7 @@ function drush_provision_drupal_provision_backup() {
   drush_shell_exec($exclude_tag);
 
   $command_base = "tar cpf";
-  $command_arguments = " %s --exclude-tag=exclude.tag .";
+  $command_arguments = " %s --exclude-tag=exclude.tag";
   if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
   }
@@ -111,6 +111,7 @@ function drush_provision_drupal_provision_backup() {
   } else {
     $command = $command_base . $command_arguments;
   }
+  $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
 
   // Get the size of the backup
