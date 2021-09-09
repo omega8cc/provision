@@ -76,6 +76,7 @@ class Provision_Service_db extends Provision_Service {
     }
 
     $suggest_base = substr(str_replace(array('.', '-'), '' , preg_replace('/^www\./', '', $uri)), 0, 16);
+    drush_command_invoke_all_ref('provision_suggest_db_name_alter', $suggest_base);
 
     if (!$suggest_base) {
       drush_log(dt("SUGGEST_BASE @suggest_base is EMPTY...", array('@suggest_base' => $suggest_base)), 'info');

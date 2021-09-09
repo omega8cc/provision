@@ -64,11 +64,7 @@ case "$1" in
 
           if [ "$DRUSH_VERSION" = "stable" ]; then
 
-              DRUSH_PHAR_URL="https://github.com/drush-ops/drush/releases/download/8.1.16/drush.phar"
-
-          elif [ "$DRUSH_VERSION" = "unstable" ]; then
-
-              DRUSH_PHAR_URL="https://github.com/drush-ops/drush/releases/download/8.1.16/drush.phar"
+              DRUSH_PHAR_URL="https://github.com/drush-ops/drush/releases/download/8.4.8/drush.phar"
 
           elif [ "$DRUSH_MAJOR_VERSION" -ge "8" ]; then
 
@@ -93,7 +89,11 @@ case "$1" in
           else  # Drush versions prior to 8 aren't available as .phar's.
 
               # Install Drush.
-              su -c "composer global require drush/drush:$DRUSH_VERSION" aegir
+              if [ "$DRUSH_VERSION" = "unstable" ]; then
+                  su -c "composer global require drush/drush:8.x-dev" aegir
+              else
+                  su -c "composer global require drush/drush:$DRUSH_VERSION" aegir
+              fi
 
               # Rename an old drush executable.
               if [ -f /usr/local/bin/drush ]; then
@@ -126,5 +126,3 @@ esac
 #DEBHELPER#
 
 exit 0
-
-
