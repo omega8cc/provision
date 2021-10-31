@@ -7,6 +7,10 @@
     ServerAdmin <?php  print $this->site_mail; ?>
   <?php endif;?>
 
+  <IfModule mod_http2.c>
+    Protocols h2 http/1.1
+  </IfModule>
+
 <?php
 $aegir_root = drush_get_option('aegir_root');
 if (!$aegir_root && $server->aegir_root) {
