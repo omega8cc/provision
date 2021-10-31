@@ -39,6 +39,12 @@ if (sizeof($this->aliases)) {
 
 <IfModule mod_rewrite.c>
   RewriteEngine on
+
+  # Mitigation for https://www.drupal.org/SA-CORE-2018-002
+  RewriteCond %{QUERY_STRING} (.*)(23value|23default_value|element_parents=%23)(.*) [NC]
+  RewriteCond %{REQUEST_METHOD} POST [NC]
+  RewriteRule ^.*$  - [R=403,L]
+
 <?php
 if ($this->redirection || $ssl_redirection) {
 
