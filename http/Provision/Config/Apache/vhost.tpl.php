@@ -5,6 +5,10 @@
   ServerAdmin <?php  print $this->site_mail; ?>
 <?php endif;?>
 
+<IfModule mod_http2.c>
+  Protocols h2 http/1.1
+</IfModule>
+
 <?php
 $aegir_root = drush_get_option('aegir_root');
 if (!$aegir_root && $server->aegir_root) {
@@ -39,6 +43,12 @@ if (sizeof($this->aliases)) {
 
 <IfModule mod_rewrite.c>
   RewriteEngine on
+
+  # Mitigation for https://www.drupal.org/SA-CORE-2018-002
+  RewriteCond %{QUERY_STRING} (.*)(23value|23default_value|element_parents=%23)(.*) [NC]
+  RewriteCond %{REQUEST_METHOD} POST [NC]
+  RewriteRule ^.*$  - [R=403,L]
+
 <?php
 if ($this->redirection || $ssl_redirection) {
 
