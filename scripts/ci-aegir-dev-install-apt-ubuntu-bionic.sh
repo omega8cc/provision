@@ -24,7 +24,7 @@ postfix postfix/main_mailer_type select Local only
 EOF
 
 echo "[CI] Pre-installing dependencies"
-sudo apt-get install --yes mariadb-server mariadb-client php7.2-mysql php7.2-cli php7.2-gd php7.2 postfix
+sudo apt-get install --yes mysql-server mysql-client php7.2-mysql php7.2-cli php7.2-gd php7.2 postfix
 
 echo "[CI] Installing .deb files .. will fail on missing packages"
 sudo DPKG_DEBUG=developer dpkg --install build/aegir3_*.deb build/aegir3-provision*.deb build/aegir3-hostmaster*.deb

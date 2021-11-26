@@ -13,7 +13,7 @@ sudo apt-get update
 #echo "debconf debconf/frontend select Noninteractive" | debconf-set-selections
 
 
-sudo apt-get install --yes mariadb-server
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes mariadb-server
 sudo /usr/bin/mysql -e "GRANT ALL ON *.* TO 'aegir_root'@'localhost' IDENTIFIED BY 'PASSWORD' WITH GRANT OPTION"
 
 
@@ -24,4 +24,4 @@ postfix postfix/main_mailer_type select Local only
 
 EOF
 
-sudo DPKG_DEBUG=developer apt-get install --yes aegir3
+sudo DEBIAN_FRONTEND=noninteractive DPKG_DEBUG=developer apt-get install --yes aegir3
