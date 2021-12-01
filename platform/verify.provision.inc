@@ -220,6 +220,7 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     $core8_version_id = d()->root . '/core';
+    $core9_version_id = d()->root . '/core/themes/stable9';
 
     if (provision_file()->exists($pathAll)->status() &&
        (provision_file()->exists($core8_version_id)->status() ||
@@ -237,11 +238,13 @@ function drush_provision_drupal_pre_provision_verify() {
         $core6_contrib_dir = '/data/all/' . $latestDir . '/o_contrib';
         $core7_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_seven';
         $core8_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_eight';
+        $core9_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_nine';
       }
       else {
         $core6_contrib_dir = '/data/all/000/modules/o_contrib';
         $core7_contrib_dir = '/data/all/000/modules/o_contrib_seven';
         $core8_contrib_dir = '/data/all/000/modules/o_contrib_eight';
+        $core9_contrib_dir = '/data/all/000/modules/o_contrib_nine';
       }
 
       $core6_version_id = d()->root . '/modules/path_alias_cache';
@@ -253,18 +256,20 @@ function drush_provision_drupal_pre_provision_verify() {
       $core8_version_id = d()->root . '/core';
       $core8_contrib_symlink = d()->root . '/modules/o_contrib_eight';
       $core8_contrib_dot = d()->root . '/modules/.o_contrib_eight_dont_use';
+      $core9_version_id = d()->root . '/core/themes/stable9';
+      $core9_contrib_symlink = d()->root . '/modules/o_contrib_nine';
+      $core9_contrib_dot = d()->root . '/modules/.o_contrib_nine_dont_use';
 
       $core6_contrib_js_file = $core6_contrib_dir . '/js/js.php';
       $core7_contrib_js_file = $core7_contrib_dir . '/js/js.php';
-      $core8_contrib_js_file = $core8_contrib_dir . '/js/js.php';
       $core6_contrib_js_symlink = d()->root . '/js.php';
       $core7_contrib_js_symlink = d()->root . '/js.php';
-      $core8_contrib_js_symlink = d()->root . '/js.php';
 
       // Make sure the platform root and core modules directories are writable (BOA).
       if (provision_file()->exists($core6_contrib_dir)->status() ||
           provision_file()->exists($core7_contrib_dir)->status() ||
-          provision_file()->exists($core8_contrib_dir)->status()) {
+          provision_file()->exists($core8_contrib_dir)->status() ||
+          provision_file()->exists($core9_contrib_dir)->status()) {
         provision_file()->writable(d()->root)
           ->succeed('Drupal root directory @path is writable by the provisioning script')
           ->fail('Drupal root directory @path is not writable by the provisioning script', 'PROVISION_DRUPAL_ROOT_DIR_NOT_WRITABLE');
@@ -330,8 +335,30 @@ function drush_provision_drupal_pre_provision_verify() {
       }
       if (provision_file()->exists($core8_contrib_dir)->status() &&
           provision_file()->exists($core8_version_id)->status() &&
+          !provision_file()->exists($core9_version_id)->status() &&
           !provision_file()->exists($core8_contrib_symlink)->status()) {
         provision_file()->symlink($core8_contrib_dir, $core8_contrib_symlink)
+          ->succeed('Created symlink @path to @target')
+          ->fail('Could not create symlink @path to @target: @reason');
+      }
+
+      // Add symlink to BOA specific contrib in Drupal 9.
+      // Check if static copy exists first
+      if (is_dir($core9_contrib_symlink) && !is_link($core9_contrib_symlink)) {
+        // Run cleanup of previous dot dir if exists
+        // and current contrib is not a symlink again.
+        if (provision_file()->exists($core9_contrib_dot)->status()) {
+          _provision_recursive_delete($core9_contrib_dot);
+          drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $core9_contrib_dot)), 'message');
+        }
+        // Rename static contrib to dot dir if exists
+        rename($core9_contrib_symlink, $core9_contrib_dot);
+        drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core9_contrib_dot)), 'message');
+      }
+      if (provision_file()->exists($core9_contrib_dir)->status() &&
+          provision_file()->exists($core9_version_id)->status() &&
+          !provision_file()->exists($core9_contrib_symlink)->status()) {
+        provision_file()->symlink($core9_contrib_dir, $core9_contrib_symlink)
           ->succeed('Created symlink @path to @target')
           ->fail('Could not create symlink @path to @target: @reason');
       }
@@ -350,15 +377,6 @@ function drush_provision_drupal_pre_provision_verify() {
          provision_file()->exists($core7_version_id)->status() &&
          !provision_file()->exists($core7_contrib_js_symlink)->status()) {
         provision_file()->symlink($core7_contrib_js_file, $core7_contrib_js_symlink)
-          ->succeed('Created symlink @path to @target')
-          ->fail('Could not create symlink @path to @target: @reason');
-      }
-
-      // Add symlink to BOA specific JS Callback Handler support in Drupal 8.
-      if (provision_file()->exists($core8_contrib_js_file)->status() &&
-          provision_file()->exists($core8_version_id)->status() &&
-          !provision_file()->exists($core8_contrib_js_symlink)->status()) {
-        provision_file()->symlink($core8_contrib_js_file, $core8_contrib_js_symlink)
           ->succeed('Created symlink @path to @target')
           ->fail('Could not create symlink @path to @target: @reason');
       }
