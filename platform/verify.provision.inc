@@ -362,6 +362,14 @@ function drush_provision_drupal_pre_provision_verify() {
           ->succeed('Created symlink @path to @target')
           ->fail('Could not create symlink @path to @target: @reason');
       }
+      if (provision_file()->exists($core9_contrib_dir)->status() &&
+          provision_file()->exists($core9_version_id)->status()) {
+        if (provision_file()->exists($core8_contrib_symlink)->status()) {
+          // Rename core8_contrib_symlink to core8_contrib_dot if exists in D9 platform
+          rename($core8_contrib_symlink, $core8_contrib_dot);
+          drush_log(dt('D8 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core8_contrib_dot)), 'message');
+        }
+      }
 
       // Add symlink to BOA specific JS Callback Handler support in Pressflow 6.
       if (provision_file()->exists($core6_contrib_js_file)->status() &&
