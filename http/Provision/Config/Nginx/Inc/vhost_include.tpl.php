@@ -451,6 +451,14 @@ location ^~ /admin/config/development/performance/redis {
   access_log off;
   return 301 $scheme://$host/admin/config/development/performance;
 }
+
+###
+### Deny cache details display.
+###
+location ^~ /admin/reports/redis {
+  access_log off;
+  return 301 $scheme://$host/admin/reports;
+}
 <?php endif; ?>
 
 ###

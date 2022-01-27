@@ -425,6 +425,14 @@ location ^~ /<?php print $subdir; ?> {
     access_log off;
     return 301 $scheme://$host/<?php print $subdir; ?>/admin/config/development/performance;
   }
+
+  ###
+  ### Deny cache details display.
+  ###
+  location ^~ /<?php print $subdir; ?>/admin/reports/redis {
+    access_log off;
+    return 301 $scheme://$host/<?php print $subdir; ?>/admin/reports;
+  }
 <?php endif; ?>
 
   ###
