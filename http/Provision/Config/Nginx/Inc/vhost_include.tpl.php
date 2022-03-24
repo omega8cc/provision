@@ -1487,9 +1487,9 @@ location ~* ^/(?:index|cron|boost_stats|update|authorize|xmlrpc)\.php$ {
 
 <?php if ($nginx_config_mode == 'extended'): ?>
 ###
-### Allow access to /authorize.php and /update.php only for logged in admin user.
+### Allow access to /update.php only for logged in admin user.
 ###
-location ~* ^/(?:core/)?(?:authorize|update)\.php$ {
+location ~ ^/update.php {
   error_page 418 = @allowupdate;
   if ( $cache_uid ) {
     return 418;
@@ -1498,12 +1498,45 @@ location ~* ^/(?:core/)?(?:authorize|update)\.php$ {
 }
 
 ###
-### Internal location for /authorize.php and /update.php restricted access.
+### Allow access to /authorize.php only for logged in admin user.
+###
+location ~ ^/authorize.php {
+  error_page 418 = @allowauthorize;
+  if ( $cache_uid ) {
+    return 418;
+  }
+  return 404;
+}
+
+###
+### Internal location for /update.php restricted access.
 ###
 location @allowupdate {
-  limit_conn   limreq 88;
-  access_log   off;
-  try_files    $uri =404; ### check for existence of php file first
+  fastcgi_split_path_info ^(.+\.php)(/.+)$;
+  fastcgi_index update.php;
+  fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  fastcgi_intercept_errors on;
+  include fastcgi_params;
+  limit_conn   limreq 8;
+<?php if ($satellite_mode == 'boa'): ?>
+  fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+<?php elseif ($phpfpm_mode == 'port'): ?>
+  fastcgi_pass 127.0.0.1:9000;
+<?php else: ?>
+  fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
+<?php endif; ?>
+}
+
+###
+### Internal location for /authorize.php and restricted access.
+###
+location @allowauthorize {
+  fastcgi_split_path_info ^(.+\.php)(/.+)$;
+  fastcgi_index authorize.php;
+  fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  fastcgi_intercept_errors on;
+  include fastcgi_params;
+  limit_conn   limreq 8;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>

@@ -1052,11 +1052,23 @@ location ^~ /<?php print $subdir; ?> {
 
 <?php if ($nginx_config_mode == 'extended'): ?>
   ###
-  ### Allow access to /authorize.php and /update.php only for logged in admin user.
+  ### Allow access to /update.php only for logged in admin user.
   ###
-  location ~* ^/<?php print $subdir; ?>/((?:core/)?(authorize|update))\.php$ {
+  location ~ ^/<?php print $subdir; ?>/(update)\.php$ {
     set $real_fastcgi_script_name $1.php;
     error_page 418 = @allowupdate_<?php print $subdir_loc; ?>;
+    if ( $cache_uid ) {
+      return 418;
+    }
+    return 404;
+  }
+
+  ###
+  ### Allow access to /authorize.php only for logged in admin user.
+  ###
+  location ~ ^/<?php print $subdir; ?>/(authorize)\.php$ {
+    set $real_fastcgi_script_name $1.php;
+    error_page 418 = @allowauthorize_<?php print $subdir_loc; ?>;
     if ( $cache_uid ) {
       return 418;
     }
@@ -1242,11 +1254,11 @@ location @modern_<?php print $subdir_loc; ?> {
 
 <?php if ($nginx_config_mode == 'extended'): ?>
 ###
-### Internal location for /authorize.php and /update.php restricted access.
+### Internal location for /update.php restricted access.
 ###
 location @allowupdate_<?php print $subdir_loc; ?> {
 <?php if ($satellite_mode == 'boa'): ?>
-  limit_conn   limreq 88;
+  limit_conn   limreq 8;
 <?php endif; ?>
   include       fastcgi_params;
 
@@ -1270,8 +1282,50 @@ location @allowupdate_<?php print $subdir_loc; ?> {
 
   fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-  access_log   off;
-  try_files    /$real_fastcgi_script_name =404; ### check for existence of php file first
+  fastcgi_split_path_info ^(.+\.php)(/.+)$;
+  fastcgi_index update.php;
+  fastcgi_intercept_errors on;
+
+<?php if ($satellite_mode == 'boa'): ?>
+  fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+<?php elseif ($phpfpm_mode == 'port'): ?>
+  fastcgi_pass 127.0.0.1:9000;
+<?php else: ?>
+  fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
+<?php endif; ?>
+}
+
+###
+### Internal location for /authorize.php restricted access.
+###
+location @allowauthorize_<?php print $subdir_loc; ?> {
+<?php if ($satellite_mode == 'boa'): ?>
+  limit_conn   limreq 8;
+<?php endif; ?>
+  include       fastcgi_params;
+
+  # Block https://httpoxy.org/ attacks.
+  fastcgi_param HTTP_PROXY "";
+
+  fastcgi_param db_type   <?php print urlencode($db_type); ?>;
+  fastcgi_param db_name   <?php print urlencode($db_name); ?>;
+  fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
+  fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
+  fastcgi_param db_host   <?php print urlencode($db_host); ?>;
+  fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+
+  fastcgi_param  HTTP_HOST           <?php print $this->uri; ?>;
+  fastcgi_param  RAW_HOST            $host;
+  fastcgi_param  SITE_SUBDIR         <?php print $subdir; ?>;
+  fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
+
+  fastcgi_param  REDIRECT_STATUS     200;
+
+  fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
+
+  fastcgi_split_path_info ^(.+\.php)(/.+)$;
+  fastcgi_index authorize.php;
+  fastcgi_intercept_errors on;
 
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
