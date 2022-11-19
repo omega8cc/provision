@@ -43,11 +43,6 @@ if (!$nginx_has_gzip && $server->nginx_has_gzip) {
   $nginx_has_gzip = $server->nginx_has_gzip;
 }
 
-$nginx_has_upload_progress = drush_get_option('nginx_has_upload_progress');
-if (!$nginx_has_upload_progress && $server->nginx_has_upload_progress) {
-  $nginx_has_upload_progress = $server->nginx_has_upload_progress;
-}
-
 $satellite_mode = drush_get_option('satellite_mode');
 if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
@@ -359,23 +354,6 @@ location ^~ /js/ {
     rewrite ^/(.*)$ /js.php?q=$1 last;
   }
 }
-
-<?php if ($nginx_has_upload_progress): ?>
-###
-### Upload progress support.
-### https://drupal.org/project/filefield_nginx_progress
-### http://github.com/masterzen/nginx-upload-progress-module
-###
-location ~ (?<upload_form_uri>.*)/x-progress-id:(?<upload_id>\d*) {
-  access_log off;
-  rewrite ^ $upload_form_uri?X-Progress-ID=$upload_id;
-}
-location ^~ /progress {
-  access_log off;
-  upload_progress_json_output;
-  report_uploads uploads;
-}
-<?php endif; ?>
 
 <?php if ($satellite_mode == 'boa'): ?>
 ###
@@ -1428,9 +1406,6 @@ location = /index.php {
   fastcgi_pass  127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass  unix:<?php print $phpfpm_socket_path; ?>;
-<?php endif; ?>
-<?php if ($nginx_has_upload_progress): ?>
-  track_uploads uploads 60s; ### required for upload progress
 <?php endif; ?>
   ###
   ### Use Nginx cache for all visitors.

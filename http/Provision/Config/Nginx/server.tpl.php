@@ -45,11 +45,6 @@ if (!$nginx_has_gzip && $server->nginx_has_gzip) {
   $nginx_has_gzip = $server->nginx_has_gzip;
 }
 
-$nginx_has_upload_progress = drush_get_option('nginx_has_upload_progress');
-if (!$nginx_has_upload_progress && $server->nginx_has_upload_progress) {
-  $nginx_has_upload_progress = $server->nginx_has_upload_progress;
-}
-
 $satellite_mode = drush_get_option('satellite_mode');
 if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
@@ -66,9 +61,6 @@ if ($nginx_has_gzip) {
   print "  gzip_static       on;\n";
 }
 
-if ($nginx_has_upload_progress) {
-  print "  upload_progress uploads 1m;\n";
-}
 ?>
 
 <?php if ($nginx_config_mode == 'extended'): ?>
