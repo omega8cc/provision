@@ -146,8 +146,8 @@ if (isset($_SERVER['db_name'])) {
   $settings['allow_authorize_operations'] = FALSE;
 
   /**
-   * Useless currently, because it is not used in Drupal 8 anyway.
-   * Instead, Drupal 8 is trying to set the clean URLs mode on the fly,
+   * Useless currently, because it is not used in Drupal 8+ anyway.
+   * Instead, Drupal 8+ is trying to set the clean URLs mode on the fly,
    * depending on the request, so we should force this by redirecting
    * non-clean to clean URLs on the web server level - Nginx example:
    *
