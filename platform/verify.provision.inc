@@ -220,8 +220,8 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     $core8_version_id = d()->root . '/core';
-    $core9_version_id = d()->root . '/core/themes/stable9';
-    $core10_version_id = d()->root . '/core/themes/olivero';
+    $core9_version_id = d()->root . '/core/themes/olivero';
+    $core10_version_f = d()->root . '/core/themes/classy';
 
     if (provision_file()->exists($pathAll)->status() &&
        (provision_file()->exists($core8_version_id)->status() ||
@@ -259,10 +259,10 @@ function drush_provision_drupal_pre_provision_verify() {
       $core8_version_id = d()->root . '/core';
       $core8_contrib_symlink = d()->root . '/modules/o_contrib_eight';
       $core8_contrib_dot = d()->root . '/modules/.o_contrib_eight_dont_use';
-      $core9_version_id = d()->root . '/core/themes/stable9';
+      $core9_version_id = d()->root . '/core/themes/olivero';
       $core9_contrib_symlink = d()->root . '/modules/o_contrib_nine';
       $core9_contrib_dot = d()->root . '/modules/.o_contrib_nine_dont_use';
-      $core10_version_id = d()->root . '/core/themes/olivero';
+      $core10_version_f = d()->root . '/core/themes/classy';
       $core10_contrib_symlink = d()->root . '/modules/o_contrib_ten';
       $core10_contrib_dot = d()->root . '/modules/.o_contrib_ten_dont_use';
 
@@ -348,6 +348,19 @@ function drush_provision_drupal_pre_provision_verify() {
           ->succeed('Created symlink @path to @target')
           ->fail('Could not create symlink @path to @target: @reason');
       }
+      if (provision_file()->exists($core8_contrib_dir)->status() &&
+          provision_file()->exists($core8_version_id)->status()) {
+        if (provision_file()->exists($core9_contrib_symlink)->status()) {
+          // Rename core9_contrib_symlink to core9_contrib_dot if exists in D8 platform
+          rename($core9_contrib_symlink, $core9_contrib_dot);
+          drush_log(dt('D9 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core9_contrib_dot)), 'message');
+        }
+        if (provision_file()->exists($core10_contrib_symlink)->status()) {
+          // Rename core10_contrib_symlink to core10_contrib_dot if exists in D8 platform
+          rename($core10_contrib_symlink, $core10_contrib_dot);
+          drush_log(dt('D10 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core10_contrib_dot)), 'message');
+        }
+      }
 
       // Add symlink to BOA specific contrib in Drupal 9.
       // Check if static copy exists first
@@ -364,6 +377,7 @@ function drush_provision_drupal_pre_provision_verify() {
       }
       if (provision_file()->exists($core9_contrib_dir)->status() &&
           provision_file()->exists($core9_version_id)->status() &&
+          provision_file()->exists($core10_version_f)->status() &&
           !provision_file()->exists($core9_contrib_symlink)->status()) {
         provision_file()->symlink($core9_contrib_dir, $core9_contrib_symlink)
           ->succeed('Created symlink @path to @target')
@@ -375,6 +389,11 @@ function drush_provision_drupal_pre_provision_verify() {
           // Rename core8_contrib_symlink to core8_contrib_dot if exists in D9 platform
           rename($core8_contrib_symlink, $core8_contrib_dot);
           drush_log(dt('D8 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core8_contrib_dot)), 'message');
+        }
+        if (provision_file()->exists($core10_contrib_symlink)->status()) {
+          // Rename core10_contrib_symlink to core10_contrib_dot if exists in D9 platform
+          rename($core10_contrib_symlink, $core10_contrib_dot);
+          drush_log(dt('D10 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core10_contrib_dot)), 'message');
         }
       }
 
@@ -392,18 +411,25 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core10_contrib_dot)), 'message');
       }
       if (provision_file()->exists($core10_contrib_dir)->status() &&
-          provision_file()->exists($core10_version_id)->status() &&
+          provision_file()->exists($core9_version_id)->status() &&
+          !provision_file()->exists($core10_version_f)->status() &&
           !provision_file()->exists($core10_contrib_symlink)->status()) {
         provision_file()->symlink($core10_contrib_dir, $core10_contrib_symlink)
           ->succeed('Created symlink @path to @target')
           ->fail('Could not create symlink @path to @target: @reason');
       }
       if (provision_file()->exists($core10_contrib_dir)->status() &&
-          provision_file()->exists($core10_version_id)->status()) {
+          provision_file()->exists($core9_version_id)->status() &&
+          !provision_file()->exists($core10_version_f)->status()) {
         if (provision_file()->exists($core8_contrib_symlink)->status()) {
           // Rename core8_contrib_symlink to core8_contrib_dot if exists in D10 platform
           rename($core8_contrib_symlink, $core8_contrib_dot);
           drush_log(dt('D8 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core8_contrib_dot)), 'message');
+        }
+        if (provision_file()->exists($core9_contrib_symlink)->status()) {
+          // Rename core9_contrib_symlink to core9_contrib_dot if exists in D10 platform
+          rename($core9_contrib_symlink, $core9_contrib_dot);
+          drush_log(dt('D9 BOA contrib renamed to dot-copy : !dot', array('!dot' => $core9_contrib_dot)), 'message');
         }
       }
 
