@@ -392,7 +392,7 @@ function drush_provision_drupal_pre_provision_verify() {
         // @TODO: Change to provision platform property "build_command".
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, 'process');
         drush_log(dt('Composer install complete.'), $drush_log_type);
       }
       elseif (!$composer_directory) {
