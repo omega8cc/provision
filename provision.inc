@@ -493,7 +493,7 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   $message = "[{$label}] {$commandLine}";
   if ($log_output) {
     // If $log_type is specified other than the default, use that so it is visible. p_command is piped to aegir UI.
-    drush_log($message, $log_type != 'p_info'? $log_type: 'process_start');
+    drush_log($message, $log_type != 'p_info'? $log_type: 'p_command');
 
     $exit_code = $process->run(function ($type, $buffer) use ($log_type) {
       drush_log($buffer, $log_type);
@@ -514,14 +514,14 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
   if ($exit_code === 0) {
 
     if ($log_output) {
-      drush_log('', 'process_stop');
+      drush_log('', 'p_ok');
     }
     return $process->getOutput();
   }
   else {
 
     if ($log_output) {
-      drush_log('', 'process_error');
+      drush_log('', 'p_error');
     }
 
     if ($throw_drush_error) {
