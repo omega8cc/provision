@@ -449,27 +449,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
 
-    // @TODO: Convert to a call to "provision-packages".
-    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())), $drush_log_type);
-    // THIS WORKS:
-    // Found 3 'profiles' packages in platform: standard, minimal, devmaster[ok]
-    // THIS IS NO LONGER RUN IN PROVISION_BACKEND_INVOKE so ...
-    $packages_list =  _scrub_object(provision_find_packages());
-    foreach ($packages_list as $type => $packages) {
-      drush_log(dt("Found @count '@type' packages in platform: @packages", array(
-          '@count' => count($packages),
-          '@type' => $type,
-          '@packages' => implode(', ', array_keys($packages)))
-      ), $drush_log_type);
-    }
-    drush_set_option('packages', $packages_list, 'drupal');
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
-
-    // @TODO: Remove once we are sure provision-packages works.
-    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
-
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
