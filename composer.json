@@ -14,13 +14,10 @@
         "docs": "http://docs.aegirproject.org/"
     },
     "require": {
-        "symfony/process": "^3.4"
+        "symfony/process": "^4.4"
     },
     "config": {
-        "sort-packages": true,
-        "platform": {
-            "php": "7.0.8"
-        }
+        "sort-packages": true
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
