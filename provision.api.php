@@ -523,6 +523,19 @@ function hook_provision_db_options_alter(&$options, $dsn) {
 }
 
 /**
+ * Alter the suggested database name for new databases.
+ *
+ * @param $database
+ *   The default suggested database name to alter. The modified name
+ *   should be 16 characters or fewer.
+ */
+function hook_provision_suggest_db_name_alter(&$database) {
+    if (d()->db_server->name == '@server_myremoteserver') {
+        $database = substr('r_' . $database, 0, 15);
+    }
+}
+
+/**
  * Alter the db username.
  *
  * @param string $user

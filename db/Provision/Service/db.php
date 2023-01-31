@@ -77,6 +77,7 @@ class Provision_Service_db extends Provision_Service {
     $uri = $this->context->uri;
 
     $suggest_base = substr(str_replace(array('.', '-'), '' , preg_replace('/^www\./', '', $uri)), 0, 16);
+    drush_command_invoke_all_ref('provision_suggest_db_name_alter', $suggest_base);
 
     if (!$this->database_exists($suggest_base)) {
       return $suggest_base;
