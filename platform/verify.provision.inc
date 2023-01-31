@@ -448,10 +448,14 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
+    drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())))
+    drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
 
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
+    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
