@@ -134,6 +134,14 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
     // Sync all filesystem changes to the remote server.
     d()->service('http')->sync(d()->site_path, $options);
 
+    // If this site's "file_public_path" is not the default site_path/files, sync it.
+    if (d()->site_path . '/files' != d()->file_public_path) {
+      d()->service('http')->sync(d()->file_public_path, $options);
+    }
+    if (d()->site_path . '/files/private' != d()->file_private_path) {
+      d()->service('http')->sync(d()->file_private_path, $options);
+    }
+
     // Reset the exclude-path option
     if(!is_null($exclude)) {
       if(empty($old_exclude)) {
@@ -157,8 +165,8 @@ function provision_drupal_fetch_site($alias = NULL) {
 
   $site = d($alias);
   // synch filesystem changes back from the remote server.
-  $site->service('http')->fetch($site->site_path . '/files/');
-  $site->service('http')->fetch($site->site_path . '/private/');
+  $site->service('http')->fetch(d()->file_public_path);
+  $site->service('http')->fetch(d()->file_private_path);
   $site->service('http')->fetch($site->site_path . '/modules/');
   $site->service('http')->fetch($site->site_path . '/themes/');
   $site->service('http')->fetch($site->site_path . '/libraries/');
@@ -208,11 +216,12 @@ function _provision_drupal_create_directories($url = NULL) {
   $chgrp = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
-    $mkdir[$file_public_path]            = 02775;
-    $chgrp[$file_public_path]            = d('@server_master')->web_group;
 
     $mkdir[$file_public_path]        = 02775;
     $chgrp[$file_public_path]        = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/tmp"]        = 02775;
+    $chgrp["$file_public_path/tmp"]        = d('@server_master')->web_group;
 
     $mkdir["$file_public_path/images"]     = 02775;
     $chgrp["$file_public_path/images"]     = d('@server_master')->web_group;
@@ -225,6 +234,12 @@ function _provision_drupal_create_directories($url = NULL) {
 
     $mkdir["$file_public_path/js"]         = 02775;
     $chgrp["$file_public_path/js"]         = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/advagg_css"]         = 02775;
+    $chgrp["$file_public_path/advagg_css"]         = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/advagg_js"]         = 02775;
+    $chgrp["$file_public_path/advagg_js"]         = d('@server_master')->web_group;
 
     $mkdir["$file_public_path/ctools"]     = 02775;
     $chgrp["$file_public_path/ctools"]     = d('@server_master')->web_group;
@@ -272,6 +287,28 @@ function _provision_drupal_create_directories($url = NULL) {
     $chgrp["$file_private_path/files/feeds"] = d('@server_master')->web_group;
 
     // d8 support
+    $mkdir["$file_private_path/config"]   = 02775;
+    $chgrp["$file_private_path/config"]   = d('@server_master')->web_group;
+
+    $mkdir["$file_private_path/config/sync"] = 02775;
+    $chgrp["$file_private_path/config/sync"] = d('@server_master')->web_group;
+
+    // civicrm support
+    $mkdir["$file_public_path/civicrm"] = 02775;
+    $chgrp["$file_public_path/civicrm"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/ConfigAndLog"] = 02775;
+    $chgrp["$file_public_path/civicrm/ConfigAndLog"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/custom"] = 02775;
+    $chgrp["$file_public_path/civicrm/custom"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/dynamic"] = 02775;
+    $chgrp["$file_public_path/civicrm/dynamic"] = d('@server_master')->web_group;
+
+    $mkdir["$file_public_path/civicrm/persist"] = 02775;
+    $chgrp["$file_public_path/civicrm/persist"] = d('@server_master')->web_group;
+
     $mkdir["$file_temporary_path/config"]   = 02775;
     $chgrp["$file_temporary_path/config"]   = d('@server_master')->web_group;
 
@@ -305,14 +342,16 @@ function _provision_drupal_create_directories($url = NULL) {
     "$file_public_path/xmlsitemap",
     "$file_private_path",
     "$file_private_path/config",
-    "$file_private_path/config/sync"
+    "$file_private_path/config/sync",
     "$file_private_path/files",
     "$file_private_path/files/backup_migrate",
     "$file_private_path/files/backup_migrate/manual",
     "$file_private_path/files/backup_migrate/scheduled",
     "$file_private_path/files/feeds",
     "$file_private_path/temp",
+    "sites/$url/libraries",
     "sites/$url/themes",
+    "sites/$url/modules",
     "sites/$url/vendor"
   );
 
