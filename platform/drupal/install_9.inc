@@ -102,7 +102,7 @@ function install_main() {
   $sql = drush_sql_get_class();
   $db_spec = $sql->db_spec();
 
-  $db_spec['db_prefix'] = $GLOBALS['db_prefix'];
+  $db_spec['db_prefix'] = $GLOBALS['db_prefix'] ? : '';
 
   if ($db_spec['driver'] == 'mysqli') {
     $db_spec['driver'] = 'mysql';
