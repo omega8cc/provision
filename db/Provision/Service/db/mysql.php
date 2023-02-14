@@ -303,10 +303,18 @@ port=%s
     // Fail if db file already exists.
     $dump_filename = d()->site_path . '/database.sql';
     $dump_file = fopen($dump_filename, 'x');
+    $message = dt('Could not write database backup file mysqldump to %path', array(
+      '%path' => $dump_filename,
+    ));
     if ($dump_file === FALSE) {
-      drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path', array(
-        '%path' => $dump_filename,
-      )));
+      if (drush_get_option('force')) {
+        drush_log($message, 'error');
+      }
+      else {
+        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path', array(
+          '%path' => $dump_filename,
+        )));
+      }
     }
     else {
       $pipes = array();
@@ -322,10 +330,14 @@ port=%s
           $this->filter_line($buffer);
           // Write the resulting line in the backup file.
           if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
-            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path', array(
-              '%path' => $dump_filename,
-            )));
-
+            if (drush_get_option('force')) {
+              drush_log($message, 'warning');
+            }
+            else {
+              drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path', array(
+                '%path' => $dump_filename,
+              )));
+            }
           }
         }
         // Close stdout.
@@ -335,7 +347,13 @@ port=%s
         // Close stderr as well.
         fclose($pipes[2]);
         if (proc_close($process) != 0) {
-          drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd, '%path' => $dump_filename)));
+          
+          if (drush_get_option('force')) {
+            drush_log($message, 'warning');
+          }
+          else {
+            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump to %path (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd, '%path' => $dump_filename)));
+          }
         }
       }
       else {
