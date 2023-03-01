@@ -42,4 +42,33 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
       }
     }
   }
+
+  function write()
+  {
+    $this->writeDrushYml();
+    return parent::write();
+  }
+
+  function filenameYaml() {
+    return drush_server_home() . '/.drush/drush.yml';
+  }
+
+  /**
+   * Write a Drush 9+ YML config file.
+   * @return void
+   */
+  function writeDrushYml() {
+    $drush_config = [
+      'alias-path' => [
+        '${env.HOME}/.drush/sites'
+      ],
+    ];
+    $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config);
+    $filename = $this->filenameYaml();
+
+    provision_file()->file_put_contents($filename, $yaml)
+      ->succeed('Wrote Drush.yml config file: ' . $filename, 'success')
+      ->fail('Could not write drush.yml config file: ' . $filename)
+      ->status();
+  }
 }
