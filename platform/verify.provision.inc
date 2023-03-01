@@ -39,6 +39,7 @@ function _drush_provision_verify_current_platform() {
     $args = array();
     $options = array();
     $options['runner'] = drush_get_option('runner');
+    $options['root'] = d()->root;
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
 
     $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
