@@ -470,7 +470,9 @@ function drush_provision_drupal_pre_provision_verify() {
       $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
       $aegir_drushrc->write();
 
-      drush_invoke_process('@none', "cache-clear", array('drush'));
+      drush_invoke_process('@none', "cache-clear", array('drush'), array(
+        'root' => d()->root,
+      ));
     }
 
     provision_drupal_push_site(drush_get_option('override_slave_authority', FALSE));
