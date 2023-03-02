@@ -57,7 +57,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     $alias = [
       $this->context->name => [
         'root' => isset($this->data['options']['root'])? $this->data['options']['root']: d('hostmaster')->root,
-        'uri' => $this->data['options']['uri'],
+        'uri' => isset($this->data['options']['uri']) ? $this->data['options']['uri'] : NULL,
         'options' => $this->data['options'],
       ],
     ];
