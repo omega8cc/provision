@@ -60,8 +60,10 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
   function writeDrushYml() {
     $drush_config = [
       'drush' => [
-        'alias-path' => [
-          '${env.HOME}/.drush/sites'
+        'paths' => [
+          'alias-path' => [
+            '${env.HOME}/.drush/sites'
+          ]
         ],
       ],
     ];
