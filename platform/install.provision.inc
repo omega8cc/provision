@@ -102,16 +102,24 @@ function drush_provision_drupal_provision_install() {
   )), 'ok');
 
   // Run Drupal installation if option was specified
+  $env = [];
   if (d()->install_method == 'profile') {
+    $options = drush_get_merged_options();
+    provision_process([
+      'drush',
+      d()->site_install_command,
+      d()->install_profile,
+      '--sites-subdir=' . d()->uri,
+    ], null, dt('Installing site'), $env, TRUE);
 
-    // call a backend task to do the actual installation.
-    $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    $result = drush_get_context('provision_process_result');
 
     // pass the login link back to the front end.
-    drush_set_option('login_link', $result['context']['login_link']);
+    $output = $result->getOutput();
+    //drush_set_option('login_link', $result['context']['login_link']);
 
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
-    drush_set_option('profile_installed', TRUE, 'site');
+//    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+//    drush_set_option('profile_installed', TRUE, 'site');
   }
   // If install_method is 'manual', do nothing.
   elseif (d()->install_method == 'manual') {
@@ -131,10 +139,10 @@ function drush_provision_drupal_post_provision_install() {
 
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
-    _provision_drupal_rebuild_caches();
-    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+//    _provision_drupal_rebuild_caches();
+//    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
     _provision_client_create_symlink();
-    drush_include_engine('drupal', 'cron_key');
+//    drush_include_engine('drupal', 'cron_key');
   }
   // For all other install methods, just create the symlink.
   else {
