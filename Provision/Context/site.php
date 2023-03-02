@@ -28,9 +28,6 @@ class Provision_Context_site extends Provision_Context {
   function init_site() {
     $this->setProperty('uri');
 
-     // we need to set the alias root to the platform root, otherwise drush will cause problems.
-    $this->root = $this->platform->root;
-
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;
 
@@ -49,15 +46,19 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
 
-    // Load commands from platform, but allow site to retain it's own.
-    $this->setProperty('commands', $this->platform->findCommands());
+    if (!empty($this->platform)) {
+      // we need to set the alias root to the platform root, otherwise drush will cause problems.
+      $this->root = $this->platform->root;
 
-    // Load git properties from platform.
-    $this->setProperty('git_root', d()->platform->git_root);
-    $this->setProperty('git_remote', d()->platform->git_remote);
-    $this->setProperty('git_reference', d()->platform->git_reference);
-    $this->setProperty('git_docroot', d()->platform->git_docroot);
+      // Load commands from platform, but allow site to retain it's own.
+      $this->setProperty('commands', $this->platform->findCommands());
 
+      // Load git properties from platform.
+      $this->setProperty('git_root', $this->platform->git_root);
+      $this->setProperty('git_remote', $this->platform->git_remote);
+      $this->setProperty('git_reference', $this->platform->git_reference);
+      $this->setProperty('git_docroot', $this->platform->git_docroot);
+    }
   }
 
   /**
