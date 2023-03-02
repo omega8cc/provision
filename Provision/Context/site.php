@@ -46,17 +46,17 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
 
+    // Load commands from platform, but allow site to retain it's own.
     if (!empty($this->platform)) {
       // we need to set the alias root to the platform root, otherwise drush will cause problems.
       $this->root = $this->platform->root;
 
-      // Load commands from platform, but allow site to retain it's own.
       $this->setProperty('commands', $this->platform->findCommands());
 
       // Load git properties from platform.
       $this->setProperty('git_root', $this->platform->git_root);
-      $this->setProperty('git_remote', $this->platform->git_remote);
-      $this->setProperty('git_reference', $this->platform->git_reference);
+      $this->setProperty('git_remote', $this->git_remote);
+      $this->setProperty('git_reference', $this->git_reference);
       $this->setProperty('git_docroot', $this->platform->git_docroot);
     }
   }
