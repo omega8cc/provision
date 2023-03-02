@@ -22,6 +22,7 @@ class Provision_Context_site extends Provision_Context {
       'install_method' => 'site: How to install the site; default profile. When set to "profile" the install profile will be run automatically. Otherwise, an empty database will be created. Additional modules may provide additional install_methods.',
       'profile' => 'site: Drupal profile to use; default standard',
       'drush_aliases' => 'site: Comma-separated list of additional Drush aliases through which this site can be accessed.',
+      'site_install_command' => 'site: The drush command to run when installing the site.',
     );
   }
 
@@ -38,6 +39,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('redirection', FALSE);
     $this->setProperty('cron_key', '');
     $this->setProperty('drush_aliases', array(), TRUE);
+    $this->setProperty('site_install_command', 'site:install');
 
     // this can potentially be handled by a Drupal sub class
     $this->setProperty('profile', 'standard');
@@ -55,8 +57,8 @@ class Provision_Context_site extends Provision_Context {
 
       // Load git properties from platform.
       $this->setProperty('git_root', $this->platform->git_root);
-      $this->setProperty('git_remote', $this->git_remote);
-      $this->setProperty('git_reference', $this->git_reference);
+      $this->setProperty('git_remote', $this->platform->git_remote);
+      $this->setProperty('git_reference', $this->platform->git_reference);
       $this->setProperty('git_docroot', $this->platform->git_docroot);
     }
   }
