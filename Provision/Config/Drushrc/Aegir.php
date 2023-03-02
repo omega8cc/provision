@@ -59,8 +59,10 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
    */
   function writeDrushYml() {
     $drush_config = [
-      'alias-path' => [
-        '${env.HOME}/.drush/sites'
+      'drush' => [
+        'alias-path' => [
+          '${env.HOME}/.drush/sites'
+        ],
       ],
     ];
     $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config);
