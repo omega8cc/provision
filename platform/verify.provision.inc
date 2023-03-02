@@ -23,7 +23,9 @@ function drush_provision_drupal_provision_verify_validate() {
     provision_drupal_push_site();
 
     drush_errors_on();
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+
+    // @TODO: Move to post-hosting-task, if needed at all.
+    // drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
   }
 }
 
@@ -42,6 +44,7 @@ function _drush_provision_verify_current_platform() {
     $options['root'] = d()->root;
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
 
+    chdir(d('@hostmaster')->root);
     $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
     if ($result['error_status']) {
       drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
@@ -455,12 +458,15 @@ function drush_provision_drupal_pre_provision_verify() {
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
-    drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
+    // @TODO: Move to post-hosting-task.
+    // drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
 
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
-    _provision_drupal_ensure_htaccess_update();
+
+    // @TODO: Move to post-hosting-task.
+    // _provision_drupal_ensure_htaccess_update();
     // Requires at least the database settings to complete.
 
     _provision_drupal_create_settings_file();
@@ -468,6 +474,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // If this is the hostmaster site, save the ~/.drush/drushrc.php file.
     $hostmaster = provision_sitealias_get_record('@hostmaster');
     if (d()->root == $hostmaster['root'] && d()->uri == $hostmaster['uri']) {
+      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
       $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
       $aegir_drushrc->write();
 
@@ -485,11 +492,13 @@ function drush_provision_drupal_pre_provision_verify() {
  */
 function drush_provision_drupal_post_provision_verify() {
   if (d()->type === 'site') {
-    _provision_drupal_rebuild_caches();
+    // @TODO: Move to post-hosting-task.
+//    _provision_drupal_rebuild_caches();
     drush_set_option('installed', TRUE, 'site');
 
     _provision_client_create_symlink();
-    drush_include_engine('drupal', 'cron_key');
+    // @TODO: Move to post-hosting-task.
+//    drush_include_engine('drupal', 'cron_key');
 
     # Cleanup useless `aegir.services.yml` files.
     # See: https://www.drupal.org/project/provision/issues/3066538
