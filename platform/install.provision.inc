@@ -97,20 +97,22 @@ function drush_provision_drupal_provision_install() {
   // @TODO: modernize install method by using "install_command" property instead.
 
   // Install site according to install_method.
-  drush_log(dt('Installing site with the "!method" method.', array(
-    '!method' => d()->install_method,
+  drush_log(dt('Installing profile "!profile".', array(
+    '!profile' => d()->profile,
   )), 'ok');
 
   // Run Drupal installation if option was specified
   $env = [];
   if (d()->install_method == 'profile') {
     $options = drush_get_merged_options();
-    provision_process([
-      'drush',
-      d()->site_install_command,
-      d()->install_profile,
-      '--sites-subdir=' . d()->uri,
-    ], null, dt('Installing site'), $env, TRUE);
+    $command = [drush_find_path_to_drush('') . '/drush'];
+    $command[] = d()->site_install_command;
+    $command[] = d()->profile;
+    $command[] = '--sites-subdir=' . d()->uri;
+
+    drush_log("Running: " . print_r($command, 1), 'warning');
+
+    provision_process($command, null, dt('Installing site'), $env, TRUE);
 
     $result = drush_get_context('provision_process_result');
 
