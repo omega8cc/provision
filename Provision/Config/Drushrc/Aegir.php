@@ -67,7 +67,7 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
         ],
       ],
     ];
-    $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config);
+    $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config, 10, 2);
     $filename = $this->filenameYaml();
 
     provision_file()->file_put_contents($filename, $yaml)
