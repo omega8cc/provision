@@ -27,9 +27,11 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     }
 
     $this->data = array(
-      'aliasname' => ltrim($context, '@'),
+      'aliasname' => str_replace('.', '_', ltrim($context, '@')),
       'options' => $data,
+      'environment_name' => isset($data['environment_name'])? $data['environment_name'] : 'default',
     );
+
 
     // @TODO: If this is a site, write a drush YML alias as well.
 
@@ -55,7 +57,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    */
   function writeSiteAlias() {
     $alias = [
-      $this->context->name => [
+      $this->data['environment_name'] => [
         'root' => isset($this->data['options']['root'])? $this->data['options']['root']: d('hostmaster')->root,
         'uri' => isset($this->data['options']['uri']) ? $this->data['options']['uri'] : NULL,
         'options' => $this->data['options'],
