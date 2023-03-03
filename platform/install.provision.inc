@@ -104,24 +104,28 @@ function drush_provision_drupal_provision_install() {
   // Run Drupal installation if option was specified
   $env = [];
   if (d()->install_method == 'profile') {
-    $options = drush_get_merged_options();
-    $command = [drush_find_path_to_drush('') . '/drush'];
-    $command[] = d()->site_install_command;
-    $command[] = d()->profile;
-    $command[] = '--sites-subdir=' . d()->uri;
 
-    drush_log("Running: " . print_r($command, 1), 'warning');
+    // @TODO: Move entirely to the process method.
+    if (d()->name == '@hostmaster') {
+      // call a backend task to do the actual installation.
+      $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
 
-    provision_process($command, null, dt('Installing site'), $env, TRUE);
+      // pass the login link back to the front end.
+      drush_set_option('login_link', $result['context']['login_link']);
+      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+      drush_set_option('profile_installed', TRUE, 'site');
+    }
+    else {
+      $options = drush_get_merged_options();
+      $command = [drush_find_path_to_drush('') . '/drush'];
+      $command[] = d()->site_install_command;
+      $command[] = d()->profile;
+      $command[] = '--sites-subdir=' . d()->uri;
+      $command[] = '--yes';
 
-    $result = drush_get_context('provision_process_result');
-
-    // pass the login link back to the front end.
-    $output = $result->getOutput();
-    //drush_set_option('login_link', $result['context']['login_link']);
-
-//    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
-//    drush_set_option('profile_installed', TRUE, 'site');
+      provision_process($command, null, dt('Installing site...'), $env, TRUE);
+      $process = drush_get_context('provision_process_result');
+    }
   }
   // If install_method is 'manual', do nothing.
   elseif (d()->install_method == 'manual') {
