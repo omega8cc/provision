@@ -39,7 +39,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('redirection', FALSE);
     $this->setProperty('cron_key', '');
     $this->setProperty('drush_aliases', array(), TRUE);
-    $this->setProperty('site_install_command', 'site:install');
+    $this->setProperty('site_install_command', 'si');
 
     // this can potentially be handled by a Drupal sub class
     $this->setProperty('profile', 'standard');
