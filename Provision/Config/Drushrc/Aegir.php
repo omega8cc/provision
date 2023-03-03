@@ -63,6 +63,9 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
         'paths' => [
           'alias-path' => [
             '${env.HOME}/.drush/sites'
+          ],
+          'config' => [
+            '${env.HOME}/.drush/local.drush.yml'
           ]
         ],
       ],
