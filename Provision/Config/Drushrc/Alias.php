@@ -61,7 +61,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
         'options' => $this->data['options'],
       ],
     ];
-    $yaml = \Symfony\Component\Yaml\Yaml::dump($alias);
+    $yaml = \Symfony\Component\Yaml\Yaml::dump($alias, 10, 2);
     $filename = $this->filenameYaml();
 
     provision_file()->file_put_contents($filename, $yaml)
