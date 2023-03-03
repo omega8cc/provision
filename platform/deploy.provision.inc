@@ -163,7 +163,7 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
 
   // Built in Hooks
   if ($update) {
-    $commands[] = "drush {$drush_alias} updatedb --yes";
+    $commands[] = "drush updatedb --yes";
   }
   else {
     drush_log(dt('Skipped updating database...'), $drush_log_type);
@@ -172,10 +172,10 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
   // Clear the whole cache, unless option is false
   if ($cache) {
     if (drush_drupal_major_version(d()->root) >= 8) {
-      $commands[] = "drush {$drush_alias} cache-rebuild";
+      $commands[] = "drush cache-rebuild";
     }
     else {
-      $commands[] = "drush {$drush_alias} cache-clear all";
+      $commands[] = "drush cache-clear all";
     }
   }
   else {
@@ -184,14 +184,16 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
 
   // Revert All Features, unless option is false
   if ($revert) {
-    $commands[] = "drush {$drush_alias} features-revert-all --yes";
+    $commands[] = "drush features-revert-all --yes";
   }
   else {
     drush_log(dt('Skipped reverting all features...'), $drush_log_type);
   }
 
   foreach ($commands as $command) {
-    $output = provision_process($command, d()->platform->git_root, NULL, [], TRUE, NULL, TRUE, $provision_log_type);
+    $output = provision_process($command, d()->platform->git_root, NULL, [
+      'DRUSH_OPTIONS_URI' => d()->uri
+    ], TRUE, NULL, TRUE, $provision_log_type);
 
     // Detect common errors and help the user.
     // Composer install with incorrect PHP version.
