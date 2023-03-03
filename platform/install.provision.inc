@@ -44,6 +44,7 @@ function drush_provision_drupal_provision_install_validate() {
 
       // Destroy site_path.
       if (file_exists(d()->site_path)) {
+        provision_file()->chmod(d()->site_path, 0755);
         _provision_recursive_delete( d()->site_path );
         drush_log(dt('Deleted @site_path.', array('@site_path' => d()->site_path)), 'ok');
       }
@@ -70,6 +71,7 @@ function drush_provision_drupal_pre_provision_install() {
  * If the install went south, and the site is not PROVISION_SITE_INSTALLED, clean up behind ourselves
  */
 function drush_provision_drupal_pre_provision_install_rollback() {
+  provision_file()->chmod(d()->site_path, 0755);
   _provision_recursive_delete( d()->site_path );
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
   foreach (d()->drush_aliases as $alias) {
@@ -121,6 +123,9 @@ function drush_provision_drupal_provision_install() {
       $command[] = d()->site_install_command;
       $command[] = d()->profile;
       $command[] = '--sites-subdir=' . d()->uri;
+      $site_name = escapeshellarg($options['#name']);
+      $command[] = "--site-name='$site_name'";
+      $command[] = "--account-mail={$options['client_email']}";
       $command[] = '--yes';
 
       provision_process($command, null, dt('Installing site...'), $env, TRUE);
