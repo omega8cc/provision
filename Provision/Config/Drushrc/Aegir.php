@@ -69,6 +69,15 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
           ]
         ],
       ],
+      'command' => [
+        'site' => [
+          'alias' => [
+            'options' => [
+              'format' => 'list',
+            ],
+          ],
+        ],
+      ],
     ];
     $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config, 10, 2);
     $filename = $this->filenameYaml();
