@@ -119,7 +119,7 @@ function drush_provision_drupal_provision_install() {
     }
     else {
       $options = drush_get_merged_options();
-      $command = [drush_find_path_to_drush('') . '/drush'];
+      $command = ['drush'];
       $command[] = d()->site_install_command;
       $command[] = d()->profile;
       $command[] = '--sites-subdir=' . d()->uri;
