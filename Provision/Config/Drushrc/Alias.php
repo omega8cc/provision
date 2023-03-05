@@ -26,10 +26,14 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $data['drush_aliases'] = array_unique($data['drush_aliases']);
     }
 
+    $environment = isset($data['environment'])? $data['environment'] : ltrim($context, '@');
+    $alias = "{$context}.{$environment}";
+
     $this->data = array(
-      'aliasname' => ltrim($context, '@'),
+      'aliasname' => $alias,
       'options' => $data,
-      'environment_name' => isset($data['environment_name'])? $data['environment_name'] : 'default',
+      'name' => $context,
+      'environment' => $environment,
     );
 
 
@@ -42,7 +46,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function filenameYaml() {
-    return drush_server_home() . '/.drush/sites/' . $this->data['aliasname'] . '.site.yml';
+    return drush_server_home() . '/.drush/sites/' . $this->data['name'] . '.site.yml';
   }
 
   function write()
@@ -56,19 +60,28 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    * @return void
    */
   function writeSiteAlias() {
-    $alias = [
-      $this->data['environment_name'] => [
-        'root' => isset($this->data['options']['root'])? $this->data['options']['root']: d('hostmaster')->root,
-        'uri' => isset($this->data['options']['uri']) ? $this->data['options']['uri'] : NULL,
-        'options' => $this->data['options'],
-      ],
-    ];
-    $yaml = \Symfony\Component\Yaml\Yaml::dump($alias, 10, 2);
-    $filename = $this->filenameYaml();
+    if ($this->context->type == 'site') {
+      $alias = [
+        $this->data['environment'] => [
+          'root' => isset($this->data['options']['root'])? $this->data['options']['root']: d('hostmaster')->root,
+          'uri' => isset($this->data['options']['uri']) ? $this->data['options']['uri'] : NULL,
+          'options' => $this->data['options'],
+        ],
+      ];
 
-    provision_file()->file_put_contents($filename, $yaml)
-      ->succeed('Wrote Yaml Drush Site Alias file: ' . $filename, 'success')
-      ->fail('Could not write Yaml Drush Site Alias file: ' . $filename)
-      ->status();
+      // @TODO: If yml file already exists, load it and append.
+      $yaml = \Symfony\Component\Yaml\Yaml::dump($alias, 10, 2);
+      $filename = $this->filenameYaml();
+
+      provision_file()->file_put_contents($filename, $yaml)
+        ->succeed('Wrote Yaml Drush Site Alias file: ' . $filename, 'success')
+        ->fail('Could not write Yaml Drush Site Alias file: ' . $filename)
+        ->status();
+    }
+  }
+
+  function delete() {
+    unlink($this->filenameYaml());
+    unlink($this->filename());
   }
 }

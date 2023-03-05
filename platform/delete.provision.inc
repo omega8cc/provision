@@ -7,7 +7,9 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
   if (d()->type === 'site') {
     drush_set_option('force', true, 'process');
 
-    provision_file()->chmod(d()->site_path, 0755);
+    provision_file()->chmod(d()->site_path, 0755)
+      ->succeed(dt('Made site path writable.'))
+      ->fail(dt('Unable to change mode of site path to be writable.'));
 
     if (!empty($backup_file) && !strpos($backup_file, '/')) {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
@@ -29,10 +31,13 @@ function drush_provision_drupal_provision_delete() {
   if (d()->type === 'site') {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
-    drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
+    // Delete alias files.
     foreach (d()->drush_aliases as $alias) {
-      drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
+      $file = new Provision_Config_Drushrc_Alias($alias, d());
+      $file->delete();
     }
+    $file = new Provision_Config_Drushrc_Alias(d()->name, d());
+    $file->delete();
 
     // Do not automatically save the drushrc at the end of the command.
     drush_set_option('provision_save_config', false);
