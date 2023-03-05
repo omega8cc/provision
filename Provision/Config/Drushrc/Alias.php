@@ -27,7 +27,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     }
 
     $this->data = array(
-      'aliasname' => str_replace('.', '_', ltrim($context, '@')),
+      'aliasname' => ltrim($context, '@'),
       'options' => $data,
       'environment_name' => isset($data['environment_name'])? $data['environment_name'] : 'default',
     );
