@@ -10,6 +10,7 @@ class Provision_Context_site extends Provision_Context {
   static function option_documentation() {
     return array(
       'environment' => 'site: the environment name for this site. For example, dev, test, live.',
+      'project' => 'site: a codename for this site. If left empty, site URI will be used.',
       'platform' => 'site: the platform the site is run on',
       'db_server' => 'site: the db server the site is run on',
       'uri' => 'site: example.com URI, no http:// or trailing /',
@@ -29,9 +30,8 @@ class Provision_Context_site extends Provision_Context {
 
   function init_site() {
     $this->setProperty('uri');
-    $this->setProperty('project', drush_get_option('db_name'));
-    $this->setProperty('environment', 'dev');
-
+    $this->setProperty('project');
+    $this->setProperty('environment');
 
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;

@@ -27,7 +27,9 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     }
 
     $environment = isset($data['environment'])? $data['environment'] : ltrim($context, '@');
-    $alias = "{$context}.{$environment}";
+    $project = isset($data['project'])? $data['project'] : ltrim($context, '@');
+
+    $alias = "{$project}.{$environment}";
 
     $this->data = array(
       'aliasname' => $alias,
