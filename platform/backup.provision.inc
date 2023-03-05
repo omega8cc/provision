@@ -46,6 +46,10 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
     drush_set_option('backup_file', $suggested);
   }
 
+  provision_file()->chmod(d()->site_path, 0755)
+    ->succeed(dt('Made site path writable.'))
+    ->fail(dt('Unable to change mode of site path to be writable.'));
+
 }
 
 /**
