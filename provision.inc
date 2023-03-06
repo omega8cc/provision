@@ -238,6 +238,10 @@ function _provision_recursive_delete($path) {
       $d->close();
     }
 
+    $chmod = provision_file()->chmod($path, 0755)
+      ->fail('Unable to make @path writable.')
+      ->status();
+
     $rm = provision_file()->rmdir($path)
       ->fail('Deleting @path directory failed.')
       ->status();
