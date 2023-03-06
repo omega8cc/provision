@@ -26,21 +26,18 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $data['drush_aliases'] = array_unique($data['drush_aliases']);
     }
 
-    $environment = isset($data['environment'])? $data['environment'] : ltrim($context, '@');
-    $project = isset($data['project'])? $data['project'] : ltrim($context, '@');
+    $name = ltrim($context, '@');
+    $environment = isset($data['environment'])? $data['environment'] : $name;
+    $project = isset($data['project'])? $data['project'] : $name;
 
     $alias = "{$project}.{$environment}";
 
     $this->data = array(
       'aliasname' => $alias,
       'options' => $data,
-      'name' => $context,
+      'name' => $name,
       'environment' => $environment,
     );
-
-
-    // @TODO: If this is a site, write a drush YML alias as well.
-
   }
 
   function filename() {
