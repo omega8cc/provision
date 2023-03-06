@@ -3,6 +3,7 @@
  * @file
  * Provides the Provision_Config_Drushrc_Alias class.
  */
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Class to write an alias records.
@@ -16,28 +17,30 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    * @param $options
    *   Array of string option names to save.
    */
-  function __construct($context, $data = array()) {
-    parent::__construct($context, $data);
+  function __construct($context, $options = array()) {
+    parent::__construct($context, $options);
 
-    if (isset($data['aliases']) && is_array($data['aliases'])) {
-      $data['aliases'] = array_unique($data['aliases']);
+    if (isset($options['aliases']) && is_array($options['aliases'])) {
+      $options['aliases'] = array_unique($options['aliases']);
     }
-    if (isset($data['drush_aliases']) && is_array($data['drush_aliases'])) {
-      $data['drush_aliases'] = array_unique($data['drush_aliases']);
+    if (isset($options['drush_aliases']) && is_array($options['drush_aliases'])) {
+      $options['drush_aliases'] = array_unique($options['drush_aliases']);
     }
 
     $name = ltrim($context, '@');
-    $environment = isset($data['environment'])? $data['environment'] : $name;
-    $project = isset($data['project'])? $data['project'] : $name;
+    $name_sanitized = str_replace('.', '', $name);
 
-    $alias = "{$project}.{$environment}";
-
+    // Site, Server, & Platform alias info.
     $this->data = array(
       'aliasname' => $name,
-      'options' => $data,
-      'environment' => $environment,
-      'name_sanitized' => str_replace('.', '', $name)
+      'options' => $options,
     );
+
+    // Site alias info, for Drush 10+.
+    if ($this->context->type == 'site') {
+      $this->data['group'] = isset($options['group']) ? $options['group']: $name_sanitized;
+      $this->data['environment'] = isset($options['environment']) ? $options['environment']: drush_get_option('default_environment_name', 'default');
+    }
   }
 
   function filename() {
@@ -45,7 +48,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function filenameYaml() {
-    return drush_server_home() . '/.drush/sites/' . $this->data['name_sanitized'] . '.site.yml';
+    return drush_server_home() . '/.drush/sites/' . $this->data['group'] . '.site.yml';
   }
 
   function write()
@@ -60,16 +63,21 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    */
   function writeSiteAlias() {
     if ($this->context->type == 'site') {
-      $alias = [
-        $this->data['environment'] => [
-          'root' => isset($this->data['options']['root'])? $this->data['options']['root']: d('hostmaster')->root,
-          'uri' => isset($this->data['options']['uri']) ? $this->data['options']['uri'] : NULL,
-          'options' => $this->data['options'],
-        ],
+
+      try {
+        $alias = Yaml::parseFile($this->filenameYaml());
+      }
+      catch (\Exception $e) {
+        $alias = [];
+      }
+
+      $alias[$this->data['environment']] = [
+        'root' => $this->data['options']['root'],
+        'uri' => $this->data['options']['uri'],
+        'options' => $this->data['options'],
       ];
 
-      // @TODO: If yml file already exists, load it and append.
-      $yaml = \Symfony\Component\Yaml\Yaml::dump($alias, 10, 2);
+      $yaml = Yaml::dump($alias, 10, 2);
       $filename = $this->filenameYaml();
 
       provision_file()->file_put_contents($filename, $yaml)
