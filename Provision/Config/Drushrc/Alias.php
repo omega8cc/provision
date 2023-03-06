@@ -33,10 +33,10 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     $alias = "{$project}.{$environment}";
 
     $this->data = array(
-      'aliasname' => $alias,
+      'aliasname' => $name,
       'options' => $data,
-      'name' => $name,
       'environment' => $environment,
+      'name_sanitized' => str_replace('.', '', $name)
     );
   }
 
@@ -45,7 +45,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function filenameYaml() {
-    return drush_server_home() . '/.drush/sites/' . $this->data['name'] . '.site.yml';
+    return drush_server_home() . '/.drush/sites/' . $this->data['name_sanitized'] . '.site.yml';
   }
 
   function write()
