@@ -58,40 +58,6 @@ if (isset($_SERVER['db_name'])) {
   $db_url['default'] = $_SERVER['db_type'] . '://' . $_SERVER['db_user'] . ':' . $_SERVER['db_passwd'] . '@' . $_SERVER['db_host'] . ':' . $_SERVER['db_port'] . '/' . $_SERVER['db_name'];
 }
 
-  /**
-   * Now that we used the credentials from the apache environment, we
-   * don't need them anymore. Clear them from apache and the _SERVER
-   * array, otherwise they show up in phpinfo() and other friendly
-   * places.
-   */
-  if (function_exists('apache_setenv')) {
-    apache_setenv('db_type', '');
-    apache_setenv('db_user', '');
-    apache_setenv('db_passwd', '');
-    apache_setenv('db_host', '');
-    apache_setenv('db_port', '');
-    apache_setenv('db_name', '');
-    // no idea why they are also in REDIRECT_foo, but they are
-    apache_setenv('REDIRECT_db_type', '');
-    apache_setenv('REDIRECT_db_user', '');
-    apache_setenv('REDIRECT_db_passwd', '');
-    apache_setenv('REDIRECT_db_host', '');
-    apache_setenv('REDIRECT_db_port', '');
-    apache_setenv('REDIRECT_db_name', '');
-  }
-  unset($_SERVER['db_type']);
-  unset($_SERVER['db_user']);
-  unset($_SERVER['db_passwd']);
-  unset($_SERVER['db_host']);
-  unset($_SERVER['db_port']);
-  unset($_SERVER['db_name']);
-  unset($_SERVER['REDIRECT_db_type']);
-  unset($_SERVER['REDIRECT_db_user']);
-  unset($_SERVER['REDIRECT_db_passwd']);
-  unset($_SERVER['REDIRECT_db_host']);
-  unset($_SERVER['REDIRECT_db_port']);
-  unset($_SERVER['REDIRECT_db_name']);
-
 <?php else: ?>
 
   $databases['default']['default'] = array(
@@ -115,6 +81,40 @@ if (isset($_SERVER['db_name'])) {
     '%db_name' => $this->creds['db_name'])); ?>";
 
 <?php endif; ?>
+
+  /**
+  * Now that we used the credentials from the apache environment, we
+  * don't need them anymore. Clear them from apache and the _SERVER
+  * array, otherwise they show up in phpinfo() and other friendly
+  * places.
+  */
+  if (function_exists('apache_setenv')) {
+  apache_setenv('db_type', '');
+  apache_setenv('db_user', '');
+  apache_setenv('db_passwd', '');
+  apache_setenv('db_host', '');
+  apache_setenv('db_port', '');
+  apache_setenv('db_name', '');
+  // no idea why they are also in REDIRECT_foo, but they are
+  apache_setenv('REDIRECT_db_type', '');
+  apache_setenv('REDIRECT_db_user', '');
+  apache_setenv('REDIRECT_db_passwd', '');
+  apache_setenv('REDIRECT_db_host', '');
+  apache_setenv('REDIRECT_db_port', '');
+  apache_setenv('REDIRECT_db_name', '');
+  }
+  unset($_SERVER['db_type']);
+  unset($_SERVER['db_user']);
+  unset($_SERVER['db_passwd']);
+  unset($_SERVER['db_host']);
+  unset($_SERVER['db_port']);
+  unset($_SERVER['db_name']);
+  unset($_SERVER['REDIRECT_db_type']);
+  unset($_SERVER['REDIRECT_db_user']);
+  unset($_SERVER['REDIRECT_db_passwd']);
+  unset($_SERVER['REDIRECT_db_host']);
+  unset($_SERVER['REDIRECT_db_port']);
+  unset($_SERVER['REDIRECT_db_name']);
 
   $profile = "<?php print $this->profile ?>";
   $install_profile = "<?php print $this->profile ?>";
