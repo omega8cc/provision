@@ -131,8 +131,8 @@ function drush_provision_drupal_provision_install() {
       provision_process($command, null, dt('Installing site...'), $env, TRUE);
       $process = drush_get_context('provision_process_result');
 
-      chdir(d('@hostmaster')->root);
-      $result = provision_backend_invoke(d()->name, "provision-verify");
+      // chdir(d('@hostmaster')->root);
+      // $result = provision_backend_invoke(d()->name, "provision-verify");
 
     }
   }
