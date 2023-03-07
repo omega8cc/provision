@@ -125,7 +125,10 @@ function drush_provision_drupal_provision_install() {
       $command[] = '--sites-subdir=' . d()->uri;
       $site_name = escapeshellarg($options['#name']);
       $command[] = "--site-name=$site_name";
-      $command[] = "--account-mail={$options['client_email']}";
+
+      if ($options['client_email']) {
+        $command[] = "--account-mail={$options['client_email']}";
+      }
       $command[] = '--yes';
 
       provision_process($command, null, dt('Installing site...'), $env, TRUE);
