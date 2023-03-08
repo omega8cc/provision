@@ -200,6 +200,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // Current State
       $t['@git_reference_current'] = d()->getBranchOrTag();
+//      $t['@git_sha_current'] = d()->getSha()
       // Only branch checkouts have "current" remotes.
       $git_branch = d()->getBranch();
       if ($git_branch) {
@@ -223,11 +224,6 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Desired State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
-
-      $remote_references_output = d()->getRemoteReferences();
-      drush_set_option('git_remote_references', $remote_references_output, 'drupal');
-      drush_log(dt("Current remote references as of @date:", $t), $drush_log_type);
-      drush_log(dt($remote_references_output), $drush_log_type);
 
       d()->displayGitStatus(FALSE);
 
@@ -355,6 +351,15 @@ function drush_provision_drupal_pre_provision_verify() {
         }
         provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], $log_output, NULL, TRUE, $provision_log_type);
       }
+
+      // Save options for post hosting tasks to pick up.
+      drush_set_option('git_refs', d()->getRemoteReferences(), 'drupal');
+      drush_set_option('git_reference', d()->getBranchOrTag(), 'drupal');
+      drush_set_option('git_remote', d()->getCurrentRemoteUrl(), 'drupal');
+      drush_set_option('git_reset', d()->git_reset, 'drupal');
+      drush_set_option('git_root', d()->git_root, 'drupal');
+      drush_set_option('git_docroot', d()->git_docroot, 'drupal');
+      
       d()->displayGitStatus(FALSE);
       drush_log(dt('Git operations complete.'), $drush_log_type);
     }
