@@ -128,7 +128,12 @@ class Provision_Context_platform extends Provision_Context {
    * Get the current git SHA. 
    */
   public function getStatus() {
-    return trim(shell_exec("cd {$this->git_root}; git -c color.ui=always status -sb 2> /dev/null"));
+    chdir($this->git_root);
+    return implode(PHP_EOL . PHP_EOL, [
+      trim(shell_exec("git -c color.ui=always show 2> /dev/null")),
+      trim(shell_exec("git -c color.ui=always status 2> /dev/null")),
+      trim(shell_exec("git -c color.ui=always diff --minimal 2> /dev/null")),
+    ]);
   }
 
   /**
