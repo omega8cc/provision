@@ -110,6 +110,26 @@ class Provision_Context_platform extends Provision_Context {
   public function isDetached() {
     $this->execSuccess('git symbolic-ref -q HEAD', $this->git_root);
   }
+  /**
+   * Get the current git SHA. 
+   */
+  public function getSha() {
+    return trim(shell_exec("cd $this->git_root && git rev-parse @ 2> /dev/null"));
+  }
+
+  /**
+   * Get the current git SHA. 
+   */
+  public function getLast() {
+    return trim(shell_exec("cd {$this->git_root}; git log --pretty=format:'%ct' --max-count=1 2> /dev/null"));
+  }
+
+  /**
+   * Get the current git SHA. 
+   */
+  public function getStatus() {
+    return trim(shell_exec("cd {$this->git_root}; git -c color.ui=always status -sb 2> /dev/null"));
+  }
 
   /**
    * Return the branch name.

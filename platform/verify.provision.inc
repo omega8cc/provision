@@ -353,6 +353,9 @@ function drush_provision_drupal_pre_provision_verify() {
       }
 
       // Save options for post hosting tasks to pick up.
+      drush_set_option('git_sha', d()->getSha(), 'drupal');
+      drush_set_option('git_last', d()->getLast(), 'drupal');
+      drush_set_option('git_status', d()->getStatus(), 'drupal');
       drush_set_option('git_refs', d()->getRemoteReferences(), 'drupal');
       drush_set_option('git_reference', d()->getBranchOrTag(), 'drupal');
       drush_set_option('git_remote', d()->getCurrentRemoteUrl(), 'drupal');
@@ -361,7 +364,12 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_set_option('git_docroot', d()->git_docroot, 'drupal');
       
       d()->displayGitStatus(FALSE);
-      drush_log(dt('Git operations complete.'), $drush_log_type);
+
+      drush_log(dt('Git operations complete. Current status: %git_reference %git_remote %git_sha', [
+        '%git_reference' => drush_get_option('git_reference'),
+        '%git_remote' => drush_get_option('git_remote'),
+        '%git_sha' => drush_get_option('git_sha'),
+      ]), $drush_log_type);
     }
 
     // Composer Install Support
