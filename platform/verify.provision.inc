@@ -411,7 +411,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
         provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
         
-        provision_process("git -c color.ui=always show && git -c color.ui=always status && git -c color.ui=always diff --minimal", $composer_directory, dt('Git Status', $t), [], $log_output, dt('Unable to run git status.'), FALSE, $provision_log_type);
+        provision_process("git -c color.ui=always log --oneline --max-count=1 && git -c color.ui=always status && git -c color.ui=always diff --minimal", $composer_directory, dt('Git Status', $t), [], $log_output, dt('Unable to run git status.'), FALSE, $provision_log_type);
 
       }
       elseif (!$composer_directory) {
