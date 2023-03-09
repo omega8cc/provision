@@ -282,6 +282,7 @@ function drush_provision_drupal_pre_provision_verify() {
         // If git_reset is set, show the diff and a message.
         // We don't need to run git reset, git checkout --force is used instead.
         if (d()->git_reset && drush_get_option('no-reset', FALSE) == TRUE) {
+          
           $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to --no-reset option.', $t);
           $run_git_reset = FALSE;
         }
@@ -312,24 +313,22 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
         if ($run_git_reset) {
-          if (d()->isAhead()) {
-            drush_log(dt('Skipping git reset because git repository has un-pushed commits.'), 'warning');
-          }
-          else {
-            // @TODO: Check if BEHIND: RESET will lose commits if repo is behind the remote.
-            $log_message = dt('Resetting to git upstream...');
-            $reset_command = [
-              "git",
-              "reset",
-              "--hard",
-              "@{upstream}"
-            ];
-
-            // If the repo cannot be written to, git reset will fail.
-            // Ths code assumes allowing the `git reset` command to fail with a warning is the desired behavior.
-            $error_on_reset_fail = drush_get_option('error_on_git_reset_fail', false);
-            provision_process($reset_command, d()->git_root, $log_message, [], $log_output, dt('Unable to reset.'), $error_on_reset_fail, $provision_log_type);
-          }
+          $reset_command = "git reset --hard FETCH_HEAD";
+        }
+        else {
+          $reset_command = "git reset FETCH_HEAD";
+        }
+          
+        if (d()->isAhead()) {
+          drush_log(dt('Skipping git reset because git repository has un-pushed commits. Make sure your local commits are pushed or they may be lost.'), 'warning');
+        }
+        else {
+          $log_message = dt('Resetting to git upstream...');
+          
+          // If the repo cannot be written to, git reset will fail.
+          // Ths code assumes allowing the `git reset` command to fail with a warning is the desired behavior.
+          $error_on_reset_fail = drush_get_option('error_on_git_reset_fail', false);
+          provision_process($reset_command, d()->git_root, $log_message, [], $log_output, dt('Unable to reset.'), $error_on_reset_fail, $provision_log_type);
         }
       }
 
