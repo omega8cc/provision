@@ -369,7 +369,7 @@ function drush_provision_drupal_pre_provision_verify() {
         '%git_reference' => drush_get_option('git_reference'),
         '%git_remote' => drush_get_option('git_remote'),
         '%git_sha' => drush_get_option('git_sha'),
-      ]), $drush_log_type);
+      ]), 'debug');
     }
 
     // Composer Install Support
@@ -382,7 +382,7 @@ function drush_provision_drupal_pre_provision_verify() {
     elseif (drush_get_option('provision_composer_install_platforms', TRUE)) {
       drush_log(dt('Composer bin found: @composer_bin', array(
         '@composer_bin' => $composer_bin,
-      )), $drush_log_type);
+      )), 'debug');
 
       // Detect composer.json and run composer install.
       // Step 1: Look for composer directory in git_root or root.
@@ -410,7 +410,9 @@ function drush_provision_drupal_pre_provision_verify() {
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
         provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
-        drush_log(dt('Composer install complete.'), $drush_log_type);
+        
+        provision_process("git -c color.ui=always show && git -c color.ui=always status && git -c color.ui=always diff --minimal", $composer_directory, dt('Git Status', $t), [], $log_output, dt('Unable to run git status.'), FALSE, $provision_log_type);
+
       }
       elseif (!$composer_directory) {
         drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
