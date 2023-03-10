@@ -467,16 +467,15 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
     
     // Set URI so drush will look at the site folder.
     // @TODO: use URL from domain aliases, redirect target, if there is one.
-    $command[] = '--uri=' . d()->uri;
+    $command[] = '--uri=' . d($context)->uri;
     
     $env = [];
     $cwd = d($context)->root;
-
-    return provision_process(implode(' ', $command), $cwd, dt("Running drush command '%command' on site '%site' in folder '%cwd'.", [
-      '%site' => d()->uri,
-      '%command' => $drush_command,
-      '%cwd' => d()->cwd,
-    ]), $env, dt('Drush command failed.'));
+    return provision_process(implode(' ', $command), $cwd, dt("Running drush command '!command' on site '!site' in folder '!cwd'.", [
+      '!site' => d($context)->uri,
+      '!command' => $drush_command,
+      '!cwd' => $cwd,
+    ]), $env, TRUE, dt('Drush command failed.'), TRUE, 'ok');
   }
 }
 
