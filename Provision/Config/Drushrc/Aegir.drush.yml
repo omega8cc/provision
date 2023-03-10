@@ -14,10 +14,3 @@ command:
     alias:
       options:
         format: list
-  sql:
-    dump:
-      options:
-        extra-dump: "--single-transaction=false" 
-    sync:
-      options:
-        extra-dump: "--single-transaction=false" 
