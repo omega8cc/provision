@@ -89,6 +89,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
+    
+    // MySQL did this to us. https://github.com/drush-ops/drush/issues/5368#issuecomment-1405209770
+    $statement .= "; GRANT RELOAD ON `%s`.* TO `%s`@`%s`";
     return $this->query($statement, $name, $username, $host);
   }
 
