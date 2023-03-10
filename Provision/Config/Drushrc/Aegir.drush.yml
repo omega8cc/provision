@@ -1,0 +1,23 @@
+# Default global drush yml file.
+# Managed by Provision.
+# Do not alter or you will lose your changes.
+# Create local.drush.yml to manage your own config.
+---
+drush:
+  paths:
+    alias-path:
+      - ${env.HOME}/.drush/sites
+    config:
+      - ${env.HOME}/.drush/drush.local.yml
+command:
+  site:
+    alias:
+      options:
+        format: list
+  sql:
+    dump:
+      options:
+        extra-dump: "--single-transaction=false" 
+    sync:
+      options:
+        extra-dump: "--single-transaction=false" 

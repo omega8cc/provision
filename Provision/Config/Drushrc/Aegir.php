@@ -58,30 +58,11 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
    * @return void
    */
   function writeDrushYml() {
-    $drush_config = [
-      'drush' => [
-        'paths' => [
-          'alias-path' => [
-            '${env.HOME}/.drush/sites'
-          ],
-          'config' => [
-            '${env.HOME}/.drush/local.drush.yml'
-          ]
-        ],
-      ],
-      'command' => [
-        'site' => [
-          'alias' => [
-            'options' => [
-              'format' => 'list',
-            ],
-          ],
-        ],
-      ],
-    ];
-    $yaml = \Symfony\Component\Yaml\Yaml::dump($drush_config, 10, 2);
-    $filename = $this->filenameYaml();
 
+    $config = \Symfony\Component\Yaml\Yaml::parseFile(__DIR__ . '/Aegir.drush.yml');
+    drupal_alter('provision_global_drush_yml_config', $config);
+    $yaml = \Symfony\Component\Yaml\Yaml::dump($config, 8, 2);
+    $filename = $this->filenameYaml();
     provision_file()->file_put_contents($filename, $yaml)
       ->succeed('Wrote Drush.yml config file: ' . $filename, 'success')
       ->fail('Could not write drush.yml config file: ' . $filename)
