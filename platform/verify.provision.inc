@@ -200,7 +200,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // Current State
       $t['@git_reference_current'] = d()->getBranchOrTag();
-//      $t['@git_sha_current'] = d()->getSha()
+      $t['@git_sha'] = d()->getSha();
       // Only branch checkouts have "current" remotes.
       $git_branch = d()->getBranch();
       if ($git_branch) {
@@ -214,6 +214,7 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Git repository clone detected in @git_root', $t), $drush_log_type);
       drush_log(dt('Current State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference_current', $t), $drush_log_type);
+      drush_log(dt('              SHA: @git_sha', $t), $drush_log_type);
       if ($git_branch) {
         drush_log(dt('    Git Remote: @git_remote_current', $t), $drush_log_type);
       }
@@ -224,9 +225,7 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Desired State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
-
-      d()->displayGitStatus(FALSE);
-
+      
       // Set git remote
       // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
       // If there is a current and desired git_remote...
@@ -259,8 +258,10 @@ function drush_provision_drupal_pre_provision_verify() {
           "--tags",
           "--recurse-submodules",
         ],
-          d()->git_root, dt('Fetching latest changes...'), [], $log_output, NULL, TRUE, $provision_log_type);
+          d()->git_root, FALSE, NULL, TRUE, $provision_log_type);
       }
+
+      d()->displayGitStatus();
 
       // @TODO: Check dirty git status before checkout force and throw a warning.
 
@@ -290,11 +291,6 @@ function drush_provision_drupal_pre_provision_verify() {
           $log_message = dt('Checking out git reference @git_reference, discarding local changes (--force)...', $t);
           $run_git_reset = TRUE;
           $checkout_command[] = '--force';
-          provision_process([
-            "git",
-            "diff",
-          ],
-            d()->git_root, dt('Git repository changes to be reset', $t), [], $log_output, dt('git diff failed.'), FALSE, $provision_log_type);
         }
         elseif (!d()->git_reset) {
           $run_git_reset = FALSE;
@@ -410,8 +406,6 @@ function drush_provision_drupal_pre_provision_verify() {
 
         provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
         
-        provision_process("git -c color.ui=always log --oneline --max-count=1 && git -c color.ui=always status && git -c color.ui=always diff --minimal", $composer_directory, dt('Git Status', $t), [], $log_output, dt('Unable to run git status.'), FALSE, $provision_log_type);
-
       }
       elseif (!$composer_directory) {
         drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
