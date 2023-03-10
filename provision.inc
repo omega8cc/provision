@@ -446,7 +446,7 @@ function _scrub_object($input) {
  */
 function provision_backend_invoke($target, $drush_command, $arguments = array(), $task_options = array(), $mode = 'GET') {
   $context = '@' . ltrim($target, '@');
-  
+
   // If a provision command is run, use drush_invoke_process.
   if (strpos($drush_command, 'provision-') === 0) {
     return drush_invoke_process($context, $drush_command, $arguments, $task_options, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
@@ -455,7 +455,6 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
     // Build the command
     $command = $env = [];
     $command[] = 'drush';
-    $command[] = $context  = '@' . ltrim($target, '@');
     $command[] = $drush_command;
     $command = array_merge($command, $arguments);
     foreach ($task_options as $name => $value) {
@@ -471,9 +470,12 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
     $command[] = '--uri=' . d()->uri;
     
     $env = [];
+    $cwd = d($context)->root;
 
-    return provision_process(implode(' ', $command), d($context)->root, dt("Running drush command on site %site", [
+    return provision_process(implode(' ', $command), $cwd, dt("Running drush command '%command' on site '%site' in folder '%cwd'.", [
       '%site' => d()->uri,
+      '%command' => $drush_command,
+      '%cwd' => d()->cwd,
     ]), $env, dt('Drush command failed.'));
   }
 }
