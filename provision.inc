@@ -436,15 +436,46 @@ function _scrub_object($input) {
  *   drush data passed to drush_invoke_process().
  * @param $mode
  *   drush IPC mode (GET/POST) passed to drush_invoke_process().
- * @return array
- *   The entire drush context from the command. This allows commands to call "drush_set_context" and return their data
- *   to the caller of provision_backend_context.
+ * @return string
+ *  Output.
+ * 
+ * If additional info is needed, the Process Result is available:
+ * drush_get_context('provision_process_result');
  *
  * @see drush_invoke_process()
  */
-function provision_backend_invoke($target, $command, $arguments = array(), $data = array(), $mode = 'GET') {
+function provision_backend_invoke($target, $drush_command, $arguments = array(), $task_options = array(), $mode = 'GET') {
   $context = '@' . ltrim($target, '@');
-  return drush_invoke_process($context, $command, $arguments, $data, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
+  
+  // If a provision command is run, use drush_invoke_process.
+  if (strpos($drush_command, 'provision-') === 0) {
+    return drush_invoke_process($context, $drush_command, $arguments, $task_options, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
+  }
+  else {
+    // Build the command
+    $command = $env = [];
+    $command[] = 'drush';
+    $command[] = $context  = '@' . ltrim($target, '@');
+    $command[] = $drush_command;
+    $command = array_merge($command, $arguments);
+    foreach ($task_options as $name => $value) {
+      $value = escapeshellarg($value);
+      $command[] = "--$name=$value";
+    }
+
+    // @TODO: Is this needed?
+    $command[] = '--strict=0';
+    
+    // Set URI so drush will look at the site folder.
+    // @TODO: use URL from domain aliases, redirect target, if there is one.
+    $command[] = '--uri=' . d()->uri;
+    
+    $env = [];
+
+    return provision_process(implode(' ', $command), d($context)->root, dt("Running drush command on site %site", [
+      '%site' => d()->uri,
+    ]), $env, dt('Drush command failed.'));
+  }
 }
 
 /**
