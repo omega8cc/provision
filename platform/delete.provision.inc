@@ -33,10 +33,10 @@ function drush_provision_drupal_provision_delete() {
 
     // Delete alias files.
     foreach (d()->drush_aliases as $alias) {
-      $file = new Provision_Config_Drushrc_Alias($alias, d());
+      $file = new Provision_Config_Drushrc_Alias($alias);
       $file->delete();
     }
-    $file = new Provision_Config_Drushrc_Alias(d()->name, d());
+    $file = new Provision_Config_Drushrc_Alias(d()->name);
     $file->delete();
 
     // Do not automatically save the drushrc at the end of the command.
