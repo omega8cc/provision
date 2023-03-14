@@ -19,6 +19,13 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
 
   function load_data() {
     // List Hosting Features and their enabled status.
+    if (!function_exists('hosting_get_features')) {
+      return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Hosting module was not loaded for some reason. Current Context: !context (!type)', [
+        '!context' => $this->context->name, 
+        '!type' => $this->context->type, 
+      ]));
+    }
+    
     $features = hosting_get_features();
     foreach ($features as $name => $info) {
       $enabled_features[$name] = $info['enabled'];

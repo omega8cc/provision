@@ -474,7 +474,9 @@ function provision_drupal_find_sites() {
     closedir($dir);
   }
   else {
-    drush_log(dt("Cannot find sites directory"), 'error');
+    drush_log(dt("Cannot find ./sites directory in !dir", [
+      '!dir' => getcwd(),
+    ]), 'error');
     $sites = FALSE;
   }
   return $sites;

@@ -419,6 +419,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // In cases where we just build the platform Drush would have cleared this value.
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+//    chdir(d()->root);
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
     // If we couldn't bootstrap, there's no sense in continuing past this point.
@@ -451,6 +452,7 @@ function drush_provision_drupal_pre_provision_verify() {
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
 
+    
     // Ensure sites.php file exists for Drupal 8 and above.
     $sitesfile = "sites/sites.php";
     if (drush_drupal_major_version() >= 8 && !file_exists($sitesfile)) {
@@ -459,6 +461,8 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
 
+//    drush_log("what is current dir? " . getcwd(),'warning');
+    
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
     drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())));
     drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
