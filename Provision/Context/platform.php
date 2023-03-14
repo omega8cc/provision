@@ -303,4 +303,18 @@ class Provision_Context_platform extends Provision_Context {
       return TRUE;
     }
   }
+
+  /**
+   * Loads data from a platform's composer.json.
+   * @return array
+   */
+  public function getComposer() {
+    $composer_json_path = $this->git_root . DIRECTORY_SEPARATOR . 'composer.json';
+    if (file_exists($composer_json_path)) {
+      return json_decode(file_get_contents($composer_json_path), TRUE);
+    }
+    else {
+      return [];
+    }
+  } 
 }
