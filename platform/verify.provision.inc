@@ -251,14 +251,7 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt('Skipping git fetch due to --no-fetch option.'), $drush_log_type);
       } else {
         // Fetch latest changes
-        provision_process([
-          "git",
-          "fetch",
-          "--all",
-          "--tags",
-          "--recurse-submodules",
-        ],
-          d()->git_root, FALSE, NULL, TRUE, $provision_log_type);
+        provision_process("git fetch --all --tags --recurse-submodules", d()->git_root, FALSE, NULL, TRUE, $provision_log_type);
       }
 
       d()->displayGitStatus();
@@ -290,7 +283,6 @@ function drush_provision_drupal_pre_provision_verify() {
         elseif (d()->git_reset && drush_get_option('no-reset', FALSE) == FALSE) {
           $log_message = dt('Checking out git reference @git_reference, discarding local changes (--force)...', $t);
           $run_git_reset = TRUE;
-          $checkout_command[] = '--force';
         }
         elseif (!d()->git_reset) {
           $run_git_reset = FALSE;
@@ -304,7 +296,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Checkout could fail for many reasons so lets allow it to continue.
         $exit_if_checkout_failed = drush_get_option('require-checkout', FALSE);
-        $checkout_command = array_filter(array_merge($checkout_command, $checkout_options));
+        
+        //  Git fetch after command so that we are sure we have the right FETCH_HEAD.
+        $checkout_command = implode(" ", array_filter(array_merge($checkout_command, $checkout_options))) . ' && git fetch';
         provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Git checkout failed.'), $exit_if_checkout_failed, $provision_log_type);
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
@@ -468,6 +462,10 @@ function drush_provision_drupal_pre_provision_verify() {
     drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
 
     provision_drupal_push_site();
+
+    // Save git status after all the operations so we can see any changes made by composer install.
+    drush_set_option('git_status', d()->getStatus(), 'drupal');
+
   }
   elseif (d()->type === 'site') {
     // @TODO: Move to post-hosting-task.
