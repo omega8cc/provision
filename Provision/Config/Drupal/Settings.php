@@ -15,9 +15,11 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
   }
 
   function process() {
+    if (isset($this->data['db_type']) && $this->data['db_type'] == 'mysqli') {
+      $this->data['db_type'] = 'mysql';
+    }
     if (drush_drupal_major_version() >= 9) {
       $this->template = 'provision_drupal_settings_9.tpl.php';
-      $this->data['db_type'] = ($this->data['db_type'] == 'mysqli') ? 'mysql' : $this->data['db_type'];
       $this->data['utf8mb4_is_configurable'] = TRUE;
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
@@ -27,7 +29,6 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
     }
     elseif (drush_drupal_major_version() == 8) {
       $this->template = 'provision_drupal_settings_8.tpl.php';
-      $this->data['db_type'] = ($this->data['db_type'] == 'mysqli') ? 'mysql' : $this->data['db_type'];
       $this->data['utf8mb4_is_configurable'] = TRUE;
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
@@ -37,7 +38,6 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
     }
     elseif (drush_drupal_major_version() == 7) {
       $this->template = 'provision_drupal_settings_7.tpl.php';
-      $this->data['db_type'] = ($this->data['db_type'] == 'mysqli') ? 'mysql' : $this->data['db_type'];
       $this->data['utf8mb4_is_configurable'] = version_compare(drush_drupal_version(), '7.50', '>=');
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $this->data['maintenance_var_new'] = TRUE;
@@ -59,7 +59,7 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
     }
 
     foreach (array('db_type', 'db_user', 'db_passwd', 'db_host', 'db_name', 'db_port') as $key) {
-      $this->creds[$key] = urldecode($this->data[$key]);
+      $this->creds[$key] = urldecode($this->data[$key] ?? '');
     }
 
     $this->data['extra_config'] = "# Extra configuration from modules:\n";
