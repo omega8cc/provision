@@ -217,8 +217,8 @@ if (isset($_SERVER['db_name'])) {
   }
 
   # Additional platform wide configuration settings.
-  if (is_readable('<?php print $this->platform->root  ?>/sites/default/settings.php')) {
-    include_once('<?php print $this->platform->root ?>/sites/default/settings.php');
+  if (is_readable('<?php print $this->platform->root  ?>/sites/all/settings.php')) {
+    include_once('<?php print $this->platform->root ?>/sites/all/settings.php');
   }
 
   # Additional site configuration settings.
