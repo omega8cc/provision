@@ -177,15 +177,20 @@ class Provision_Context {
    */
   function __construct($name) {
     $this->name = $name;
+    
+    
   }
 
   /**
    * Init stub function.
    */
   function init() {
+    
+    
     preg_match("/^Provision_Context_(.*)$/", get_class($this), $matches);
     $this->type = $matches[1];
     $this->setProperty('context_type', $this->type);
+    $this->setProperty('settings', $this->settings ?? []);
 
     // Set up the parent of this context object.
     if (!is_null($this->parent_key)) {
