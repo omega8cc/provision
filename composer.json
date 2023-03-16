@@ -23,6 +23,9 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {
+        "files": [
+            "provision.inc"
+        ],
         "psr-0": {
             "Provision_": [
                 "Provision"
