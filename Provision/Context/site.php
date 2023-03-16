@@ -66,4 +66,46 @@ class Provision_Context_site extends Provision_Context {
       $config->write();
     }
   }
+
+  /**
+   * @return void
+   */
+  public static function getDeploySteps() {
+    $steps = self::defaultDeploySteps();
+    return $steps;
+  }
+
+  /**
+   * Default deploy steps for a site.
+   * 
+   * getDeploySteps() will load these or overrides.
+   * @return array[]
+   */
+  private static function defaultDeploySteps() {
+    return [
+      'reset' => [
+        'title' => t('Reset'),
+        'description' => t('Discard uncommitted code changes.'),
+        'command' => 'git reset --hard',
+      ],
+      'build' => [
+        'title' => t('Build'),
+        'description' => t('Prepare source code.'),
+        'command' => 'composer install --no-dev --profile',
+      ],
+      'update' => [
+        'title' => t('Update'),
+        'description' => t('Apply changes to the site.'),
+        'command' => [
+          'drush pm:update --no-cache-clear',
+          'drush cache:rebuild',
+        ],
+      ],
+      'test' => [
+        'title' => t('Test'),
+        'description' => t('Run tests against the site.'),
+        'command' => 'drush status',
+      ],
+    ];
+  }
 }
