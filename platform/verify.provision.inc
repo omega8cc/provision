@@ -298,15 +298,15 @@ function drush_provision_drupal_pre_provision_verify() {
         $exit_if_checkout_failed = drush_get_option('require-checkout', FALSE);
         
         //  Git fetch after command so that we are sure we have the right FETCH_HEAD.
-        $checkout_command = implode(" ", array_filter(array_merge($checkout_command, $checkout_options))) . ' && git fetch';
+        $checkout_command = implode(" ", array_filter(array_merge($checkout_command, $checkout_options)));
         provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Git checkout failed.'), $exit_if_checkout_failed, $provision_log_type);
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
         if ($run_git_reset) {
-          $reset_command = "git reset --hard FETCH_HEAD";
+          $reset_command = "git fetch && git reset --hard FETCH_HEAD";
         }
         else {
-          $reset_command = "git reset FETCH_HEAD";
+          $reset_command = "git fetch && git reset FETCH_HEAD";
         }
           
         if (d()->isAhead()) {
