@@ -1,12 +1,29 @@
 <?php
 
+use Eloquent\Composer\Configuration\ConfigurationReader;
+
 /**
  * @file Provision named context site class.
  */
 
 class Provision_Context_site extends Provision_Context {
+
+  use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
+
   public $type = 'site';
   public $parent_key = 'platform';
+
+  public function __construct($name, $node = null) {
+    parent::__construct($name);
+    if ($node && $node->type != $this->type) {
+      throw new \Exception('Node passed to __construct() is not a site.');
+    }
+    elseif ($node) {
+      
+      // 
+      $this->setProperty('git_root', $node->git_root);
+    }
+  }
 
   static function option_documentation() {
     return array(
@@ -72,8 +89,30 @@ class Provision_Context_site extends Provision_Context {
    * Load the deploy steps for this site. 
    * @return array[]
    */
-  public static function getDeploySteps() {
+  public function getDeploySteps() {
     $steps = self::defaultDeploySteps();
+
+    $composer_path = $this->git_root . '/composer.json';
+    $reader = new ConfigurationReader;
+    $this->composerConfig =  $reader->read($composer_path);
+    $scripts = (array) $this->composerConfig->scripts()->rawData();
+    
+    foreach ($steps as $step => $info) {
+      $command = "deploy:$step";
+      if (isset($scripts[$command])) {
+        $steps[$step]['command'] = $scripts[$command];
+        $steps[$step]['overridden_by'] = t('Defined in %override: <code>deploy:@step</code>.', [
+          '%override' => 'composer.json',
+          '@step' => $step,
+        ]);
+      }
+    }
+    
+    // Allow modules to alter the steps.
+    if (function_exists('drupal_alter')) {
+      drupal_alter('hosting_site_deploy_steps', $steps, $this);
+    }
+    
     return $steps;
   }
 
