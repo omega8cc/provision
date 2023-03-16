@@ -68,7 +68,8 @@ class Provision_Context_site extends Provision_Context {
   }
 
   /**
-   * @return void
+   * Load the deploy steps for this site. 
+   * @return array[]
    */
   public static function getDeploySteps() {
     $steps = self::defaultDeploySteps();
