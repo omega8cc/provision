@@ -91,8 +91,13 @@ class Provision_Context_site extends Provision_Context {
    */
   public function getDeploySteps() {
     $steps = self::defaultDeploySteps();
-
     $composer_path = $this->git_root . '/composer.json';
+    
+    // Don't try to load if there's no file.
+    if (empty($this->git_root) || !file_exists($composer_path)) {
+      return $steps;
+    }
+
     $reader = new ConfigurationReader;
     $this->composerConfig =  $reader->read($composer_path);
     $scripts = (array) $this->composerConfig->scripts()->rawData();
