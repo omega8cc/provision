@@ -8,6 +8,7 @@
  * Class for the platform context.
  */
 class Provision_Context_platform extends Provision_Context {
+  public $type = 'platform';
   public $parent_key = 'server';
 
   static function option_documentation() {

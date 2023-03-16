@@ -186,9 +186,6 @@ class Provision_Context {
    */
   function init() {
     
-    
-    preg_match("/^Provision_Context_(.*)$/", get_class($this), $matches);
-    $this->type = $matches[1];
     $this->setProperty('context_type', $this->type);
     $this->setProperty('settings', $this->settings ?? []);
 
@@ -314,7 +311,7 @@ class Provision_Context {
    */
   function get_services() {
     $services = array();
-    if (!is_null($this->parent_key)) {
+    if (!is_null($this->parent_key) && !empty($this->{$this->parent_key})) {
       $services = $this->{$this->parent_key}->get_services();
     }
 

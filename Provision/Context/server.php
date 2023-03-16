@@ -11,6 +11,9 @@
  * objects for each of the available service types.
  */
 class Provision_Context_server extends Provision_Context {
+
+  public $type = 'server';
+
   /**
    * Associative array of services for this server.
    *

@@ -5,6 +5,7 @@
  */
 
 class Provision_Context_site extends Provision_Context {
+  public $type = 'site';
   public $parent_key = 'platform';
 
   static function option_documentation() {
