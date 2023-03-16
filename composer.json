@@ -14,11 +14,16 @@
         "docs": "http://docs.aegirproject.org/"
     },
     "require": {
+        "devshop/git-traits": "dev-feature/composer/git-traits",
+        "http-interop/http-factory-guzzle": "^1.2",
         "symfony/process": "^4.4",
         "symfony/yaml": "^4.4"
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
