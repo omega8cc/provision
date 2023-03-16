@@ -14,7 +14,7 @@
         "docs": "http://docs.aegirproject.org/"
     },
     "require": {
-        "devshop/git-traits": "dev-feature/composer/git-traits",
+        "devshop/git-traits": "1.x-dev",
         "eloquent/composer-config-reader": "^3.0",
         "http-interop/http-factory-guzzle": "^1.2",
         "symfony/process": "^4.4",
