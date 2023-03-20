@@ -336,21 +336,21 @@ class Provision_Context_platform extends Provision_Context {
       //        'command' => 'git reset --hard',
       //      ],
       'build' => [
-        'title' => t('Build'),
-        'description' => t('Prepare source code.'),
+        'title' => dt('Build'),
+        'description' => dt('Prepare source code.'),
         'command' => 'composer install --no-dev --ansi',
       ],
       'update' => [
-        'title' => t('Update'),
-        'description' => t('Apply pending updates to the site.'),
+        'title' => dt('Update'),
+        'description' => dt('Apply pending updates to the site.'),
         'command' => [
           "drush updatedb  --no-cache-clear",
           'drush cache:rebuild',
         ],
       ],
       'test' => [
-        'title' => t('Test'),
-        'description' => t('Run tests against the site.'),
+        'title' => dt('Test'),
+        'description' => dt('Run tests against the site.'),
         'command' => 'drush status',
       ],
     ];
