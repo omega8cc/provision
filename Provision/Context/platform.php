@@ -278,7 +278,7 @@ class Provision_Context_platform extends Provision_Context {
       return [];
     }
   } 
-  }
+
   /**
    * Load the deploy steps for this site.
    * @return array[]
