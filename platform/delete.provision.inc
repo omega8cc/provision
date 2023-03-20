@@ -7,17 +7,20 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
   if (d()->type === 'site') {
     drush_set_option('force', true, 'process');
 
-    provision_file()->chmod(d()->site_path, 0755)
-      ->succeed(dt('Made site path writable.'))
-      ->fail(dt('Unable to change mode of site path to be writable.'));
+    // Check for site path, if exists, make writable and save backup.
+    if (file_exists(d()->site_path)) {
+      provision_file()->chmod(d()->site_path, 0755)
+        ->succeed(dt('Made site path writable.'))
+        ->fail(dt('Unable to change mode of site path to be writable.'));
 
-    if (!empty($backup_file) && !strpos($backup_file, '/')) {
-      drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
-    }
-    else {
-      drush_log(dt('Invoking drush provision-backup...'));
-      drush_invoke("provision-backup", $backup_file);
-      drush_unset_option('force', 'process');
+      if (!empty($backup_file) && !strpos($backup_file, '/')) {
+        drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
+      }
+      else {
+        drush_log(dt('Invoking drush provision-backup...'));
+        drush_invoke("provision-backup", $backup_file);
+        drush_unset_option('force', 'process');
+      }
     }
   }
 }
