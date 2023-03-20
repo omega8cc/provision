@@ -391,7 +391,7 @@ function drush_provision_drupal_pre_provision_verify() {
       $t['@composer_root'] = $composer_directory;
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
-      if ($composer_directory && drush_get_option('no-composer-install', FALSE) == FALSE) {
+      if ($composer_directory && drush_get_option('no-composer-install', FALSE) !== FALSE) {
 
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
