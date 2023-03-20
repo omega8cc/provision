@@ -392,13 +392,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
       if ($composer_directory && drush_get_option('no-composer-install', FALSE) !== FALSE) {
-
-        // Composer Install command: Do not interact, do not show download progress.
-        // Customizable by setting drush option 'provision_composer_install_command'
-        // @TODO: Change to provision platform property "build_command".
-        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
+        
+        // Run build step. This runs either the default from Provision_Context_Site::getDefaultDeploySteps() or the site's composer.json
+        d()->runDeployStep('build');
         
       }
       elseif (!$composer_directory) {
