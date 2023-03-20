@@ -98,8 +98,7 @@ class Provision_Context_platform extends Provision_Context {
     chdir($this->git_root);
     return implode(PHP_EOL . PHP_EOL, [
       trim(shell_exec("git -c color.ui=always status 2> /dev/null")),
-      trim(shell_exec("git -c color.ui=always show 2> /dev/null")),
-      trim(shell_exec("git -c color.ui=always diff --minimal 2> /dev/null")),
+      trim(shell_exec("git -c color.ui=always show --compact-summary 2> /dev/null")),
     ]);
   }
 
