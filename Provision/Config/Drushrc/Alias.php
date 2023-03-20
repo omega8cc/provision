@@ -88,7 +88,11 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function delete() {
-    unlink($this->filenameYaml());
-    unlink($this->filename());
+    if (file_exists($this->filenameYaml())){
+      unlink($this->filenameYaml());
+    }
+    if (file_exists($this->filename())){
+      unlink($this->filename());
+    }
   }
 }
