@@ -1,8 +1,5 @@
 <?php
 
-use Eloquent\Composer\Configuration\ConfigurationReader;
-use DevShop\Component\Common\ComposerRepositoryAwareTrait;
-
 /**
  * @file Provision named context platform class.
  */
@@ -11,8 +8,6 @@ use DevShop\Component\Common\ComposerRepositoryAwareTrait;
  * Class for the platform context.
  */
 class Provision_Context_platform extends Provision_Context {
-  use ComposerRepositoryAwareTrait;
-  
   public $type = 'platform';
   public $parent_key = 'server';
 
@@ -282,6 +277,7 @@ class Provision_Context_platform extends Provision_Context {
     else {
       return [];
     }
+  } 
   }
   /**
    * Load the deploy steps for this site.
