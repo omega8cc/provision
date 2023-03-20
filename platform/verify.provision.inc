@@ -14,7 +14,12 @@ function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
 
     // Verify the platform first.
-    _drush_provision_verify_current_platform();
+    if (_drush_provision_verify_current_platform()) {
+      drush_log(dt('Codebase verified.'), 'ok');
+    }
+    else {
+      return false;
+    }
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -50,11 +55,10 @@ function _drush_provision_verify_current_platform() {
       drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
         '@alias' => d()->platform->name,
       )), 'error');
-      return drush_get_error();
+      return false;
     }
     else {
-      # @TODO: Platforms are not receiving package data when sites are verifying.
-      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
+      return true;
     }
   }
 }
@@ -391,7 +395,7 @@ function drush_provision_drupal_pre_provision_verify() {
       $t['@composer_root'] = $composer_directory;
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
-      if ($composer_directory && drush_get_option('no-composer-install', FALSE) !== FALSE) {
+      if ($composer_directory && !drush_get_option('no-composer-install', FALSE)) {
         
         // Run build step. This runs either the default from Provision_Context_Site::getDefaultDeploySteps() or the site's composer.json
         d()->runDeployStep('build');
@@ -414,15 +418,7 @@ function drush_provision_drupal_pre_provision_verify() {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
     // If we couldn't bootstrap, there's no sense in continuing past this point.
     if (drush_get_error()) {
-      $errors = drush_get_error_log();
-      foreach ($errors as $type => &$error) {
-        $error = "$type: {$error[0]}";
-      }
-      return drush_set_error("DRUSH_INVALID_DRUPAL_ROOT",
-        dt("An error occured while preparing code in @path: @errors", array(
-          '@path' => d()->root,
-          '@errors' => implode('|', $errors)
-        )));
+      return false;
     }
 
     // Fix ownership early enough

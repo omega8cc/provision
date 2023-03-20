@@ -1,6 +1,7 @@
 <?php
-
 use Eloquent\Composer\Configuration\ConfigurationReader;
+
+use DevShop\Component\Common\ComposerRepositoryAwareTrait;
 
 /**
  * @file Provision named context site class.
@@ -8,7 +9,7 @@ use Eloquent\Composer\Configuration\ConfigurationReader;
 
 class Provision_Context_site extends Provision_Context {
 
-  use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
+  use ComposerRepositoryAwareTrait;
 
   public $type = 'site';
   public $parent_key = 'platform';
@@ -91,71 +92,12 @@ class Provision_Context_site extends Provision_Context {
    * @return array[]
    */
   public function getDeploySteps() {
-    $steps = self::defaultDeploySteps();
-    $composer_path = $this->git_root . '/composer.json';
-    
-    // Don't try to load if there's no file.
-    if (empty($this->git_root) || !file_exists($composer_path)) {
-      return $steps;
+    if (isset($this->platform)) {
+      return $this->platform->getDeploySteps();
     }
-
-    $reader = new ConfigurationReader;
-    $this->composerConfig =  $reader->read($composer_path);
-    $scripts = (array) $this->composerConfig->scripts()->rawData();
-    
-    foreach ($steps as $step => $info) {
-      $command = "deploy:$step";
-      if (!empty($scripts[$command])) {
-        $steps[$step]['command'] = $scripts[$command];
-        $steps[$step]['source'] = 'composer';
-        $steps[$step]['overridden_by'] = t('Defined in %override: <code>deploy:@step</code>.', [
-          '%override' => 'composer.json',
-          '@step' => $step,
-        ]);
-      }
+    else {
+      throw new Exception('$site->getDeploySteps can only be called if there is a $site->platform.');
     }
-    
-    // Allow modules to alter the steps.
-    if (function_exists('drupal_alter')) {
-      drupal_alter('hosting_site_deploy_steps', $steps, $this);
-    }
-    
-    return $steps;
-  }
-
-  /**
-   * Default deploy steps for a site.
-   * 
-   * getDeploySteps() will load these or overrides.
-   * @return array[]
-   */
-  private static function defaultDeploySteps() {
-    return [
-      // @TODO: Add as hosting task option. Not a real deploy step.
-//      'reset' => [
-//        'title' => t('Reset'),
-//        'description' => t('Discard uncommitted code changes.'),
-//        'command' => 'git reset --hard',
-//      ],
-      'build' => [
-        'title' => t('Build'),
-        'description' => t('Prepare source code.'),
-        'command' => 'composer install --no-dev --ansi',
-      ],
-      'update' => [
-        'title' => t('Update'),
-        'description' => t('Apply pending updates to the site.'),
-        'command' => [
-          "drush updatedb  --no-cache-clear",
-          'drush cache:rebuild',
-        ],
-      ],
-      'test' => [
-        'title' => t('Test'),
-        'description' => t('Run tests against the site.'),
-        'command' => 'drush status',
-      ],
-    ];
   }
 
   /**
@@ -164,32 +106,6 @@ class Provision_Context_site extends Provision_Context {
    * @return bool
    */
   public function runDeployStep($step) {
-    $log_output = drush_get_option('runner') == 'hosting_task';
-    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
-
-    $steps = $this->getDeploySteps();
-    $commands = is_array($steps[$step]['command'])?
-      $steps[$step]['command']:
-      [$steps[$step]['command']];
-
-    $cwd = $this->git_root;
-    $env = [
-      'DRUSH_OPTIONS_URI' => $this->uri,
-      'XTERM' => 'TERM',
-    ];
-
-    $t = [
-      '@step' => $step,
-      '@root' => $cwd,
-    ];
-    
-    foreach ($commands as $command) {
-      provision_process($command, $cwd, dt('Deploy Step: @step in @root', $t), $env, $log_output, null, TRUE, $provision_log_type);
-      $process = drush_get_context('provision_process_result');
-      if (!$process->isSuccessful()) {
-        return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Deploy Step failed: @step', $t));
-      }
-    }
-    return TRUE;
+    return $this->platform->runDeployStep($step);
   }
 }
