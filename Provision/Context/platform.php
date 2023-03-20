@@ -181,7 +181,7 @@ class Provision_Context_platform extends Provision_Context {
    */
   public function displayGitStatus() {
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
-    provision_process("git -c color.ui=always log --oneline --max-count=1 && git -c color.ui=always status && git -c color.ui=always diff --minimal", $this->git_root, dt('Git Status'), [], TRUE, dt('Unable to run git status.'), FALSE, $provision_log_type);
+    drush_log($this->getStatus(), $provision_log_type);
   }
 
   /**
