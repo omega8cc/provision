@@ -1,6 +1,7 @@
 <?php
-
 use Eloquent\Composer\Configuration\ConfigurationReader;
+
+use DevShop\Component\Common\ComposerRepositoryAwareTrait;
 
 /**
  * @file Provision named context site class.
@@ -8,7 +9,7 @@ use Eloquent\Composer\Configuration\ConfigurationReader;
 
 class Provision_Context_site extends Provision_Context {
 
-  use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
+  use ComposerRepositoryAwareTrait;
 
   public $type = 'site';
   public $parent_key = 'platform';
@@ -71,6 +72,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
     
     $this->setProperty('root', $this->platform->root);
+    $this->setProperty('git_root', $this->platform->git_root);
   }
 
   /**
@@ -90,68 +92,20 @@ class Provision_Context_site extends Provision_Context {
    * @return array[]
    */
   public function getDeploySteps() {
-    $steps = self::defaultDeploySteps();
-    $composer_path = $this->git_root . '/composer.json';
-    
-    // Don't try to load if there's no file.
-    if (empty($this->git_root) || !file_exists($composer_path)) {
-      return $steps;
+    if (isset($this->platform)) {
+      return $this->platform->getDeploySteps();
     }
-
-    $reader = new ConfigurationReader;
-    $this->composerConfig =  $reader->read($composer_path);
-    $scripts = (array) $this->composerConfig->scripts()->rawData();
-    
-    foreach ($steps as $step => $info) {
-      $command = "deploy:$step";
-      if (isset($scripts[$command])) {
-        $steps[$step]['command'] = $scripts[$command];
-        $steps[$step]['overridden_by'] = t('Defined in %override: <code>deploy:@step</code>.', [
-          '%override' => 'composer.json',
-          '@step' => $step,
-        ]);
-      }
+    else {
+      throw new Exception('$site->getDeploySteps can only be called if there is a $site->platform.');
     }
-    
-    // Allow modules to alter the steps.
-    if (function_exists('drupal_alter')) {
-      drupal_alter('hosting_site_deploy_steps', $steps, $this);
-    }
-    
-    return $steps;
   }
 
   /**
-   * Default deploy steps for a site.
-   * 
-   * getDeploySteps() will load these or overrides.
-   * @return array[]
+   * @param $step
+   *
+   * @return bool
    */
-  private static function defaultDeploySteps() {
-    return [
-      'reset' => [
-        'title' => t('Reset'),
-        'description' => t('Discard uncommitted code changes.'),
-        'command' => 'git reset --hard',
-      ],
-      'build' => [
-        'title' => t('Build'),
-        'description' => t('Prepare source code.'),
-        'command' => 'composer install --no-dev --profile',
-      ],
-      'update' => [
-        'title' => t('Update'),
-        'description' => t('Apply changes to the site.'),
-        'command' => [
-          'drush pm:update --no-cache-clear',
-          'drush cache:rebuild',
-        ],
-      ],
-      'test' => [
-        'title' => t('Test'),
-        'description' => t('Run tests against the site.'),
-        'command' => 'drush status',
-      ],
-    ];
+  public function runDeployStep($step) {
+    return $this->platform->runDeployStep($step);
   }
 }
