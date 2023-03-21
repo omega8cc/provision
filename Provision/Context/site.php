@@ -71,6 +71,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
     
     $this->setProperty('root', $this->platform->root);
+    $this->setProperty('git_root', $this->platform->git_root);
   }
 
   /**
