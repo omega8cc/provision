@@ -46,62 +46,27 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
   if (empty($git_ref)) {
     $git_ref = d()->platform->git_reference;
   }
-
-  // Get post deploy options
-  $revert = drush_get_option('revert');
-  $update = drush_get_option('update');
-  $cache = drush_get_option('cache');
-
+  
   $drush_alias = d()->name;
-
-  $commands = array();
 
   drush_log("{$drush_alias}: " . dt('Running deploy hooks.'), $drush_log_type);
 
-  // Built in Hooks
-  if ($update) {
-    $commands[] = "drush updatedb --yes";
-  }
-  else {
-    drush_log(dt('Skipped updating database...'), $drush_log_type);
-  }
+  $steps = d()->getDeploySteps();
 
-  // Clear the whole cache, unless option is false
-  if ($cache) {
-    if (drush_drupal_major_version(d()->root) >= 8) {
-      $commands[] = "drush cache-rebuild";
+  foreach ($steps as $step_name => $step) {
+    if (drush_get_option($step_name)) {
+      
+      if ($step['source'] ?? '' == 'composer') {
+        $command = "composer deploy:$step_name";
+      }
+      else {
+        $command = $step['command'];
+      }
+      
+      $step_succeeded = d()->runDeployStep($step_name);
+      if (!$step_succeeded){
+        return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Deploy aborted: commands failed.'));
+      }
     }
-    else {
-      $commands[] = "drush cache-clear all";
-    }
-  }
-  else {
-    drush_log(dt('Skipped rebuilding caches...'), $drush_log_type);
-  }
-
-  // Revert All Features, unless option is false
-  if ($revert) {
-    $commands[] = "drush features-revert-all --yes";
-  }
-  else {
-    drush_log(dt('Skipped reverting all features...'), $drush_log_type);
-  }
-
-  foreach ($commands as $command) {
-    $output = provision_process($command, d()->platform->git_root, NULL, [
-      'DRUSH_OPTIONS_URI' => d()->uri
-    ], TRUE, NULL, TRUE, $provision_log_type);
-
-    // Detect common errors and help the user.
-    // Composer install with incorrect PHP version.
-    if (strpos($command, 'composer install') !== FALSE && strpos($output, 'your PHP version') !== FALSE && strpos($output, 'does not satisfy that requirement') !== FALSE) {
-      drush_log(dt('Composer indicated that it could not install packages because the site codebase requires a higher version of PHP than what is running on the server.'), $drush_log_type);
-      drush_log(dt('You can either upgrade your version of PHP on this server or set the maximum PHP version in your composer.json file. See !link for instructions for how to modify your composer.json file, then make sure to run `composer update` on your codebase to pin your packages to a lower PHP version.', [
-        '!link' => '<a href="https://getcomposer.org/doc/06-config.md#platform">https://getcomposer.org/doc/06-config.md#platform</a>',
-      ]), $drush_log_type);
-    }
-
   }
 }
-
-
