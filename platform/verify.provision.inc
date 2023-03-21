@@ -14,12 +14,7 @@ function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
 
     // Verify the platform first.
-    if (_drush_provision_verify_current_platform()) {
-      drush_log(dt('Codebase verified.'), 'ok');
-    }
-    else {
-      return false;
-    }
+    _drush_provision_verify_current_platform();
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -55,10 +50,11 @@ function _drush_provision_verify_current_platform() {
       drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
         '@alias' => d()->platform->name,
       )), 'error');
-      return false;
+      return drush_get_error();
     }
     else {
-      return true;
+      # @TODO: Platforms are not receiving package data when sites are verifying.
+      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
     }
   }
 }
@@ -395,10 +391,14 @@ function drush_provision_drupal_pre_provision_verify() {
       $t['@composer_root'] = $composer_directory;
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
-      if ($composer_directory && !drush_get_option('no-composer-install', FALSE)) {
-        
-        // Run build step. This runs either the default from Provision_Context_Site::getDefaultDeploySteps() or the site's composer.json
-        d()->runDeployStep('build');
+      if ($composer_directory && drush_get_option('no-composer-install', FALSE) == FALSE) {
+
+        // Composer Install command: Do not interact, do not show download progress.
+        // Customizable by setting drush option 'provision_composer_install_command'
+        // @TODO: Change to provision platform property "build_command".
+        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
+
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
         
       }
       elseif (!$composer_directory) {
@@ -418,7 +418,15 @@ function drush_provision_drupal_pre_provision_verify() {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
     // If we couldn't bootstrap, there's no sense in continuing past this point.
     if (drush_get_error()) {
-      return false;
+      $errors = drush_get_error_log();
+      foreach ($errors as $type => &$error) {
+        $error = "$type: {$error[0]}";
+      }
+      return drush_set_error("DRUSH_INVALID_DRUPAL_ROOT",
+        dt("An error occured while preparing code in @path: @errors", array(
+          '@path' => d()->root,
+          '@errors' => implode('|', $errors)
+        )));
     }
 
     // Fix ownership early enough

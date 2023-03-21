@@ -71,7 +71,6 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
     
     $this->setProperty('root', $this->platform->root);
-    $this->setProperty('git_root', $this->platform->git_root);
   }
 
   /**
@@ -105,9 +104,8 @@ class Provision_Context_site extends Provision_Context {
     
     foreach ($steps as $step => $info) {
       $command = "deploy:$step";
-      if (!empty($scripts[$command])) {
+      if (isset($scripts[$command])) {
         $steps[$step]['command'] = $scripts[$command];
-        $steps[$step]['source'] = 'composer';
         $steps[$step]['overridden_by'] = t('Defined in %override: <code>deploy:@step</code>.', [
           '%override' => 'composer.json',
           '@step' => $step,
@@ -131,22 +129,21 @@ class Provision_Context_site extends Provision_Context {
    */
   private static function defaultDeploySteps() {
     return [
-      // @TODO: Add as hosting task option. Not a real deploy step.
-//      'reset' => [
-//        'title' => t('Reset'),
-//        'description' => t('Discard uncommitted code changes.'),
-//        'command' => 'git reset --hard',
-//      ],
+      'reset' => [
+        'title' => t('Reset'),
+        'description' => t('Discard uncommitted code changes.'),
+        'command' => 'git reset --hard',
+      ],
       'build' => [
         'title' => t('Build'),
         'description' => t('Prepare source code.'),
-        'command' => 'composer install --no-dev --ansi',
+        'command' => 'composer install --no-dev --profile',
       ],
       'update' => [
         'title' => t('Update'),
-        'description' => t('Apply pending updates to the site.'),
+        'description' => t('Apply changes to the site.'),
         'command' => [
-          "drush updatedb  --no-cache-clear",
+          'drush pm:update --no-cache-clear',
           'drush cache:rebuild',
         ],
       ],
@@ -156,40 +153,5 @@ class Provision_Context_site extends Provision_Context {
         'command' => 'drush status',
       ],
     ];
-  }
-
-  /**
-   * @param $step
-   *
-   * @return bool
-   */
-  public function runDeployStep($step) {
-    $log_output = drush_get_option('runner') == 'hosting_task';
-    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
-
-    $steps = $this->getDeploySteps();
-    $commands = is_array($steps[$step]['command'])?
-      $steps[$step]['command']:
-      [$steps[$step]['command']];
-
-    $cwd = $this->git_root;
-    $env = [
-      'DRUSH_OPTIONS_URI' => $this->uri,
-      'XTERM' => 'TERM',
-    ];
-
-    $t = [
-      '@step' => $step,
-      '@root' => $cwd,
-    ];
-    
-    foreach ($commands as $command) {
-      provision_process($command, $cwd, dt('Deploy Step: @step in @root', $t), $env, $log_output, null, TRUE, $provision_log_type);
-      $process = drush_get_context('provision_process_result');
-      if (!$process->isSuccessful()) {
-        return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Deploy Step failed: @step', $t));
-      }
-    }
-    return TRUE;
   }
 }
