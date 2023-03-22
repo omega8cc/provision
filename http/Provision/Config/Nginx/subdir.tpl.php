@@ -205,7 +205,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   ### Deny not compatible request methods without 405 response.
   ###
-  if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|DELETE|OPTIONS)$ ) {
+  if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
     return 403;
   }
 
