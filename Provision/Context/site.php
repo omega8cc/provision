@@ -171,7 +171,7 @@ class Provision_Context_site extends Provision_Context {
       $steps[$step]['command']:
       [$steps[$step]['command']];
 
-    $cwd = $this->git_root;
+    $cwd = $this->platform->git_root;
     $env = [
       'DRUSH_OPTIONS_URI' => $this->uri,
       'XTERM' => 'TERM',
