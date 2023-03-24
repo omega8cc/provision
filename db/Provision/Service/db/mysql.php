@@ -301,8 +301,14 @@ port=%s
       $gtid_option = '';
     } // else
 
+    // @TODO: Shouldn't we just defer to drush for this stuff??
     // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
-    $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --single-transaction --quick --no-autocommit %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
+    
+    // Load sql dump options from drush config.
+    // Single transaction is great, but MYSQL added an extra permission for it that is failing us all.
+    // until that is fixed, Aegir sets a drush config option to force '--no-tablespaces --single-transaction=false --set-gtid-purged=OFF'  
+    $options = drush_get_option('extra-dump', '--single-transaction --quick --no-autocommit ');
+    $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s %s %s", $gtid_option, $options, escapeshellcmd(drush_get_option('db_name')));
 
     // Fail if db file already exists.
     $dump_filename = d()->site_path . '/database.sql';
