@@ -14,3 +14,7 @@ command:
     alias:
       options:
         format: list
+  sql:
+    dump:
+      options:
+        extra-dump: '--no-tablespaces --single-transaction=false --set-gtid-purged=OFF'  
