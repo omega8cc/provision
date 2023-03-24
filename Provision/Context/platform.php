@@ -11,6 +11,8 @@ class Provision_Context_platform extends Provision_Context {
   public $type = 'platform';
   public $parent_key = 'server';
 
+  const GIT_STATUS_MAX_LENGTH = 1024;
+  
   static function option_documentation() {
     return array(
       'root' => 'platform: path to a Drupal installation',
@@ -76,14 +78,14 @@ class Provision_Context_platform extends Provision_Context {
    * Get the current git SHA. 
    */
   public function getSha() {
-    return trim(shell_exec("cd $this->git_root && git rev-parse @ 2> /dev/null"));
+    return self::shellExecTruncate("cd $this->git_root && git rev-parse @ 2> /dev/null");
   }
 
   /**
    * Get the current git SHA. 
    */
   public function getLast() {
-    return trim(shell_exec("cd {$this->git_root}; git log --pretty=format:'%ct' --max-count=1 2> /dev/null"));
+    return self::shellExecTruncate("cd {$this->git_root}; git log --pretty=format:'%ct' --max-count=1 2> /dev/null");
   }
 
   /**
@@ -92,9 +94,37 @@ class Provision_Context_platform extends Provision_Context {
   public function getStatus() {
     chdir($this->git_root);
     return implode(PHP_EOL . PHP_EOL, [
-      trim(shell_exec("git -c color.ui=always status 2> /dev/null")),
-      trim(shell_exec("git -c color.ui=always show --compact-summary 2> /dev/null")),
+      self::shellExecTruncate("git -c color.ui=always status 2> /dev/null"),
+      self::shellExecTruncate("git -c color.ui=always show --compact-summary 2> /dev/null"),
     ]);
+  }
+
+  /**
+   * Shell exec then trim the output.
+   * @param $command
+   *
+   * @return string
+   */
+  public function shellExecTruncate($command) {
+    return self::truncateString(shell_exec($command));
+  }
+  
+  /**
+   * Trim strings to avoid super long output.
+   * @param $string
+   * @return string
+   */
+  public function truncateString($string) {
+    $string = trim($string);
+    if (strlen($string) <= self::GIT_STATUS_MAX_LENGTH) {
+      return $string;
+    }
+    else {
+      return substr($string, 0, self::GIT_STATUS_MAX_LENGTH) . dt('[Trimmed to @char characters from @size]', [
+          '@char' => self::GIT_STATUS_MAX_LENGTH,
+          '@size' => strlen($string),
+        ]);  
+    }
   }
 
   /**
@@ -277,5 +307,5 @@ class Provision_Context_platform extends Provision_Context {
     else {
       return [];
     }
-  } 
+  }
 }
