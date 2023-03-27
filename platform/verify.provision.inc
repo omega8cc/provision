@@ -55,6 +55,9 @@ function _drush_provision_verify_current_platform() {
     else {
       # @TODO: Platforms are not receiving package data when sites are verifying.
       drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
+      
+      # DEBUG to figure out where the data is.
+      # drush_log(print_r(array_keys($result), 1), 'warning');
     }
   }
 }
