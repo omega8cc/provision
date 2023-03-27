@@ -411,7 +411,7 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
       }
       elseif ($composer_directory && drush_get_option('no-composer-install', FALSE) == TRUE) {
-        drush_log(dt('Composer file was found, but composer install was not run due to --no-composer-install option.'), 'warning');
+        drush_log(dt('Composer file was found, but composer install was not run due to --no-composer-install option.'), 'ok');
       }
     }
     
