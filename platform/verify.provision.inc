@@ -39,7 +39,8 @@ function _drush_provision_verify_current_platform() {
   if (d()->type == 'site' && d()->platform) {
     drush_log(dt('Verifying platform...'), $drush_log_type);
     $args = array();
-    $options = array();
+    $options = drush_get_merged_options();
+    
     $options['runner'] = drush_get_option('runner');
     $options['root'] = d()->root;
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
@@ -412,6 +413,53 @@ function drush_provision_drupal_pre_provision_verify() {
       elseif ($composer_directory && drush_get_option('no-composer-install', FALSE) == TRUE) {
         drush_log(dt('Composer file was found, but composer install was not run due to --no-composer-install option.'), 'warning');
       }
+    }
+    
+    // Detect missing index.php. Look for composer config to reset.
+    if (!file_exists(d()->root . '/index.php')) {
+      if (file_exists(d()->git_root . '/composer.json')) {
+
+        $r = d()->getComposer();
+        if (!empty($r['extra']['drupal-scaffold']['locations']['web-root'])) {
+          $path = realpath(d()->git_root . '/' . $r['extra']['drupal-scaffold']['locations']['web-root']);
+          if ($path && file_exists( $path . '/index.php')) {
+            drush_log(dt('Drupal Scaffold Web root detected: @root', [
+              '@root' => $path,
+            ]), $provision_log_type);
+            
+            d()->setProperty('root', $path);
+            d()->root = $path;
+            drush_set_option('root', $path);
+
+            $git_docroot = dirname($path . '/index.php');
+            d()->setProperty('git_docroot', $git_docroot);
+            d()->git_docroot = $git_docroot;
+            drush_set_option('git_docroot', $git_docroot);
+          }
+          else {
+            drush_set_error(DRUSH_APPLICATION_ERROR, dt('Drupal Scaffold config was found, but no index.php was found in that location (@file). Composer install should have run before this step. Try a manual composer install and run the task again.', [
+              '@file' => $path ?? d()->git_root . '/' . $r['extra']['drupal-scaffold']['locations']['web-root'],
+            ]));
+          }
+        }
+        else {
+          drush_set_error(DRUSH_APPLICATION_ERROR, dt('Index.php file was not found in platform root (@root). A composer.json file was found, but Drupal Scaffold config is not present. Add to @composer:extras.drupal-scaffold.locations.web-root', [
+            '@root' => d()->root,
+            '@composer' => d()->git_root . '/composer.json',
+          ]));
+        }
+      }
+      else {
+        drush_set_error(DRUSH_APPLICATION_ERROR, dt('Index.php not was found at @root. Composer.json file was not found at @git_root', [
+          '@root' => d()->root,
+          '@git_root' => d()->git_root,
+        ]));
+      }
+    }
+    else {
+      drush_log(dt('Index.php was found at @path.', [
+        '@path' => d()->root,
+      ]), 'ok');
     }
 
     // Re-set the ROOT PATH for Drush.
