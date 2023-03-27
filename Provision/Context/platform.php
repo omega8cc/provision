@@ -11,8 +11,15 @@ class Provision_Context_platform extends Provision_Context {
   public $type = 'platform';
   public $parent_key = 'server';
 
+  use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
+  
   const GIT_STATUS_MAX_LENGTH = 1024;
   
+  function __construct($name) {
+    parent::__construct($name);
+    $this->setComposerConfigFromPath($this->git_root);
+  }
+
   static function option_documentation() {
     return array(
       'root' => 'platform: path to a Drupal installation',
