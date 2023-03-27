@@ -195,12 +195,10 @@ class Provision_Context_platform extends Provision_Context {
     // Only branch checkouts can have a remote.
     $remote = $this->getCurrentRemoteName();
     if (empty($remote)) {
-      return;
+      $remote = 'origin';
     }
-    else {
-      $command = "git config remote.{$remote}.url";
-      return $this->execOutput($command);
-    }
+    $command = "git config remote.{$remote}.url";
+    return $this->execOutput($command);
   }
 
   /**

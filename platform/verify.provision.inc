@@ -201,12 +201,9 @@ function drush_provision_drupal_pre_provision_verify() {
       // Current State
       $t['@git_reference_current'] = d()->getBranchOrTag();
       $t['@git_sha'] = d()->getSha();
-      // Only branch checkouts have "current" remotes.
-      $git_branch = d()->getBranch();
-      if ($git_branch) {
-        $t['@git_remote_current_name'] = d()->getCurrentRemoteName();
-        $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
-      }
+      $t['@git_remote_current_name'] = d()->getCurrentRemoteName();
+      $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
+      
       $t['@date'] = date('r');
   
       $t['@type'] = $git_ref_type = d()->isBranchOrTag() ?? 'reference';
@@ -217,12 +214,7 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Current State:'), $drush_log_type);
       drush_log(dt('    Git @type: @git_reference_current', $t), $drush_log_type);
       drush_log(dt('              SHA: @git_sha', $t), $drush_log_type);
-      if ($git_branch) {
         drush_log(dt('    Git Remote: @git_remote_current', $t), $drush_log_type);
-      }
-      else {
-        drush_log(dt('    Git Remote: None (detached HEAD)', $t), $drush_log_type);
-      }
 
       drush_log(dt('Desired State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
