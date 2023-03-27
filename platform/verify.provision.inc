@@ -208,12 +208,14 @@ function drush_provision_drupal_pre_provision_verify() {
         $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
       }
       $t['@date'] = date('r');
+  
+      $t['@type'] = $git_ref_type = d()->isBranchOrTag();
 
       drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
 
       drush_log(dt('Git repository clone detected in @git_root', $t), $drush_log_type);
       drush_log(dt('Current State:'), $drush_log_type);
-      drush_log(dt('    Git Reference: @git_reference_current', $t), $drush_log_type);
+      drush_log(dt('    Git @type: @git_reference_current', $t), $drush_log_type);
       drush_log(dt('              SHA: @git_sha', $t), $drush_log_type);
       if ($git_branch) {
         drush_log(dt('    Git Remote: @git_remote_current', $t), $drush_log_type);
@@ -302,17 +304,20 @@ function drush_provision_drupal_pre_provision_verify() {
         provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Git checkout failed.'), $exit_if_checkout_failed, $provision_log_type);
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
-        if ($run_git_reset) {
-          $reset_command = "git fetch && git reset --hard FETCH_HEAD";
-        }
-        else {
-          $reset_command = "git fetch && git reset FETCH_HEAD";
+        $reset_command = '';
+        if ($git_ref_type == 'branch') {
+          if ($run_git_reset) {
+            $reset_command = "git fetch && git reset --hard FETCH_HEAD";
+          }
+          else {
+            $reset_command = "git fetch && git reset FETCH_HEAD";
+          }
         }
           
         if (d()->isAhead()) {
           drush_log(dt('Skipping git reset because git repository has un-pushed commits. Make sure your local commits are pushed or they may be lost.'), 'warning');
         }
-        else {
+        elseif ($reset_command) {
           $log_message = dt('Resetting to git upstream...');
           
           // If the repo cannot be written to, git reset will fail.

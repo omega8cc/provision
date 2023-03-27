@@ -168,6 +168,25 @@ class Provision_Context_platform extends Provision_Context {
   }
 
   /**
+   * Return the currently checked out branch or tag.
+   */
+  public function isBranchOrTag()
+  {
+    $branch = $this->getBranch();
+    $tag = $this->getTag();
+
+    if ($branch) {
+      return 'branch';
+    }
+    elseif ($tag) {
+      return 'tag';
+    }
+    else {
+      return FALSE;
+    }
+  }
+
+  /**
    * Returns the remote name, usually "origin".
    * @return  array
    */
