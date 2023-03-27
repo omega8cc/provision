@@ -473,6 +473,17 @@ function drush_provision_drupal_pre_provision_verify() {
     // @TODO: Move to post-hosting-task.
     // drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
 
+    // Set these in addition to platform so verify site tasks get the latest data from platforms.
+    drush_set_option('git_sha', d()->platform->getSha(), 'drupal');
+    drush_set_option('git_last', d()->platform->getLast(), 'drupal');
+    drush_set_option('git_status', d()->platform->getStatus(), 'drupal');
+    drush_set_option('git_refs', d()->platform->getRemoteReferences(), 'drupal');
+    drush_set_option('git_reference', d()->platform->getBranchOrTag(), 'drupal');
+    drush_set_option('git_remote', d()->platform->getCurrentRemoteUrl(), 'drupal');
+    drush_set_option('git_reset', d()->platform->git_reset, 'drupal');
+    drush_set_option('git_root', d()->platform->git_root, 'drupal');
+    drush_set_option('git_docroot', d()->platform->git_docroot, 'drupal');
+
     // This is the actual drupal provisioning requirements.
     _provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
