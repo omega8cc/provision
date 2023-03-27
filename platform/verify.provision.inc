@@ -431,7 +431,8 @@ function drush_provision_drupal_pre_provision_verify() {
             d()->root = $path;
             drush_set_option('root', $path);
 
-            $git_docroot = dirname($path . '/index.php');
+            // To remove ./
+            $git_docroot = $r['extra']['drupal-scaffold']['locations']['web-root'];
             d()->setProperty('git_docroot', $git_docroot);
             d()->git_docroot = $git_docroot;
             drush_set_option('git_docroot', $git_docroot);
