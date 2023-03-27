@@ -209,7 +209,7 @@ function drush_provision_drupal_pre_provision_verify() {
       }
       $t['@date'] = date('r');
   
-      $t['@type'] = $git_ref_type = d()->isBranchOrTag();
+      $t['@type'] = $git_ref_type = d()->isBranchOrTag() ?? 'reference';
 
       drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
 
@@ -305,7 +305,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Reset to @{upstream}, only if there are not un-pushed commits.
         $reset_command = '';
-        if ($git_ref_type == 'branch') {
+        $log_message = dt('Resetting to git upstream...');
+        $new_git_ref_type = d()->isBranchOrTag();
+        if ($new_git_ref_type == 'branch') {
           if ($run_git_reset) {
             $reset_command = "git fetch && git reset --hard FETCH_HEAD";
           }
@@ -313,12 +315,15 @@ function drush_provision_drupal_pre_provision_verify() {
             $reset_command = "git fetch && git reset FETCH_HEAD";
           }
         }
+        elseif ($new_git_ref_type == 'tag' && $run_git_reset) {
+          $reset_command = "git reset --hard";
+          $log_message = dt('Resetting to git tag...');
+        }
           
         if (d()->isAhead()) {
           drush_log(dt('Skipping git reset because git repository has un-pushed commits. Make sure your local commits are pushed or they may be lost.'), 'warning');
         }
         elseif ($reset_command) {
-          $log_message = dt('Resetting to git upstream...');
           
           // If the repo cannot be written to, git reset will fail.
           // Ths code assumes allowing the `git reset` command to fail with a warning is the desired behavior.
