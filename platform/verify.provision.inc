@@ -248,7 +248,7 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt('Skipping git fetch due to --no-fetch option.'), $drush_log_type);
       } else {
         // Fetch latest changes
-        provision_process("git fetch --all --tags --recurse-submodules", d()->git_root, FALSE, NULL, TRUE, $provision_log_type);
+        provision_process("git fetch --all --tags --recurse-submodules", d()->git_root, dt('Fetching latest branches and tags....'), NULL, TRUE, dt('Unable to fetch from git remote.'), FALSE, $provision_log_type);
       }
 
       d()->displayGitStatus();
