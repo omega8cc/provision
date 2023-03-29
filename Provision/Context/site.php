@@ -138,7 +138,8 @@ class Provision_Context_site extends Provision_Context {
       'build' => [
         'title' => dt('Build'),
         'description' => dt('Prepare source code.'),
-        'command' => 'composer install --no-dev --ansi',
+        // Preferred default production composer install command.
+        'command' => 'composer --no-interaction install --no-progress --prefer-dist --optimize-autoloader',
       ],
       'update' => [
         'title' => dt('Update'),
