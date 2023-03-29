@@ -131,7 +131,7 @@ function drush_provision_drupal_provision_install() {
       }
       $command[] = '--yes';
 
-      provision_process($command, d()->root, dt('Installing site...'), $env, TRUE);
+      provision_process($command, d()->platform->root, dt('Installing site...'), $env, TRUE);
       $process = drush_get_context('provision_process_result');
 
       // chdir(d('@hostmaster')->root);
