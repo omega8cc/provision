@@ -507,7 +507,7 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
  * @return string|void
  *   The output or error output of the command.
  */
-function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = FALSE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
+function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
   if (empty($command)) {
     return;
   }
