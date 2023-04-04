@@ -388,20 +388,8 @@ function drush_provision_drupal_pre_provision_verify() {
       )), 'debug');
 
       // Detect composer.json and run composer install.
-      // Step 1: Look for composer directory in git_root or root.
-      // Copied from composer Application.php
-      $dir = d()->root;
-      $home = realpath(getenv('HOME') ?: getenv('USERPROFILE') ?: '/');
-      while (dirname($dir) !== $dir && $dir !== $home) {
-        // Copied from Factory::getComposerFile()
-        $getComposerFile = trim(getenv('COMPOSER')) ?: './composer.json';
-        if (file_exists($dir.'/'.$getComposerFile)) {
-          $oldWorkingDir = getcwd();
-          break;
-        }
-        $dir = dirname($dir);
-      }
-      $composer_directory = $dir;
+      // Step 1: Look for composer directory in git_root.
+      $composer_directory = d()->git_root;
       $t['@composer_root'] = $composer_directory;
 
       // Step 2: Run composer install if composer.json is present, unless drush option provision_composer_install_platforms_verify_always is set to false.
