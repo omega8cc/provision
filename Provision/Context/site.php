@@ -145,7 +145,7 @@ class Provision_Context_site extends Provision_Context {
         'title' => dt('Update'),
         'description' => dt('Apply pending updates to the site.'),
         'command' => [
-          "drush updatedb  --no-cache-clear",
+          "drush updatedb --yes --no-cache-clear",
           'drush cache:rebuild',
         ],
       ],
@@ -155,6 +155,27 @@ class Provision_Context_site extends Provision_Context {
         'command' => 'drush status',
       ],
     ];
+  }
+
+  /**
+   * Default deploy steps for a site.
+   *
+   * getDeploySteps() will load these or overrides.
+   * @return array[]
+   */
+  public static function generateComposerJsonDeployScripts($steps = null) {
+    if (empty($steps)) {
+      $steps = self::defaultDeploySteps();
+    }
+    $composer = [];
+    $composer['scripts'] = [];
+    
+    foreach ($steps as $name => $info) {
+      $composer['scripts']["deploy:$name"] = is_array($info['command'])?
+       $info['command']:
+       [$info['command']]; 
+    }
+    return $composer;
   }
 
   /**
