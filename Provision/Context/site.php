@@ -106,7 +106,7 @@ class Provision_Context_site extends Provision_Context {
       if (!empty($scripts[$command])) {
         $steps[$step]['command'] = $scripts[$command];
         $steps[$step]['source'] = 'composer';
-        $steps[$step]['overridden_by'] = t('Defined in %override: <code>deploy:@step</code>.', [
+        $steps[$step]['overridden_by'] = t('Overridden by <code>composer.json:deploy:build</code> script.', [
           '%override' => 'composer.json',
           '@step' => $step,
         ]);
