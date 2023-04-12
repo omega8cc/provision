@@ -808,6 +808,18 @@ location ~* \.(?:js|htc)$ {
 }
 
 ###
+### Deny listed requests for security reasons.
+###
+location = /composer.json {
+  access_log off;
+  return 404;
+}
+location = /composer.lock {
+  access_log off;
+  return 404;
+}
+
+###
 ### Support for dynamic .json requests.
 ###
 location ~* \.json$ {
