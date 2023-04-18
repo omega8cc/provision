@@ -45,7 +45,7 @@ function drush_provision_drupal_provision_install_validate() {
 
       // Destroy site_path.
       if (file_exists(d()->site_path)) {
-        provision_file()->chmod(d()->site_path, 0755);
+        provision_file()->chmod(d()->site_path, 0755, TRUE);
         _provision_recursive_delete( d()->site_path );
         drush_log(dt('Deleted @site_path.', array('@site_path' => d()->site_path)), 'ok');
       }
@@ -160,8 +160,8 @@ function drush_provision_drupal_provision_install_profile(){
       $command[] = "--account-mail={$options['client_email']}";
     }
     $command[] = '--yes';
-
-    provision_process($command, d()->platform->root, dt('Installing site...'), $env, TRUE, FALSE, TRUE, drush_get_option('drush_log_type', 'ok'));
+    $env = [];
+    provision_process($command, d()->platform->root, dt('Installing site...'));
     $process = drush_get_context('provision_process_result');
 
     // chdir(d('@hostmaster')->root);
