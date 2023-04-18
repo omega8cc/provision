@@ -15,6 +15,9 @@
  * Check that we are trying to install a new site , and a new site only
  */
 function drush_provision_drupal_provision_install_validate() {
+  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+  drush_set_option('drush_log_type', $drush_log_type);
+
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
@@ -23,7 +26,7 @@ function drush_provision_drupal_provision_install_validate() {
     // If "force-reinstall" option is set, delete the database and files.
     if (drush_get_option('force-reinstall', FALSE)) {
 
-      drush_log(dt('Forcing reinstall...'), 'ok');
+      drush_log(dt('Forcing reinstall...'), drush_set_option('drush_log_type', 'ok'));
 
       // Drop the database if we can figure out what it is.
       // If last install failed, the database and the site folder is deleted.
@@ -94,59 +97,77 @@ function drush_provision_drupal_provision_install() {
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
-  // @TODO: modernize install method by using "install_command" property instead.
-
   // Install site according to install_method.
-  drush_log(dt('Installing profile "!profile".', array(
-    '!profile' => d()->profile,
-  )), 'ok');
-
-  // Run Drupal installation if option was specified
-  $env = [];
-  if (d()->settings['install']['method'] == 'profile') {
-
-    // @TODO: Move entirely to the process method.
-    if (d()->name == '@hostmaster') {
-      // call a backend task to do the actual installation.
-      $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
-
-      // pass the login link back to the front end.
-      drush_set_option('login_link', $result['context']['login_link']);
-      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
-      drush_set_option('profile_installed', TRUE, 'site');
-    }
-    else {
-      $options = drush_get_merged_options();
-      $command = ['drush'];
-      $command[] = d()->site_install_command;
-      $command[] = d()->profile;
-      $command[] = '--sites-subdir=' . d()->uri;
-      $site_name = escapeshellarg($options['#name']);
-      $command[] = "--site-name=$site_name";
-
-      if ($options['client_email']) {
-        $command[] = "--account-mail={$options['client_email']}";
-      }
-      $command[] = '--yes';
-
-      provision_process($command, d()->platform->root, dt('Installing site...'), $env, TRUE);
-      $process = drush_get_context('provision_process_result');
-
-      // chdir(d('@hostmaster')->root);
-      // $result = provision_backend_invoke(d()->name, "provision-verify");
-
-    }
+  $hook = "drush_provision_drupal_provision_install_" . d()->install_method;
+  if (empty(d()->install_method)) {
+    return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Install Method not found. Make sure site settings.install.method is set.'));
   }
-  // If install_method is 'manual', do nothing.
-  elseif (d()->settings['install']['method'] == 'manual') {
-    drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
+  if (!function_exists($hook)) {
+    return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Function for install method @method not found. Expecting @hook', [
+      '@method' => d()->install_method,
+      '@hook' => $hook,
+    ]));
   }
-
-  // @TODO: Move additional install methods code here.
+  else {
+    $hook();
+  }
 
   drush_set_option('installed', TRUE, 'site');
   _provision_drupal_maintain_aliases();
 
+}
+
+/**
+ * Implements provision-install for METHOD.
+ * @return void
+ */
+function drush_provision_drupal_provision_install_METHOD(){
+}
+
+/**
+ * Implements provision-install for METHOD.
+ * @return void
+ */
+function drush_provision_drupal_provision_install_manual(){
+  drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
+
+}
+
+/**
+ * Implements provision-install for METHOD.
+ * @return void
+ */
+function drush_provision_drupal_provision_install_profile(){
+  if (d()->name == '@hostmaster') {
+    // call a backend task to do the actual installation.
+    $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+
+    // pass the login link back to the front end.
+    drush_set_option('login_link', $result['context']['login_link']);
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+    drush_set_option('profile_installed', TRUE, 'site');
+  }
+  else {
+    $options = drush_get_merged_options();
+    $command = ['drush'];
+    $command[] = d()->site_install_command;
+    $command[] = d()->profile;
+    $command[] = '--sites-subdir=' . d()->uri;
+    $site_name = escapeshellarg($options['#name']);
+    $command[] = "--site-name=$site_name";
+
+    if ($options['client_email']) {
+      $command[] = "--account-mail={$options['client_email']}";
+    }
+    $command[] = '--yes';
+
+    provision_process($command, d()->platform->root, dt('Installing site...'), $env, TRUE, FALSE, TRUE, drush_get_option('drush_log_type', 'ok'));
+    $process = drush_get_context('provision_process_result');
+
+    // chdir(d('@hostmaster')->root);
+    // $result = provision_backend_invoke(d()->name, "provision-verify");
+
+  }
 }
 
 /**
