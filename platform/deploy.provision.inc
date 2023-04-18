@@ -30,7 +30,7 @@ function drush_provision_deploy($target_git_reference = '') {
 
   // Tell provision-verify to skip composer install.
   $options['no-composer-install'] = TRUE;
-  
+
   // Verify command handles git and composer stages.
   provision_backend_invoke(d()->name, 'provision-verify', [], $options);
 }
@@ -46,7 +46,7 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
   if (empty($git_ref)) {
     $git_ref = d()->platform->git_reference;
   }
-  
+
   $drush_alias = d()->name;
 
   drush_log("{$drush_alias}: " . dt('Running deploy hooks.'), $drush_log_type);
@@ -55,14 +55,6 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
 
   foreach ($steps as $step_name => $step) {
     if (drush_get_option($step_name)) {
-      
-      if ($step['source'] ?? '' == 'composer') {
-        $command = "composer deploy:$step_name";
-      }
-      else {
-        $command = $step['command'];
-      }
-      
       $step_succeeded = d()->runDeployStep($step_name);
       if (!$step_succeeded){
         return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Deploy aborted: commands failed.'));
