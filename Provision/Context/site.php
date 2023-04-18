@@ -139,6 +139,7 @@ class Provision_Context_site extends Provision_Context {
         'title' => dt('Re-install'),
         'description' => dt('Destroy & reinstall the site.'),
         'note' => dt('WARNING: If checked, this site will be destroyed and recreated on every deployment.'),
+        'command' => 'drush @hostmaster hosting-task --force @alias install force-reinstall=1 parent_task=@task_nid'
       ],
       'build' => [
         'title' => dt('Build'),
@@ -190,6 +191,7 @@ class Provision_Context_site extends Provision_Context {
    */
   public function runDeployStep($step) {
 
+    $task_nid = drush_get_option('task_nid');
     $log_output = drush_get_option('runner') == 'hosting_task';
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
 
@@ -210,9 +212,11 @@ class Provision_Context_site extends Provision_Context {
     $t = [
       '@step' => $step,
       '@root' => $cwd,
+      '@alias' => d()->name,
+      '@task_nid' => $task_nid,
     ];
     foreach ($commands as $command) {
-      provision_process($command, $cwd, dt('Deploy Step: @step in @root', $t), $env, TRUE, null, TRUE, $provision_log_type);
+      provision_process(strtr($command, $t), $cwd, dt('Deploy Step: @step in @root', $t), $env, TRUE, null, TRUE, $provision_log_type);
       $process = drush_get_context('provision_process_result');
       if (!$process->isSuccessful()) {
         return drush_set_error(DRUSH_APPLICATION_ERROR, dt('Deploy Step failed: @step', $t));
