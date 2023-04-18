@@ -32,12 +32,10 @@ function drush_provision_drupal_provision_install_validate() {
         // Load the current database name from drushrc.php.
         // I cannot find another way to find the current db_name!
         require_once(d()->site_path . '/drushrc.php');
-        $old_db_name = $options['db_name'];
-
-        if (d()->service('db')->database_exists($old_db_name)) {
-          d()->service('db')->drop_database($old_db_name);
+        if (!empty($options['db_name']) && d()->service('db')->database_exists($options['db_name'])) {
+          d()->service('db')->drop_database($options['db_name']);
           drush_log(dt('Dropped database @database.', array(
-            '@database' => $old_db_name,
+            '@database' => $options['db_name'],
           )), 'ok');
         }
       }
@@ -105,7 +103,7 @@ function drush_provision_drupal_provision_install() {
 
   // Run Drupal installation if option was specified
   $env = [];
-  if (d()->install_method == 'profile') {
+  if (d()->settings['install']['method'] == 'profile') {
 
     // @TODO: Move entirely to the process method.
     if (d()->name == '@hostmaster') {
@@ -140,9 +138,11 @@ function drush_provision_drupal_provision_install() {
     }
   }
   // If install_method is 'manual', do nothing.
-  elseif (d()->install_method == 'manual') {
+  elseif (d()->settings['install']['method'] == 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
   }
+
+  // @TODO: Move additional install methods code here.
 
   drush_set_option('installed', TRUE, 'site');
   _provision_drupal_maintain_aliases();
