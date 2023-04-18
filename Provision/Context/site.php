@@ -19,8 +19,8 @@ class Provision_Context_site extends Provision_Context {
       throw new \Exception('Node passed to __construct() is not a site.');
     }
     elseif ($node) {
-      
-      // 
+
+      //
       $this->setProperty('git_root', $node->git_root);
     }
   }
@@ -69,7 +69,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_public_path', 'sites/' . $this->uri . '/files');
     $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
-    
+
     $this->setProperty('root', $this->platform->root);
   }
 
@@ -106,7 +106,7 @@ class Provision_Context_site extends Provision_Context {
       if (!empty($scripts[$command])) {
         $steps[$step]['command'] = $scripts[$command];
         $steps[$step]['source'] = 'composer';
-        $steps[$step]['overridden_by'] = t('Overridden by <code>composer.json:deploy:build</code> script.', [
+        $steps[$step]['note'] = t('Defined by <code>composer.json:deploy:build</code> script.', [
           '%override' => 'composer.json',
           '@step' => $step,
         ]);
@@ -135,6 +135,11 @@ class Provision_Context_site extends Provision_Context {
       //        'description' => t('Discard uncommitted code changes.'),
       //        'command' => 'git reset --hard',
       //      ],
+      'install' => [
+        'title' => dt('Re-install'),
+        'description' => dt('Destroy & reinstall the site.'),
+        'note' => dt('WARNING: If checked, this site will be destroyed and recreated on every deployment.'),
+      ],
       'build' => [
         'title' => dt('Build'),
         'description' => dt('Prepare source code.'),
@@ -169,11 +174,11 @@ class Provision_Context_site extends Provision_Context {
     }
     $composer = [];
     $composer['scripts'] = [];
-    
+
     foreach ($steps as $name => $info) {
       $composer['scripts']["deploy:$name"] = is_array($info['command'])?
        $info['command']:
-       [$info['command']]; 
+       [$info['command']];
     }
     return $composer;
   }
@@ -189,6 +194,9 @@ class Provision_Context_site extends Provision_Context {
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
 
     $steps = $this->getDeploySteps();
+    if (empty($steps[$step]['command'])) {
+      return TRUE;
+    }
     $commands = is_array($steps[$step]['command'])?
       $steps[$step]['command']:
       [$steps[$step]['command']];
