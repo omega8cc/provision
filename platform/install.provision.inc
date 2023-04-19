@@ -171,6 +171,37 @@ function drush_provision_drupal_provision_install_profile(){
 }
 
 /**
+ * Implements provision-install for METHOD clone.
+ * @return void
+ */
+function drush_provision_drupal_provision_install_clone(){
+
+  $source = d()->settings['install']['clone_source'];
+
+  // If "clone_source" is set to "_other", use the drush alias in "clone_source_drush".
+  if ($source == '_other') {
+    if (empty(d()->settings['install']['clone_source_drush'])) {
+      return drush_set_error(DRUSH_APPLICATION_ERROR, dt('settings.install.clone_source set to _other, but no'));
+    }
+    $source = d()->settings['install']['clone_source_drush'];
+  }
+
+  $destination = '@' . d()->group . '.' . d()->environment;
+  $extra_dump = escapeshellarg('--extra-dump="--single-transaction=false"');
+  $database_command = "drush sql-sync $extra_dump $source $destination";
+  $files_command = "drush rsync $source:%files $destination:%files";
+
+  $environment = [];
+
+  if (!drush_get_option('skip-database', FALSE)) {
+    provision_process($database_command, drush_server_home(), dt('Syncing database...'), $environment, TRUE);
+  }
+  if (!drush_get_option('skip-files', FALSE)) {
+    provision_process($files_command, drush_server_home(), dt('Syncing files...'), $environment, true);
+  }
+}
+
+/**
  * Finish the installation, regenerate the caches on the site so that
  * any changes to things such as available modules/ themes can take affect.
  */
