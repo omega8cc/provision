@@ -27,8 +27,8 @@ class Provision_Context_site extends Provision_Context {
 
   static function option_documentation() {
     return array(
-      'group' => 'site: the drush alias group to put this site into. If left blank, a sanitized URI will be used.',
-      'environment' => 'site: the environment name for this site. For example, dev, test, live.',
+      'hosting_group' => 'site: the drush alias group to put this site into. If left blank, a sanitized URI will be used.',
+      'hosting_environment' => 'site: the environment name for this site. For example, dev, test, live.',
       'platform' => 'site: the platform the site is run on',
       'db_server' => 'site: the db server the site is run on',
       'uri' => 'site: example.com URI, no http:// or trailing /',

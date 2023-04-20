@@ -186,7 +186,7 @@ function drush_provision_drupal_provision_install_clone(){
     $source = d()->settings['install']['clone_source_drush'];
   }
 
-  $destination = '@' . d()->group . '.' . d()->environment;
+  $destination = '@' . d()->hosting_group . '.' . d()->hosting_environment;
   $extra_dump = escapeshellarg('--extra-dump="--single-transaction=false"');
   $database_command = "drush sql-sync $extra_dump $source $destination";
   $files_command = "drush rsync $source:%files $destination:%files";
