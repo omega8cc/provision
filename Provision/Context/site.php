@@ -160,7 +160,10 @@ class Provision_Context_site extends Provision_Context {
       'test' => [
         'title' => dt('Test'),
         'description' => dt('Run tests against the site.'),
-        'command' => 'drush status',
+        'command' => [
+          'drush status',
+          'env',
+        ]
       ],
     ];
   }
