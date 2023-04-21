@@ -13,7 +13,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
 
   /**
    * @param $name
-   *   String '\@name' for named context.
+   *   String name for named context.
    * @param $options
    *   Array of string option names to save.
    */
@@ -28,19 +28,12 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
     }
 
     $name = ltrim($context, '@');
-    $name_sanitized = str_replace('.', '', $name);
 
     // Site, Server, & Platform alias info.
     $this->data = array(
       'aliasname' => $name,
       'options' => $options,
     );
-
-    // Site alias info, for Drush 10+.
-    if ($this->context->type == 'site') {
-      $this->data['group'] = isset($options['group']) ? $options['group']: $name_sanitized;
-      $this->data['environment'] = isset($options['environment']) ? $options['environment']: drush_get_option('default_environment_name', 'default');
-    }
   }
 
   function filename() {
@@ -48,7 +41,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function filenameYaml() {
-    return drush_server_home() . '/.drush/sites/' . $this->data['group'] . '.site.yml';
+    return drush_server_home() . '/.drush/sites/' . $this->data['options']['hosting_group'] . '.site.yml';
   }
 
   function write()
@@ -71,7 +64,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
         $alias = [];
       }
 
-      $alias[$this->data['environment']] = [
+      $alias[$this->data['options']['hosting_environment']] = [
         'root' => $this->data['options']['root'],
         'uri' => $this->data['options']['uri'],
         'options' => $this->data['options'],
