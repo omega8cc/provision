@@ -40,7 +40,7 @@ function _drush_provision_verify_current_platform() {
     drush_log(dt('Verifying platform...'), $drush_log_type);
     $args = array();
     $options = drush_get_merged_options();
-    
+
     $options['runner'] = drush_get_option('runner');
     $options['root'] = d()->root;
     $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
@@ -56,7 +56,7 @@ function _drush_provision_verify_current_platform() {
     else {
       # @TODO: Platforms are not receiving package data when sites are verifying.
       drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
-      
+
       # DEBUG to figure out where the data is.
       # drush_log(print_r(array_keys($result), 1), 'warning');
     }
@@ -212,7 +212,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $t['@git_remote_current'] = d()->getCurrentRemoteUrl();
       }
       $t['@date'] = date('r');
-  
+
       $t['@type'] = $git_ref_type = d()->isBranchOrTag() ?? 'reference';
 
       drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
@@ -231,7 +231,7 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log(dt('Desired State:'), $drush_log_type);
       drush_log(dt('    Git Reference: @git_reference', $t), $drush_log_type);
       drush_log(dt('    Git Remote: @git_remote', $t), $drush_log_type);
-      
+
       // Set git remote
       // @TODO:  Add the --set-remote option to hosting_task if the user changed it on the platform node.
       // If there is a current and desired git_remote...
@@ -282,7 +282,7 @@ function drush_provision_drupal_pre_provision_verify() {
         // If git_reset is set, show the diff and a message.
         // We don't need to run git reset, git checkout --force is used instead.
         if (d()->git_reset && drush_get_option('no-reset', FALSE) == TRUE) {
-          
+
           $log_message = dt('Checking out git reference @git_reference. Skipping git reset due to --no-reset option.', $t);
           $run_git_reset = FALSE;
         }
@@ -302,7 +302,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
         // Checkout could fail for many reasons so lets allow it to continue.
         $exit_if_checkout_failed = drush_get_option('require-checkout', FALSE);
-        
+
         //  Git fetch after command so that we are sure we have the right FETCH_HEAD.
         $checkout_command = implode(" ", array_filter(array_merge($checkout_command, $checkout_options)));
         provision_process($checkout_command, d()->git_root, $log_message, [], $log_output, dt('Git checkout failed.'), $exit_if_checkout_failed, $provision_log_type);
@@ -323,12 +323,12 @@ function drush_provision_drupal_pre_provision_verify() {
           $reset_command = "git reset --hard";
           $log_message = dt('Resetting to git tag...');
         }
-          
+
         if (d()->isAhead()) {
           drush_log(dt('Skipping git reset because git repository has un-pushed commits. Make sure your local commits are pushed or they may be lost.'), 'warning');
         }
         elseif ($reset_command) {
-          
+
           // If the repo cannot be written to, git reset will fail.
           // Ths code assumes allowing the `git reset` command to fail with a warning is the desired behavior.
           $error_on_reset_fail = drush_get_option('error_on_git_reset_fail', false);
@@ -365,7 +365,7 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_set_option('git_reset', d()->git_reset, 'drupal');
       drush_set_option('git_root', d()->git_root, 'drupal');
       drush_set_option('git_docroot', d()->git_docroot, 'drupal');
-      
+
       d()->displayGitStatus(FALSE);
 
       drush_log(dt('Git operations complete. Current status: %git_reference %git_remote %git_sha', [
@@ -401,7 +401,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
         provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
-        
+
       }
       elseif (!$composer_directory) {
         drush_set_error('DRUSH_COMPOSER_ERROR', dt('A composer.json file was not found anywhere above @composer_root.', $t), 'warning');
@@ -410,7 +410,7 @@ function drush_provision_drupal_pre_provision_verify() {
         drush_log(dt('Composer file was found, but composer install was not run due to --no-composer-install option.'), 'ok');
       }
     }
-    
+
     // Detect missing index.php. Look for composer config to reset.
     if (!file_exists(d()->root . '/index.php')) {
       if (file_exists(d()->git_root . '/composer.json')) {
@@ -422,7 +422,7 @@ function drush_provision_drupal_pre_provision_verify() {
             drush_log(dt('Drupal Scaffold Web root detected: @root', [
               '@root' => $path,
             ]), $provision_log_type);
-            
+
             d()->setProperty('root', $path);
             d()->root = $path;
             drush_set_option('root', $path);
@@ -496,7 +496,7 @@ function drush_provision_drupal_pre_provision_verify() {
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
 
-    
+
     // Ensure sites.php file exists for Drupal 8 and above.
     $sitesfile = "sites/sites.php";
     if (drush_drupal_major_version() >= 8 && !file_exists($sitesfile)) {
@@ -506,7 +506,7 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
 //    drush_log("what is current dir? " . getcwd(),'warning');
-    
+
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
     drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'drupal', '@version' => drush_drupal_version())));
     drush_set_option('packages', _scrub_object(provision_find_packages()), 'drupal');
