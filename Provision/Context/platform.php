@@ -12,9 +12,9 @@ class Provision_Context_platform extends Provision_Context {
   public $parent_key = 'server';
 
   use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
-  
+
   const GIT_STATUS_MAX_LENGTH = 1024;
-  
+
   function __construct($name) {
     parent::__construct($name);
     $this->setComposerConfigFromPath($this->git_root);
@@ -82,21 +82,21 @@ class Provision_Context_platform extends Provision_Context {
     $this->execSuccess('git symbolic-ref -q HEAD', $this->git_root);
   }
   /**
-   * Get the current git SHA. 
+   * Get the current git SHA.
    */
   public function getSha() {
     return self::shellExecTruncate("cd $this->git_root && git rev-parse @ 2> /dev/null");
   }
 
   /**
-   * Get the current git SHA. 
+   * Get the current git SHA.
    */
   public function getLast() {
     return self::shellExecTruncate("cd {$this->git_root}; git log --pretty=format:'%ct' --max-count=1 2> /dev/null");
   }
 
   /**
-   * Get the current git SHA. 
+   * Get the current git SHA.
    */
   public function getStatus() {
     chdir($this->git_root);
@@ -115,7 +115,7 @@ class Provision_Context_platform extends Provision_Context {
   public function shellExecTruncate($command) {
     return self::truncateString(shell_exec($command));
   }
-  
+
   /**
    * Trim strings to avoid super long output.
    * @param $string
@@ -130,7 +130,7 @@ class Provision_Context_platform extends Provision_Context {
       return substr($string, 0, self::GIT_STATUS_MAX_LENGTH) . dt('[Trimmed to @char characters from @size]', [
           '@char' => self::GIT_STATUS_MAX_LENGTH,
           '@size' => strlen($string),
-        ]);  
+        ]);
     }
   }
 
