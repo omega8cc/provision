@@ -449,7 +449,6 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
 
   // If a provision command is run, use drush_invoke_process.
   if (strpos($drush_command, 'provision-') === 0) {
-    chdir(d('@hostmaster')->root);
     return drush_invoke_process($context, $drush_command, $arguments, $task_options, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
   }
   else {
