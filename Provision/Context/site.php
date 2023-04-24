@@ -206,7 +206,7 @@ class Provision_Context_site extends Provision_Context {
 
     $task_nid = drush_get_option('task_nid');
     $log_output = drush_get_option('runner') == 'hosting_task';
-    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_command_log': 'ok';
 
     $steps = $this->getDeploySteps();
     if (empty($steps[$step]['command'])) {

@@ -231,7 +231,7 @@ class Provision_Context_platform extends Provision_Context {
    * Print out current git status, git remotes, and logs.
    */
   public function displayGitStatus() {
-    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_command_log': 'ok';
     drush_log($this->getStatus(), $provision_log_type);
   }
 

@@ -72,14 +72,14 @@ function drush_provision_drupal_pre_provision_verify() {
 
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
-  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_command_log': 'ok';
   $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_notice': 'ok';
 
   // If the runner of this command was hosting_task, use drush log to print processes.
   $log_output = drush_get_option('runner') == 'hosting_task';
 
   if ($log_output) {
-    drush_log(dt('Task is being run from Aegir hosting-task command.'), $drush_log_type);
+    drush_log(dt('Task is being run from Aegir hosting-task command.'), 'debug');
   }
 
   if (d()->type === 'server') {
@@ -131,7 +131,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 1. Git Platform, does not exist.
     if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
-      drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), $drush_log_type);
+      drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), 'debug');
 
       // git_remote is required if git_root is set.
       if (empty(d()->git_remote)) {
@@ -217,7 +217,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
       $t['@type'] = $git_ref_type = d()->isBranchOrTag() ?? 'reference';
 
-      drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
+      drush_log(dt('Git Information as of @date:', $t), $provision_log_type);
 
       drush_log(dt('Git repository clone detected in @git_root', $t), $drush_log_type);
       drush_log(dt('Current State:'), $drush_log_type);

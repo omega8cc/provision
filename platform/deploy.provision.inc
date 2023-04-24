@@ -40,7 +40,7 @@ function drush_provision_deploy($target_git_reference = '') {
  */
 function drush_provision_post_provision_deploy($git_ref = NULL) {
 
-  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_info': 'ok';
+  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_command_log': 'ok';
   $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_notice': 'ok';
 
   if (empty($git_ref)) {
