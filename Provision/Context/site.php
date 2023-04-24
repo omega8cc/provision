@@ -90,7 +90,7 @@ class Provision_Context_site extends Provision_Context {
    * Load the deploy steps for this site.
    * @return array[]
    */
-  public function getDeploySteps() {
+  public function getDeploySteps($step_to_get = null) {
     $steps = self::defaultDeploySteps();
     $composer_path = $this->git_root . '/composer.json';
 
@@ -120,7 +120,15 @@ class Provision_Context_site extends Provision_Context {
       drupal_alter('hosting_site_deploy_steps', $steps, $this);
     }
 
-    return $steps;
+    if ($step_to_get && !isset($steps[$step_to_get])) {
+      throw new \Exception(dt('Step "@step" not found.', ['@step' => $step_to_get]));
+    }
+    elseif ($step_to_get) {
+      return $steps[$step_to_get];
+    }
+    else {
+      return $steps;
+    }
   }
 
   /**
