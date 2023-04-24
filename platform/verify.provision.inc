@@ -146,6 +146,7 @@ function drush_provision_drupal_pre_provision_verify() {
           d()->git_remote,
           d()->git_root,
       ], null, dt('Cloning @git_remote to @git_root...', $t), [], $log_output, NULL, TRUE, $provision_log_type);
+      drush_log('', 'ok');
     }
 
     // 2. Git Platform, path does exist, but is not a git repo.
@@ -216,8 +217,8 @@ function drush_provision_drupal_pre_provision_verify() {
       $t['@date'] = date('r');
 
       $t['@type'] = $git_ref_type = d()->isBranchOrTag() ?? 'reference';
-
-      drush_log(dt('Git Information as of @date:', $t), $provision_log_type);
+      drush_log(dt(''), 'p_command');
+      drush_log(dt('Git Information as of @date:', $t), $drush_log_type);
 
       drush_log(dt('Git repository clone detected in @git_root', $t), $drush_log_type);
       drush_log(dt('Current State:'), $drush_log_type);
