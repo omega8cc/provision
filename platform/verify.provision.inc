@@ -37,9 +37,11 @@ function drush_provision_drupal_provision_verify_validate() {
 function _drush_provision_verify_current_platform() {
   $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
   if (d()->type == 'site' && d()->platform) {
-    drush_log(dt('Verifying platform...'), $drush_log_type);
+    drush_log(dt('Verifying codebase at git reference @git_reference...', ['@git_reference' => d()->platform->git_reference]), $drush_log_type);
     $args = array();
     $options = drush_get_merged_options();
+    $options['git_reference'] = d()->platform->git_reference;
+    $options['git_remote'] = d()->platform->git_remote;
 
     $options['runner'] = drush_get_option('runner');
     $options['root'] = d()->root;
