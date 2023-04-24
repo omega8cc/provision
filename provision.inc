@@ -438,7 +438,7 @@ function _scrub_object($input) {
  *   drush IPC mode (GET/POST) passed to drush_invoke_process().
  * @return string
  *  Output.
- * 
+ *
  * If additional info is needed, the Process Result is available:
  * drush_get_context('provision_process_result');
  *
@@ -464,11 +464,11 @@ function provision_backend_invoke($target, $drush_command, $arguments = array(),
 
     // @TODO: Is this needed?
     $command[] = '--strict=0';
-    
+
     // Set URI so drush will look at the site folder.
     // @TODO: use URL from domain aliases, redirect target, if there is one.
     $command[] = '--uri=' . d($context)->uri;
-    
+
     $env = [];
     $cwd = d($context)->root;
     return provision_process(implode(' ', $command), $cwd, dt("Running drush command '!command' on site '!site' in folder '!cwd'.", [
@@ -566,7 +566,7 @@ function provision_process($command, $cwd = null, $label = 'Process', $env = arr
     else {
       drush_log($error_message ?? $process->getErrorOutput(), 'warning');
     }
-    
+
     return $process->getErrorOutput();
   }
 }
