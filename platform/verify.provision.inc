@@ -423,7 +423,7 @@ function drush_provision_drupal_pre_provision_verify() {
           if ($path && file_exists( $path . '/index.php')) {
             drush_log(dt('Drupal Scaffold Web root detected: @root', [
               '@root' => $path,
-            ]), $provision_log_type);
+            ]), $drush_log_type);
 
             d()->setProperty('root', $path);
             d()->root = $path;
