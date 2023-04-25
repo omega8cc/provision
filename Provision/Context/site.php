@@ -48,6 +48,7 @@ class Provision_Context_site extends Provision_Context {
   }
 
   function init_site() {
+    $this->setProperty('drush_script');
     $this->setProperty('uri');
     $this->setProperty('hosting_group');
     $this->setProperty('hosting_environment');
