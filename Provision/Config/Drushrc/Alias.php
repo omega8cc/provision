@@ -27,6 +27,9 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $options['drush_aliases'] = array_unique($options['drush_aliases']);
     }
 
+    // Force drush to use hostmaster drush
+    $options['path-aliases']['%drush-script'] = d('@hostmaster')->root . '/../vendor/drush/drush/drush.php';
+
     $name = ltrim($context, '@');
 
     // Site, Server, & Platform alias info.
