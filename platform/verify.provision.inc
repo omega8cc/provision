@@ -18,9 +18,9 @@ function drush_provision_drupal_provision_verify_validate() {
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
-
-    _provision_drupal_create_settings_file();
-    provision_drupal_push_site();
+//
+//    _provision_drupal_create_settings_file();
+//    provision_drupal_push_site();
 
     drush_errors_on();
 
@@ -464,6 +464,7 @@ function drush_provision_drupal_pre_provision_verify() {
         '@path' => d()->root,
       ]), 'ok');
     }
+    
 
     // Re-set the ROOT PATH for Drush.
     // In cases where we just build the platform Drush would have cleared this value.
@@ -521,9 +522,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // Save git status after all the operations so we can see any changes made by composer install.
     drush_set_option('git_status', d()->getStatus(), 'drupal');
-
-  }
-  elseif (d()->type === 'site') {
+//
+//  }
+//  elseif (d()->type === 'site') {
     // @TODO: Move to post-hosting-task.
     // drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
 
