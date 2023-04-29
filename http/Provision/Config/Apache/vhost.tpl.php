@@ -106,6 +106,26 @@ if ($this->redirection || $ssl_redirection) {
         php_flag engine off
       </IfModule>
     </Directory>
+    <Directory <?php print $this->root; ?>>
+      Order allow,deny
+      Allow from all
+      Satisfy All
+      Require all granted
+  
+      <?php print $extra_directory_config; ?>
+  
+  
+      <?php
+      if (is_readable("{$this->root}/.htaccess")) {
+        print "\n# Include the platform's htaccess file\n";
+        print "Include {$this->root}/.htaccess\n";
+      }
+      ?>
+  
+      # Do not read any .htaccess in the platform
+      AllowOverride none
+  
+    </Directory>
 
 <?php
 $if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
