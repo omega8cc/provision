@@ -274,15 +274,19 @@ class Provision_Context_platform extends Provision_Context {
   public function isRepo($repo_path = null, $set_error = TRUE) {
     // If no path specified, use the site or platform path of the alias.
     if (!$repo_path) {
-      $repo_path = d()->git_root;
+      $repo_path = d()->git_root ?? d()->root;
     }
-    if (!$repo_path) {
-      if (d()->type === 'site') {
-        $repo_path = d()->site_path ? d()->site_path : d()->root;
-      } elseif (d()->type == 'platform') {
-        $repo_path = d()->platform->root ? d()->platform->root : d()->root;
-      }
-    }
+    
+    drush_log(dt('Looking for repo path %repo...', [
+      '%repo' => $repo_path,
+    ]));
+//    if (!$repo_path) {
+//      if (d()->type === 'site') {
+//        $repo_path = d()->site_path ? d()->site_path : d()->root;
+//      } elseif (d()->type == 'platform') {
+//        $repo_path = d()->root ? d()->platform->root : d()->root;
+//      }
+//    }
 
     // Do not allow /var/aegir to be repo_path.
     // See https://www.drupal.org/node/2893588

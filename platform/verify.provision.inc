@@ -14,7 +14,7 @@ function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
 
     // Verify the platform first.
-    _drush_provision_verify_current_platform();
+    // _drush_provision_verify_current_platform();
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -29,41 +29,41 @@ function drush_provision_drupal_provision_verify_validate() {
   }
 }
 
-/**
- * Helper function to run provision-verify logic on the current site's platform.
- * Can only be used when a Site context is active.
- * Called before from site verify and site install commands.
- */
-function _drush_provision_verify_current_platform() {
-  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
-  if (d()->type == 'site' && d()->platform) {
-    drush_log(dt('Verifying codebase at git reference @git_reference...', ['@git_reference' => d()->platform->git_reference]), $drush_log_type);
-    $args = array();
-    $options = drush_get_merged_options();
-    $options['git_reference'] = d()->platform->git_reference;
-    $options['git_remote'] = d()->platform->git_remote;
-
-    $options['runner'] = drush_get_option('runner');
-    $options['root'] = d()->root;
-    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
-
-    chdir(d('@hostmaster')->root);
-    $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
-    if ($result['error_status']) {
-      drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
-        '@alias' => d()->platform->name,
-      )), 'error');
-      return drush_get_error();
-    }
-    else {
-      # @TODO: Platforms are not receiving package data when sites are verifying.
-      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
-
-      # DEBUG to figure out where the data is.
-      # drush_log(print_r(array_keys($result), 1), 'warning');
-    }
-  }
-}
+///**
+// * Helper function to run provision-verify logic on the current site's platform.
+// * Can only be used when a Site context is active.
+// * Called before from site verify and site install commands.
+// */
+//function _drush_provision_verify_current_platform() {
+//  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+//  if (d()->type == 'site' && d()->platform) {
+//    drush_log(dt('Verifying codebase at git reference @git_reference...', ['@git_reference' => d()->platform->git_reference]), $drush_log_type);
+//    $args = array();
+//    $options = drush_get_merged_options();
+//    $options['git_reference'] = d()->platform->git_reference;
+//    $options['git_remote'] = d()->platform->git_remote;
+//
+//    $options['runner'] = drush_get_option('runner');
+//    $options['root'] = d()->root;
+//    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
+//
+//    chdir(d('@hostmaster')->root);
+//    $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
+//    if ($result['error_status']) {
+//      drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
+//        '@alias' => d()->platform->name,
+//      )), 'error');
+//      return drush_get_error();
+//    }
+//    else {
+//      # @TODO: Platforms are not receiving package data when sites are verifying.
+//      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
+//
+//      # DEBUG to figure out where the data is.
+//      # drush_log(print_r(array_keys($result), 1), 'warning');
+//    }
+//  }
+//}
 
 /**
  * Implements drush_hook_pre_COMMAND().
@@ -104,7 +104,7 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
   }
-  elseif (d()->type === 'platform') {
+  elseif (d()->type === 'platform' || d()->type === 'site') {
 
     // Translation strings
     $t = array();
@@ -130,6 +130,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // 6. adhoc platform, path does exist.
 
     // 1. Git Platform, does not exist.
+    drush_log('git root: ' . d()->git_root, 'warning');
     if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
       drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), 'debug');
 
@@ -199,7 +200,9 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 6. adhoc platform, path does exist.
     elseif (file_exists(d()->root)) {
-      drush_log(dt('Platform path found (@root).'), 'notice');
+      drush_log(dt('Platform path found (@root).', [
+        '@root' => d()->root
+      ]), 'notice');
     }
 
     // If this is a git platform...
@@ -525,7 +528,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
 
     // Set these in addition to platform so verify site tasks get the latest data from platforms.
-    drush_set_option('git_sha', d()->platform->getSha(), 'drupal');
+    drush_set_option('git_sha', d()->getSha(), 'drupal');
     drush_set_option('git_last', d()->platform->getLast(), 'drupal');
     drush_set_option('git_status', d()->platform->getStatus(), 'drupal');
     drush_set_option('git_refs', d()->platform->getRemoteReferences(), 'drupal');

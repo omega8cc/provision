@@ -44,7 +44,7 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
   $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_notice': 'ok';
 
   if (empty($git_ref)) {
-    $git_ref = d()->platform->git_reference;
+    $git_ref = d()->git_reference;
   }
 
   $drush_alias = d()->name;

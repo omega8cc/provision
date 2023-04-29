@@ -6,27 +6,15 @@ use Eloquent\Composer\Configuration\ConfigurationReader;
  * @file Provision named context site class.
  */
 
-class Provision_Context_site extends Provision_Context {
+class Provision_Context_site extends Provision_Context_platform {
 
   use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
 
   public $type = 'site';
-  public $parent_key = 'platform';
-
-  public function __construct($name, $node = null) {
-    parent::__construct($name);
-    if ($node && $node->type != $this->type) {
-      throw new \Exception('Node passed to __construct() is not a site.');
-    }
-    elseif ($node) {
-
-      //
-      $this->setProperty('git_root', $node->git_root);
-    }
-  }
+  // public $parent_key = 'platform';
 
   static function option_documentation() {
-    return array(
+    return parent::option_documentation() + array(
       'hosting_group' => 'site: the drush alias group to put this site into. If left blank, a sanitized URI will be used.',
       'hosting_environment' => 'site: the environment name for this site. For example, dev, test, live.',
       'drush_alias' => 'site: The global drush (9+) alias for this site.',
@@ -49,11 +37,18 @@ class Provision_Context_site extends Provision_Context {
 
   function init_site() {
     $this->setProperty('drush_script');
+    $this->setProperty('root');
     $this->setProperty('uri');
     $this->setProperty('hosting_group');
     $this->setProperty('hosting_environment');
     $this->setProperty('drush_alias');
 
+    $this->setProperty('git_root');
+    $this->setProperty('git_remote');
+    $this->setProperty('git_reference');
+    $this->setProperty('git_docroot');
+    $this->setProperty('git_reset', TRUE);
+    
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;
 
@@ -73,7 +68,6 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('file_private_path', 'sites/' . $this->uri . '/private/files');
     $this->setProperty('file_temporary_path', 'sites/' . $this->uri . '/private/temp');
 
-    $this->setProperty('root', $this->platform->root);
   }
 
   /**

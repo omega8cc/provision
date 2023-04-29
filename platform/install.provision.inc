@@ -161,7 +161,7 @@ function drush_provision_drupal_provision_install_profile(){
     }
     $command[] = '--yes';
     $env = [];
-    provision_process($command, d()->platform->root, dt('Installing site...'));
+    provision_process($command, d()->root, dt('Installing site...'));
     $process = drush_get_context('provision_process_result');
 
     // chdir(d('@hostmaster')->root);

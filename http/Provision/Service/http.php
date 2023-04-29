@@ -38,5 +38,14 @@ class Provision_Service_http extends Provision_Service {
     $context->is_oid('web_server');
     $context->service_subscribe('http', $context->web_server->name);
   }
+  
+  /**
+   * Register the http handler for platforms, based on the web_server option.
+   */
+  static function subscribe_site($context) {
+    $context->setProperty('web_server', '@server_master');
+    $context->is_oid('web_server');
+    $context->service_subscribe('http', $context->web_server->name);
+  }
 
 }
