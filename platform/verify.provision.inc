@@ -130,7 +130,6 @@ function drush_provision_drupal_pre_provision_verify() {
     // 6. adhoc platform, path does exist.
 
     // 1. Git Platform, does not exist.
-    drush_log('git root: ' . d()->git_root, 'warning');
     if (!empty(d()->git_root) && !file_exists(d()->git_root)) {
       drush_log(dt("Path @git_root does not exist. Cloning git repository @git_remote to @git_root ...", $t), 'debug');
 
