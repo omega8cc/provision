@@ -27,7 +27,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
    }
 
   // This is the actual drupal provisioning requirements.
-  if (!is_dir(d()->platform->server->backup_path)) {
+  if (!is_dir(d()->server->backup_path)) {
     drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND');
   }
 
@@ -57,13 +57,13 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
   $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
-  $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
+  $suggested = d()->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 
   // Use format of mysite.com-2008-01-02, if already existing, add number.
   $count = 0;
   while (is_file($suggested)) {
     $count++;
-    $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' .  date('Ymd.His', time()) . '_' . $count . $suffix;
+    $suggested = d()->server->backup_path . '/' . d()->uri . '-' .  date('Ymd.His', time()) . '_' . $count . $suffix;
   }
   return $suggested;
 }
