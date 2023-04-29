@@ -145,12 +145,12 @@ function hook_provision_apache_server_config($data) {
  * context.
  *
  * @param $data
- *   Associative array of data from Provision_Config_Apache_Platform::data.
+ *   Associative array of data from Provision_Config_Apache_Site::data.
  *
  * @return
  *   Lines to add to the configuration file.
  *
- * @see Provision_Config_Apache_Platform
+ * @see Provision_Config_Apache_Site
  */
 function drush_hook_provision_apache_dir_config($data) {
 }

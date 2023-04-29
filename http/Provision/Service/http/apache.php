@@ -15,7 +15,6 @@ class Provision_Service_http_apache extends Provision_Service_http_public {
   function init_server() {
     parent::init_server();
     $this->configs['server'][] = 'Provision_Config_Apache_Server';
-    $this->configs['platform'][] = 'Provision_Config_Apache_Platform';
     $this->configs['site'][] = 'Provision_Config_Apache_Site';
     if (provision_hosting_feature_enabled('subdirs')) {
       $this->configs['site'][] = 'Provision_Config_Apache_Subdir';

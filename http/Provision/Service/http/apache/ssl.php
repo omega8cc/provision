@@ -37,9 +37,6 @@ class Provision_Service_http_apache_ssl extends Provision_Service_http_ssl {
     // Replace the server config with our own. See the class for more info.
     $this->configs['server'][] = 'Provision_Config_Apache_Ssl_Server';
 
-    // Just re-use the standard platform config.
-    $this->configs['platform'][] = 'Provision_Config_Apache_Platform';
-
     $this->configs['site'][] = 'Provision_Config_Apache_Ssl_Site';
   }
 
