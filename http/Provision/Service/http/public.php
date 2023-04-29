@@ -115,7 +115,7 @@ class Provision_Service_http_public extends Provision_Service_http {
   function grant_server_list() {
     return array(
       $this->server,
-      $this->context->platform->server,
+      $this->context->server,
     );
   }
 }
