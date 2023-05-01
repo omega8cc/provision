@@ -359,17 +359,7 @@ function drush_provision_drupal_pre_provision_verify() {
         }
         provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], $log_output, NULL, TRUE, $provision_log_type);
       }
-
-      // Save options for post hosting tasks to pick up.
-      drush_set_option('git_sha', d()->getSha(), 'drupal');
-      drush_set_option('git_last', d()->getLast(), 'drupal');
-      drush_set_option('git_status', d()->getStatus(), 'drupal');
-      drush_set_option('git_refs', d()->getRemoteReferences(), 'drupal');
-      drush_set_option('git_reference', d()->getBranchOrTag(), 'drupal');
-      drush_set_option('git_remote', d()->getCurrentRemoteUrl(), 'drupal');
-      drush_set_option('git_reset', d()->git_reset, 'drupal');
-      drush_set_option('git_root', d()->git_root, 'drupal');
-      drush_set_option('git_docroot', d()->git_docroot, 'drupal');
+      
 
       d()->displayGitStatus(FALSE);
 
@@ -586,4 +576,18 @@ function drush_provision_drupal_post_provision_verify() {
         ->fail('Failed to clean up unused Aegir services.yml file.', 'PROVISION_DELETE_AEGIR_SERVICES_YML_FAILED');
     }
   }
+
+  if (d()->type === 'site' || d()->type === 'platform') {
+    // Save options for post hosting tasks to pick up.
+    drush_set_option('git_sha', d()->getSha(), 'drupal');
+    drush_set_option('git_last', d()->getLast(), 'drupal');
+    drush_set_option('git_status', d()->getStatus(), 'drupal');
+    drush_set_option('git_refs', d()->getRemoteReferences(), 'drupal');
+    drush_set_option('git_reference', d()->getBranchOrTag(), 'drupal');
+    drush_set_option('git_remote', d()->getCurrentRemoteUrl(), 'drupal');
+    drush_set_option('git_reset', d()->git_reset, 'drupal');
+    drush_set_option('git_root', d()->git_root, 'drupal');
+    drush_set_option('git_docroot', d()->git_docroot, 'drupal');
+  }
+  
 }
