@@ -11,67 +11,12 @@
  * Disable an enabled and installed site
  */
 function drush_provision_drupal_provision_verify_validate() {
-  if (d()->type === 'site') {
+  if (d()->type !== 'site') {
+    return;
+  }
 
     // Verify the platform first.
     // _drush_provision_verify_current_platform();
-
-    // Don't bootstrap if there is nothing there. drush_provision_drupal_pre_provision_verify will prepare codebase.
-    if (file_exists(d()->root)) {
-      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
-      provision_prepare_environment();
-    }
-//
-//    _provision_drupal_create_settings_file();
-//    provision_drupal_push_site();
-
-    drush_errors_on();
-
-    // @TODO: Move to post-hosting-task, if needed at all.
-    // drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
-  }
-}
-
-///**
-// * Helper function to run provision-verify logic on the current site's platform.
-// * Can only be used when a Site context is active.
-// * Called before from site verify and site install commands.
-// */
-//function _drush_provision_verify_current_platform() {
-//  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
-//  if (d()->type == 'site' && d()->platform) {
-//    drush_log(dt('Verifying codebase at git reference @git_reference...', ['@git_reference' => d()->platform->git_reference]), $drush_log_type);
-//    $args = array();
-//    $options = drush_get_merged_options();
-//    $options['git_reference'] = d()->platform->git_reference;
-//    $options['git_remote'] = d()->platform->git_remote;
-//
-//    $options['runner'] = drush_get_option('runner');
-//    $options['root'] = d()->root;
-//    $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_log': 'ok';
-//
-//    chdir(d('@hostmaster')->root);
-//    $result = provision_backend_invoke(d()->platform->name, 'provision-verify', $args, $options);
-//    if ($result['error_status']) {
-//      drush_log(dt("An error was thrown during the 'drush @alias provision-verify' command.", array(
-//        '@alias' => d()->platform->name,
-//      )), 'error');
-//      return drush_get_error();
-//    }
-//    else {
-//      # @TODO: Platforms are not receiving package data when sites are verifying.
-//      drush_log(dt('Platform verified without error, verifying site...'), $drush_log_type);
-//
-//      # DEBUG to figure out where the data is.
-//      # drush_log(print_r(array_keys($result), 1), 'warning');
-//    }
-//  }
-//}
-
-/**
- * Implements drush_hook_pre_COMMAND().
- */
-function drush_provision_drupal_pre_provision_verify() {
 
   // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
   // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
@@ -84,30 +29,6 @@ function drush_provision_drupal_pre_provision_verify() {
   if ($log_output) {
     drush_log(dt('Task is being run from Aegir hosting-task command.'), 'debug');
   }
-
-  if (d()->type === 'server') {
-
-    $config_root = dirname(d()->config_path);
-    provision_file()->create_dir($config_root, dt('Provision configuration root'), 0711);
-    provision_file()->create_dir(d()->config_path, dt('Provision configuration'), 0711);
-    provision_file()->create_dir(d()->clients_path, dt('Provision client home'), 0711);
-    if (d()->name == '@server_master') {
-      provision_file()->create_dir(d()->backup_path, dt('Backup'), 0700);
-      provision_file()->create_dir(d()->include_path, dt('Provision PHP configuration'), 0711);
-      if (!provision_file()->exists(d()->include_path . '/global.inc')->succeed('Global configuration file exists')->status()) {
-        // Create an empty global.inc so the include doesn't fail with
-        // open_basedir restrictions.
-        $config = new Provision_Config_Global_Settings(d()->name);
-        $config->write();
-      }
-    }
-    else {
-      if (provision_file()->exists(d()->include_path)) {
-        d()->service('http')->sync(d()->include_path);
-      }
-    }
-  }
-  elseif (d()->type === 'platform' || d()->type === 'site') {
 
     // Translation strings
     $t = array();
@@ -554,9 +475,49 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     provision_drupal_push_site(drush_get_option('override_slave_authority', FALSE));
+
+  // Don't bootstrap if there is nothing there. drush_provision_drupal_pre_provision_verify will prepare codebase.
+  if (file_exists(d()->root)) {
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+    provision_prepare_environment();
   }
+//
+//    _provision_drupal_create_settings_file();
+//    provision_drupal_push_site();
+
+  drush_errors_on();
+
+  // @TODO: Move to post-hosting-task, if needed at all.
+  // drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
 }
 
+/**
+ * Implements drush_hook_pre_COMMAND().
+ */
+function drush_provision_drupal_pre_provision_verify()
+{
+  if (d()->type === 'server') {
+    $config_root = dirname(d()->config_path);
+    provision_file()->create_dir($config_root, dt('Provision configuration root'), 0711);
+    provision_file()->create_dir(d()->config_path, dt('Provision configuration'), 0711);
+    provision_file()->create_dir(d()->clients_path, dt('Provision client home'), 0711);
+    if (d()->name == '@server_master') {
+      provision_file()->create_dir(d()->backup_path, dt('Backup'), 0700);
+      provision_file()->create_dir(d()->include_path, dt('Provision PHP configuration'), 0711);
+      if (!provision_file()->exists(d()->include_path . '/global.inc')->succeed('Global configuration file exists')->status()) {
+        // Create an empty global.inc so the include doesn't fail with
+        // open_basedir restrictions.
+        $config = new Provision_Config_Global_Settings(d()->name);
+        $config->write();
+      }
+    }
+    else {
+      if (provision_file()->exists(d()->include_path)) {
+        d()->service('http')->sync(d()->include_path);
+      }
+    }
+  }
+}
 /**
  * Implements drush_hook_provision_post_COMMAND().
  */
