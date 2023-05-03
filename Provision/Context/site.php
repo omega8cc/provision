@@ -21,6 +21,7 @@ class Provision_Context_site extends Provision_Context_platform {
       'platform' => 'site: the platform the site is run on',
       'db_server' => 'site: the db server the site is run on',
       'uri' => 'site: example.com URI, no http:// or trailing /',
+      'root' => 'site: example.com URI, no http:// or trailing /',
       'file_public_path' => 'site: path to public files folder. Defaults to sites/example.com/files',
       'file_private_path' => 'site: path to private files folder. Defaults to sites/example.com/private/files',
       'file_temporary_path' => 'site: path to temporary files folder. Defaults to sites/example.com/private/temp',
@@ -48,7 +49,7 @@ class Provision_Context_site extends Provision_Context_platform {
     $this->setProperty('git_reference');
     $this->setProperty('git_docroot');
     $this->setProperty('git_reset', TRUE);
-    
+
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;
 
