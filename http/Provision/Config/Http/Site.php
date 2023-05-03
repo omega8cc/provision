@@ -21,6 +21,9 @@ class Provision_Config_Http_Site extends Provision_Config_Http {
 
   function process() {
     parent::process();
+    if (empty($this->context->root)) {
+      throw new \Exception("Site property 'root' not found. Cannot write web server config. Check site alias 'root' property and try again.");
+    }
 
     if ($this->aliases && !is_array($this->aliases)) {
       $this->aliases = explode(",", $this->aliases);
