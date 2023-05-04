@@ -13,7 +13,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   protected $has_port = TRUE;
 
   function default_port() {
-    $script_user = drush_get_option('script_user');
+    $script_user = d('@server_master')->script_user;
+    if (!$script_user) {
+      $script_user = drush_get_option('script_user');
+    }
     if (!$script_user && $server->script_user) {
       $script_user = $server->script_user;
     }

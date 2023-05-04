@@ -5,47 +5,74 @@
 #######################################################
 
 <?php
-$script_user = drush_get_option('script_user');
+$script_user = d('@server_master')->script_user;
+if (!$script_user) {
+  $script_user = drush_get_option('script_user');
+}
 if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
 
-$aegir_root = drush_get_option('aegir_root');
+$aegir_root = d('@server_master')->aegir_root;
+if (!$aegir_root) {
+  $aegir_root = drush_get_option('aegir_root');
+}
 if (!$aegir_root && $server->aegir_root) {
   $aegir_root = $server->aegir_root;
 }
 
-$nginx_config_mode = drush_get_option('nginx_config_mode');
+$nginx_config_mode = d('@server_master')->nginx_config_mode;
+if (!$nginx_config_mode) {
+  $nginx_config_mode = drush_get_option('nginx_config_mode');
+}
 if (!$nginx_config_mode && $server->nginx_config_mode) {
   $nginx_config_mode = $server->nginx_config_mode;
 }
 
-$phpfpm_mode = drush_get_option('phpfpm_mode');
+$phpfpm_mode = d('@server_master')->phpfpm_mode;
+if (!$phpfpm_mode) {
+  $phpfpm_mode = drush_get_option('phpfpm_mode');
+}
 if (!$phpfpm_mode && $server->phpfpm_mode) {
   $phpfpm_mode = $server->phpfpm_mode;
 }
 
-$nginx_is_modern = drush_get_option('nginx_is_modern');
+$nginx_is_modern = d('@server_master')->nginx_is_modern;
+if (!$nginx_is_modern) {
+  $nginx_is_modern = drush_get_option('nginx_is_modern');
+}
 if (!$nginx_is_modern && $server->nginx_is_modern) {
   $nginx_is_modern = $server->nginx_is_modern;
 }
 
-$nginx_has_etag = drush_get_option('nginx_has_etag');
+$nginx_has_etag = d('@server_master')->nginx_has_etag;
+if (!$nginx_has_etag) {
+  $nginx_has_etag = drush_get_option('nginx_has_etag');
+}
 if (!$nginx_has_etag && $server->nginx_has_etag) {
   $nginx_has_etag = $server->nginx_has_etag;
 }
 
-$nginx_has_http2 = drush_get_option('nginx_has_http2');
+$nginx_has_http2 = d('@server_master')->nginx_has_http2;
+if (!$nginx_has_http2) {
+  $nginx_has_http2 = drush_get_option('nginx_has_http2');
+}
 if (!$nginx_has_http2 && $server->nginx_has_http2) {
   $nginx_has_http2 = $server->nginx_has_http2;
 }
 
-$nginx_has_gzip = drush_get_option('nginx_has_gzip');
+$nginx_has_gzip = d('@server_master')->nginx_has_gzip;
+if (!$nginx_has_gzip) {
+  $nginx_has_gzip = drush_get_option('nginx_has_gzip');
+}
 if (!$nginx_has_gzip && $server->nginx_has_gzip) {
   $nginx_has_gzip = $server->nginx_has_gzip;
 }
 
-$satellite_mode = drush_get_option('satellite_mode');
+$satellite_mode = d('@server_master')->satellite_mode;
+if (!$satellite_mode) {
+  $satellite_mode = drush_get_option('satellite_mode');
+}
 if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
 }

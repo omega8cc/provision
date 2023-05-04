@@ -14,7 +14,10 @@
  */
 function drush_provision_hostmaster_install_pre_validate() {
 
-  $script_user = drush_get_option('script_user');
+  $script_user = d('@server_master')->script_user;
+  if (!$script_user) {
+    $script_user = drush_get_option('script_user');
+  }
   if (!$script_user && $server->script_user) {
     $script_user = $server->script_user;
   }
@@ -46,7 +49,10 @@ function drush_provision_hostmaster_install_pre_validate() {
 
 function drush_provision_hostmaster_install_validate($site = NULL) {
 
-  $script_user = drush_get_option('script_user');
+  $script_user = d('@server_master')->script_user;
+  if (!$script_user) {
+    $script_user = drush_get_option('script_user');
+  }
   if (!$script_user && $server->script_user) {
     $script_user = $server->script_user;
   }

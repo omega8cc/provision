@@ -3,17 +3,26 @@
 <?php if ($this->ssl_enabled && $this->ssl_key) : ?>
 
 <?php
-$script_user = drush_get_option('script_user');
+$script_user = d('@server_master')->script_user;
+if (!$script_user) {
+  $script_user = drush_get_option('script_user');
+}
 if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
 
-$satellite_mode = drush_get_option('satellite_mode');
+$satellite_mode = d('@server_master')->satellite_mode;
+if (!$satellite_mode) {
+  $satellite_mode = drush_get_option('satellite_mode');
+}
 if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
 }
 
-$nginx_has_http2 = drush_get_option('nginx_has_http2');
+$nginx_has_http2 = d('@server_master')->nginx_has_http2;
+if (!$nginx_has_http2) {
+  $nginx_has_http2 = drush_get_option('nginx_has_http2');
+}
 if (!$nginx_has_http2 && $server->nginx_has_http2) {
   $nginx_has_http2 = $server->nginx_has_http2;
 }
