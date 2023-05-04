@@ -181,7 +181,7 @@ function _provision_drupal_system_map() {
     $module->version = $module->info['version'];
   }
 
-  drush_log(dt("Found !count modules", array('!count' => sizeof($packages['modules']))), 'info');
+  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
 
   // XXX: mostly a copy-paste from above
   foreach (_provision_system_query("theme") as $theme) {
@@ -201,7 +201,7 @@ function _provision_drupal_system_map() {
     $packages['themes'][$theme->name] = $theme;
     $theme->version = $theme->info['version'];
   }
-  drush_log(dt("Found !count themes", array('!count' => sizeof($packages['themes']))), 'info');
+  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))), 'info');
   return $packages;
 }
 

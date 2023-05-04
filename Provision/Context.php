@@ -313,7 +313,7 @@ class Provision_Context {
       $services = $this->{$this->parent_key}->get_services();
     }
 
-    if (sizeof($this->service_subs)) {
+    if (count($this->service_subs)) {
       foreach ($this->service_subs as $service => $server) {
         $services[$service] = $server;
       }

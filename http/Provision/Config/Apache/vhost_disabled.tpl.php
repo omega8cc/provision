@@ -9,7 +9,7 @@
     ServerName <?php print $this->uri; ?>
 
     <?php
-    if (sizeof($this->aliases)) {
+    if (count($this->aliases)) {
       foreach ($this->aliases as $alias) {
         print "  ServerAlias " . $alias . "\n";
       }

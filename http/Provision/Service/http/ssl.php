@@ -257,7 +257,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
    */
   static function certificate_in_use($ssl_key, $server) {
     $pattern = $server->http_ssld_path . "/$ssl_key/*.receipt";
-    return sizeof(glob($pattern));
+    return count(glob($pattern));
   }
 
 

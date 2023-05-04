@@ -20,7 +20,7 @@
     SSLCertificateKeyFile <?php print $ssl_cert_key; ?>
 
 <?php
-if (sizeof($this->aliases)) {
+if (count($this->aliases)) {
   foreach ($this->aliases as $alias) {
     print "  ServerAlias " . $alias . "\n";
   }

@@ -241,7 +241,7 @@ ZEND_GET_MODULE(symfony_debug)
 
 PHP_GINIT_FUNCTION(symfony_debug)
 {
-	memset(symfony_debug_globals, 0 , sizeof(*symfony_debug_globals));
+	memset(symfony_debug_globals, 0 , count(*symfony_debug_globals));
 }
 
 PHP_GSHUTDOWN_FUNCTION(symfony_debug)

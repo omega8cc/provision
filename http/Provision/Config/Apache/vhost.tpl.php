@@ -34,7 +34,7 @@ if (!$aegir_root && $server->aegir_root) {
 
 
 <?php
-if (sizeof($this->aliases)) {
+if (count($this->aliases)) {
   foreach ($this->aliases as $alias) {
     print "  ServerAlias " . $alias . "\n";
   }

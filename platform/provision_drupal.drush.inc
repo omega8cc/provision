@@ -800,7 +800,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
       // Also search included files for function signature
       $include_matches = array();
       preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
-      if (sizeof($include_matches[0])) {
+      if (count($include_matches[0])) {
         foreach($include_matches[4] as $include) {
           if ($include_file = realpath(dirname($info->filename) . DIRECTORY_SEPARATOR . $include)) {
             $source .= "\n" . file_get_contents($include_file);
@@ -810,7 +810,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
       $function_matches = array();
         preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
 
-      if (sizeof($function_matches[0])) {
+      if (count($function_matches[0])) {
         $schema_version = max($schema_version, max($function_matches[2]));
       }
     }
@@ -889,7 +889,7 @@ function provision_reload_config($context, $file = NULL) {
     drush_log("Reloading $context drushrc.php from $file");
     include($file);
     // $options will be defined by the config file included above.
-    if (sizeof($options)) {
+    if (count($options)) {
       $options = array_merge(drush_get_context($context, array()), $options);
       drush_set_context($context, $options);
     }
