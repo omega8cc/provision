@@ -712,10 +712,10 @@ function _provision_find_packages($scope, $key = '') {
     $packages[$type] = array();
     $func = "_provision_drupal_find_$type";
     $result = $func($scope, $key);
-    if (sizeof($result)) {
+    if (count($result)) {
       $packages[$type] = $result;
       drush_log(dt("Found !count !type in !scope",
-        array('!count' => sizeof($result),
+        array('!count' => count($result),
         '!scope' => $scope_text, '!type' => $type)));
     }
   }
