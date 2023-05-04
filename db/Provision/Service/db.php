@@ -104,7 +104,7 @@ class Provision_Service_db extends Provision_Service {
    * Generate a new mysql database and user account for the specified credentials
    */
   function create_site_database($creds = array()) {
-    if (!sizeof($creds)) {
+    if (empty($creds)) {
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
@@ -139,7 +139,7 @@ class Provision_Service_db extends Provision_Service {
    * Remove the database and user account for the supplied credentials
    */
   function destroy_site_database($creds = array()) {
-    if (!sizeof($creds)) {
+    if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
@@ -172,7 +172,7 @@ class Provision_Service_db extends Provision_Service {
 
 
   function import_site_database($dump_file = null, $creds = array()) {
-    if (!sizeof($creds)) {
+    if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
@@ -275,7 +275,7 @@ class Provision_Service_db extends Provision_Service {
       if (is_null($dump_file)) {
         $dump_file = d()->site_path . '/database.sql';
       }
-      if (!sizeof($creds)) {
+      if (empty($creds)) {
         $creds = $this->fetch_site_credentials();
       }
       $exists = provision_file()->exists($dump_file)

@@ -76,7 +76,7 @@ class Provision_Config {
     // Accept both a reference and an alias name for the context.
     $this->context = is_object($context) ? $context : d($context);
 
-    if (sizeof($data)) {
+    if (!empty($data)) {
       $this->data = $data;
     }
 
