@@ -43,7 +43,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     if ($this->database_exists($test)) {
       if (!$this->drop_database($test)) {
-        drush_log(dt("Failed to drop database @dbname", array('@dbname' => $test)), 'warning');
+        drush_log(dt("Failed to drop database @dbname", ['@dbname' => $test]), 'warning');
       }
       return TRUE;
     }
@@ -69,10 +69,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function grant($name, $username, $password, $host = '') {
+    $prxy_adm_paswd = null;
     if (provision_file()->exists('/data/conf/clstr.cnf')->status()) {
       $host = '%';
     }
-    $host = ($host) ? $host : '%';
+    $host = $host ?: '%';
 
     if ($host != "127.0.0.1") {
       $extra_host = "127.0.0.1";
@@ -87,10 +88,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
         drush_shell_exec($command);
         if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
-          drush_log(dt("Failed to add @name to ProxySQL", array('@name' => $name)), 'warning');
+          drush_log(dt("Failed to add @name to ProxySQL", ['@name' => $name]), 'warning');
         }
         elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
-          drush_log(dt("Failed to add @name to ProxySQL", array('@name' => $name)), 'warning');
+          drush_log(dt("Failed to add @name to ProxySQL", ['@name' => $name]), 'warning');
         }
         else {
           $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
@@ -153,11 +154,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $user_created = $this->create_user($username, $host);
     $user_altered = $this->alter_user($username, $host, $password);
     if (!$user_created) {
-      drush_log(dt("Failed to create db_user @name", array('@name' => $username)), 'error');
+      drush_log(dt("Failed to create db_user @name", ['@name' => $username]), 'error');
       return $user_created;
     }
     if (!$user_altered) {
-      drush_log(dt("Failed to alter db_user @name", array('@name' => $username)), 'error');
+      drush_log(dt("Failed to alter db_user @name", ['@name' => $username]), 'error');
       return $user_altered;
     }
 
@@ -166,10 +167,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function revoke($name, $username, $host = '') {
+    $prxy_adm_paswd = null;
     if (provision_file()->exists('/data/conf/clstr.cnf')->status()) {
       $host = '%';
     }
-    $host = ($host) ? $host : '%';
+    $host = $host ?: '%';
     drush_command_invoke_all_ref('provision_db_username_alter', $username, '', 'revoke');
     $success = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $host);
 
@@ -179,7 +181,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     if ($grants) {
       while ($grant = $grants->fetch()) {
         // those are empty grants: just the user line
-        if (!preg_match("/^GRANT USAGE ON /", array_pop($grant))) {
+        if (!preg_match("/^GRANT USAGE ON /", (string) array_pop($grant))) {
           // real grant, we shouldn't remove the user
           $grant_found = TRUE;
           break;
@@ -195,10 +197,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
           drush_shell_exec($command);
           if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
-            drush_log(dt("Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+            drush_log(dt("Failed to delete @name in ProxySQL", ['@name' => $name]), 'warning');
           }
           elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
-            drush_log(dt("Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+            drush_log(dt("Failed to delete @name in ProxySQL", ['@name' => $name]), 'warning');
           }
           else {
             $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
@@ -244,7 +246,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       if ($grants) {
         while ($grant = $grants->fetch()) {
           // those are empty grants: just the user line
-          if (!preg_match("/^GRANT USAGE ON /", array_pop($grant))) {
+          if (!preg_match("/^GRANT USAGE ON /", (string) array_pop($grant))) {
             // real grant, we shouldn't remove the user
             $grant_found = TRUE;
             break;
@@ -262,10 +264,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
   function import_dump($dump_file, $creds) {
     if (empty($creds)) {
+    $db_name = null;
+    $writer_node_ip = null;
+    $db_host = null;
+    $db_user = null;
+    $db_passwd = null;
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name first @var", ['@var' => $db_name]), 'info');
     $mydumper_path = '/usr/local/bin/mydumper';
     $myloader_path = '/usr/local/bin/myloader';
     $script_user = d('@server_master')->script_user;
@@ -273,9 +280,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php pass_php_inc @var", ['@var' => $pass_php_inc]), 'info');
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    drush_log(dt("DEBUG MyQuick import_dump mysql.php enable_myquick @var", ['@var' => $enable_myquick]), 'info');
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
       if (provision_file()->exists($pass_php_inc)->status()) {
@@ -304,21 +311,21 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
       }
       else {
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php FAIL no db_name @var", ['@var' => $db_name]), 'info');
       }
 
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php fail oct_db_dirx @var", array('@var' => $oct_db_dirx)), 'info');
-        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php fail oct_db_dirx @var", ['@var' => $oct_db_dirx]), 'info');
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', ['%dir' => $oct_db_dirx]));
       }
 
       $threads = provision_count_cpus();
       $threads = intval($threads / 4) + 1;
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name second @var", array('@var' => $db_name)), 'info');
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
-      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name second @var", ['@var' => $db_name]), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_user @var", ['@var' => $oct_db_user]), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_pass @var", ['@var' => $oct_db_pass]), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_host @var", ['@var' => $oct_db_host]), 'info');
+      drush_log(dt("DEBUG MyQuick import_dump mysql.php oct_db_port @var", ['@var' => $oct_db_port]), 'info');
 
       // Create pre-db-import flag file.
       $pre_import_flag = $backup_path . '/.pre_import_flag.pid';
@@ -337,11 +344,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_host &&
         $oct_db_port) {
         $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --overwrite-tables --verbose=1');
-        drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+        drush_log(dt("DEBUG MyQuick import_dump mysql.php Cmd @var", ['@var' => $command]), 'info');
         drush_shell_exec($command);
 
         if (!$command) {
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', ['%command' => $command]));
         }
 
         // Delete pre-db-import flag file.
@@ -368,7 +375,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       drush_log(sprintf("Importing database using command: %s", $cmd));
 
       if (!$success) {
-        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", ['%output' => $this->safe_shell_exec_output]));
       }
     }
   }
@@ -379,8 +386,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $command = sprintf('mysql -u %s -h %s -P %s -e "SELECT VERSION()"',
       escapeshellarg($user),
-      escapeshellarg($this->server->remote_host),
-      escapeshellarg($this->server->db_port));
+      escapeshellarg((string) $this->server->remote_host),
+      escapeshellarg((string) $this->server->db_port));
 
     $server->shell_exec($command);
     $output = implode('', drush_shell_exec_output());
@@ -391,16 +398,16 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       return $match[1];
     }
     elseif (preg_match("/ERROR 2002 \(HY000\): Can't connect to local MySQL server through socket '([^']*)'/", $output, $match)) {
-      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Local database server not running, or not accessible via socket (%socket): %msg', array('%socket' => $match[1], '%msg' => join("\n", drush_shell_exec_output()))));
+      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Local database server not running, or not accessible via socket (%socket): %msg', ['%socket' => $match[1], '%msg' => join("\n", drush_shell_exec_output())]));
     }
     elseif (preg_match("/ERROR 2003 \(HY000\): Can't connect to MySQL server on/", $output, $match)) {
-      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Connection to database server failed: %msg', array('%msg' => join("\n", drush_shell_exec_output()))));
+      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Connection to database server failed: %msg', ['%msg' => join("\n", drush_shell_exec_output())]));
     }
     elseif (preg_match("/ERROR 2005 \(HY000\): Unknown MySQL server host '([^']*)'/", $output, $match)) {
-      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Cannot resolve database server hostname (%host): %msg', array('%host' => $match[1], '%msg' => join("\n", drush_shell_exec_output()))));
+      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Cannot resolve database server hostname (%host): %msg', ['%host' => $match[1], '%msg' => join("\n", drush_shell_exec_output())]));
     }
     else {
-      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Dummy connection failed to fail. Either your MySQL permissions are too lax, or the response was not understood. See http://is.gd/Y6i4FO for more information. %msg', array('%msg' => join("\n", drush_shell_exec_output()))));
+      return drush_set_error('PROVISION_DB_CONNECT_FAIL', dt('Dummy connection failed to fail. Either your MySQL permissions are too lax, or the response was not understood. See http://is.gd/Y6i4FO for more information. %msg', ['%msg' => join("\n", drush_shell_exec_output())]));
     }
   }
 
@@ -414,11 +421,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $db_host = drush_get_option('db_host');
     }
     if (is_null($db_user)) {
-      $db_user = urldecode(drush_get_option('db_user'));
+      $db_user = urldecode((string) drush_get_option('db_user'));
     }
     drush_command_invoke_all_ref('provision_db_username_alter', $db_user, $db_host);
     if (is_null($db_passwd)) {
-      $db_passwd = urldecode(drush_get_option('db_passwd'));
+      $db_passwd = urldecode((string) drush_get_option('db_passwd'));
     }
     if (is_null($db_port)) {
       $db_port = $this->server->db_port;
@@ -443,13 +450,16 @@ port=%s
    * writeable pipes.
    */
   function generate_descriptorspec($stdin_file = NULL) {
-    $stdin_spec = is_null($stdin_file) ? array("pipe", "r") : array("file", $stdin_file, "r");
-    $descriptorspec = array(
-      0 => $stdin_spec,         // stdin is a pipe that the child will read from
-      1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
-      2 => array("pipe", "w"),  // stderr is a file to write to
-      3 => array("pipe", "r"),  // fd3 is our special file descriptor where we pass credentials
-    );
+    $stdin_spec = is_null($stdin_file) ? ["pipe", "r"] : ["file", $stdin_file, "r"];
+    $descriptorspec = [
+        0 => $stdin_spec,
+        // stdin is a pipe that the child will read from
+        1 => ["pipe", "w"],
+        // stdout is a pipe that the child will write to
+        2 => ["pipe", "w"],
+        // stderr is a file to write to
+        3 => ["pipe", "r"],
+    ];
     return $descriptorspec;
   }
 
@@ -459,14 +469,14 @@ port=%s
   function get_regexes() {
     static $regexes = NULL;
     if (is_null($regexes)) {
-      $regexes = array(
-        // remove DEFINER entries
-        '#/\*!50013 DEFINER=.*/#' => FALSE,
-        // remove another kind of DEFINER line
-        '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
-        // remove broken CREATE ALGORITHM entries
-        '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
-      );
+      $regexes = [
+          // remove DEFINER entries
+          '#/\*!50013 DEFINER=.*/#' => FALSE,
+          // remove another kind of DEFINER line
+          '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
+          // remove broken CREATE ALGORITHM entries
+          '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
+      ];
 
       // Allow regexes to be altered or appended to.
       drush_command_invoke_all_ref('provision_mysql_regex_alter', $regexes);
@@ -478,21 +488,18 @@ port=%s
     $regexes = $this->get_regexes();
     foreach ($regexes as $find => $replace) {
       if ($replace === FALSE) {
-        if (preg_match($find, $line)) {
+        if (preg_match($find, (string) $line)) {
           // Remove this line entirely.
           $line = FALSE;
         }
       }
       else {
-        $line = preg_replace($find, $replace, $line);
+        $line = preg_replace($find, (string) $replace, (string) $line);
         if (is_null($line)) {
           // preg exploded in our face, oops.
           drush_set_error('PROVISION_BACKUP_FAILED', dt(
             "Error while running regular expression:\n Pattern: !find\n Replacement: !replace",
-            array(
-              '!find' => $find,
-              '!replace' => $replace,
-          )));
+            ['!find' => $find, '!replace' => $replace]));
         }
       }
     }
@@ -502,6 +509,10 @@ port=%s
    * Generate a mysqldump for use in backups.
    */
   function generate_dump() {
+    $creds = null;
+    $count = null;
+    $db_name = null;
+    $writer_node_ip = null;
     // Set the umask to 077 so that the dump itself is non-readable by the
     // webserver.
     umask(0077);
@@ -520,7 +531,7 @@ port=%s
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", ['@var' => $db_name]), 'info');
     $mydumper_path = '/usr/local/bin/mydumper';
     $myloader_path = '/usr/local/bin/myloader';
     $script_user = d('@server_master')->script_user;
@@ -528,16 +539,16 @@ port=%s
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php pass_php_inc @var", ['@var' => $pass_php_inc]), 'info');
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    drush_log(dt("DEBUG MyQuick generate_dump mysql.php enable_myquick @var", ['@var' => $enable_myquick]), 'info');
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
       $oct_db_test = $oct_db_dirx . '/metadata';
       while (is_file($oct_db_test) && $count <= 6) {
         $count++;
         sleep(10);
-        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", array('@var' => $count)), 'info');
+        drush_log(dt("DEBUG MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", ['@var' => $count]), 'info');
       }
 
       if (provision_file()->exists($pass_php_inc)->status()) {
@@ -566,17 +577,17 @@ port=%s
         }
       }
       else {
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php FAIL no db_name @var", ['@var' => $db_name]), 'info');
       }
 
       if (is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php delete @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php delete @var", ['@var' => $oct_db_dirx]), 'info');
         _provision_recursive_delete($oct_db_dirx);
-        drush_log(dt("DEBUG MyQuick tmp_expim dir removed @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed @var", ['@var' => $oct_db_dirx]), 'info');
       }
 
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php create @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php create @var", ['@var' => $oct_db_dirx]), 'info');
         provision_file()->mkdir($oct_db_dirx)
           ->succeed('Created <code>@path</code>')
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
@@ -584,11 +595,11 @@ port=%s
 
       $threads = provision_count_cpus();
       $threads = intval($threads / 4) + 1;
-      drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
-      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
-      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
-      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", ['@var' => $db_name]), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_user @var", ['@var' => $oct_db_user]), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_pass @var", ['@var' => $oct_db_pass]), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_host @var", ['@var' => $oct_db_host]), 'info');
+      drush_log(dt("DEBUG MyQuick generate_dump mysql.php oct_db_port @var", ['@var' => $oct_db_port]), 'info');
 
       if (is_dir($oct_db_dirx) &&
         $db_name &&
@@ -597,7 +608,7 @@ port=%s
         $oct_db_host &&
         $oct_db_port) {
         $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=50000 --build-empty-files --threads=' . $threads . ' --less-locking --long-query-guard=900 --verbose=1');
-        drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+        drush_log(dt("DEBUG MyQuick generate_dump mysql.php Cmd @var", ['@var' => $command]), 'info');
         drush_shell_exec($command);
       }
     }
@@ -611,11 +622,11 @@ port=%s
         drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
       }
       else {
-        $pipes = array();
+        $pipes = [];
         $descriptorspec = $this->generate_descriptorspec();
         $process = proc_open($cmd, $descriptorspec, $pipes);
         if (is_resource($process)) {
-          fwrite($pipes[3], $this->generate_mycnf());
+          fwrite($pipes[3], (string) $this->generate_mycnf());
           fclose($pipes[3]);
 
           // At this point we have opened a pipe to that mysqldump command. Now
@@ -623,7 +634,7 @@ port=%s
           while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
             $this->filter_line($buffer);
             // Write the resulting line in the backup file.
-            if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
+            if ($buffer && fwrite($dump_file, (string) $buffer) === FALSE) {
               drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
             }
           }
@@ -634,7 +645,7 @@ port=%s
           // Close stderr as well.
           fclose($pipes[2]);
           if (proc_close($process) != 0) {
-            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd)));
+            drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', ['%msg' => $err, '%command' => $cmd]));
           }
         }
         else {
@@ -644,7 +655,7 @@ port=%s
 
       $dump_size_too_small = filesize(d()->site_path . '/database.sql') < 1024;
       if (($dump_size_too_small) && !drush_get_option('force', FALSE)) {
-        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not generate database backup from mysqldump. (error: %msg)', array('%msg' => $err)));
+        drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not generate database backup from mysqldump. (error: %msg)', ['%msg' => $err]));
       }
     }
 
@@ -667,11 +678,11 @@ port=%s
   function safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file = NULL) {
     $mycnf = $this->generate_mycnf($db_host, $db_user, $db_passwd);
     $descriptorspec = $this->generate_descriptorspec($dump_file);
-    $pipes = array();
+    $pipes = [];
     $process = proc_open($cmd, $descriptorspec, $pipes);
     $this->safe_shell_exec_output = '';
     if (is_resource($process)) {
-      fwrite($pipes[3], $mycnf);
+      fwrite($pipes[3], (string) $mycnf);
       fclose($pipes[3]);
 
       $this->safe_shell_exec_output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
@@ -698,7 +709,7 @@ port=%s
     $version = $this->conn->getAttribute(PDO::ATTR_CLIENT_VERSION);
     if (strpos($version, 'mysqlnd') !== FALSE) {
       // The mysqlnd driver supports utf8mb4 starting at version 5.0.9.
-      $version = preg_replace('/^\D+([\d.]+).*/', '$1', $version);
+      $version = preg_replace('/^\D+([\d.]+).*/', '$1', (string) $version);
       if (version_compare($version, '5.0.9', '<')) {
         return FALSE;
       }
@@ -711,11 +722,11 @@ port=%s
     }
 
     // Ensure that the MySQL server supports large prefixes and utf8mb4.
-    $dbname = uniqid(drush_get_option('aegir_db_prefix', 'site_'));
+    $dbname = uniqid((string) drush_get_option('aegir_db_prefix', 'site_'));
     $this->create_database($dbname);
     $success = $this->query("CREATE TABLE `%s`.`drupal_utf8mb4_test` (id VARCHAR(255), PRIMARY KEY(id(255))) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC", $dbname);
     if (!$this->drop_database($dbname)) {
-      drush_log(dt("Failed to drop database @dbname", array('@dbname' => $dbname)), 'warning');
+      drush_log(dt("Failed to drop database @dbname", ['@dbname' => $dbname]), 'warning');
     }
 
     return ($success !== FALSE);
