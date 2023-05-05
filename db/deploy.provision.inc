@@ -38,7 +38,7 @@ function drush_db_post_provision_deploy() {
         ->fail('Moving the Post-DB-Import @path1 to @path2 has failed.');
       if (is_file($oct_db_test)) {
         _provision_recursive_delete($oct_db_dirx);
-        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", ['@var' => $oct_db_dirx]), 'info');
       }
       provision_file()->unlink($post_import_flag)
         ->succeed('Removed Post-DB-Import Flag-File')
