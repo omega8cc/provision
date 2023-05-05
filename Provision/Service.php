@@ -30,11 +30,11 @@ class Provision_Service extends Provision_ChainedState {
   protected $has_restart_cmd = FALSE;
   protected $has_port = FALSE;
 
-  protected $configs = array();
+  protected $configs = [];
 
 
-  protected $config_cache = array();
-  private $_config = array();
+  protected $config_cache = [];
+  private $_config = [];
 
 
   /**
@@ -46,7 +46,7 @@ class Provision_Service extends Provision_ChainedState {
    * This is used so that we can create methods for drush commands, and
    * can fail safely.
    */
-  function __call($name, $args = array()) {
+  function __call($name, $args = []) {
     return provision::method_invoke($this, $name, $args);
   }
 
@@ -100,8 +100,8 @@ class Provision_Service extends Provision_ChainedState {
    *   Any optional information to be made available to templates. If a string, it will be
    *   turned into an array with the 'name' property the value of the string.
    */
-  function config($config, $data = array()) {
-    $this->_config = array();
+  function config($config, $data = []) {
+    $this->_config = [];
 
     if (!isset($this->configs[$config])) {
       $service = (!is_null($this->application_name)) ? $this->application_name : $this->service;
@@ -117,7 +117,7 @@ class Provision_Service extends Provision_ChainedState {
     }
 
     if (!isset($this->config_cache[$this->context->name][$config])) {
-      $this->config_cache[$this->context->name][$config] = array();
+      $this->config_cache[$this->context->name][$config] = [];
       foreach ((array) $this->configs[$config] as $class) {
         $this->config_cache[$this->context->name][$config][] = new $class($this->context, array_merge($this->config_data($config), $data));
       }
@@ -170,11 +170,11 @@ class Provision_Service extends Provision_ChainedState {
             if (is_array($arg2)) {
               if (!isset($config->store->loaded_records[$arg1])
                   || !is_array($config->store->loaded_records[$arg1])) {
-                $config->store->loaded_records[$arg1] = array();
+                $config->store->loaded_records[$arg1] = [];
               }
               if (!isset($config->store->records[$arg1])
                   || !is_array($config->store->records[$arg1])) {
-                $config->store->records[$arg1] = array();
+                $config->store->records[$arg1] = [];
               }
               $config->store->records[$arg1] = array_merge($config->store->loaded_records[$arg1], $config->store->records[$arg1], $arg2);
             }
@@ -238,7 +238,7 @@ class Provision_Service extends Provision_ChainedState {
    * This method will fetch the class to instantiate from the internal
    * $this->configs control array.
    */
-  function create_config($config, $data = array()) {
+  function create_config($config, $data = []) {
     $this->config($config, $data)->write();
   }
 
@@ -250,7 +250,7 @@ class Provision_Service extends Provision_ChainedState {
    *
    * @return the return value of unlink(), which is usually the file object
    */
-  function delete_config($config, $data = array()) {
+  function delete_config($config, $data = []) {
     return $this->config($config, $data)->unlink();
   }
 
@@ -258,7 +258,7 @@ class Provision_Service extends Provision_ChainedState {
    * Fetch extra information the service wants to pass to the config file classes.
    */
   function config_data($config = NULL, $class = NULL) {
-    $data = array();
+    $data = [];
     // Always pass the server this service is running on to configs.
     $data['server'] = $this->server;
 
@@ -321,7 +321,7 @@ class Provision_Service extends Provision_ChainedState {
   /**
    * Sync filesystem changes to the server hosting this service.
    */
-  function sync($path = NULL, $additional_options = array()) {
+  function sync($path = NULL, $additional_options = []) {
     return $this->server->sync($path, $additional_options);
   }
 
@@ -340,7 +340,7 @@ class Provision_Service extends Provision_ChainedState {
    *   array('option' => 'description')
    */
   static function option_documentation() {
-    return array();
+    return [];
   }
 
   /**

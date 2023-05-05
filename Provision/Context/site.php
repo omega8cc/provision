@@ -38,10 +38,10 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('site_enabled', true);
     $this->setProperty('language', 'en');
     $this->setProperty('client_name');
-    $this->setProperty('aliases', array(), TRUE);
+    $this->setProperty('aliases', [], TRUE);
     $this->setProperty('redirection', FALSE);
     $this->setProperty('cron_key', '');
-    $this->setProperty('drush_aliases', array(), TRUE);
+    $this->setProperty('drush_aliases', [], TRUE);
 
     // this can potentially be handled by a Drupal sub class
     $this->setProperty('profile', 'standard');

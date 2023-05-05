@@ -103,7 +103,7 @@ function drush_provision_drupal_provision_install() {
   if (d()->install_method == 'profile') {
 
     // call a backend task to do the actual installation.
-    $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    $result = provision_backend_invoke(d()->name, "provision-install-backend", [], array('client_email' => drush_get_option('client_email')));
     
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);

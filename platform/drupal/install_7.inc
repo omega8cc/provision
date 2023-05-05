@@ -87,7 +87,7 @@ function install_main() {
     case '9':
     case '8':
     case '7':
-      $sql = drush_get_class('Drush\Sql\Sql', array(), array(drush_drupal_major_version()));
+      $sql = drush_get_class('Drush\Sql\Sql', [], array(drush_drupal_major_version()));
       $db_spec = $sql->get_db_spec();
       break;
     case '6':

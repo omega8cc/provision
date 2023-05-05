@@ -57,7 +57,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   $options[$hash_name] = $new_name;
   $options['platform'] = (isset($platform)) ? $platform : $options['platform'];
   $options['root'] = d($options['platform'])->root;
-  $options['aliases'] = array();
+  $options['aliases'] = [];
   $options['redirection'] = 0;
 
   // XXX: right now we just drop SSL configuration when cloning, because

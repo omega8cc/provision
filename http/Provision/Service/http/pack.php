@@ -27,8 +27,8 @@ class Provision_Service_http_pack extends Provision_Service_http {
   }
 
   function init_server() {
-    $this->server->setProperty('slave_web_servers', array(), TRUE);
-    $this->server->setProperty('master_web_servers', array(), TRUE);
+    $this->server->setProperty('slave_web_servers', [], TRUE);
+    $this->server->setProperty('master_web_servers', [], TRUE);
   }
 
   function init_site() {
@@ -43,7 +43,7 @@ class Provision_Service_http_pack extends Provision_Service_http {
    * methods, and returns TRUE only if they all returned something that
    * can be interpreted as TRUE.
    */
-  function _each_server($servers, $method, $args = array()) {
+  function _each_server($servers, $method, $args = []) {
     // Return True by default.
     $ret = TRUE;
     foreach ($servers as $server) {
@@ -59,12 +59,12 @@ class Provision_Service_http_pack extends Provision_Service_http {
     $this->_each_server($this->server->slave_web_servers, __FUNCTION__);
   }
 
-  function create_config($config, $data = array()) {
+  function create_config($config, $data = []) {
     $this->_each_server($this->server->master_web_servers, __FUNCTION__, array($config));
     $this->_each_server($this->server->slave_web_servers, __FUNCTION__, array($config));
   }
 
-  function delete_config($config, $data = array()) {
+  function delete_config($config, $data = []) {
     $this->_each_server($this->server->master_web_servers, __FUNCTION__, array($config));
     $this->_each_server($this->server->slave_web_servers, __FUNCTION__, array($config));
 
@@ -87,7 +87,7 @@ class Provision_Service_http_pack extends Provision_Service_http {
       $this->_each_server($this->server->slave_web_servers, __FUNCTION__);
   }
 
-  function sync($path = NULL, $additional_options = array()) {
+  function sync($path = NULL, $additional_options = []) {
     $args = func_get_args();
     $this->_each_server($this->server->master_web_servers, __FUNCTION__, $args);
   }

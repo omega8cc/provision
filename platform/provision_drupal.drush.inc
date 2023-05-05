@@ -30,14 +30,14 @@ function provision_drupal_drush_help($section) {
 }
 
 function provision_drupal_drush_engine_drupal() {
-  $engines = array();
-  $engines['clear'] = array();
-  $engines['cron_key'] = array();
-  $engines['deploy'] = array();
-  $engines['import'] = array();
-  $engines['install'] = array();
-  $engines['packages'] = array();
-  $engines['verify'] = array();
+  $engines = [];
+  $engines['clear'] = [];
+  $engines['cron_key'] = [];
+  $engines['deploy'] = [];
+  $engines['import'] = [];
+  $engines['install'] = [];
+  $engines['packages'] = [];
+  $engines['verify'] = [];
   return $engines;
 }
 
@@ -221,7 +221,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
     // Check whether we're hosted on a cluster, in which case, the master is
     // authoritative.
     $cluster = d()->platform->web_server->http_service_type == 'cluster' ? TRUE : FALSE;
-    $options = array();
+    $options = [];
     if ($override_slave_authority || $cluster) {
       $exclude = NULL;
     }
@@ -306,7 +306,7 @@ function _provision_drupal_create_directories($url = NULL) {
     "sites/$url/vendor"          => 02775, # https://github.com/omega8cc/boa/issues/385
   );
 
-  $chgrp = array();
+  $chgrp = [];
   // special case: platform. do not handle files dir
   if ($url != 'all') {
     $mkdir["sites/$url/files"]            = 02775;
@@ -550,7 +550,7 @@ function _provision_drupal_rebuild_caches() {
 }
 
 function provision_drupal_find_sites() {
-  $sites = array();
+  $sites = [];
   if ($dir = opendir("./sites")) {
     while (FALSE !== ($subdir = readdir($dir))) {
       // skip internal directory pointers
@@ -579,7 +579,7 @@ function provision_drupal_find_aliases() {
   // Composer based D8 codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
 
-  $aliases = array();
+  $aliases = [];
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 7) {
       $config = new Provision_Config_Drupal_Alias_Store(d()->name);
@@ -706,10 +706,10 @@ function _provision_find_platforms() {
  * A small helper function to reduce code duplication
  */
 function _provision_find_packages($scope, $key = '') {
-  $packages = array();
+  $packages = [];
   $scope_text = ($key) ? "$scope/$key" : $scope;
   foreach (array('modules', 'themes') as $type) {
-    $packages[$type] = array();
+    $packages[$type] = [];
     $func = "_provision_drupal_find_$type";
     $result = $func($scope, $key);
     if (count($result)) {
@@ -740,7 +740,7 @@ function provision_drupal_system_map() {
  */
 function _provision_drupal_find_modules($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'modules');
-  $files = array();
+  $files = [];
 
   if (drush_drupal_major_version() >= 8) {
     foreach ($paths as $path) {
@@ -798,7 +798,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
       $source = str_replace("\r\n", "\n", $source);
       $source = str_replace("\r", "\n", $source);
       // Also search included files for function signature
-      $include_matches = array();
+      $include_matches = [];
       preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
       if (count($include_matches[0])) {
         foreach($include_matches[4] as $include) {
@@ -807,7 +807,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
           }
         }
       }
-      $function_matches = array();
+      $function_matches = [];
         preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
 
       if (count($function_matches[0])) {
@@ -829,10 +829,10 @@ function _provision_drupal_find_modules($scope, $key = '') {
 }
 
 function provision_parse_info_file($filename) {
-  $info = array();
+  $info = [];
 
   $defaults = array(
-    'dependencies' => array(),
+    'dependencies' => [],
     'description' => '',
     'version' => NULL,
     'php' => DRUPAL_MINIMUM_PHP,
@@ -890,7 +890,7 @@ function provision_reload_config($context, $file = NULL) {
     include($file);
     // $options will be defined by the config file included above.
     if (count($options)) {
-      $options = array_merge(drush_get_context($context, array()), $options);
+      $options = array_merge(drush_get_context($context, []), $options);
       drush_set_context($context, $options);
     }
   }
@@ -967,7 +967,7 @@ function _provision_client_delete_symlink() {
  * Find available languages for a profile.
  */
 function _provision_find_profile_languages($profile_path) {
-  $languages = array();
+  $languages = [];
 
   // English is default.
   $languages['en'] = 1;

@@ -8,7 +8,7 @@
  * At the very least you will want to send them the one-time login url, !login_url.
  */
 
-$mail = array();
+$mail = [];
 $mail['subject'] = dt('Your new site !site has been created');
 $mail['body'] = dt("!username,
 

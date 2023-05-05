@@ -14,7 +14,7 @@ class Provision_Config {
   /**
    * Associate array of variables to make available to the template.
    */
-  public $data = array();
+  public $data = [];
 
   /**
    * A Provision_Context object thie configuration relates to.
@@ -68,7 +68,7 @@ class Provision_Config {
    *   An associative array to potentially manipulate in process() and make
    *   available as variables to the template.
    */
-  function __construct($context, $data = array()) {
+  function __construct($context, $data = []) {
     if (is_null($this->template)) {
       throw new Exception(dt("No template specified for: %class", array('%class' => get_class($this))));
     }
@@ -120,7 +120,7 @@ class Provision_Config {
     $templates = drush_command_invoke_all('provision_config_load_templates', $this);
     // Ensure that templates is at least an array.
     if (!is_array($templates)) {
-      $templates = array();
+      $templates = [];
     }
     // Allow other Drush commands to alter the templates from other commands.
     drush_command_invoke_all_ref('provision_config_load_templates_alter', $templates, $this);

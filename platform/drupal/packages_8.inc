@@ -12,8 +12,8 @@
  */
 function _provision_drupal_find_themes($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'themes');
-  $files = array();
-  $engines = array();
+  $files = [];
+  $engines = [];
   foreach ($paths as $path) {
     $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
@@ -97,7 +97,7 @@ function _provision_drupal_system_map() {
  *   List of packages.
  */
 function _provision_system_query($type) {
-  $packages = array();
+  $packages = [];
 
   if ($type == 'theme') {
     /** @var \Drupal\Core\Extension\Extension[] $extensions_data */
@@ -168,7 +168,7 @@ function _provision_system_query($type) {
 function _provision_find_profiles() {
   $profile_dirs = array('./core/profiles', './profiles');
 
-  $profiles = array();
+  $profiles = [];
   foreach($profile_dirs as $profile_dir) {
     if (!is_dir($profile_dir)) {
       drush_log(dt("Cannot find profiles directory %dir", array('%dir' => $profile_dir)), 'error');
@@ -199,7 +199,7 @@ function _provision_find_profiles() {
  * Retrieve a list of paths to search in a certain scope
  */
 function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
-  $searchpaths = array();
+  $searchpaths = [];
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
   switch ($scope) {
     case 'base':

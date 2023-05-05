@@ -20,7 +20,7 @@ class Provision_Config_Drushrc extends Provision_Config {
     return _drush_config_file($this->context_name);
   }
 
-  function __construct($context, $data = array()) {
+  function __construct($context, $data = []) {
     parent::__construct($context, $data);
     $this->load_data();
   }

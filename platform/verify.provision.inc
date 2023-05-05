@@ -62,8 +62,8 @@ function drush_provision_drupal_pre_provision_verify() {
     // Create a platform from a makefile, if it doesnt already exist and the makefile does.
     if (!provision_file()->exists(d()->root)->status() && !empty(d()->makefile)) {
       drush_log(dt("Platform path does not exist, fetching from drush makefile"), 'notice');
-      $arguments = array();
-      $options = array();
+      $arguments = [];
+      $options = [];
       // Propagate working-copy args downward.
       if (drush_get_option('working-copy') || !empty(d()->make_working_copy)) {
         $options[] = '--working-copy';
@@ -226,7 +226,7 @@ function drush_provision_drupal_pre_provision_verify() {
     if (provision_file()->exists($pathAll)->status() &&
        (provision_file()->exists($core8_version_id)->status() ||
         preg_match("/\/static\//", d()->root))) {
-      $sortedDirs = array();
+      $sortedDirs = [];
       foreach(scandir($pathAll) as $dir) {
         if(is_dir($pathAll . $dir)) {
           array_push($sortedDirs, $dir);

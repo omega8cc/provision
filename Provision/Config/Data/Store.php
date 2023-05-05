@@ -22,13 +22,13 @@ class Provision_Config_Data_Store extends Provision_Config {
   private $locked = FALSE;
   protected $fp = NULL;
 
-  public $records = array();
-  public $loaded_records = array();
+  public $records = [];
+  public $loaded_records = [];
 
   protected $mode = 0700;
 
 
-  function __construct($context, $data = array()) {
+  function __construct($context, $data = []) {
     parent::__construct($context, $data);
 
     $this->load_data();

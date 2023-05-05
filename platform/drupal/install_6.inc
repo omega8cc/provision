@@ -313,7 +313,7 @@ function install_main() {
       $batch =& batch_get();
       $batch['progressive'] = FALSE;
       $batch['redirect'] = NULL;
-      $batch['operations'] = array();
+      $batch['operations'] = [];
       $batch['url'] = 'batch';
       batch_set($batch);
 

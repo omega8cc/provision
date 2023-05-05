@@ -7,7 +7,7 @@
 class Provision_Config_Drupal_Settings extends Provision_Config {
   public $template = 'provision_drupal_settings_7.tpl.php';
   public $description = 'Drupal settings.php file';
-  public $creds = array();
+  public $creds = [];
   protected $mode = 0440;
 
   function filename() {

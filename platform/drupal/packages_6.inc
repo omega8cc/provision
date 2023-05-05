@@ -12,8 +12,8 @@
  */
 function _provision_drupal_find_themes($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'themes');
-  $files = array();
-  $engines = array();
+  $files = [];
+  $engines = [];
   foreach ($paths as $path) {
     $files = array_merge($files, drush_scan_directory($path, "/\.info$/", array('.', '..', 'CVS', '.svn'), 0, true, 'name'));
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, true, 'name'));
@@ -46,7 +46,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
  * This code is based on the Drupal 6 and Drupal 7 drupal_parse_info_file
  */
 function _provision_drupal_parse_info_file($filename) {
-  $info = array();
+  $info = [];
 
   if (!file_exists($filename)) {
     return $info;
@@ -90,7 +90,7 @@ function _provision_drupal_parse_info_file($filename) {
           $key = count($parent);
         }
         if (!isset($parent[$key]) || !is_array($parent[$key])) {
-          $parent[$key] = array();
+          $parent[$key] = [];
         }
         $parent = &$parent[$key];
       }
@@ -121,7 +121,7 @@ function _provision_drupal_parse_info_file($filename) {
  *   List of packages.
  */
 function _provision_system_query($type) {
-  $entries = array();
+  $entries = [];
   $result = db_query("SELECT * FROM {system} WHERE type='%s'", $type);
   while ($entry = db_fetch_object($result)) {
     $entries[] = $entry;
@@ -198,7 +198,7 @@ function _provision_drupal_system_map() {
  * Find available profiles on this platform.
  */
 function _provision_find_profiles() {
-  $profiles = array();
+  $profiles = [];
 
   include_once('includes/install.inc');
   $profiles_subdirs[] = "./profiles";
@@ -210,14 +210,14 @@ function _provision_find_profiles() {
     }
 
     while (FALSE !== ($name = readdir($dir))) {
-      $languages = array();
+      $languages = [];
       if (($name == '..') || ($name == '.') || (!is_dir("$profiles_subdir/$name"))) {
         continue;
       }
 
       $profile = new stdClass();
       $profile->name = $name;
-      $profile->info = array();
+      $profile->info = [];
 
       $info_file = "$profiles_subdir/$name/$name.info";
       if (file_exists($info_file)) {
@@ -253,7 +253,7 @@ function _provision_find_profiles() {
  * Retrieve a list of paths to search in a certain scope
  */
 function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
-  $searchpaths = array();
+  $searchpaths = [];
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
   switch ($scope) {
     case 'base' :

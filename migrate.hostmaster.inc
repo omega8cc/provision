@@ -65,11 +65,11 @@ We are making the following assumptions:
       'makefile' => drush_get_option('makefile', dirname(__FILE__) . '/aegir.make'),
     ));
     // propagate working-copy args downward
-    $options = array();
+    $options = [];
     if (drush_get_option('working-copy')) {
       $options['working-copy'] = 1;
     }
-    provision_backend_invoke($new_platform, 'provision-verify', array(), $options);
+    provision_backend_invoke($new_platform, 'provision-verify', [], $options);
     drush_set_option('new_platform', $new_platform);
     // exit if an error has occured.
     if (drush_get_error()) {
@@ -166,12 +166,12 @@ We are making the following assumptions:
  */
 function drush_provision_pre_hostmaster_migrate($site, $platform) {
   // we ignore errors here through integrate = FALSE
-  // provision_backend_invoke(drush_get_option('site_name'), 'hosting-pause', array(), array('#integrate' => FALSE));
+  // provision_backend_invoke(drush_get_option('site_name'), 'hosting-pause', [], array('#integrate' => FALSE));
 }
 
 function drush_provision_hostmaster_migrate($site, $platform) {
   // See: https://www.drupal.org/node/2762701.
-  $platform_version = provision_backend_invoke(drush_get_option('site_name'), 'status', array(), array('fields' => 'drupal-version', 'field-labels' => 0));
+  $platform_version = provision_backend_invoke(drush_get_option('site_name'), 'status', [], array('fields' => 'drupal-version', 'field-labels' => 0));
   drush_log(dt("Debug trim platform_version @name", array('@name' => trim($platform_version['output']))), 'warning');
   drush_log(dt("Debug platform_version @path: @id", array('@path' => $platform, '@id' => $platform_version)), 'warning');
   $major_version_upgrade = version_compare('7.0', trim($platform_version['output'])) > 0 ? TRUE : FALSE;
@@ -219,7 +219,7 @@ function drush_provision_post_hostmaster_migrate($site, $platform) {
   provision_backend_invoke(drush_get_option('site_name'), 'cache-clear', array('drush'));
   // we pass the context names we generated to the task so we can enforce that the names
   // stay the same.
-  provision_backend_invoke(drush_get_option('site_name'), 'hosting-resume', array(), array(
+  provision_backend_invoke(drush_get_option('site_name'), 'hosting-resume', [], array(
     'old_platform_name' => drush_get_option('old_platform'),
     'new_platform_name' => drush_get_option('new_platform'),
   ));

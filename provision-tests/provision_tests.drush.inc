@@ -264,7 +264,7 @@ function drush_provision_tests_install_platform($platform_name, $platform_alias 
     PROVISION_TESTS_BUILDS_REPO . "/$platform_name.make",
     "/var/aegir/platforms/$platform_alias",
   );
-  $opts = array();
+  $opts = [];
   if (version_compare(drush_core_version(), '7', '>=')) {
     $opts[] = '--shallow-clone';
   }
@@ -309,7 +309,7 @@ function drush_provision_tests_install_site($platform_name, $site, $profile_name
   );
   drush_invoke_process('@none', 'provision-save', $args, $options);
 
-  $args = array();
+  $args = [];
   $options = array(
     'client_email' => 'this.email@is.invalid',
   );
@@ -421,5 +421,5 @@ function drush_provision_tests_add_custom_test_task() {
  * Run all remaining hosting tasks.
  */
 function drush_provision_tests_run_remaining_tasks($debug = FALSE) {
-  provision_backend_invoke('@hostmaster', "hosting-tasks", array(), array('force' => TRUE, 'debug' => $debug));
+  provision_backend_invoke('@hostmaster', "hosting-tasks", [], array('force' => TRUE, 'debug' => $debug));
 }

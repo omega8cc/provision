@@ -16,7 +16,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    * @param $options
    *   Array of string option names to save.
    */
-  function __construct($context, $data = array()) {
+  function __construct($context, $data = []) {
     parent::__construct($context, $data);
 
     if (isset($data['aliases']) && is_array($data['aliases'])) {

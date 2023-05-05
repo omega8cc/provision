@@ -8,7 +8,7 @@ class Provision_Service_http_cluster extends Provision_Service_http {
   }
 
   function init_server() {
-    $this->server->setProperty('cluster_web_servers', array(), TRUE);
+    $this->server->setProperty('cluster_web_servers', [], TRUE);
   }
 
   function init_site() {
@@ -22,7 +22,7 @@ class Provision_Service_http_cluster extends Provision_Service_http {
    * methods, and returns TRUE only if they all returned something that
    * can be interpreted as TRUE.
    */
-  function _each_server($method, $args = array()) {
+  function _each_server($method, $args = []) {
     // Return True by default.
     $ret = TRUE;
     foreach ($this->server->cluster_web_servers as $server) {
@@ -37,11 +37,11 @@ class Provision_Service_http_cluster extends Provision_Service_http {
     $this->_each_server(__FUNCTION__);
   }
 
-  function create_config($config, $data = array()) {
+  function create_config($config, $data = []) {
     $this->_each_server(__FUNCTION__, array($config));
   }
 
-  function delete_config($config, $data = array()) {
+  function delete_config($config, $data = []) {
     $this->_each_server(__FUNCTION__, array($config));
 
     return $this;
@@ -61,7 +61,7 @@ class Provision_Service_http_cluster extends Provision_Service_http {
     return $this->_each_server(__FUNCTION__);
   }
 
-  function sync($path = NULL, $additional_options = array()) {
+  function sync($path = NULL, $additional_options = []) {
     $args = func_get_args();
     $this->_each_server(__FUNCTION__, $args);
   }

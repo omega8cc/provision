@@ -488,7 +488,7 @@ function provision_load_critical($load = NULL, $threshold = NULL) {
  * Check whether a Hosting feature is enabled.
  */
 function provision_hosting_feature_enabled($feature) {
-  $features = drush_get_option('hosting_features', array());
+  $features = drush_get_option('hosting_features', []);
   return array_key_exists($feature, $features) && $features[$feature];
 }
 
@@ -497,7 +497,7 @@ function provision_hosting_feature_enabled($feature) {
  */
 function provision_generate_login_reset() {
   $uri = d()->redirection ?: d()->uri;
-  $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $uri, 'no-browser' => TRUE));
+  $result = drush_invoke_process(d()->name, 'user-login', [], array('uri' => $uri, 'no-browser' => TRUE));
 
   return $result['output'];
 }

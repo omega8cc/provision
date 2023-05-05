@@ -87,7 +87,7 @@ function & d($name = NULL, $_root_object = FALSE, $allow_creation = TRUE) {
  * We cache the result locally here.
  */
 function provision_sitealias_get_record($name) {
-  static $cache = array();
+  static $cache = [];
 
   $name = provision_normalise_context_name($name);
 

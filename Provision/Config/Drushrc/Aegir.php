@@ -12,7 +12,7 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
   public $template = 'provision_drushrc_aegir.tpl.php';
   public $description = 'Aegir Drush configuration file';
 
-  function __construct($context = '@none', $data = array()) {
+  function __construct($context = '@none', $data = []) {
     parent::__construct($context, $data);
     $this->load_data();
   }
@@ -26,8 +26,8 @@ class Provision_Config_Drushrc_Aegir extends Provision_Config_Drushrc {
 
     $this->data['hosting_features'] = $enabled_features;
 
-    $this->data['drush_exclude'] = array();
-    $this->data['drush_include'] = array();
+    $this->data['drush_exclude'] = [];
+    $this->data['drush_include'] = [];
     foreach($enabled_features as $feature => $status) {
       if ($status === '0') {
         $this->data['drush_exclude'][] = $feature;

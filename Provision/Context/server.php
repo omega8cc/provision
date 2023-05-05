@@ -16,7 +16,7 @@ class Provision_Context_server extends Provision_Context {
    *
    * @see Provision_Service
    */
-  protected $services = array();
+  protected $services = [];
 
   static function option_documentation() {
     $options = array(
@@ -29,7 +29,7 @@ class Provision_Context_server extends Provision_Context {
       // TODO: replace this file scanning nastiness, with a hook!
       $reflect = new reflectionClass('Provision_Service_' . $service);
       $base_dir = dirname($reflect->getFilename());
-      $types = array();
+      $types = [];
       $options[$service . '_service_type'] = 'placeholder';
       foreach (array_keys(drush_scan_directory($base_dir, '%.*_service\.inc%')) as $service_file) {
         if (preg_match('%^' . $base_dir . '/([a-z]+)/(?:\1)_service.inc$%', $service_file, $match)) {
@@ -58,7 +58,7 @@ class Provision_Context_server extends Provision_Context {
       $this->setProperty('script_user', d('@server_master')->script_user);
     }
 
-    $this->setProperty('ip_addresses', array(), true);
+    $this->setProperty('ip_addresses', [], true);
 
     $this->backup_path = $this->aegir_root . '/backups';
     $this->config_path = $this->aegir_root . '/config/' . ltrim($this->name, '@');
@@ -127,7 +127,7 @@ class Provision_Context_server extends Provision_Context {
    * Retrieve a list of service objects associated with this server.
    */
   function get_services() {
-    $services = array();
+    $services = [];
     foreach ($this->services as $service => $object) {
       $services[$service] = $this->name;
     }
@@ -168,7 +168,7 @@ class Provision_Context_server extends Provision_Context {
    *   line (like the 'process' context, but only for the scope of this one
    *   call).
    */
-  function sync($path = NULL, $additional_options = array()) {
+  function sync($path = NULL, $additional_options = []) {
     if (!provision_is_local_host($this->remote_host)) {
       if (is_null($path)) {
         $path = $this->config_path;
@@ -180,7 +180,7 @@ class Provision_Context_server extends Provision_Context {
           'keep-dirlinks' => TRUE,
           'omit-dir-times' => TRUE,
         );
-        $global_extra_options = drush_get_option('global_sync_options', array());
+        $global_extra_options = drush_get_option('global_sync_options', []);
         $options = array_merge($default_options, $additional_options, $global_extra_options);
 
 
@@ -219,7 +219,7 @@ class Provision_Context_server extends Provision_Context {
    *   line (like the 'process' context, but only for the scope of this one
    *   call).
    */
-  function fetch($path, $additional_options = array()) {
+  function fetch($path, $additional_options = []) {
     if (!provision_is_local_host($this->remote_host)) {
       if (provision_file()->exists($path)->status()) {
         $options = array_merge(array(

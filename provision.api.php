@@ -61,7 +61,7 @@
  * In a drush contrib check if the frontend part (hosting_hook variant) is enabled.
  */
 function hook_drush_load() {
-  $features = drush_get_option('hosting_features', array());
+  $features = drush_get_option('hosting_features', []);
   $hook_feature_name = 'something';
 
   return array_key_exists($hook_feature_name, $features) // Front-end module is installed...
@@ -289,7 +289,7 @@ function hook_provision_config_load_templates($config) {
  */
 function hook_provision_config_load_templates_alter(&$templates, $config) {
   // Don't let any custom templates be used.
-  $templates = array();
+  $templates = [];
 }
 
 /**
@@ -404,7 +404,7 @@ function hook_provision_drupal_chmod_not_recursive_directories_alter($chmod_not_
  *    The site url.
  */
 function hook_provision_drupal_install_settings_alter(&$settings, $url) {
-  $settings['forms']['install_configure_form']['update_status_module'] = array();
+  $settings['forms']['install_configure_form']['update_status_module'] = [];
 }
 
 /**

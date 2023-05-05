@@ -47,7 +47,7 @@ function provision_autoload_register_prefix($prefix, $dir, $prepend = FALSE) {
     $dirs = $current_prefixes[$prefix];
   }
   else {
-    $dirs = array();
+    $dirs = [];
   }
 
   // Now add the new one.
@@ -456,7 +456,7 @@ function _scrub_object($input) {
  *
  * @see drush_invoke_process()
  */
-function provision_backend_invoke($target, $command, $arguments = array(), $data = array(), $mode = 'GET') {
+function provision_backend_invoke($target, $command, $arguments = [], $data = [], $mode = 'GET') {
   $context = '@' . ltrim($target, '@');
   return drush_invoke_process($context, $command, $arguments, $data, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
 }
@@ -489,7 +489,7 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
  * @return string|void
  *   The output or error output of the command.
  */
-function provision_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
+function provision_process($command, $cwd = null, $label = 'Process', $env = [], $log_output = TRUE, $error_message = NULL, $throw_drush_error = TRUE, $log_type = 'p_info') {
   if (empty($command)) {
     return;
   }
@@ -631,7 +631,7 @@ class provision {
    * This is a static method so it can be re-used by some other classes
    * that aren't contexts. (notably services and configs).
    */
-  static function method_invoke($object, $func, $args = array()) {
+  static function method_invoke($object, $func, $args = []) {
     if (method_exists($object, $func)) {
       return call_user_func_array(array($object, $func), $args);
     }

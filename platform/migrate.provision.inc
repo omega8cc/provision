@@ -74,7 +74,7 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
 function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   $target = drush_get_option('target_name');
-  $options = array();
+  $options = [];
   $options = d()->options;
   $options['uri'] = d()->uri;
 
@@ -101,7 +101,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     $options['uri'] = ltrim($new_name, '@');
     $hash_name = drush_get_option('#name') ? '#name' : 'name';
     $options[$hash_name] = $new_name;
-    $new_aliases = array();
+    $new_aliases = [];
     $old_aliases = (is_array($options['aliases'])) ? $options['aliases'] : FALSE;
     $pre_old_uri = ltrim(d()->uri, '@');
     $pre_new_uri = ltrim($new_name, '@');
@@ -126,7 +126,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
         }
       }
       $unique_aliases = array_unique($new_aliases); // Make sure there are no duplicates.
-      $options['aliases'] = array(); // Reset original aliases array.
+      $options['aliases'] = []; // Reset original aliases array.
       $options['aliases'] = $unique_aliases; // Use rewritten aliases array.
       if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
         drush_set_option('rename_only', TRUE);

@@ -25,15 +25,15 @@ class Provision_Context {
    * members, $evironment->property_name. __get() and __set handle this. In
    * init(), set defaults with setProperty().
    */
-  protected $properties = array();
+  protected $properties = [];
 
   /**
    * Keeps track of properites that are names of Provision_Context objects.
    * Set with is_oid().
    */
-  protected $oid_map = array();
+  protected $oid_map = [];
 
-  protected $service_subs = array();
+  protected $service_subs = [];
   protected $parent_key = NULL;
 
   /**
@@ -133,7 +133,7 @@ class Provision_Context {
    * Execute a method on the object and all of it's associated
    * services.
    */
-  function method_invoke($func, $args = array(), $services = TRUE) {
+  function method_invoke($func, $args = [], $services = TRUE) {
     provision::method_invoke($this, $func, $args);
     // Services will be invoked regardless of the existence of a
     // implementation in the context class.
@@ -154,7 +154,7 @@ class Provision_Context {
    * Additionally it will dispatch this function call to
    * all the currently enabled services.
    */
-  function type_invoke($name, $args = array()) {
+  function type_invoke($name, $args = []) {
     $this->method_invoke("{$name}_{$this->type}");
   }
 
@@ -168,7 +168,7 @@ class Provision_Context {
    *
    * This will generate a function call like : $method_$type_cmd.
    */
-  function command_invoke($command, $args = array()) {
+  function command_invoke($command, $args = []) {
     $this->method_invoke("{$command}_{$this->type}_cmd");
   }
 
@@ -287,8 +287,8 @@ class Provision_Context {
    * @return
    *   An array of return values from method implementations.
    */
-  function services_invoke($callback, $args = array()) {
-    $results = array();
+  function services_invoke($callback, $args = []) {
+    $results = [];
     // fetch the merged list of services.
     // These may be on different servers entirely.
     $services = $this->get_services();
@@ -308,7 +308,7 @@ class Provision_Context {
    * if no subscriptions were available.
    */
   function get_services() {
-    $services = array();
+    $services = [];
     if (!is_null($this->parent_key)) {
       $services = $this->{$this->parent_key}->get_services();
     }
@@ -329,6 +329,6 @@ class Provision_Context {
    *   array('option' => 'description')
    */
   static function option_documentation() {
-    return array();
+    return [];
   }
 }

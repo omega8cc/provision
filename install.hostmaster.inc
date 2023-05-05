@@ -271,14 +271,14 @@ function drush_provision_hostmaster_install($site = NULL) {
     'makefile' => drush_get_option('makefile'),
   ));
   // propagate working-copy args downward
-  $options = array();
+  $options = [];
   if (drush_get_option('working-copy')) {
     $options['working-copy'] = 1;
 
     # Don't rewrite module info files if using working-copy.
     $options['no-gitinfofile'] = 1;
   }
-  provision_backend_invoke($platform_name, 'provision-verify', array(), $options);
+  provision_backend_invoke($platform_name, 'provision-verify', [], $options);
 
   // exit if an error has occured.
   if (drush_get_error()) {
@@ -308,7 +308,7 @@ function drush_provision_hostmaster_install($site = NULL) {
   ));
 
   drush_log('Starting with the hostmaster frontend installation.', 'notice');
-  $data = provision_backend_invoke($site_name, 'provision-install', array(), array('client_email' => drush_get_option('client_email')));
+  $data = provision_backend_invoke($site_name, 'provision-install', [], array('client_email' => drush_get_option('client_email')));
   provision_backend_invoke($site_name, 'provision-verify');
 
   // exit if an error has occured.

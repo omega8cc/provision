@@ -40,7 +40,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
 
     $this->context->setProperty('ssl_enabled', 0);
     $this->context->setProperty('ssl_key', NULL);
-    $this->context->setProperty('ip_addresses', array());
+    $this->context->setProperty('ip_addresses', []);
   }
 
 
