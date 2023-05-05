@@ -112,7 +112,7 @@ if (isset($_SERVER['db_name'])) {
     '%db_passwd' => $this->creds['db_passwd'],
     '%db_host' => $this->creds['db_host'],
     '%db_port' => $this->creds['db_port'],
-    '%db_name' => $this->creds['db_name']];) ?>";
+    '%db_name' => $this->creds['db_name']]); ?>";
 
 <?php endif; ?>
 
