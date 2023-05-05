@@ -100,9 +100,9 @@ class Provision_Service_db extends Provision_Service {
   /**
    * Generate a new mysql database and user account for the specified credentials
    */
-    if (empty($creds)) {
   function create_site_database($creds = []) {
     $db_name = null;
+    if (empty($creds)) {
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
@@ -136,8 +136,8 @@ class Provision_Service_db extends Provision_Service {
   /**
    * Remove the database and user account for the supplied credentials
    */
-    if (empty($creds)) {
   function destroy_site_database($creds = []) {
+    if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
@@ -168,11 +168,10 @@ class Provision_Service_db extends Provision_Service {
     }
   }
 
-
-    if (empty($creds)) {
   function import_site_database($dump_file = null, $creds = []) {
     $db_name = null;
     $writer_node_ip = null;
+    if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);

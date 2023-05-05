@@ -264,11 +264,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
   function import_dump($dump_file, $creds) {
     if (empty($creds)) {
-    $db_name = null;
-    $writer_node_ip = null;
-    $db_host = null;
-    $db_user = null;
-    $db_passwd = null;
+      $db_name = null;
+      $writer_node_ip = null;
+      $db_host = null;
+      $db_user = null;
+      $db_passwd = null;
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
