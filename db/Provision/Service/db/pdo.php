@@ -67,7 +67,7 @@ class Provision_Service_db_pdo extends Provision_Service_db {
     }
     $this->ensure_connected();
     $this->query_callback($args, TRUE);
-    $query = preg_replace_callback(PROVISION_QUERY_REGEXP, $this->query_callback(...), (string) $query);
+    $query = preg_replace_callback(PROVISION_QUERY_REGEXP, array($this, 'query_callback'), $query);
 
     try {
       $result = $this->conn->query($query);
@@ -79,7 +79,7 @@ class Provision_Service_db_pdo extends Provision_Service_db {
 
     if (!$result) {
       $error = [];
-      [$error['@sql_error'], $error['@driver_error'], $error['@error_message']] = $this->conn->errorInfo();
+      list($error['@sql_error'], $error['@driver_error'], $error['@error_message']) = $this->conn->errorInfo();
       drush_log(dt('Database query returned: @sql_error[@driver_error]: @error_message', $error), 'notice');
     }
 
@@ -97,7 +97,7 @@ class Provision_Service_db_pdo extends Provision_Service_db {
       case '%d': // We must use type casting to int to convert FALSE/NULL/(TRUE?)
         return (int) array_shift($args); // We don't need db_escape_string as numbers are db-safe
       case '%s':
-        return substr((string) $this->conn->quote(array_shift($args)), 1, -1);
+        return substr($this->conn->quote(array_shift($args)), 1, -1);
       case '%%':
         return '%';
       case '%f':
