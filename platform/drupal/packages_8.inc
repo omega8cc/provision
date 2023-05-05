@@ -23,7 +23,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
   foreach($files as $name => $file) {
     $files[basename($name, '.info')] = $file;
     unset($files[$name]);
-  } 
+  }
 
   foreach ($files as $name => $file) {
     $files[$name]->info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($file->filename));
@@ -141,7 +141,7 @@ function _provision_system_query($type) {
       if(!file_exists($package->filename)) {
         drush_log(dt("@name.info.yml not found.", array("@name" => $name)), 'notice');
         continue;
-      } 
+      }
       else {
         $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($package->filename));
         // Skip hidden modules
@@ -166,7 +166,7 @@ function _provision_system_query($type) {
  * Find available profiles on this platform.
  */
 function _provision_find_profiles() {
-  $profile_dirs = array('./core/profiles', './profiles');
+  $profile_dirs = ['./core/profiles', './profiles'];
 
   $profiles = [];
   foreach($profile_dirs as $profile_dir) {

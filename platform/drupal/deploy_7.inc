@@ -34,16 +34,16 @@ if ($url_changed) {
 
 function _provision_platform_drupal_deploy_7_replace($old_url, $new_url) {
   // Update absolute URLs to files for sites cloned/migrated/renamed in the multisite install.
-  $replace_abs_patterns = array(
+  $replace_abs_patterns = [
     ':old' => '//' . $old_url . '/sites/' . $old_url . '/files',
     ':new' => '//' . $new_url . '/sites/' . $new_url . '/files',
-  );
+  ];
 
   // Update paths for sites cloned/migrated/renamed in the multisite install.
-  $replace_patterns = array(
+  $replace_patterns = [
     ':old' => 'sites/' . $old_url,
     ':new' => 'sites/' . $new_url,
-  );
+  ];
 
   if(db_table_exists('block_custom')) {
     db_query("UPDATE {block_custom} SET body     = REPLACE(body,     :old, :new)", $replace_abs_patterns);

@@ -26,10 +26,10 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $data['drush_aliases'] = array_unique($data['drush_aliases']);
     }
 
-    $this->data = array(
+    $this->data = [
       'aliasname' => ltrim($context, '@'),
       'options' => $data,
-    );
+    ];
   }
 
   function filename() {

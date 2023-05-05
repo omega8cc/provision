@@ -213,7 +213,7 @@ function drush_provision_hostmaster_install($site = NULL) {
   $aegir_db_grant_all_hosts = drush_get_option('aegir_db_grant_all_hosts');
 
   $server = '@server_master';
-  $master_context = array(
+  $master_context = [
     'context_type' => 'server',
     // files
     'remote_host' => $aegir_http_host,
@@ -225,7 +225,7 @@ function drush_provision_hostmaster_install($site = NULL) {
     'web_group' => drush_get_option('web_group'),
     'master_url' => "http://" . $site,
     'db_port' => $aegir_db_port,
-  );
+  ];
 
   $master_db = sprintf("mysql://%s:%s@%s:%s", urlencode($aegir_db_user), urlencode($aegir_db_pass), $aegir_db_host, $aegir_db_port);
   if ($aegir_http_host == $aegir_db_host) {
@@ -234,14 +234,14 @@ function drush_provision_hostmaster_install($site = NULL) {
     $dbserver = $server;
   } else {
     $dbserver = '@server_' . $aegir_db_host;
-    $dbserver_context = array(
+    $dbserver_context = [
       'remote_host' => $aegir_db_host,
       'context_type' => 'server',
       'db_service_type' => 'mysql',
       'master_db' => $master_db,
       'db_grant_all_hosts' => $aegir_db_grant_all_hosts,
       'db_port' => $aegir_db_port,
-    );
+    ];
     drush_invoke_process('@none', "provision-save", array($dbserver), $dbserver_context);
     provision_backend_invoke($dbserver, 'provision-verify');
   }

@@ -12,7 +12,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function copy($source, $destination) {
     $this->_clear_state();
 
-    $this->tokens = array('@source' => $source, '@destination' => $destination);
+    $this->tokens = ['@source' => $source, '@destination' => $destination];
 
     $this->last_status = FALSE;
 
@@ -34,7 +34,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->_clear_state();
 
     $this->last_status = is_writable($path);
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -51,7 +51,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->_clear_state();
 
     $this->last_status = file_exists($path) || is_link($path);
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -68,7 +68,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->_clear_state();
 
     $this->last_status = is_readable($path);
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -85,7 +85,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->_clear_state();
 
     $this->last_status = mkdir($path, 0775, TRUE);
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -102,7 +102,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->_clear_state();
 
     $this->last_status = rmdir($path);
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -124,7 +124,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     else {
       $this->last_status = TRUE;
     }
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
 
     return $this;
   }
@@ -138,13 +138,13 @@ class Provision_FileSystem extends Provision_ChainedState {
   function chmod($path, $perms, $recursive = FALSE) {
     $this->_clear_state();
 
-    $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $perms));
+    $this->tokens = ['@path' => $path, '@perm' => sprintf('%o', $perms)];
 
     $func = ($recursive) ? array($this, '_chmod_recursive') : 'chmod';
     if (!@call_user_func($func, $path, $perms)) {
       $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
     }
-    clearstatcache(); // this needs to be called, otherwise we get the old info 
+    clearstatcache(); // this needs to be called, otherwise we get the old info
     $this->last_status = substr(sprintf('%o', fileperms($path)), -4) == sprintf('%04o', $perms);
 
     return $this;
@@ -164,24 +164,24 @@ class Provision_FileSystem extends Provision_ChainedState {
    */
   function chown($path, $owner, $recursive = FALSE) {
     $this->_clear_state();
-    $this->tokens = array('@path' => $path, '@uid' => $owner);
+    $this->tokens = ['@path' => $path, '@uid' => $owner];
 
     // We do not attempt to chown symlinks.
     if (is_link($path)) {
       return $this;
-    } 
+    }
 
     $func = ($recursive) ? array($this, '_chown_recursive') : 'chown';
     if ($owner = provision_posix_username($owner)) {
       if (!call_user_func($func, $path, $owner)) {
-        $this->tokens['@reason'] = dt("chown to @owner failed on @path", array('@owner' => $owner, '@path' => $path)) ; 
+        $this->tokens['@reason'] = dt("chown to @owner failed on @path", array('@owner' => $owner, '@path' => $path)) ;
       }
     }
     else {
       $this->tokens['@reason'] = dt("the user does not exist");
     }
 
-    clearstatcache(); // this needs to be called, otherwise we get the old info 
+    clearstatcache(); // this needs to be called, otherwise we get the old info
     $this->last_status = $owner == provision_posix_username(fileowner($path));
 
     return $this;
@@ -201,12 +201,12 @@ class Provision_FileSystem extends Provision_ChainedState {
    */
   function chgrp($path, $gid, $recursive = FALSE) {
     $this->_clear_state();
-    $this->tokens = array('@path' => $path, '@gid' => $gid);
+    $this->tokens = ['@path' => $path, '@gid' => $gid];
 
     // We do not attempt to chown symlinks.
     if (is_link($path)) {
       return $this;
-    } 
+    }
 
     $func = ($recursive) ? array($this, '_chgrp_recursive') : 'chgrp';
     if ($group = provision_posix_groupname($gid)) {
@@ -223,7 +223,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       $this->tokens['@reason'] = dt("the group does not exist");
     }
 
-    clearstatcache(); // this needs to be called, otherwise we get the old info 
+    clearstatcache(); // this needs to be called, otherwise we get the old info
     $this->last_status = $group == provision_posix_groupname(filegroup($path));
 
     return $this;
@@ -240,7 +240,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function switch_paths($path1, $path2) {
     $this->_clear_state();
 
-    $this->tokens = array('@path1' => $path1, '@path2' => $path2);
+    $this->tokens = ['@path1' => $path1, '@path2' => $path2];
 
     $this->last_status = FALSE;
 
@@ -252,7 +252,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     elseif (!file_exists($path2)) {
       $this->last_status = rename($path1, $path2);
     }
-    elseif (rename($path1, $temp)) { 
+    elseif (rename($path1, $temp)) {
       if (rename($path2, $path1)) {
         if (rename($temp, $path2)) {
           $this->last_status = TRUE; // path1 is now path2
@@ -265,7 +265,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       else {
         // same .. just in reverse
         $this->last_status = rename($temp, $path1);
-      }   
+      }
     }
 
     return $this;
@@ -286,7 +286,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function extract($path, $target) {
     $this->_clear_state();
 
-    $this->tokens = array('@path' => $path, '@target' => $target);
+    $this->tokens = ['@path' => $path, '@target' => $target];
 
     if (is_readable($path)) {
       if (is_writeable(dirname($target)) && !file_exists($target) && !is_dir($target)) {
@@ -345,7 +345,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function symlink($target, $path) {
     $this->_clear_state();
 
-    $this->tokens = array('@target' => $target, '@path' => $path);
+    $this->tokens = ['@target' => $target, '@path' => $path];
 
     if (file_exists($path) && !is_link($path)) {
       $this->tokens['@reason'] = dt("A file already exists at @path");
@@ -418,7 +418,7 @@ class Provision_FileSystem extends Provision_ChainedState {
   function file_put_contents($path, $data, $flags = 0) {
     $this->_clear_state();
 
-    $this->tokens = array('@path' => $path);
+    $this->tokens = ['@path' => $path];
     $this->last_status = file_put_contents($path, $data, $flags) !== FALSE;
 
     return $this;

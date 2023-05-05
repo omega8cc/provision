@@ -19,12 +19,12 @@ class Provision_Context_server extends Provision_Context {
   protected $services = [];
 
   static function option_documentation() {
-    $options = array(
+    $options = [
       'remote_host' => 'server: host name; default localhost',
       'script_user' => 'server: OS user name; default current user',
       'aegir_root' => 'server: Aegir root; default ' . getenv('HOME'),
       'master_url' => 'server: Hostmaster URL',
-    );
+    ];
     foreach (drush_command_invoke_all('provision_services') as $service => $default) {
       // TODO: replace this file scanning nastiness, with a hook!
       $reflect = new reflectionClass('Provision_Service_' . $service);
@@ -175,11 +175,11 @@ class Provision_Context_server extends Provision_Context {
       }
 
       if (provision_file()->exists($path)->status()) {
-        $default_options = array(
+        $default_options = [
           'relative' => TRUE,
           'keep-dirlinks' => TRUE,
           'omit-dir-times' => TRUE,
-        );
+        ];
         $global_extra_options = drush_get_option('global_sync_options', []);
         $options = array_merge($default_options, $additional_options, $global_extra_options);
 

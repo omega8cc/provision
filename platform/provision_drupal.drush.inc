@@ -297,14 +297,14 @@ function _provision_drupal_create_directories($url = NULL) {
     }
   }
   # those directories will be created and their modes changed
-  $mkdir = array(
+  $mkdir = [
     "sites/$url"                 => 0755,
     # those should be writable by the aegir primary group to ease development
     "sites/$url/themes"          => 02775,
     "sites/$url/modules"         => 02775,
     "sites/$url/libraries"       => 02775, # http://drupal.org/node/496240
     "sites/$url/vendor"          => 02775, # https://github.com/omega8cc/boa/issues/385
-  );
+  ];
 
   $chgrp = [];
   // special case: platform. do not handle files dir
@@ -403,7 +403,7 @@ function _provision_drupal_create_directories($url = NULL) {
   }
 
   // These paths should not have recursive operations performed on them.
-  $chmod_not_recursive = $chgrp_not_recursive = array(
+  $chmod_not_recursive = $chgrp_not_recursive = [
     "sites/$url",
     "sites/$url/files",
     "sites/$url/files/advagg_css",
@@ -439,7 +439,7 @@ function _provision_drupal_create_directories($url = NULL) {
     "sites/$url/private/temp",
     "sites/$url/themes",
     "sites/$url/vendor"
-  );
+  ];
 
   // Allow other commands to add or alter the directories to be created,
   // chmod'd or chgrp'd.
@@ -490,17 +490,17 @@ function _provision_drupal_ensure_htaccess_update() {
   if (drush_drupal_major_version() == 7) {
 
     // Copied from modules/system/system.install system_requirements()
-    $htaccess_files['public://.htaccess'] = array(
+    $htaccess_files['public://.htaccess'] = [
       'directory' => variable_get('file_public_path', conf_path() . '/files'),
-    );
+    ];
     if ($private_files_directory = variable_get('file_private_path')) {
-      $htaccess_files['private://.htaccess'] = array(
+      $htaccess_files['private://.htaccess'] = [
         'directory' => $private_files_directory,
-      );
+      ];
     }
-    $htaccess_files['temporary://.htaccess'] = array(
+    $htaccess_files['temporary://.htaccess'] = [
       'directory' => variable_get('file_temporary_path', file_directory_temp()),
-    );
+    ];
     foreach ($htaccess_files as $htaccess_file => $info) {
       // Check for the string which was added to the recommended .htaccess file
       // in the latest security update.
@@ -518,12 +518,12 @@ function _provision_drupal_ensure_htaccess_update() {
   elseif (drush_drupal_major_version() == 6 && function_exists('file_create_htaccess')) {
 
     // Copied from modules/system/system.install system_requirements()
-    $htaccess_files['files_htaccess'] = array(
+    $htaccess_files['files_htaccess'] = [
       'directory' => file_directory_path(),
-    );
-    $htaccess_files['temporary_files_htaccess'] = array(
+    ];
+    $htaccess_files['temporary_files_htaccess'] = [
       'directory' => file_directory_temp(),
-    );
+    ];
     foreach ($htaccess_files as $key => $info) {
       // Check for the string which was added to the recommended .htaccess file
       // in the latest security update.
@@ -756,7 +756,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
     foreach ($paths as $path) {
       $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     }
-  } 
+  }
 
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {
@@ -831,12 +831,12 @@ function _provision_drupal_find_modules($scope, $key = '') {
 function provision_parse_info_file($filename) {
   $info = [];
 
-  $defaults = array(
+  $defaults = [
     'dependencies' => [],
     'description' => '',
     'version' => NULL,
     'php' => DRUPAL_MINIMUM_PHP,
-  );
+  ];
 
   if (file_exists($filename)) {
     $info = _provision_drupal_parse_info_file($filename);
@@ -856,7 +856,7 @@ function provision_parse_info_file($filename) {
  * step and add more information or take other actions.
  */
 function provision_prepare_environment() {
-  $fields = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+  $fields = ['db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port'];
   foreach ($fields as $key) {
     $_SERVER[$key] = drush_get_option($key, NULL, 'site');
   }

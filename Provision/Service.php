@@ -113,7 +113,7 @@ class Provision_Service extends Provision_ChainedState {
     }
 
     if (!is_array($data) && is_string($data)) {
-      $data = array('name' => $data);
+      $data = ['name' => $data];
     }
 
     if (!isset($this->config_cache[$this->context->name][$config])) {

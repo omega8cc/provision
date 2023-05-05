@@ -38,7 +38,7 @@ if (isset($_SERVER['db_name'])) {
    * Drupal's multisite set-up.
    * This is a security measure implemented by the Aegir project.
    */
-  $databases['default']['default'] = array(
+  $databases['default']['default'] = [
     'driver' => $_SERVER['db_type'],
     'database' => $_SERVER['db_name'],
     'username' => $_SERVER['db_user'],
@@ -53,7 +53,7 @@ if (isset($_SERVER['db_name'])) {
     'charset' => 'utf8mb4',
     'collation' => 'utf8mb4_unicode_ci',
 <?php endif; ?>
-  );
+  ];
   $db_url['default'] = $_SERVER['db_type'] . '://' . $_SERVER['db_user'] . ':' . $_SERVER['db_passwd'] . '@' . $_SERVER['db_host'] . ':' . $_SERVER['db_port'] . '/' . $_SERVER['db_name'];
 }
 
@@ -93,7 +93,7 @@ if (isset($_SERVER['db_name'])) {
 
 <?php else: ?>
 
-  $databases['default']['default'] = array(
+  $databases['default']['default'] = [
     'driver' => "<?php print $this->creds['db_type']; ?>",
     'database' => "<?php print $this->creds['db_name']; ?>",
     'username' => "<?php print $this->creds['db_user']; ?>",
@@ -104,14 +104,14 @@ if (isset($_SERVER['db_name'])) {
     'charset' => 'utf8mb4',
     'collation' => 'utf8mb4_unicode_ci',
 <?php endif; ?>
-   );
-  $db_url['default'] = "<?php print strtr("%db_type://%db_user:%db_passwd@%db_host:%db_port/%db_name", array(
+   ];
+  $db_url['default'] = "<?php print strtr("%db_type://%db_user:%db_passwd@%db_host:%db_port/%db_name", [
     '%db_type' => $this->creds['db_type'],
     '%db_user' => $this->creds['db_user'],
     '%db_passwd' => $this->creds['db_passwd'],
     '%db_host' => $this->creds['db_host'],
     '%db_port' => $this->creds['db_port'],
-    '%db_name' => $this->creds['db_name'])); ?>";
+    '%db_name' => $this->creds['db_name'])]; ?>";
 
 <?php endif; ?>
 
@@ -171,19 +171,19 @@ if (isset($_SERVER['db_name'])) {
   /**
    * Trusted Host Settings support.
    */
-  $settings['trusted_host_patterns'] = array(
+  $settings['trusted_host_patterns'] = [
 <?php
-  $esc_uri = str_replace('.', '\.', $this->uri);
+  $esc_uri = str_replace('.', '\.', $this->uri];
   print "    '^{$esc_uri}\$',\n";
   foreach ($this->aliases as $alias_url) {
-    $esc_alias = preg_replace(['/\./', '/\/.+/'], ['\.', ''], $alias_url);
+    $esc_alias = preg_replace(['/\./', '/\/.+/'], ['\.', ''], $alias_url];
     print "    '^{$esc_alias}\$',\n";
   }
 ?>
     '^localhost$',
     '^localhost\.*',
     '\.local$',
-  );
+  ];
 
   /**
    * Set the Syslog identity to the site name so it's not always "drupal".

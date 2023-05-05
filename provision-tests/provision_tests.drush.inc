@@ -16,45 +16,39 @@ define('PROVISION_TESTS_LOCK_TIMEOUT', 3600.0);
  * Implements hook_drush_command().
  */
 function provision_tests_drush_command() {
-  $items['provision-tests-run'] = array(
+  $items['provision-tests-run'] = [
     'description' => dt('Runs provision tests'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
     // Although we're a provision command, we require hostmaster to be around to
     // run the tests correctly.
-    'drupal dependencies' => array(
-      'hosting',
-    ),
-    'options' => array(
-      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', array(':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT)),
+    'drupal dependencies' => ['hosting'],
+    'options' => [
+      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', [':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT]),
       'force' => dt('Continue even if the task queue is still locked.'),
-    ),
-  );
-  $items['provision-tests-new-run'] = array(
+    ],
+  ];
+  $items['provision-tests-new-run'] = [
     'description' => dt('Runs NEW provision tests'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
     // Although we're a provision command, we require hostmaster to be around to
     // run the tests correctly.
-    'drupal dependencies' => array(
-      'hosting',
-    ),
-    'options' => array(
-      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', array(':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT)),
+    'drupal dependencies' => ['hosting'],
+    'options' => [
+      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', [':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT]),
       'force' => dt('Continue even if the task queue is still locked.'),
-    ),
-  );
-  $items['provision-demo-content'] = array(
+    ],
+  ];
+  $items['provision-demo-content'] = [
     'description' => dt('Setup some demo content on a fresh Aegir install'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_FULL,
     // Although we're a provision command, we require hostmaster to be around to
     // run the tests correctly.
-    'drupal dependencies' => array(
-      'hosting',
-    ),
-    'options' => array(
-      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', array(':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT)),
+    'drupal dependencies' => ['hosting'],
+    'options' => [
+      'lock-wait' => dt('Time to wait to acquire a lock on the task queue. Defaults to :wait seconds.', [':wait' => PROVISION_TESTS_DEFAULT_LOCK_WAIT]),
       'force' => dt('Continue even if the task queue is still locked.'),
-    ),
-  );
+    ],
+  ];
 
   return $items;
 }
@@ -260,22 +254,22 @@ function drush_provision_tests_install_platform($platform_name, $platform_alias 
     $platform_alias = $platform_name;
   }
   drush_log(dt('Building platform: @platform and adding to hostmaster.', array('@platform' => $platform_alias)), 'ok');
-  $args = array(
+  $args = [
     PROVISION_TESTS_BUILDS_REPO . "/$platform_name.make",
     "/var/aegir/platforms/$platform_alias",
-  );
+  ];
   $opts = [];
   if (version_compare(drush_core_version(), '7', '>=')) {
     $opts[] = '--shallow-clone';
   }
-  drush_invoke_process('@none', 'make', $args, $opts);
-  $args = array(
+  drush_invoke_process('@none', 'make', $args, $opts];
+  $args = [
     "@platform_$platform_alias",
-  );
-  $options = array(
+  ];
+  $options = [
     'root' => "/var/aegir/platforms/$platform_alias",
     'context_type' => 'platform',
-  );
+  ];
   drush_invoke_process('@none', 'provision-save', $args, $options);
   provision_backend_invoke('@hostmaster', 'hosting-import', array("@platform_$platform_alias"));
   drush_provision_tests_run_remaining_tasks();
@@ -294,11 +288,11 @@ function drush_provision_tests_remove_platform($platform_name) {
  * Helper function to install a site.
  */
 function drush_provision_tests_install_site($platform_name, $site, $profile_name) {
-  drush_log(dt('Installing: @site on platform: @platform with profile: @profile.', array('@site' => "$site.aegir.example.com", '@platform' => $platform_name, '@profile' => $profile_name)), 'ok');
-  $args = array(
+  drush_log(dt('Installing: @site on platform: @platform with profile: @profile.', ['@site' => "$site.aegir.example.com", '@platform' => $platform_name, '@profile' => $profile_name]), 'ok');
+  $args = [
     "@$site.aegir.example.com",
-  );
-  $options = array(
+  ];
+  $options = [
     'uri' => "$site.aegir.example.com",
     'context_type' => 'site',
     'platform' => "@platform_$platform_name",
@@ -306,15 +300,15 @@ function drush_provision_tests_install_site($platform_name, $site, $profile_name
     'db_server' => '@server_localhost',
     'root' => "/var/aegir/platforms/$platform_name",
     'client_email' => 'this.email@is.invalid',
-  );
+  ];
   drush_invoke_process('@none', 'provision-save', $args, $options);
 
   $args = [];
-  $options = array(
+  $options = [
     'client_email' => 'this.email@is.invalid',
-  );
+  ];
   provision_backend_invoke("@$site.aegir.example.com", 'provision-install', $args, $options);
-  provision_backend_invoke('@hostmaster', 'hosting-task', array("@platform_$platform_name", 'verify'), array('force' => TRUE));
+  provision_backend_invoke('@hostmaster', 'hosting-task', ["@platform_$platform_name", 'verify'], ['force' => TRUE]);
   drush_provision_tests_run_remaining_tasks();
 }
 
@@ -322,15 +316,15 @@ function drush_provision_tests_install_site($platform_name, $site, $profile_name
  * Helper function to download a module to a site.
  */
 function drush_provision_tests_dl_module_to_site($module, $site) {
-  drush_log(dt('Downloading module: @module to site: @site.', array('@site' => "$site.aegir.example.com", '@module' => $module)), 'ok');
-  $args = array(
+  drush_log(dt('Downloading module: @module to site: @site.', ['@site' => "$site.aegir.example.com", '@module' => $module]), 'ok');
+  $args = [
     $module,
-  );
-  $options = array(
+  ];
+  $options = [
     // Normally 'dl' in a site context should know to put it in the site-
     // specific modules directory, but not through provision_backend_invoke()?
     'destination' => "sites/$site.aegir.example.com/modules",
-  );
+  ];
   provision_backend_invoke("@$site.aegir.example.com", 'dl', $args, $options);
   drush_provision_tests_run_remaining_tasks();
 }

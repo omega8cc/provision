@@ -19,10 +19,10 @@ print "<?php \n"; ?>
  * rules. The aliases are defined in an associative array named $sites, which
  * should look similar to the following:
  *
- * $sites = array(
+ * $sites = [
  *   'devexample.com' => 'example.com',
  *   'localhost.example' => 'example.com',
- * );
+ * ];
  *
  * The above array will cause Drupal to look for a directory named
  * "example.com" in the sites directory whenever a request comes from

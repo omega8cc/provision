@@ -80,7 +80,7 @@ function _provision_drush_check_user() {
 function _provision_drush_check_load() {
   $load = sys_getloadavg();
   if (provision_load_critical($load)) {
-    drush_set_error('PROVISION_OVERLOAD', dt("load on system too heavy (@load), aborting", array('@load' => join(" ", $load))));
+    drush_set_error('PROVISION_OVERLOAD', dt("load on system too heavy (@load), aborting", ['@load' => join(" ", $load)]));
     exit(1);
   }
 }
@@ -89,14 +89,12 @@ function _provision_drush_check_load() {
  * Implementation of hook_drush_command().
  */
 function provision_drush_command() {
-  $items['provision-save'] = array(
+  $items['provision-save'] = [
     'description' => dt('Save Drush alias'),
-    'arguments' => array(
-      '@context_name' => 'Context to save',
-    ),
-    'options' => array_merge(array(
+    'arguments' => ['@context_name' => 'Context to save'],
+    'options' => array_merge([
       'context_type' => 'server, platform, or site; default server',
-      'delete' => 'Remove the alias.'),
+      'delete' => 'Remove the alias.'],
       Provision_Context_server::option_documentation(),
       Provision_Context_platform::option_documentation(),
       Provision_Context_site::option_documentation()),
@@ -104,251 +102,246 @@ function provision_drush_command() {
     // enumerate them yet... see https://drupal.org/node/1972286
     'allow-additional-options' => TRUE,
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
-  );
-  $items['provision-install'] = array(
+  ];
+  $items['provision-install'] = [
     'description' => dt('Provision a new site using the provided data.'),
-    'examples' => array(
+    'examples' => [
       'drush @site provision-install' => 'Install the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'options' => array(
+    ],
+    'options' => [
       'client_email' => dt('The email address of the client to use.'),
       'profile' => dt('The profile to use when installing the site.'),
       'force-reinstall' => dt('Delete the sites database and files, before attempting to install.'),
-    ),
+    ],
     'allow-additional-options' => TRUE,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-install-backend'] = array(
+  $items['provision-install-backend'] = [
     'description' => dt('Provision a new site using the provided data.'),
-    'options' => array(
-      'client_email' => dt('The email address of the client to use.'),
-    ),
+    'options' => ['client_email' => dt('The email address of the client to use.')],
     'allow-additional-options' => TRUE,
     'hidden' => TRUE,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE
-  );
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
+  ];
 
-  $items['provision-import'] = array(
+  $items['provision-import'] = [
     'description' => dt('Turn an already running site into a provisioned site.'),
-    'options' => array(
+    'options' => [
       'client_email' => dt('The email address of the client to use.'),
-    ),
+    ],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-import' => 'Import the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-backup'] = array(
-    'optional arguments' => array('backup-file' => dt('The file to save the backup to. This will be a gzipped tarball.')),
-    'options' => array(
+  $items['provision-backup'] = [
+    'optional arguments' => ['backup-file' => dt('The file to save the backup to. This will be a gzipped tarball.')],
+    'options' => [
       'provision_backup_suffix' => dt('Set the extension for the backupfile, compression is derived from this (default: ".tar.gz"'),
-    ),
+    ],
     'description' => dt('Generate a back up for the site.'),
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-backup' => 'Back up the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-enable'] = array(
+  $items['provision-enable'] = [
     'description' => 'Enable a disabled site.',
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-enable' => 'Enable the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
-  $items['provision-disable'] = array(
-    'arguments' => array('domain.com' => dt('The domain of the site to disable (only if disabled).')),
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
+  $items['provision-disable'] = [
+    'arguments' => ['domain.com' => dt('The domain of the site to disable (only if disabled).')],
     'description' => 'Disable a site.',
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-disable' => 'Disable the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-lock'] = array(
+  $items['provision-lock'] = [
     'description' => 'Lock a platform from having any other sites provisioned on it.',
-    'examples' => array(
+    'examples' => [
       'drush @platform provision-lock' => 'Lock the platform as defined by the platform Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-unlock'] = array(
+  $items['provision-unlock'] = [
     'description' => 'Unlock a platform so that sites can be provisioned on it.',
-    'examples' => array(
+    'examples' => [
       'drush @platform provision-unlock' => 'Unlock the platform as defined by the platform Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-verify'] = array(
-    'aliases' => array('v', 'pv', 'verify'),
-    'arguments' => array('domain.com' => dt('The domain of the site to verify).')),
+  $items['provision-verify'] = [
+    'aliases' => ['v', 'pv', 'verify'],
+    'arguments' => ['domain.com' => dt('The domain of the site to verify).')],
     'description' => 'Verify that the provisioning framework is correctly installed.',
-    'examples' => array(
+    'examples' => [
       'drush @site provision-verify' => 'Verify the site as defined by the site Drush alias generated with provision-save.',
       'drush @platform provision-verify' => 'Verify the platform as defined by the platform Drush alias generated with provision-save.',
-    ),
-    'options' => array(
-      'working-copy' => array(
+    ],
+    'options' => [
+      'working-copy' => [
         'description' => dt('Keep VCS files when building the a platform using Drush make.'),
         'hidden' => TRUE,
-      ),
-      'override_slave_authority' => array(
+      ],
+      'override_slave_authority' => [
         'description' => dt('Push the site specific files directory to a slave. This overrides the slaves authority.'),
-      ),
-    ),
+      ],
+    ],
     'allow-additional-options' => TRUE,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
-  );
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  ];
 
-  $items['provision-restore'] = array(
+  $items['provision-restore'] = [
     'description' => 'Restore the site to a previous backup. This will also generate a backup of the site as it was.',
-    'arguments' => array(
-      'site_backup.tar.gz' => dt('The backup to restore the site to.')),
+    'arguments' => [
+      'site_backup.tar.gz' => dt('The backup to restore the site to.')],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-restore ~/backups/some_site.tar.gz' => 'Restore the site to the backup in ~/backups/some_site.tar.gz.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-deploy'] = array(
+  $items['provision-deploy'] = [
     'description' => 'Deploy an existing backup to a new url.',
-    'arguments' => array(
-      'site_backup.tar.gz' => dt('The backup to deploy.')),
-    'options' => array(
+    'arguments' => [
+      'site_backup.tar.gz' => dt('The backup to deploy.')],
+    'options' => [
       'old_uri' => dt('Old site uri to replace in references to sites/example.com/files/ in the database content.)'),
-    ),
+    ],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-deploy ~/backups/some_site.tar.gz' => 'Deploy the site as defined by the site Drush alias, from the backup in ~/backups/some_site.tar.gz.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-migrate'] = array(
+  $items['provision-migrate'] = [
     'description' => 'Migrate a site between platforms.',
-    'arguments' => array(
-      '@platform_name' => dt('The Drush alias of the platform.')),
-    'options' => array(
-      'profile' => dt('The Drupal profile to use.')),
+    'arguments' => [
+      '@platform_name' => dt('The Drush alias of the platform.')],
+    'options' => [
+      'profile' => dt('The Drupal profile to use.')],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-migrate @platform_name' => 'Migrate the site as defined by the Drush alias, to the platform as defined by the platform\'s Drush alias',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-clone'] = array(
+  $items['provision-clone'] = [
     'description' => 'Clone a site between platforms.',
-    'arguments' => array(
+    'arguments' => [
       '@new_site' => dt('The Drush alias of the new site as generated by provision-save.'),
-      '@platform_name' => dt('The Drush alias of the platform to clone the site onto.')),
-    'options' => array(
-      'profile' => dt('The Drupal profile to use.')),
+      '@platform_name' => dt('The Drush alias of the platform to clone the site onto.')],
+    'options' => [
+      'profile' => dt('The Drupal profile to use.')],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-clone @new_site @platform_name' => 'Clone the original site to the new site on a platform',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-delete'] = array(
+  $items['provision-delete'] = [
     'description' => 'Delete a site or platform.',
-    'options' => array(
-      'force' => dt('Force deletion.')),
+    'options' => [
+      'force' => dt('Force deletion.')],
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-delete' => 'Delete the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  ];
 
-  $items['provision-login-reset'] = array(
+  $items['provision-login-reset'] = [
     'description' => 'Generate a one-time login reset URL.',
     'allow-additional-options' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-login-reset' => 'Generate a one-time login reset URL for the site as defined by the site Drush alias generated with provision-save.',
-    ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
-  );
+    ],
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  ];
 
-  $items['provision-backup-delete'] = array(
+  $items['provision-backup-delete'] = [
     'description' => 'Delete a backup file.',
-    'arguments' => array('backup-file' => dt('The backup file to delete. This will be a gzipped tarball.')),
+    'arguments' => ['backup-file' => dt('The backup file to delete. This will be a gzipped tarball.')],
 		'required-arguments' => TRUE,
-    'examples' => array(
+    'examples' => [
       'drush @site provision-backup-delete /path/to/site_backup.tgz' => 'Delete a backup of this site as defined by the site Drush alias generated with provision-save.',
-    ),
+    ],
     'allow-additional-options' => TRUE,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
+  ];
 
-  );
-
-  $items['hostmaster-migrate'] = array(
+  $items['hostmaster-migrate'] = [
     'description' => dt('Migrate an instance of the Hostmaster front end to a new platform'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
-    'arguments' => array(
+    'arguments' => [
       'example.com' => dt('The name of the site to migrate'),
       '/path/to/platform' => dt('The platform to migrate the site to.'),
-    ),
-    'options' => array(
-      'http_service_type' => dt('Webserver type to configure (default: %webserver)', array('%webserver' => 'apache')),
-      'makefile' => dt('The makefile used to create the hostmaster platform (default: %makefile)', array('%makefile' => dirname(__FILE__). '/aegir.make')),
+    ],
+    'options' => [
+      'http_service_type' => dt('Webserver type to configure (default: %webserver)', ['%webserver' => 'apache']),
+      'makefile' => dt('The makefile used to create the hostmaster platform (default: %makefile)', ['%makefile' => dirname(__FILE__). '/aegir.make']),
       'working-copy' => dt('Keep VCS files when building the hostmaster platform using Drush make.')
-    ),
-  );
+    ],
+  ];
 
-  $items['hostmaster-install'] = array(
+  $items['hostmaster-install'] = [
     'description' => dt('Install and verify the Hostmaster frontend.'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
-    'arguments' => array(
-      'example.com' => dt('The URL of the site to install, optional (default: %host).', array('%host' => provision_fqdn())),
-    ),
-    'options' => array
-    (
-     'http_service_type' => dt('Webserver type to configure (default: %webserver)', array('%webserver' => 'apache')),
-     'aegir_db_host' => dt('Database host to connect to (default: %host)', array('%host' => 'localhost')),
-     'aegir_db_user' => dt('Database user to connect as (default: %user)', array('%user' => 'root')),
-     'aegir_db_pass' => dt('Database password to use'),
-     'aegir_db_port' => dt('Database port to use (default: %port)', array('%port' => '3306')),
-     'aegir_db_grant_all_hosts' => dt('Allow connection from arbitrary web hosts. (Default: FALSE)'),
-     'client_email' => dt('Email of the first client to create in the frontend'),
-     'client_name' => dt('Name of the first client to create in the frontend (default: %user)', array('%user' => 'admin')),
-     'makefile' => dt('The makefile used to create the hostmaster platform (default: %makefile)', array('%makefile' => dirname(__FILE__). '/aegir.make')),
-     'aegir_host' => dt('Fully qualified domain name of the local server (default: %fqdn)', array('%fqdn' => provision_fqdn())),
-     'script_user' => dt('User to run the backend as (default: %user)', array('%user' => provision_current_user())),
-     'web_group' => dt('Group the webserver is running as (default: %group)', array('%group' => _provision_default_web_group())),
-     'http_port' => dt('Port the webserver is running on (default: %port)', array('%port' => '80')),
-     'version' => dt('The version of this released. (default: %version)', array('%version' => provision_version())),
-     'aegir_root' => dt('Install aegir in this home directory (default: %home). Do not change unless you know what you are doing.', array('%home' => drush_server_home())),
-     'root' => dt('Install the frontend in this directory (default: %home/hostmaster-%version).', array('%home' => drush_server_home(), '%version' => provision_version())),
-     'backend-only' => dt('Install just the backend, and not the frontend UI.'),
-     'working-copy' => dt('Keep VCS files when building the hostmaster platform using Drush make.')
-     ),
-  );
+    'arguments' => [
+      'example.com' => dt('The URL of the site to install, optional (default: %host).', ['%host' => provision_fqdn()]),
+    ],
+    'options' => [
+      'http_service_type' => dt('Webserver type to configure (default: %webserver)', ['%webserver' => 'apache']),
+      'aegir_db_host' => dt('Database host to connect to (default: %host)', ['%host' => 'localhost']),
+      'aegir_db_user' => dt('Database user to connect as (default: %user)', ['%user' => 'root']),
+      'aegir_db_pass' => dt('Database password to use'),
+      'aegir_db_port' => dt('Database port to use (default: %port)', ['%port' => '3306']),
+      'aegir_db_grant_all_hosts' => dt('Allow connection from arbitrary web hosts. (Default: FALSE)'),
+      'client_email' => dt('Email of the first client to create in the frontend'),
+      'client_name' => dt('Name of the first client to create in the frontend (default: %user)', ['%user' => 'admin']),
+      'makefile' => dt('The makefile used to create the hostmaster platform (default: %makefile)', ['%makefile' => dirname(__FILE__). '/aegir.make']),
+      'aegir_host' => dt('Fully qualified domain name of the local server (default: %fqdn)', ['%fqdn' => provision_fqdn()]),
+      'script_user' => dt('User to run the backend as (default: %user)', ['%user' => provision_current_user()]),
+      'web_group' => dt('Group the webserver is running as (default: %group)', ['%group' => _provision_default_web_group()]),
+      'http_port' => dt('Port the webserver is running on (default: %port)', ['%port' => '80']),
+      'version' => dt('The version of this released. (default: %version)', ['%version' => provision_version()]),
+      'aegir_root' => dt('Install aegir in this home directory (default: %home). Do not change unless you know what you are doing.', ['%home' => drush_server_home()]),
+      'root' => dt('Install the frontend in this directory (default: %home/hostmaster-%version).', ['%home' => drush_server_home(), '%version' => provision_version()]),
+      'backend-only' => dt('Install just the backend, and not the frontend UI.'),
+      'working-copy' => dt('Keep VCS files when building the hostmaster platform using Drush make.'),
+    ],
+  ];
 
-  $items['hostmaster-uninstall'] = array(
+  $items['hostmaster-uninstall'] = [
     'description' => dt('Uninstall the Hostmaster frontend.'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_SITE,
-    'options' => array
-    (
+    'options' => [
      'all' => dt('Destroy *ALL* sites managed by the Aegir frontend'),
-     ),
-  );
+     ],
+  ];
 
-  $items['backend-parse'] = array(
+  $items['backend-parse'] = [
     'description' => dt('Parse the output of --backend commands to a human readable form'),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
-  );
+  ];
 
   return $items;
 }
@@ -373,8 +366,8 @@ function drush_provision_verify() {
 }
 
 function _provision_default_web_group() {
-  $info = posix_getgrgid(posix_getgid());
-  $common_groups = array(
+  $info = posix_getgrgid(posix_getgid()];
+  $common_groups = [
     'www-data',
     'apache',
     'nginx',
@@ -384,7 +377,8 @@ function _provision_default_web_group() {
     'httpd',
     'nogroup',
     'nobody',
-    $info['name']);
+    $info['name'],
+  ];
 
   foreach ($common_groups as $group) {
     if (provision_posix_groupname($group)) {
@@ -497,7 +491,7 @@ function provision_hosting_feature_enabled($feature) {
  */
 function provision_generate_login_reset() {
   $uri = d()->redirection ?: d()->uri;
-  $result = drush_invoke_process(d()->name, 'user-login', [], array('uri' => $uri, 'no-browser' => TRUE));
+  $result = drush_invoke_process(d()->name, 'user-login', [], ['uri' => $uri, 'no-browser' => TRUE]);
 
   return $result['output'];
 }

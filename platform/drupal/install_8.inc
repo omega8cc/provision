@@ -26,7 +26,7 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
     $mailto = $account->getEmail();
     $date = \Drupal::service('date.formatter')->format(time());
 
-    $mail_params['variables'] = array(
+    $mail_params['variables'] = [
       '!username' => $username,
       '!site' => $site,
       '!login_url' => $onetime,
@@ -35,7 +35,7 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
       '!edit_uri' => $edit_uri,
       '!mailto' => $mailto,
       '!date' => $date,
-    );
+    ];
 
     $langcode = $account->getPreferredLangcode();
 
@@ -114,33 +114,33 @@ function install_main() {
   unset($GLOBALS['db_url']);
 
   $account_pass = provision_password();
-  $settings = array(
-    'parameters' => array(
+  $settings = [
+    'parameters' => [
       'profile' => $profile,
       'langcode' => $install_locale,
-    ),
+    ],
     'settings_verified' => TRUE,
-    'forms' => array(
+    'forms' => [
       'install_settings_form' => $db_spec,
-      'install_configure_form' => array(
+      'install_configure_form' => [
         'site_name' => $url,
         'site_mail' => $client_email ? $client_email : 'admin@example.com',
-        'account' => array(
+        'account' => [
           'name' => 'admin',
           'mail' => $client_email ? $client_email : 'admin@example.com',
-          'pass' => array(
+          'pass' => [
             'pass1' => $account_pass,
             'pass2' => $account_pass,
-          ),
-        ),
-        'update_status_module' => array(
+          ],
+        ],
+        'update_status_module' => [
           1 => TRUE,
           2 => TRUE,
-        ),
+        ],
         'clean_url' => drush_get_option('clean_url', TRUE),
-      ),
-    ),
-  );
+      ],
+    ],
+  ];
   try {
     $class_loader = drush_drupal_load_autoloader(DRUPAL_ROOT);
     install_drupal($class_loader, $settings);

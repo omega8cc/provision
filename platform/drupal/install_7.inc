@@ -17,11 +17,17 @@ function install_send_welcome_mail($url, $account, $language, $client_email, $on
   if ($client_email) {
     // Mail one time login URL and instructions.
     $from = variable_get('site_mail', ini_get('sendmail_from'));
-    $mail_params['variables'] = array(
-      '!username' => $account->name, '!site' => variable_get('site_name', 'Drupal'), '!login_url' => $onetime,
-      '!uri' => $base_url, '!uri_brief' => preg_replace('!^https?://!', '', $base_url), '!mailto' => $account->mail,
-      '!date' => format_date(time()), '!login_uri' => url('user', array('absolute' => TRUE)),
-      '!edit_uri' => url('user/' . $account->uid . '/edit', array('absolute' => TRUE)));
+    $mail_params['variables'] = [
+      '!username' => $account->name,
+      '!site' => variable_get('site_name', 'Drupal'),
+      '!login_url' => $onetime,
+      '!uri' => $base_url,
+      '!uri_brief' => preg_replace('!^https?://!', '', $base_url),
+      '!mailto' => $account->mail,
+      '!date' => format_date(time()),
+      '!login_uri' => url('user', ['absolute' => TRUE]),
+      '!edit_uri' => url('user/' . $account->uid . '/edit', ['absolute' => TRUE]),
+    ];
 
     $mail_success = drupal_mail('install', 'welcome-admin', $account->mail, user_preferred_language($account), $mail_params, $from, TRUE);
 
@@ -116,33 +122,33 @@ function install_main() {
     $name = PROVISION_DEFAULT_ADMIN_USER;
   }
   $client_email = install_validate_client_email(drush_get_option('client_email', FALSE));
-  $settings = array(
-    'parameters' => array(
+  $settings = [
+    'parameters' => [
       'profile' => $profile,
       'locale' => $install_locale,
-    ),
+    ],
     'settings_verified' => TRUE,
-    'forms' => array(
+    'forms' => [
       'install_settings_form' => $db_spec,
-      'install_configure_form' => array(
+      'install_configure_form' => [
         'site_name' => $url,
         'site_mail' => $client_email,
-        'account' => array(
+        'account' => [
           'name' => $name,
           'mail' => $client_email,
-          'pass' => array(
+          'pass' => [
             'pass1' => $account_pass,
             'pass2' => $account_pass,
-          ),
-        ),
-        'update_status_module' => array(
+          ],
+        ],
+        'update_status_module' => [
           1 => TRUE,
           2 => TRUE,
-        ),
+        ],
         'clean_url' => drush_get_option('clean_url', TRUE),
-      ),
-    ),
-  );
+      ],
+    ],
+  ];
 
   // Allow other commands to alter the installation settings.
   drush_command_invoke_all_ref('provision_drupal_install_settings_alter', $settings, $url);
@@ -181,10 +187,10 @@ install_main();
 
 function install_civicrm_dashboard() {
   // Create a CiviCRM dashboard link in the navigation menu.
-  $options = array(
+  $options = [
     'link_title' => 'CiviCRM',
     'link_path' => 'civicrm/dashboard',
-  );
+  ];
   menu_link_save($options);
 
   // Update the menu router and cache information.

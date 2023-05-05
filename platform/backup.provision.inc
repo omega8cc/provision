@@ -6,11 +6,11 @@
  * Back up an existing site
  */
 
-const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
+const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = [
   './files/css',
   './files/js',
   './private/temp',
-);
+];
 
 /**
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.

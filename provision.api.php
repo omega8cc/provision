@@ -434,14 +434,14 @@ function hook_provision_deploy_options_alter(&$deploy_options, $context) {
  *   dump. Defaults are set in Provision_Service_db_mysql::get_regexes().
  */
 function hook_provision_mysql_regex_alter(&$regexes) {
-  $regexes = array(
+  $regexes = [
     // remove these lines entirely.
     '#/\*!50013 DEFINER=.*/#' => FALSE,
     // just remove the matched content.
     '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
     // replace matched content as needed
     '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
-  );
+  ];
 }
 
 /**
@@ -514,10 +514,10 @@ function hook_provision_db_options_alter(&$options, $dsn) {
   // via https://owendavies.net/articles/azure-php-mysql-ssl/.
   foreach ($servers as $server) {
     if (strpos($dsn, $server)) {
-      $options = array(
+      $options = [
         PDO::MYSQL_ATTR_SSL_CA => '/var/aegir/config/ssl.d/Combined.crt.pem',
-        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false
-      );
+        PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
+      ];
     }
   }
 }

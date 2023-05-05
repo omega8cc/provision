@@ -78,11 +78,17 @@ function install_send_welcome_mail($url, $account, $profile, $language, $client_
   // Mail one time login URL and instructions.
   $from = variable_get('site_mail', ini_get('sendmail_from'));
 
-  $mail_params['variables'] = array(
-      '!username' => $account->name, '!site' => variable_get('site_name', 'Drupal'), '!login_url' => $onetime,
-      '!uri' => $base_url, '!uri_brief' => preg_replace('!^https?://!', '', $base_url), '!mailto' => $account->mail,
-      '!date' => format_date(time()), '!login_uri' => url('user', array('absolute' => TRUE)),
-      '!edit_uri' => url('user/' . $account->uid . '/edit', array('absolute' => TRUE)));
+  $mail_params['variables'] = [
+    '!username' => $account->name,
+    '!site' => variable_get('site_name', 'Drupal'),
+    '!login_url' => $onetime,
+    '!uri' => $base_url,
+    '!uri_brief' => preg_replace('!^https?://!', '', $base_url),
+    '!mailto' => $account->mail,
+    '!date' => format_date(time()),
+    '!login_uri' => url('user', array('absolute' => TRUE)),
+    '!edit_uri' => url('user/' . $account->uid . '/edit', ['absolute' => TRUE]),
+  ];
 
   $mail_success = drupal_mail('install', 'welcome-admin', $client_email, user_preferred_language($account), $mail_params, $from, TRUE);
 
