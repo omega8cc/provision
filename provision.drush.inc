@@ -366,7 +366,7 @@ function drush_provision_verify() {
 }
 
 function _provision_default_web_group() {
-  $info = posix_getgrgid(posix_getgid()];
+  $info = posix_getgrgid(posix_getgid());
   $common_groups = [
     'www-data',
     'apache',
