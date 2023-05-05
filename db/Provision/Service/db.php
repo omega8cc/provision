@@ -372,7 +372,7 @@ class Provision_Service_db extends Provision_Service {
       return ['%'];
     }
     else {
-      return array_unique(array_map($this->grant_host(...), $this->context->service('http')->grant_server_list()));
+      return array_unique(array_map(array($this, 'grant_host'), $this->context->service('http')->grant_server_list()));
     }
   }
 
