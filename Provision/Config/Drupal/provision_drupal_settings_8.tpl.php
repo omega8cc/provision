@@ -173,10 +173,10 @@ if (isset($_SERVER['db_name'])) {
    */
   $settings['trusted_host_patterns'] = [
 <?php
-  $esc_uri = str_replace('.', '\.', $this->uri];
+  $esc_uri = str_replace('.', '\.', $this->uri);
   print "    '^{$esc_uri}\$',\n";
   foreach ($this->aliases as $alias_url) {
-    $esc_alias = preg_replace(['/\./', '/\/.+/'], ['\.', ''], $alias_url];
+    $esc_alias = preg_replace(['/\./', '/\/.+/'], ['\.', ''], $alias_url);
     print "    '^{$esc_alias}\$',\n";
   }
 ?>
