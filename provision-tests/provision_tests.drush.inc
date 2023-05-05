@@ -262,7 +262,7 @@ function drush_provision_tests_install_platform($platform_name, $platform_alias 
   if (version_compare(drush_core_version(), '7', '>=')) {
     $opts[] = '--shallow-clone';
   }
-  drush_invoke_process('@none', 'make', $args, $opts];
+  drush_invoke_process('@none', 'make', $args, $opts);
   $args = [
     "@platform_$platform_alias",
   ];
