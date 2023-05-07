@@ -161,6 +161,23 @@ function drush_provision_drupal_post_provision_backup() {
 function drush_provision_drupal_provision_backup_rollback() {
   $backup_file = drush_get_option('backup_file');
   if (is_readable($backup_file) && is_file($backup_file)) {
+    $aegir_root = d('@server_master')->aegir_root;
+    $backup_path = d('@server_master')->backup_path;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
+    $oct_db_test = $oct_db_dirx . '/metadata';
+    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_cleanup_' . date("Ymd.His", time());
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    if (is_file($enable_myquick) && is_file($oct_db_test)) {
+      $old = $oct_db_dirx;
+      $new = $uri_db_dirz;
+      provision_file()->switch_paths($old, $new)
+        ->succeed('Moving the Post-DB-Cleanup @path1 to @path2 was successful.')
+        ->fail('Moving the Post-DB-Cleanup @path1 to @path2 has failed.');
+      if (is_dir($new)) {
+        _provision_recursive_delete($old);
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_provision_drupal_provision_backup_rollback @var", array('@var' => $old)), 'info');
+      }
+    }
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')
       ->fail('Failed deleting backup file @path');
