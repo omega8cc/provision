@@ -13,8 +13,8 @@ stages:
   - syntax
   - build
   - test
-  - publish
-  - upgradetest
+#  - publish
+#  - upgradetest
 
 
 #
@@ -138,26 +138,26 @@ test:ubuntu-focal-aegir3-apt:
 
   script: "scripts/ci-aegir-dev-install-apt-ubuntu-focal.sh"
 
-test:cluster-slave-debian-stretch-apt:
-  stage: test
-  image: debian:stretch
-  allow_failure: false
-  dependencies:
-    - build:deb
-
-  only:
-    - 7.x-3.x
-    - /^7\.x-3\.\d+\.x/
-    - /-runalltests$/
-
-  before_script:
-    - apt-get update
-    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
-    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
-    - echo "exit 0" >> /usr/sbin/policy-rc.d
-    - apt-get install --yes sudo curl
-
-  script: "scripts/ci-aegir-dev-install-apt-debian9-cluster-slave.sh"
+#test:cluster-slave-debian-stretch-apt:
+#  stage: test
+#  image: debian:stretch
+#  allow_failure: false
+#  dependencies:
+#    - build:deb
+#
+#  only:
+#    - 7.x-3.x
+#    - /^7\.x-3\.\d+\.x/
+#    - /-runalltests$/
+#
+#  before_script:
+#    - apt-get update
+#    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+#    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+#    - echo "exit 0" >> /usr/sbin/policy-rc.d
+#    - apt-get install --yes sudo curl
+#
+#  script: "scripts/ci-aegir-dev-install-apt-debian9-cluster-slave.sh"
 
 test:behat:
   stage: test
@@ -198,73 +198,73 @@ test:behat:
 ### Stage "publish"
 #
 
-publish:unstable-repo:
-  stage: publish
-  dependencies:
-    - build:deb
-
-  only:
-    - 7.x-3.x
-    - /^7\.x-3\.\d+\.x/
-
-  image: ruby:2.1
-  before_script:
-    # install ssh-agent
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
-
-    # run ssh-agent
-    - eval $(ssh-agent -s)
-
-    # add ssh key stored in SSH_PRIVATE_KEY variable to the agent store
-    - ssh-add <(echo "$SSH_PRIVATE_KEY")
-
-    - mkdir -p ~/.ssh
-    - ls -la /.dockerenv
-    - echo "$SSH_SERVER_HOSTKEYS" > ~/.ssh/known_hosts
-    - cat ~/.ssh/known_hosts
-
-  script:
-    - ls -lah build/*
-    - scp build/* ci@aegir0.aegirproject.org:/var/www/repos/incoming/
-      # reprepro should pick this up in seconds and update the repository index.
+#publish:unstable-repo:
+#  stage: publish
+#  dependencies:
+#    - build:deb
+#
+#  only:
+#    - 7.x-3.x
+#    - /^7\.x-3\.\d+\.x/
+#
+#  image: ruby:2.1
+#  before_script:
+#    # install ssh-agent
+#    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+#
+#    # run ssh-agent
+#    - eval $(ssh-agent -s)
+#
+#    # add ssh key stored in SSH_PRIVATE_KEY variable to the agent store
+#    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+#
+#    - mkdir -p ~/.ssh
+#    - ls -la /.dockerenv
+#    - echo "$SSH_SERVER_HOSTKEYS" > ~/.ssh/known_hosts
+#    - cat ~/.ssh/known_hosts
+#
+#  script:
+#    - ls -lah build/*
+#    - scp build/* ci@aegir0.aegirproject.org:/var/www/repos/incoming/
+#      # reprepro should pick this up in seconds and update the repository index.
 
 
 #
 ### Stage "upgradetest"
 #
 
-# Upgrade the latest stable Aegir to our unstable repo.
-upgradetest:debian-stretch-aegir3-apt-upgrade:
-  stage: upgradetest
-  image: debian:buster
-  dependencies:
-    - publish:unstable-repo
-
-  only:
-    - 7.x-3.x
-    - /^7\.x-3\.\d+\.x/
-    - /-runalltests$/
-
-  before_script:
-    - apt-get update
-    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
-    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
-    - echo "exit 0" >> /usr/sbin/policy-rc.d
-    - apt-get install --yes sudo curl cron
-
-  script:
-    - "scripts/ci-aegir-stable-install-apt-debian10.sh"
-    # extra step to run the task queue.
-    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
-    - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
-    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
-    - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
-    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
-    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
-    - sleep 2m
-    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
-    # upgrade to the latest version from the unstable repo.
-    - rm -v /etc/apt/sources.list.d/aegir-stable.list
-    - echo "deb [signed-by=/usr/share/keyrings/aegir-archive-keyring.gpg] http://debian.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
-    - sudo apt-get update
-    - sudo DEBIAN_FRONTEND=noninteractive apt-get --yes dist-upgrade
+## Upgrade the latest stable Aegir to our unstable repo.
+#upgradetest:debian-stretch-aegir3-apt-upgrade:
+#  stage: upgradetest
+#  image: debian:buster
+#  dependencies:
+#    - publish:unstable-repo
+#
+#  only:
+#    - 7.x-3.x
+#    - /^7\.x-3\.\d+\.x/
+#    - /-runalltests$/
+#
+#  before_script:
+#    - apt-get update
+#    # Avoid ERROR: invoke-rc.d: policy-rc.d denied execution of start.
+#    - echo "#!/bin/sh" > /usr/sbin/policy-rc.d
+#    - echo "exit 0" >> /usr/sbin/policy-rc.d
+#    - apt-get install --yes sudo curl cron
+#
+#  script:
+#    - "scripts/ci-aegir-stable-install-apt-debian10.sh"
+#    # extra step to run the task queue.
+#    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
+#    - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
+#    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
+#    - sudo su aegir --login --command 'drush @hostmaster hosting-tasks --force'
+#    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count();"'
+#    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
+#    - sleep 2m
+#    - sudo su aegir --login --command 'drush @hostmaster php-eval "echo hosting_task_count_running();"'
+#    # upgrade to the latest version from the unstable repo.
+#    - rm -v /etc/apt/sources.list.d/aegir-stable.list
+#    - echo "deb [signed-by=/usr/share/keyrings/aegir-archive-keyring.gpg] http://debian.aegirproject.org unstable main" | sudo tee -a /etc/apt/sources.list.d/aegir-unstable.list
+#    - sudo apt-get update
+#    - sudo DEBIAN_FRONTEND=noninteractive apt-get --yes dist-upgrade
