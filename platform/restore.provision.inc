@@ -22,6 +22,16 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
   _provision_drupal_create_settings_file();
+  drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_restore'));
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  $internal_backup_flag_blank = "Internal-DB-Backup \n";
+  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_restore';
+  if (!provision_file()->exists($internal_backup_flag)->status()) {
+    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
+      ->succeed('Generated blank ' . $local_description)
+      ->fail('Could not generate ' . $local_description);
+  }
   drush_invoke('provision-backup');
 }
 

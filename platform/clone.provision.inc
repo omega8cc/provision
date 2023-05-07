@@ -20,6 +20,16 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
  * Make a backup before making any changes, and add extract the file we are restoring from
  */
 function drush_provision_drupal_pre_provision_clone($new_name, $platform = null) {
+  drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_clone'));
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  $internal_backup_flag_blank = "Internal-DB-Backup \n";
+  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_clone';
+  if (!provision_file()->exists($internal_backup_flag)->status()) {
+    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
+      ->succeed('Generated blank ' . $local_description)
+      ->fail('Could not generate ' . $local_description);
+  }
   drush_invoke('provision-backup');
 }
 
@@ -98,6 +108,11 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     sleep(5); // A small trick to avoid high load and race conditions.
     // Verify again also original site via frontend to avoid issue #1004526
     provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
+    $backup_path = d('@server_master')->backup_path;
+    $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+    provision_file()->unlink($internal_backup_flag)
+      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_clone')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_clone');
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');

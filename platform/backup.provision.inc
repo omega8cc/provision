@@ -146,6 +146,29 @@ function drush_provision_drupal_provision_backup_get_exclusions() {
 
 function drush_provision_drupal_post_provision_backup() {
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
+
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  if (!is_file($internal_backup_flag)) {
+    $aegir_root = d('@server_master')->aegir_root;
+    $backup_path = d('@server_master')->backup_path;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
+    $oct_db_test = $oct_db_dirx . '/metadata';
+    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    if (is_file($enable_myquick) && is_file($oct_db_test)) {
+      $old = $oct_db_dirx;
+      $new = $uri_db_dirz;
+      provision_file()->switch_paths($old, $new)
+        ->succeed('Moving the Post-DB-Backup @path1 to @path2 was successful.')
+        ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
+      if (is_dir($new)) {
+        _provision_recursive_delete($old);
+        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_provision_drupal_post_provision_backup @var", array('@var' => $old)), 'info');
+      }
+    }
+  }
+
   if (d()->client_name) {
     $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
     provision_file()->create_dir($backup_dir, dt('Client backup directory for @client', array('@client' => d()->client_name)), 0750);
@@ -161,11 +184,14 @@ function drush_provision_drupal_post_provision_backup() {
 function drush_provision_drupal_provision_backup_rollback() {
   $backup_file = drush_get_option('backup_file');
   if (is_readable($backup_file) && is_file($backup_file)) {
+    provision_file()->unlink($backup_file)
+      ->succeed('Removed stale backup file @path')
+      ->fail('Failed deleting backup file @path');
     $aegir_root = d('@server_master')->aegir_root;
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $oct_db_test = $oct_db_dirx . '/metadata';
-    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_cleanup_' . date("Ymd.His", time());
+    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
     if (is_file($enable_myquick) && is_file($oct_db_test)) {
       $old = $oct_db_dirx;
@@ -178,8 +204,5 @@ function drush_provision_drupal_provision_backup_rollback() {
         drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_provision_drupal_provision_backup_rollback @var", array('@var' => $old)), 'info');
       }
     }
-    provision_file()->unlink($backup_file)
-      ->succeed('Removed stale backup file @path')
-      ->fail('Failed deleting backup file @path');
   }
 }

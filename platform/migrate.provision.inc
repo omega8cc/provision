@@ -24,6 +24,16 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_name = NUL
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = FALSE;
   _provision_drupal_create_settings_file();
+  drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_migrate'));
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  $internal_backup_flag_blank = "Internal-DB-Backup \n";
+  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_migrate';
+  if (!provision_file()->exists($internal_backup_flag)->status()) {
+    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
+      ->succeed('Generated blank ' . $local_description)
+      ->fail('Could not generate ' . $local_description);
+  }
   drush_invoke('provision-backup');
   provision_drupal_push_site();
 
@@ -301,4 +311,10 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
     // Load the config file of the newly migrated site and return it to hosting.
     provision_reload_config('site', drush_get_option('new_site_path', d()->site_path) . '/drushrc.php');
   }
+
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  provision_file()->unlink($internal_backup_flag)
+    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate')
+    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate');
 }

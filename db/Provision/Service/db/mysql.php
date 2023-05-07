@@ -162,7 +162,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
-    
+
     // MySQL did this to us. https://github.com/drush-ops/drush/issues/5368#issuecomment-1405209770
     $statement .= "; GRANT RELOAD ON `%s`.* TO `%s`@`%s`";
     return $this->query($statement, $name, $username, $host);
@@ -326,7 +326,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // Create pre-db-import flag file.
       $pre_import_flag = $backup_path . '/.pre_import_flag.pid';
       $pre_import_flag_blank = "Starting Import \n";
-      $local_description = 'Add Pre-DB-Import Flag-File import_dump mysql.php';
+      $local_description = 'Adding Pre-DB-Import Flag-File import_dump mysql.php';
       if (!provision_file()->exists($pre_import_flag)->status()) {
         provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
       	->succeed('Generated blank ' . $local_description)
@@ -354,8 +354,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
 		// Create post-db-import flag file.
 		$post_import_flag = $backup_path . '/.post_import_flag.pid';
-		$post_import_flag_blank = "Imported \n";
-		$local_description = 'Add Post-DB-Import Flag-File';
+		$post_import_flag_blank = "Post-DB-Import \n";
+		$local_description = 'Adding Post-DB-Import Flag-File import_dump mysql.php';
 		if (!provision_file()->exists($post_import_flag)->status()) {
 		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
 			->succeed('Generated blank ' . $local_description)
