@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Package management code for Drupal 9.
+ * Package management code for Drupal 10.
  */
 
 /**
