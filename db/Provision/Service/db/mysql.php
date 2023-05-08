@@ -261,7 +261,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
 
   function import_dump($dump_file, $creds) {
-    if (empty($creds)) {
+    if (!count($creds)) {
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
@@ -516,7 +516,7 @@ port=%s
       $gtid_option = '';
     } // else
 
-    if (empty($creds)) {
+    if (!count($creds)) {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
