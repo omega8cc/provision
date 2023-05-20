@@ -14,7 +14,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
   function default_port() {
     $script_user = drush_get_option('script_user');
-    if (!$script_user && $server->script_user) {
+    if (!$script_user && isset($server->script_user)) {
       $script_user = $server->script_user;
     }
     $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt';
