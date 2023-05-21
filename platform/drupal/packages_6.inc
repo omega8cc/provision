@@ -144,7 +144,9 @@ function _provision_drupal_system_map() {
 
   $profile = drush_get_option('profile');
   $packages['profiles'][$profile] = $profiles[$profile];
-  $packages['profiles'][$profile]->status = 1;
+  if (isset($profile) && isset($packages['profiles'][$profile])) {
+    $packages['profiles'][$profile]->status = 1;
+  }
 
   foreach (_provision_system_query("module") as $module) {
     // Skip profiles, these have a separate section above.
