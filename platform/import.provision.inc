@@ -44,10 +44,15 @@ function drush_provision_drupal_post_provision_import() {
 
     // We still run this extra backend sub-task to properly register packages etc.
     provision_backend_invoke(d()->name, 'provision-verify');
-    sleep(5); // A small trick to avoid high load and race conditions.
 
-    // We run this extra verify via frontend to avoid issue #1004526.
-    provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->name, 'verify'), array('force' => TRUE));
+    $aegir_root = d('@server_master')->aegir_root;
+    $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
+
+    if (!is_file($enable_fast_track)) {
+      sleep(5); // A small trick to avoid high load and race conditions.
+      // We run this extra verify via frontend to avoid issue #1004526.
+      provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->name, 'verify'), array('force' => TRUE));
+    }
 
     drush_include_engine('drupal', 'cron_key');
 

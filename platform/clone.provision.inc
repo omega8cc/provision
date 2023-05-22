@@ -48,18 +48,23 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
 function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   drush_set_option('old_platform', d()->platform->name);
 
-  // If the site is cloned between platforms and not just in the same platform,
-  // we should update the info collected about source and target platform first.
-  if (!is_null(d($platform)->name) && (d($platform)->name != d()->platform->name)) {
-    provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->platform->name, 'verify'), array('force' => TRUE));
-    sleep(5); // A small trick to avoid high load and race conditions.
-    provision_backend_invoke('@hostmaster', 'hosting-task', array(d($platform)->name, 'verify'), array('force' => TRUE));
+  $aegir_root = d('@server_master')->aegir_root;
+  $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
+
+  if (!is_file($enable_fast_track)) {
+    // If the site is cloned between platforms and not just in the same platform,
+    // we should update the info collected about source and target platform first.
+    if (!is_null(d($platform)->name) && (d($platform)->name != d()->platform->name)) {
+      provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->platform->name, 'verify'), array('force' => TRUE));
+      sleep(5); // A small trick to avoid high load and race conditions.
+      provision_backend_invoke('@hostmaster', 'hosting-task', array(d($platform)->name, 'verify'), array('force' => TRUE));
+      sleep(5); // A small trick to avoid high load and race conditions.
+    }
+    // We should update also the info collected about the site before running clone.
+    $local_uri_verify = '@' . d()->uri;
+    provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
     sleep(5); // A small trick to avoid high load and race conditions.
   }
-  // We should update also the info collected about the site before running clone.
-  $local_uri_verify = '@' . d()->uri;
-  provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
-  sleep(5); // A small trick to avoid high load and race conditions.
 
   $options = d()->options;
   $options['uri'] = ltrim($new_name, '@');
@@ -105,9 +110,16 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   if (!drush_get_error()) {
     // Verify the newly cloned site.
     provision_backend_invoke($new_name, 'provision-verify');
-    sleep(5); // A small trick to avoid high load and race conditions.
-    // Verify again also original site via frontend to avoid issue #1004526
-    provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
+
+    $aegir_root = d('@server_master')->aegir_root;
+    $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
+
+    if (!is_file($enable_fast_track)) {
+      sleep(5); // A small trick to avoid high load and race conditions.
+      // Verify again also original site via frontend to avoid issue #1004526
+      provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
+    }
+
     $backup_path = d('@server_master')->backup_path;
     $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
     provision_file()->unlink($internal_backup_flag)
