@@ -172,8 +172,8 @@ function drush_provision_pre_hostmaster_migrate($site, $platform) {
 function drush_provision_hostmaster_migrate($site, $platform) {
   // See: https://www.drupal.org/node/2762701.
   $platform_version = provision_backend_invoke(drush_get_option('site_name'), 'status', array(), array('fields' => 'drupal-version', 'field-labels' => 0));
-  drush_log(dt("Debug trim platform_version @name", array('@name' => trim($platform_version['output']))), 'warning');
-  drush_log(dt("Debug platform_version @path: @id", array('@path' => $platform, '@id' => $platform_version)), 'warning');
+  drush_log(dt("Debug trim platform_version @name", array('@name' => trim($platform_version['output']))), 'debug');
+  drush_log(dt("Debug platform_version @path: @id", array('@path' => $platform, '@id' => $platform_version)), 'debug');
   $major_version_upgrade = version_compare('7.0', trim($platform_version['output'])) > 0 ? TRUE : FALSE;
 
   //
