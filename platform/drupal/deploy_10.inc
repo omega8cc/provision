@@ -18,7 +18,7 @@ $old_url = drush_get_option('old_uri');
 
 if ($new_url != $old_url) {
   $url_changed  = TRUE;
-else
+else {
   $url_changed  = FALSE;
 }
 
