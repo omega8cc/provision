@@ -358,7 +358,7 @@ function drush_provision_drupal_pre_provision_verify() {
         }
         provision_process($submodules_command, d()->git_root, dt('Update git submodules...'), [], $log_output, NULL, TRUE, $provision_log_type);
       }
-
+      
 
       d()->displayGitStatus(FALSE);
 
@@ -452,7 +452,7 @@ function drush_provision_drupal_pre_provision_verify() {
         '@path' => d()->root,
       ]), 'ok');
     }
-
+    
 
     // Re-set the ROOT PATH for Drush.
     // In cases where we just build the platform Drush would have cleared this value.
@@ -593,5 +593,5 @@ function drush_provision_drupal_post_provision_verify() {
     drush_set_option('git_root', d()->git_root, 'drupal');
     drush_set_option('git_docroot', d()->git_docroot, 'drupal');
   }
-
+  
 }
