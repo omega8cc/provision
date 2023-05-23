@@ -15,10 +15,11 @@ function drush_provision_drupal_provision_verify_validate() {
 
     // Verify the platform first.
     // _drush_provision_verify_current_platform();
+    if (file_exists(d()->root)) {
+      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+      provision_prepare_environment();
+    }
 
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
-    provision_prepare_environment();
-//
 //    _provision_drupal_create_settings_file();
 //    provision_drupal_push_site();
 
@@ -551,6 +552,11 @@ function drush_provision_drupal_pre_provision_verify() {
     }
 
     provision_drupal_push_site(drush_get_option('override_slave_authority', FALSE));
+  }
+
+  if (d()->type === 'site') {
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+    provision_prepare_environment();
   }
 }
 
