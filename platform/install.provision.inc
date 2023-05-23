@@ -94,7 +94,8 @@ function drush_provision_drupal_provision_install() {
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);
 
-  // provision_save_site_data();
+  // Write drushrc.php
+  provision_save_site_data();
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
