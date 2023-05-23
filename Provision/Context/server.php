@@ -74,6 +74,14 @@ class Provision_Context_server extends Provision_Context {
   }
 
   /**
+   * Write out this named context to an alias file.
+   */
+  function write_alias() {
+    $config = new Provision_Config_Drushrc_Alias($this->name, $this->properties);
+    $config->write();
+  }
+
+  /**
    * Iterate through the available service types and spawn a handler for each type.
    */
   function load_services() {
