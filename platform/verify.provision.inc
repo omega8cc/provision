@@ -16,8 +16,10 @@ function drush_provision_drupal_provision_verify_validate() {
     // Verify the platform first.
     // _drush_provision_verify_current_platform();
 
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
-    provision_prepare_environment();
+    if (file_exists(d()->root)) {
+      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+      provision_prepare_environment();
+    }
 //
 //    _provision_drupal_create_settings_file();
 //    provision_drupal_push_site();
