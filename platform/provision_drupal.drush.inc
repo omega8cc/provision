@@ -58,7 +58,7 @@ function provision_drupal_drush_exit() {
       if (drush_get_option('installed')) {
         // Don't generate the drushrc.php on provision-save/delete commands.
         if (!preg_match("/^provision-(save|delete)/", $command[0])) {
-          provision_save_site_data();
+          // provision_save_site_data();
         }
       }
     }
@@ -654,7 +654,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
     foreach ($paths as $path) {
       $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     }
-  } 
+  }
 
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {

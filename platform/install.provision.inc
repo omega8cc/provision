@@ -65,7 +65,7 @@ function drush_provision_drupal_provision_install_validate() {
  */
 function drush_provision_drupal_pre_provision_install() {
   // This is the actual drupal provisioning requirements.
-  _provision_drupal_create_directories();
+//  _provision_drupal_create_directories();
 }
 
 /**
@@ -89,11 +89,12 @@ function drush_provision_drupal_pre_provision_install_rollback() {
  */
 function drush_provision_drupal_provision_install() {
  // Requires at least the database settings to complete.
+  // _provision_drupal_create_directories();
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);
 
-  provision_save_site_data();
+  // provision_save_site_data();
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
