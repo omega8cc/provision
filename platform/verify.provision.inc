@@ -71,8 +71,10 @@ function drush_provision_drupal_provision_verify_validate() {
  */
 function drush_provision_drupal_pre_provision_verify() {
 
-  $provision_log_type = 'p_command_log';
-  $drush_log_type = 'p_notice';
+  // If the "runner" of the command is "hosting_task", use "p_log". Otherwise, use 'ok' so it is visible in CLI calls.
+  // @TODO: Update provision_process to hide/show all "p_*" commands. Or... can drush_get_option be used inside provision_process instead?
+  $provision_log_type = drush_get_option('runner') == 'hosting_task'? 'p_command_log': 'ok';
+  $drush_log_type = drush_get_option('runner') == 'hosting_task'? 'p_notice': 'ok';
 
   // If the runner of this command was hosting_task, use drush log to print processes.
   $log_output = drush_get_option('runner') == 'hosting_task';
@@ -394,7 +396,7 @@ function drush_provision_drupal_pre_provision_verify() {
         // @TODO: Change to provision platform property "build_command".
         $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
 
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE);
+        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
 
       }
       elseif (!$composer_directory) {
