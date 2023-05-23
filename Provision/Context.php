@@ -177,15 +177,15 @@ class Provision_Context {
    */
   function __construct($name) {
     $this->name = $name;
-
-
+    
+    
   }
 
   /**
    * Init stub function.
    */
   function init() {
-
+    
     $this->setProperty('context_type', $this->type);
     $this->setProperty('settings', $this->settings ?? []);
 
@@ -238,11 +238,11 @@ class Provision_Context {
 
   /**
    * Write out this named context to an alias file.
+   */
   function write_alias() {
     $config = new Provision_Config_Drushrc_Alias($this->name, $this->properties);
     $config->write();
   }
-   */
 
   /**
    * Subscribe a service handler.
