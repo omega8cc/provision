@@ -363,8 +363,14 @@ function _provision_drupal_create_directories($url = NULL) {
   drush_command_invoke_all_ref('provision_drupal_chgrp_not_recursive_alter', $chgrp_not_recursive, $url);
   drush_command_invoke_all_ref('provision_drupal_chmod_not_recursive_alter', $chmod_not_recursive, $url);
 
+  // Make folder writable so we can create the files.
+  provision_file()->chmod("sites/$url", 02775, false)
+    ->succeed('Changed permissions of <code>@path</code> to @perm')
+    ->fail('Could not change permissions <code>@path</code> to @perm');
+
   foreach ($mkdir as $path => $perm) {
     if (!is_dir($path)) {
+      $path = getcwd() . '/' . $path;
       provision_file()->mkdir($path)
         ->succeed('Created <code>@path</code>')
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
