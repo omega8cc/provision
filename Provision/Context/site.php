@@ -104,19 +104,10 @@ class Provision_Context_site extends Provision_Context_platform {
       if (!empty($scripts[$command])) {
         $steps[$step]['command'] = $scripts[$command];
         $steps[$step]['source'] = 'composer';
-
-        if (function_exists("t")) {
-          $steps[$step]['note'] = t('Defined by <code>composer.json:deploy:build</code> script.', [
-            '%override' => 'composer.json',
-            '@step' => $step,
-          ]);
-        }
-        elseif (function_exists("dt")){
-          $steps[$step]['note'] = dt('Defined by <code>composer.json:deploy:build</code> script.', [
-            '%override' => 'composer.json',
-            '@step' => $step,
-          ]);
-        }
+        $steps[$step]['note'] = t('Defined by <code>composer.json:deploy:build</code> script.', [
+          '%override' => 'composer.json',
+          '@step' => $step,
+        ]);
       }
     }
 

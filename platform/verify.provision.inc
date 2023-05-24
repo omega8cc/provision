@@ -531,14 +531,14 @@ function drush_provision_drupal_pre_provision_verify() {
     drush_set_option('git_docroot', d()->git_docroot, 'drupal');
 
     // This is the actual drupal provisioning requirements.
-    _provision_drupal_create_directories();
+    //_provision_drupal_create_directories();
     _provision_drupal_maintain_aliases();
 
     // @TODO: Move to post-hosting-task.
     // _provision_drupal_ensure_htaccess_update();
     // Requires at least the database settings to complete.
 
-    _provision_drupal_create_settings_file();
+    //_provision_drupal_create_settings_file();
 
     // If this is the hostmaster site, save the ~/.drush/drushrc.php file.
     $hostmaster = provision_sitealias_get_record('@hostmaster');

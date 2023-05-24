@@ -188,7 +188,7 @@ function provision_save_server_data() {
 
 
 function provision_save_site_data() {
-  if (!drush_get_error() && file_exists(d()->root . '/index.php')) {
+  if (!drush_get_error()) {
     $config = new Provision_Config_Drushrc_Site(d()->name);
     $config->write();
     provision_drupal_push_site();
