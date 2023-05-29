@@ -351,7 +351,7 @@ location ^~ /<?php print $subdir; ?> {
 
   ###
   ### Allow local access to support wget method in Aegir settings
-  ### for running sites cron in Drupal 8.
+  ### for running sites cron in Drupal 8+.
   ###
   location = /<?php print $subdir; ?>/cron/ {
 <?php if ($satellite_mode == 'boa'): ?>
@@ -622,7 +622,7 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
-  ### Deny direct access to config files in Drupal 8.
+  ### Deny direct access to config files in Drupal 8+.
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/config_.* {
     access_log off;
