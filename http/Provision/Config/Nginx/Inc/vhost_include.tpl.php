@@ -1330,17 +1330,42 @@ location @cache {
 ### Send all not cached requests to drupal with clean URLs support.
 ###
 location @drupal {
+
+  ###
+  ### Detect supported no-cache exceptions
+  ###
+  if ( $request_method = POST ) {
+    set $nocache_details "Method";
+  }
+  if ( $args ~* "nocache=1" ) {
+    set $nocache_details "Args";
+  }
+  if ( $sent_http_x_force_nocache = "YES" ) {
+    set $nocache_details "Skip";
+  }
+  if ( $http_cookie ~* "NoCacheID" ) {
+    set $nocache_details "AegirCookie";
+  }
+  if ( $cache_uid ) {
+    set $nocache_details "DrupalCookie";
+  }
+
+  ###
+  ### Detect Drupal core variant
+  ###
   set $core_detected "Legacy";
   set $location_detected "Nowhere";
-  ###
-  ### Detect
-  ###
+
   if ( -e $document_root/web.config ) {
     set $core_detected "Regular";
   }
   if ( -e $document_root/core ) {
     set $core_detected "Modern";
   }
+
+  ###
+  ### Drupal core specific location switch
+  ###
   error_page 402 = @legacy;
   if ( $core_detected = Legacy ) {
     return 402;
@@ -1353,8 +1378,9 @@ location @drupal {
   if ( $core_detected = Modern ) {
     return 418;
   }
+
   ###
-  ### Fallback
+  ### Fallback to regular / D7 style rewrite
   ###
   set $location_detected "Fallback";
   rewrite ^ /index.php?$query_string? last;
