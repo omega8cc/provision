@@ -162,7 +162,7 @@ add_header X-XSS-Protection "1; mode=block";
 
 <?php if ($satellite_mode == 'boa'): ?>
 ###
-### Force clean URLs for Drupal 8.
+### Force clean URLs for Drupal 8+.
 ###
 rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
 
@@ -344,7 +344,7 @@ location = /cron.php {
 
 ###
 ### Allow local access to support wget method in Aegir settings
-### for running sites cron in Drupal 8.
+### for running sites cron in Drupal 8+.
 ###
 location ^~ /cron/ {
 <?php if ($satellite_mode == 'boa'): ?>
@@ -699,7 +699,7 @@ location ~* ^/sites/.*/files/backup_migrate/ {
 }
 
 ###
-### Deny direct access to config files in Drupal 8.
+### Deny direct access to config files in Drupal 8+.
 ###
 location ~* ^/sites/.*/files/config_.* {
   access_log off;
@@ -1404,7 +1404,7 @@ location @regular {
 }
 
 ###
-### Special location for Drupal 8.
+### Special location for Drupal 8+.
 ###
 location @modern {
   set $location_detected "Modern";
