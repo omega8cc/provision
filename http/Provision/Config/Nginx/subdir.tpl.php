@@ -1150,7 +1150,25 @@ location ^~ /<?php print $subdir; ?> {
 <?php endif; ?>
 <?php if ($nginx_config_mode == 'extended'): ?>
     ###
-    ### Use Nginx cache for all visitors.
+    ### Detect supported no-cache exceptions
+    ###
+    if ( $request_method = POST ) {
+      set $nocache_details "Method";
+    }
+    if ( $args ~* "nocache=1" ) {
+      set $nocache_details "Args";
+    }
+    if ( $sent_http_x_force_nocache = "YES" ) {
+      set $nocache_details "Skip";
+    }
+    if ( $http_cookie ~* "NoCacheID" ) {
+      set $nocache_details "AegirCookie";
+    }
+    if ( $cache_uid ) {
+      set $nocache_details "DrupalCookie";
+    }
+    ###
+    ### Use Nginx cache for all visitors by default.
     ###
     set $nocache "";
     if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
@@ -1227,26 +1245,6 @@ location @cache_<?php print $subdir_loc; ?> {
 ### Send all not cached requests to drupal with clean URLs support.
 ###
 location @drupal_<?php print $subdir_loc; ?> {
-
-  ###
-  ### Detect supported no-cache exceptions
-  ###
-  if ( $request_method = POST ) {
-    set $nocache_details "Method";
-  }
-  if ( $args ~* "nocache=1" ) {
-    set $nocache_details "Args";
-  }
-  if ( $sent_http_x_force_nocache = "YES" ) {
-    set $nocache_details "Skip";
-  }
-  if ( $http_cookie ~* "NoCacheID" ) {
-    set $nocache_details "AegirCookie";
-  }
-  if ( $cache_uid ) {
-    set $nocache_details "DrupalCookie";
-  }
-
   set $core_detected "Legacy";
   ###
   ### For Drupal >= 7
