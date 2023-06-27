@@ -274,7 +274,7 @@ class Provision_Context_platform extends Provision_Context {
   public function isRepo($repo_path = null, $set_error = TRUE) {
     // If no path specified, use the site or platform path of the alias.
     if (!$repo_path) {
-      $repo_path = d()->git_root ?? d()->root;
+      $repo_path = drush_get_option('git_root', d()->root);
     }
     
     drush_log(dt('Looking for repo path %repo...', [
