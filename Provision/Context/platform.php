@@ -11,10 +11,12 @@ class Provision_Context_platform extends Provision_Context {
   public $type = 'platform';
   public $parent_key = 'server';
 
+  public $git_root;
+
   use \DevShop\Component\Common\ComposerRepositoryAwareTrait;
 
   const GIT_STATUS_MAX_LENGTH = 1024;
-  
+
   static function option_documentation() {
     return array(
       'root' => 'platform: path to a Drupal installation',
@@ -28,6 +30,12 @@ class Provision_Context_platform extends Provision_Context {
       'git_docroot' => 'platform: The relative path within the git repository to expose to the web server.',
       'git_reset' => 'platform: If true, reset any changes to this platform when verifying.',
     );
+  }
+
+  function init()
+  {
+    return parent::init();
+    $this->git_root = drush_get_option('git_root');
   }
 
   function init_platform() {
