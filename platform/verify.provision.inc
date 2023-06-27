@@ -16,7 +16,8 @@ function drush_provision_drupal_provision_verify_validate() {
     // Verify the platform first.
     // _drush_provision_verify_current_platform();
 
-    if (file_exists(d()->root)) {
+    // Check if index.php, because root might exist but no files in a composer installation.
+    if (file_exists(d()->root . '/index.php')) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
       provision_prepare_environment();
     }
