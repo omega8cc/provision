@@ -32,9 +32,8 @@ class Provision_Context_platform extends Provision_Context {
     );
   }
 
-  function init()
-  {
-    return parent::init();
+  public function __construct($name) {
+    parent::__construct($name);
     $this->git_root = drush_get_option('git_root');
   }
 
