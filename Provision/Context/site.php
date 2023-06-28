@@ -44,11 +44,11 @@ class Provision_Context_site extends Provision_Context_platform {
     $this->setProperty('hosting_environment');
     $this->setProperty('drush_alias');
 
-    $this->setProperty('git_root');
-    $this->setProperty('git_remote');
-    $this->setProperty('git_reference');
-    $this->setProperty('git_docroot');
-    $this->setProperty('git_reset', TRUE);
+    $this->setProperty('git_root', d($this->platform)->git_root);
+    $this->setProperty('git_remote', d($this->platform)->git_remote);
+    $this->setProperty('git_reference', d($this->platform)->git_reference);
+    $this->setProperty('git_docroot', d($this->platform)->git_docroot);
+    $this->setProperty('git_reset', d($this->platform)->git_reset);
 
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;
