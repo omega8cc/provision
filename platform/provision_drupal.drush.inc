@@ -110,7 +110,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   // Sync the platform
   $sync_path = d()->git_root;
   drush_command_invoke_all_ref('provision_platform_sync_path_alter', $sync_path);
-  d()->service('http')->sync($sync_path, array('exclude-sites' => TRUE));
+  d()->service('http')->sync($sync_path);
 
   if (d()->type === 'site') {
     // Check whether we're hosted on a cluster, in which case, the master is
@@ -131,19 +131,20 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
       drush_set_option('exclude-paths', $exclude);
     }
 
-    // Sync all filesystem changes to the remote server.
-    d()->service('http')->sync(d()->site_path, $options);
-
-    // If this site's "file_public_path" is not the default site_path/files, sync it.
-    if (d()->site_path . '/files' != d()->root . '/' . d()->file_public_path) {
-      d()->service('http')->sync(d()->root . '/' . d()->file_public_path, $options);
-    }
-    if (d()->site_path . '/private/files' != d()->root  . '/' . d()->file_private_path) {
-      d()->service('http')->sync(d()->root . '/' . d()->file_private_path, $options);
-    }
-
-    // Sync temp dir.
-    d()->service('http')->sync(d()->root . '/' . d()->file_temporary_path, $options);
+// No more multisite.
+//    // Sync all filesystem changes to the remote server.
+//    d()->service('http')->sync(d()->site_path, $options);
+//
+//    // If this site's "file_public_path" is not the default site_path/files, sync it.
+//    if (d()->site_path . '/files' != d()->root . '/' . d()->file_public_path) {
+//      d()->service('http')->sync(d()->root . '/' . d()->file_public_path, $options);
+//    }
+//    if (d()->site_path . '/private/files' != d()->root  . '/' . d()->file_private_path) {
+//      d()->service('http')->sync(d()->root . '/' . d()->file_private_path, $options);
+//    }
+//    if (d()->site_path . '/private/temp' != d()->root  . '/' . d()->file_temporary_path) {
+//      d()->service('http')->sync(d()->root . '/' . d()->file_temporary_path, $options);
+//    }
 
     // Reset the exclude-path option
     if(!is_null($exclude)) {
