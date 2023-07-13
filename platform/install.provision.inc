@@ -166,6 +166,12 @@ function drush_provision_drupal_provision_install_profile(){
     provision_process($command, d()->root, dt('Installing site...'));
     $process = drush_get_context('provision_process_result');
 
+    provision_process([
+      'chmod',
+      '+w',
+      "sites/" . d()->uri,
+    ], d()->root, dt('Making sites dir writable...'));
+
     // chdir(d('@hostmaster')->root);
     // $result = provision_backend_invoke(d()->name, "provision-verify");
 
