@@ -138,7 +138,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
     if (d()->site_path . '/files' != d()->root . '/' . d()->file_public_path) {
       d()->service('http')->sync(d()->root . '/' . d()->file_public_path, $options);
     }
-    if (d()->site_path . '/files/private' != d()->root . '/' . d()->file_private_path) {
+    if (d()->site_path . '/private/files' != d()->root . '/' . d()->file_private_path) {
       d()->service('http')->sync(d()->root . '/' . d()->file_private_path, $options);
     }
 
