@@ -142,6 +142,9 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
       d()->service('http')->sync(d()->root . '/' . d()->file_private_path, $options);
     }
 
+    // Sync temp dir.
+    d()->service('http')->sync(d()->root . '/' . d()->file_temporary_path, $options);
+
     // Reset the exclude-path option
     if(!is_null($exclude)) {
       if(empty($old_exclude)) {
