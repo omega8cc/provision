@@ -104,7 +104,8 @@ class Provision_Context_site extends Provision_Context_platform {
       if (!empty($scripts[$command])) {
         $steps[$step]['command'] = $scripts[$command];
         $steps[$step]['source'] = 'composer';
-        $steps[$step]['note'] = t('Defined by <code>composer.json:deploy:build</code> script.', [
+        // @TODO: Can't use t or dt. might be drupal or drush :(
+        $steps[$step]['note'] = strtr('Defined by <code>composer.json:deploy:build</code> script.', [
           '%override' => 'composer.json',
           '@step' => $step,
         ]);
