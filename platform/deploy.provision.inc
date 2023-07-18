@@ -53,6 +53,9 @@ function drush_provision_post_provision_deploy($git_ref = NULL) {
 
   $steps = d()->getDeploySteps();
 
+  // Build step is run by verify.provision.inc
+  unset($steps['build']);
+
   foreach ($steps as $step_name => $step) {
     if (drush_get_option($step_name)) {
       $step_succeeded = d()->runDeployStep($step_name);

@@ -396,9 +396,9 @@ function drush_provision_drupal_pre_provision_verify() {
         // Composer Install command: Do not interact, do not show download progress.
         // Customizable by setting drush option 'provision_composer_install_command'
         // @TODO: Change to provision platform property "build_command".
-        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
-
-        provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
+//        $composer_command = drush_get_option('provision_composer_install_command', 'composer install --no-interaction --no-progress --no-dev --no-suggest --ansi');
+        d()->runDeployStep('build');
+        // provision_process($composer_command, $composer_directory, dt('Running composer install in @composer_root', $t), [], $log_output, dt('Composer Install failed.'), FALSE, $provision_log_type);
 
       }
       elseif (!$composer_directory) {
