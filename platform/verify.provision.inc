@@ -20,12 +20,6 @@ function drush_provision_drupal_provision_verify_validate() {
     if (file_exists(d()->root . '/index.php')) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
       provision_prepare_environment();
-
-      // Rewrite the settings file with latest settings.
-      if (!empty($_SERVER['db_host'])) {
-        _provision_drupal_create_settings_file();
-        provision_drupal_push_site();
-      }
     }
 
     drush_errors_on();
@@ -536,14 +530,19 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // This is the actual drupal provisioning requirements.
     // Don't run _provision_drupal_create_directories() here because we might be in the right folder.
-    // _provision_drupal_create_directories();
-    _provision_drupal_maintain_aliases();
+    if (file_exists(d()->root)) {
+      chdir(d()->root);
+      _provision_drupal_maintain_aliases();
+      _provision_drupal_ensure_htaccess_update();
 
-    // @TODO: Move to post-hosting-task.
-    // _provision_drupal_ensure_htaccess_update();
+      // Rewrite the settings file with latest settings.
+      if (!empty($_SERVER['db_host'])) {
+        _provision_drupal_create_directories();
+        _provision_drupal_create_settings_file();
+      }
+    }
+
     // Requires at least the database settings to complete.
-
-    //_provision_drupal_create_settings_file();
 
     // If this is the hostmaster site, save the ~/.drush/drushrc.php file.
     $hostmaster = provision_sitealias_get_record('@hostmaster');
