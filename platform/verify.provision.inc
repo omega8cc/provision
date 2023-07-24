@@ -534,7 +534,8 @@ function drush_provision_drupal_pre_provision_verify() {
       chdir(d()->root);
       _provision_drupal_create_directories();
       _provision_drupal_maintain_aliases();
-      _provision_drupal_ensure_htaccess_update();
+      
+      // _provision_drupal_ensure_htaccess_update();
 
       // Rewrite the settings file with latest settings.
       if (!empty($_SERVER['db_host'])) {
