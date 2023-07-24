@@ -154,7 +154,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // 2. Git Platform, path does exist, but is not a git repo.
     elseif (!empty(d()->git_root) && !d()->isRepo()) {
-      return drush_set_error("DRUSH_GIT_FAILED", dt('The path @git_root exists, but is not a git repository. Check the path and try again.'));
+      return drush_set_error("DRUSH_GIT_FAILED", dt('The path @git_root exists, but is not a git repository. Check the path and try again.', $t));
     }
 
     // 2. Git Platform, does exist.
