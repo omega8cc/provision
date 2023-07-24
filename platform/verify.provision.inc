@@ -532,12 +532,12 @@ function drush_provision_drupal_pre_provision_verify() {
     // Don't run _provision_drupal_create_directories() here because we might be in the right folder.
     if (file_exists(d()->root)) {
       chdir(d()->root);
+      _provision_drupal_create_directories();
       _provision_drupal_maintain_aliases();
       _provision_drupal_ensure_htaccess_update();
 
       // Rewrite the settings file with latest settings.
       if (!empty($_SERVER['db_host'])) {
-        _provision_drupal_create_directories();
         _provision_drupal_create_settings_file();
       }
     }
