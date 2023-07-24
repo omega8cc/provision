@@ -20,10 +20,11 @@ function drush_provision_drupal_provision_verify_validate() {
     if (file_exists(d()->root . '/index.php')) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
       provision_prepare_environment();
+
+      // Rewrite the settings file with latest settings.
+      _provision_drupal_create_settings_file();
+      provision_drupal_push_site();
     }
-//
-//    _provision_drupal_create_settings_file();
-//    provision_drupal_push_site();
 
     drush_errors_on();
 
