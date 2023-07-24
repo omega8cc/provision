@@ -22,8 +22,10 @@ function drush_provision_drupal_provision_verify_validate() {
       provision_prepare_environment();
 
       // Rewrite the settings file with latest settings.
-      _provision_drupal_create_settings_file();
-      provision_drupal_push_site();
+      if (!empty($_SERVER['db_host'])) {
+        _provision_drupal_create_settings_file();
+        provision_drupal_push_site();
+      }
     }
 
     drush_errors_on();
