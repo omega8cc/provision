@@ -72,6 +72,12 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
         'uri' => $this->data['options']['uri'],
         'options' => $this->data['options'],
       ];
+      if (isset(d()->web_server->remote_host)) {
+        if (!provision_is_local_host(d()->web_server->remote_host)) {
+          $alias[$this->data['options']['hosting_environment']]['user'] = 'aegir';
+          $alias[$this->data['options']['hosting_environment']]['host'] = d()->web_server->remote_host;
+        }
+      }
 
       $yaml = Yaml::dump($alias, 10, 2);
       $filename = $this->filenameYaml();
