@@ -16,10 +16,10 @@
  */
 function drush_provision_drupal_provision_login_reset() {
   $uri = d()->redirection ?: d()->uri;
-  $environment = [
-    'DRUSH_OPTIONS_URI' => $uri,
-  ];
-  $output = provision_process("drush user-login", d()->root, dt('Requesting one time login link'), $environment, TRUE);
+  $root = d()->root;
+  $alias = d()->drush_alias;
+  $command = "drush --uri={$uri} {$alias} user-login";
+  $output = provision_process($command, d()->root, dt('Requesting one time login link'), [], TRUE);
 
   drush_set_option('login_link', $output);
   drush_log(dt('Login url: !onetime', array('!onetime' => $output)), 'success');
