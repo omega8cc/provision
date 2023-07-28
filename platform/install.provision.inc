@@ -210,6 +210,107 @@ function drush_provision_drupal_provision_install_clone(){
 }
 
 /**
+ * Implements provision-install for METHOD.
+ * @return void
+ */
+function drush_provision_drupal_provision_install_import(){
+
+  // Detect database import URL/path
+  $path_or_url = d()->settings['install']['import'] ?? '';
+  if (empty($path_or_url)) {
+    return drush_set_error(DRUSH_APPLICATION_ERROR, 'Import setting was blank. Check site settings.install.import');
+  }
+
+  // Detect file path.
+  $import_files_path = d()->settings['install']['import_files'] ?? '';
+
+  $url = parse_url($path_or_url);
+  if ($url['scheme'] == 'mysql') {
+
+    // Dump the file
+    $temp_file_name = tempnam('/tmp', 'devshop_remote_db.sql.');
+    $db_name = ltrim($url['path'], '/');
+    $command = "mysqldump -u{$url['user']} -p{$url['pass']} -h{$url['host']} {$db_name}  --result-file={$temp_file_name}";
+    provision_process($command, NULL, dt('Saving database file...'));
+
+    $file_to_import = $temp_file_name;
+  }
+
+  // If file exists but is not readable, alert the user.
+  elseif (file_exists($path_or_url) && !is_readable($path_or_url)){
+    $error = dt('Unable to import SQL file !file: not readable.', array(
+      '!file' => $path_or_url,
+    ));
+    if (drush_get_option('devshop_sql_import_fail_if_import_fails', false)) {
+      return drush_set_error('DEVSHOP_IMPORT_ERROR', $error);
+    }
+    else {
+      drush_log($error, 'warning');
+      return;
+    }
+  }
+
+  // If file exists and is readable, set it as the file to import.
+  elseif (file_exists($path_or_url) && is_readable($path_or_url)){
+    $file_to_import = $path_or_url;
+  }
+  elseif (!file_exists($path_or_url))  {
+    $error = dt('The database file !file does not exist. Unable to import.', array(
+      '!file' => $path_or_url,
+    ));
+    if (drush_get_option('devshop_sql_import_fail_if_import_fails', false)) {
+      return drush_set_error('PROVISION_DATABASE_INSTALL', $error);
+    }
+    else {
+      drush_log($error, 'warning');
+      return;
+    }
+  }
+
+  // Import the database file
+  $alias = d()->name;
+  $command = "drush {$alias} sqlq 'SOURCE {$file_to_import}'";
+  provision_process($command, NULL, dt('Importing database file...'));
+  provision_process('drush cc drush', NULL, 'Clearing drush caches');
+
+  // Clear all caches.
+  if (drush_drupal_major_version(d()->root) == 8) {
+    provision_process("drush {$alias} cache-rebuild", NULL, dt('Clear all Caches'));
+  }
+  else {
+    provision_process("drush {$alias} cache-clear all", NULL, dt('Clear all Caches'));
+  }
+
+  provision_process("drush {$alias} sqlq 'SHOW TABLES'", NULL, dt('Show Tables'));
+
+  // Import files snapshot, just rsync or cp over
+  // @todo Make work with different sources, local tar, tgz, or http:// etc.
+  // @todo Exclude non-essential files directories e.g. css, php, js etc.
+  if (!empty($import_files_path)) {
+
+    if (!file_exists($import_files_path)) {
+      $error = dt('The import file specified (!file) does not exist. Unable to import.',
+        array(
+        '!file' => $import_files_path,
+      ));
+      if (drush_get_option('devshop_sql_import_fail_if_file_import_fails',
+        false)) {
+        return drush_set_error('PROVISION_DATABASE_INSTALL', $error);
+      }
+    }
+
+    provision_process("drush --yes rsync {$import_files_path} {$alias}:%files", NULL, dt('Importing files snapshot...'));
+    $files_path = d()->site_path . '/files/';
+    // Recursively chmod/chown all the files.
+    // Overriding this https://www.drupal.org/node/874716
+    provision_process("chown --recursive :apache {$files_path}");
+    provision_process("chmod --recursive 2770 {$files_path}");
+    provision_process("ls -al {$files_path}");
+
+  }
+}
+
+/**
  * Finish the installation, regenerate the caches on the site so that
  * any changes to things such as available modules/ themes can take affect.
  */
