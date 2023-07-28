@@ -273,14 +273,6 @@ function drush_provision_drupal_provision_install_import(){
   provision_process($command, NULL, dt('Importing database file...'));
   provision_process('drush cc drush', NULL, 'Clearing drush caches');
 
-  // Clear all caches.
-  if (drush_drupal_major_version(d()->root) >= 8) {
-    provision_process("drush {$alias} cache-rebuild", NULL, dt('Clear all Caches'));
-  }
-  else {
-    provision_process("drush {$alias} cache-clear all", NULL, dt('Clear all Caches'));
-  }
-
   provision_process("drush {$alias} sqlq 'SHOW TABLES'", NULL, dt('Show Tables'));
 
   // Import files snapshot, just rsync or cp over
