@@ -70,6 +70,8 @@ function drush_provision_drupal_pre_provision_install() {
 
 /**
  * If the install went south, and the site is not PROVISION_SITE_INSTALLED, clean up behind ourselves
+ * @TODO: Looks like this is never invoked. Delete it.
+ *
  */
 function drush_provision_drupal_pre_provision_install_rollback() {
   provision_file()->chmod(d()->site_path, 0755);
