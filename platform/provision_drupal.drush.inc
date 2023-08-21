@@ -473,23 +473,17 @@ function _provision_drupal_rebuild_caches() {
 
 function provision_drupal_find_sites() {
   $sites = array();
-  if ($dir = opendir("./sites")) {
+  if (file_exists(d()->root . "/sites") && $dir = opendir(d()->root . "/sites")) {
     while (FALSE !== ($subdir = readdir($dir))) {
       // skip internal directory pointers
       if ($subdir != '.' && $subdir != '..') {
-        $file = "./sites/$subdir/settings.php";
-        if (file_exists("$file") && ($subdir != 'default') && !is_link("./sites/$subdir")) {
+        $file = d()->root . "/sites/$subdir/settings.php";
+        if (file_exists("$file") && ($subdir != 'default') && !is_link(d()->root . "/sites/$subdir")) {
           $sites[$subdir] = $file;
         }
       }
     }
     closedir($dir);
-  }
-  else {
-    drush_log(dt("Cannot find ./sites directory in !dir", [
-      '!dir' => getcwd(),
-    ]), 'error');
-    $sites = FALSE;
   }
   return $sites;
 }
