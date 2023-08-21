@@ -53,7 +53,7 @@ class Provision_Context_site extends Provision_Context_platform {
     // set this because this path is accessed a lot in the code, especially in config files.
     $this->site_path = $this->root . '/sites/' . $this->uri;
 
-    $this->setProperty('site_enabled', true);
+    $this->setProperty('site_enabled');
     $this->setProperty('language', 'en');
     $this->setProperty('client_name');
     $this->setProperty('aliases', array(), TRUE);
