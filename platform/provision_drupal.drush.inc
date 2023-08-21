@@ -58,7 +58,7 @@ function provision_drupal_drush_exit() {
       if (drush_get_option('installed')) {
         // Don't generate the drushrc.php on provision-save/delete commands.
         if (!preg_match("/^provision-(save|delete)/", $command[0])) {
-          // provision_save_site_data();
+          provision_save_site_data();
         }
       }
     }
