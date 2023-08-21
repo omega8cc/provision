@@ -44,7 +44,7 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function filenameYaml() {
-    return drush_server_home() . '/.drush/sites/' . $this->data['options']['hosting_group'] . '.site.yml';
+    return drush_server_home() . '/.drush/sites/' . d()->hosting_group . '.site.yml';
   }
 
   function write()
@@ -59,13 +59,6 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
    */
   function writeSiteAlias() {
     if ($this->context->type == 'site') {
-
-      if (empty($this->data['options']['hosting_environment'])) {
-        throw new \Exception('Site options.hosting_environment was empty. Unable to write site alias file.');
-      }
-      if (empty($this->data['options']['hosting_group'])) {
-        throw new \Exception('Site options.hosting_group was empty. Unable to write site alias file.');
-      }
 
       try {
         $alias = Yaml::parseFile($this->filenameYaml());
@@ -97,9 +90,37 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   }
 
   function delete() {
-    if (file_exists($this->filenameYaml())){
-      unlink($this->filenameYaml());
+
+    $site = d();
+    drush_log("Alias::delete() " . print_r($site, 1), 'warning');
+
+    // Load yml alias file, remove and dump.
+    try {
+      $alias = Yaml::parseFile($this->filenameYaml());
+
+      if (!empty($alias[d()->hosting_environment])) {
+        unset($alias[d()->hosting_environment]);
+      }
+
+      drush_log(print_r(array_keys($alias),1), 'warning');
+
+      $yaml = Yaml::dump($alias, 10, 2);
+      $filename = $this->filenameYaml();
+      provision_file()->file_put_contents($filename, $yaml)
+        ->succeed(dt('Removed site :environment from Yaml Drush Site Alias file :file', array(
+          ':file' => $filename,
+          ':environment' => d()->hosting_environment,
+        )))
+        ->fail('Could not write Yaml Drush Site Alias file: ' . $filename)
+        ->status();
     }
+    catch (\Exception $e) {
+      drush_log(dt('Unable to parse yaml file :file: :error', array(
+        ':file' => $this->filenameYaml(),
+        ':error' => $e->getMessage(),
+      )));
+    }
+
     if (file_exists($this->filename())){
       unlink($this->filename());
     }
