@@ -60,6 +60,13 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
   function writeSiteAlias() {
     if ($this->context->type == 'site') {
 
+      if (empty($this->data['options']['hosting_environment'])) {
+        throw new \Exception('Site options.hosting_environment was empty. Unable to write site alias file.');
+      }
+      if (empty($this->data['options']['hosting_group'])) {
+        throw new \Exception('Site options.hosting_group was empty. Unable to write site alias file.');
+      }
+
       try {
         $alias = Yaml::parseFile($this->filenameYaml());
       }
