@@ -445,6 +445,11 @@ function _scrub_object($input) {
  * @see drush_invoke_process()
  */
 function provision_backend_invoke($target, $drush_command, $arguments = array(), $task_options = array(), $mode = 'GET') {
+  drush_log(dt('Invoking with provision_backend_invoke: drush :target :drush_command :arguments', array(
+    ':target' => $target,
+    ':drush_command' => $drush_command,
+    ':arguments' => implode(' ', $arguments)
+  )), 'notice');
   $context = '@' . ltrim($target, '@');
 
   // If a provision command is run, use drush_invoke_process.
