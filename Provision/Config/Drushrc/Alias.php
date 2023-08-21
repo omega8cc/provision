@@ -91,9 +91,6 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
 
   function delete() {
 
-    $site = d();
-    drush_log("Alias::delete() " . print_r($site, 1), 'warning');
-
     // Load yml alias file, remove and dump.
     try {
       $alias = Yaml::parseFile($this->filenameYaml());
@@ -101,8 +98,6 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       if (!empty($alias[d()->hosting_environment])) {
         unset($alias[d()->hosting_environment]);
       }
-
-      drush_log(print_r(array_keys($alias),1), 'warning');
 
       $yaml = Yaml::dump($alias, 10, 2);
       $filename = $this->filenameYaml();
