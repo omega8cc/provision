@@ -505,7 +505,7 @@ function provision_drupal_find_aliases() {
       $aliases = $config->find();
     }
     else {
-      if ($dir = opendir(d()->root . "/sites")) {
+      if (file_exists(d()->root . "/sites") && $dir = opendir(d()->root . "/sites")) {
         while (FALSE !== ($subdir = readdir($dir))) {
           // skip internal directory pointers
           if ($subdir != '.' && $subdir != '..') {
