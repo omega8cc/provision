@@ -317,11 +317,23 @@ function drush_provision_drupal_pre_provision_verify() {
         $log_message = dt('Resetting to git upstream...');
         $new_git_ref_type = d()->isBranchOrTag();
         if ($new_git_ref_type == 'branch') {
-          if ($run_git_reset) {
-            $reset_command = "git fetch && git reset --hard FETCH_HEAD";
+
+          // Before we reset to the remote, check if this branch is tracking anything.
+          if (file_exists(d()->git_root . "/.git/refs/remotes/origin/" . d()->git_reference)) {
+            if ($run_git_reset) {
+              $reset_command = "git fetch && git reset --hard FETCH_HEAD";
+            }
+            else {
+              $reset_command = "git fetch && git reset FETCH_HEAD";
+            }
           }
           else {
-            $reset_command = "git fetch && git reset FETCH_HEAD";
+            if ($run_git_reset) {
+              $reset_command = "git reset --hard";
+            }
+            else {
+              $reset_command = "git reset";
+            }
           }
         }
         elseif ($new_git_ref_type == 'tag' && $run_git_reset) {
