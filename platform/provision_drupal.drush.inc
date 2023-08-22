@@ -33,7 +33,7 @@ function provision_drupal_drush_engine_drupal() {
   $engines = array();
   $engines['clear'] = array();
   $engines['cron_key'] = array();
-  $engines['deploy_backup'] = array();
+  $engines['deploy'] = array();
   $engines['import'] = array();
   $engines['install'] = array();
   $engines['packages'] = array();

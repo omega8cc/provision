@@ -408,11 +408,11 @@ function hook_provision_drupal_install_settings_alter(&$settings, $url) {
 }
 
 /**
- * Alter the options passed to 'provision-deploy-backup' when it is invoked in
+ * Alter the options passed to 'provision-deploy' when it is invoked in
  * restore, clone and migrate tasks.
  *
  * @param array $deploy_options
- *   Options passed to the invocation of provision-deploy-backup.
+ *   Options passed to the invocation of provision-deploy.
  * @param string $context
  *   The type of task invoking the hook (e.g., 'clone').
  */

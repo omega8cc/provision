@@ -157,6 +157,9 @@ function drush_provision_drupal_post_provision_backup() {
       ->succeed('Created symlink @path to @target')
       ->fail('Could not create symlink @path to @target: @reason');
   }
+
+  provision_backend_invoke(d()->name, 'provision-verify');
+
 }
 
 /**

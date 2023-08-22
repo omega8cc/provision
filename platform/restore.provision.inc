@@ -5,6 +5,7 @@
  */
 function drush_provision_drupal_provision_restore_validate($restore_file = null) {
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+  provision_backend_invoke(d()->name, 'provision-verify');
 
   $exists = provision_file()->exists($restore_file)
     ->succeed('Restoring site from @path')
@@ -43,7 +44,7 @@ function drush_provision_drupal_provision_restore($restore_file) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
-  provision_backend_invoke(d()->name, 'provision-deploy-backup', array(drush_get_option('restore_file')), $deploy_options);
+  provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', false);

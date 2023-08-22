@@ -90,7 +90,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'clone');
 
-    provision_backend_invoke($new_name, 'provision-deploy-backup', array(drush_get_option('backup_file')), $deploy_options);
+  provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 
   if (!drush_get_error()) {
     // Verify the newly cloned site.
