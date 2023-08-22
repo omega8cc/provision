@@ -17,7 +17,9 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
         drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
       }
       else {
-        drush_log(dt('Invoking drush provision-backup...'));
+        drush_log(dt('Invoking drush provision-backup to :file ...', array(
+          ':file' => $backup_file,
+        )));
         drush_invoke("provision-backup", $backup_file);
         drush_unset_option('force', 'process');
       }
@@ -72,6 +74,20 @@ function drush_provision_drupal_provision_delete() {
 
     // Remove the symlink in the clients directory.
     _provision_client_delete_symlink();
+
+    // Delete all files if there are no other sites.
+    if (provision_drupal_find_sites()) {
+      return drush_set_error(dt('Existing sites were found on this platform. These sites must be deleted before this platform can be deleted.'));
+    }
+
+    // If being run by hosting-task, skip deletion so it can run later.
+    if (drush_get_option('runner') == 'hosting_task') {
+      drush_log(dt('Task is running from hosting-task command. Deletion will complete in drush_hosting_task().'), 'notice');
+    }
+    else {
+      _provision_recursive_delete(d()->git_root ?? d()->root);
+      d()->service('http')->sync(d()->root);
+    }
 
     provision_drupal_push_site($override_slave_authority = TRUE);
   }
