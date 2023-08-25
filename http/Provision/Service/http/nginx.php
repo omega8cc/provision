@@ -212,7 +212,9 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     }
 
     // Return the socket path based on the PHP version.
-    if (strtok(phpversion(), '.') == 7) {
+    $major_php = strtok(phpversion(), '.');
+
+    if ($major_php == 7 || $major_php == 8) {
       return static::getPhp7FpmSocketPath();
     }
     else {
