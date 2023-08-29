@@ -213,7 +213,15 @@ class Provision_Context_site extends Provision_Context_platform {
       $steps[$step]['command']:
       [$steps[$step]['command']];
 
-    $cwd = $this->git_root;
+    // @TODO: Better way?
+    // If build step hook, run from git root.
+    if ($step == 'build') {
+      $cwd = $this->git_root;
+    }
+    // All others run from web root so drupal is bootstrapped.
+    else {
+      $cwd = $this->git_root . '/' . $this->git_docroot;
+    }
     $env = [
       'DRUSH_OPTIONS_URI' => $this->uri,
       'XTERM' => 'TERM',
