@@ -202,13 +202,13 @@ function drush_provision_drupal_provision_install_clone(){
   $files_command = "drush rsync $source:%files $destination:%files";
 
   $environment = [];
+  $cwd = d()->root;
 
   if (!drush_get_option('skip-database', FALSE)) {
-    $cwd = d()->root;
-    provision_process($database_command, $cwd, dt('Syncing database... running from ' . $cwd), $environment, TRUE);
+    provision_process($database_command, $cwd, dt('Syncing database...'), $environment, TRUE);
   }
   if (!drush_get_option('skip-files', FALSE)) {
-    provision_process($files_command, drush_server_home(), dt('Syncing files...'), $environment, true);
+    provision_process($files_command, $cwd, dt('Syncing files...'), $environment, true);
   }
 }
 
