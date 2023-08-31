@@ -204,7 +204,8 @@ function drush_provision_drupal_provision_install_clone(){
   $environment = [];
 
   if (!drush_get_option('skip-database', FALSE)) {
-    provision_process($database_command, drush_server_home(), dt('Syncing database...'), $environment, TRUE);
+    $cwd = d()->root;
+    provision_process($database_command, $cwd, dt('Syncing database... running from ' . $cwd), $environment, TRUE);
   }
   if (!drush_get_option('skip-files', FALSE)) {
     provision_process($files_command, drush_server_home(), dt('Syncing files...'), $environment, true);
