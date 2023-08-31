@@ -327,5 +327,8 @@ function drush_provision_drupal_post_provision_install() {
   else {
     _provision_client_create_symlink();
   }
+
+  provision_backend_invoke(d()->name, 'provision-verify');
+
 }
 
