@@ -209,7 +209,7 @@ function drush_provision_drupal_provision_install_clone(){
   }
 
   // Update database immediately after sync.
-  provision_process("drush @destination updb", $cwd, dt('Updating database...'), $environment, TRUE);
+  provision_process("drush $destination updb", $cwd, dt('Updating database...'), $environment, TRUE);
 
 
   if (!drush_get_option('skip-files', FALSE)) {
