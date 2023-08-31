@@ -207,6 +207,11 @@ function drush_provision_drupal_provision_install_clone(){
   if (!drush_get_option('skip-database', FALSE)) {
     provision_process($database_command, $cwd, dt('Syncing database...'), $environment, TRUE);
   }
+
+  // Update database immediately after sync.
+  provision_process("drush @destination updb", $cwd, dt('Updating database...'), $environment, TRUE);
+
+
   if (!drush_get_option('skip-files', FALSE)) {
     provision_process($files_command, $cwd, dt('Syncing files...'), $environment, true);
   }
