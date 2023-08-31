@@ -28,8 +28,9 @@ function drush_provision_deploy_code($target_git_reference = '') {
   // Pass the "runner" option to provision-verify
   $options['runner'] = drush_get_option('runner');
 
+  // @TODO: Not sure why I did this.
   // Tell provision-verify to skip composer install.
-  $options['no-composer-install'] = TRUE;
+  // $options['no-composer-install'] = TRUE;
 
   // Verify command handles git and composer stages.
   provision_backend_invoke(d()->name, 'provision-verify', [], $options);
