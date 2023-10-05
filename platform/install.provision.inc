@@ -303,8 +303,11 @@ function drush_provision_drupal_provision_install_import(){
     $files_path = d()->site_path . '/files/';
     // Recursively chmod/chown all the files.
     // Overriding this https://www.drupal.org/node/874716
-    provision_process("chown --recursive :apache {$files_path}");
-    provision_process("chmod --recursive 2770 {$files_path}");
+
+    $web_user = _provision_default_web_group();
+    $files_mode = drush_get_option('provision_file_directory_mode', '2770');
+    provision_process("chown --recursive {$web_user} {$files_path}");
+    provision_process("chmod --recursive {$files_mode} {$files_path}");
     provision_process("ls -al {$files_path}");
 
   }
