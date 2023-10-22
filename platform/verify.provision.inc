@@ -213,18 +213,6 @@ function drush_provision_drupal_pre_provision_verify() {
         ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
-    // Delete platform's built-in drush if exists
-    $drupal8_vendor_drush_local = d()->root . '/vendor/drush';
-    $drupal8_vendor_drush_above = d()->root . '/../vendor/drush';
-    if (provision_file()->exists($drupal8_vendor_drush_local)->status()) {
-      _provision_recursive_delete($drupal8_vendor_drush_local);
-      drush_log(dt('Built-in drush removed from: !vendor', array('!vendor' => $drupal8_vendor_drush_local)), 'message');
-    }
-    if (provision_file()->exists($drupal8_vendor_drush_above)->status()) {
-      _provision_recursive_delete($drupal8_vendor_drush_above);
-      drush_log(dt('Built-in drush removed from: !vendor', array('!vendor' => $drupal8_vendor_drush_above)), 'message');
-    }
-
     $core8_version_id = d()->root . '/core';
     $core9_version_id = d()->root . '/core/themes/olivero';
     $core10_version_f = d()->root . '/core/themes/classy';
