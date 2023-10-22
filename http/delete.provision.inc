@@ -7,7 +7,7 @@ function drush_http_provision_delete() {
   }
 
   // Add platform root auto-discovery to avoid confusing
-  // Composer based D8 codebase root with Drupal real root.
+  // Composer based D8+ codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Re-set the ROOT PATH for Drush.

@@ -26,7 +26,7 @@ function drush_provision_drupal_provision_delete() {
   if (d()->type === 'site') {
 
     // Add platform root auto-discovery to avoid confusing
-    // Composer based D8 codebase root with Drupal real root.
+    // Composer based D8+ codebase root with Drupal real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Re-set the ROOT PATH for Drush.
@@ -57,7 +57,7 @@ function drush_provision_drupal_provision_delete() {
   elseif (d()->type === 'platform') {
 
     // Add platform root auto-discovery to avoid confusing
-    // Composer based D8 codebase root with Drupal real root.
+    // Composer based D8+ codebase root with Drupal real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Make sure if we are within parent codebase directory

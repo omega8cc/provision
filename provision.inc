@@ -134,7 +134,7 @@ function provision_is_local_host($host) {
 
 /**
  * Add platform root auto-discovery to avoid confusing
- * Composer based D8 codebase root with Drupal real root.
+ * Composer based D8+ codebase root with Drupal real root.
  */
 function provision_auto_fix_platform_root($isroot) {
 
