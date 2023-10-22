@@ -12,6 +12,7 @@
  */
 function drush_provision_drupal_provision_import() {
   if (d()->type === 'site') {
+    provision_lock_some_vnd(d()->root);
     if (drush_drupal_major_version() < 10) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
@@ -63,5 +64,6 @@ function drush_provision_drupal_post_provision_import() {
     drush_include_engine('drupal', 'cron_key');
 
     provision_reload_config('site');
+    provision_unlock_some_vnd(d()->root);
   }
 }

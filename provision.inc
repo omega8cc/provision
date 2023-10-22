@@ -133,6 +133,64 @@ function provision_is_local_host($host) {
 }
 
 /**
+ * Unlock site-local drush and symfony/console etc
+ * in the Aegir post-task procedure.
+ */
+function provision_unlock_some_vnd(d()->root) {
+
+  $dru_vnd_drush_local = d()->root . '/vendor/drush';
+  $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console';
+  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console';
+
+  if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+    provision_file()->chmod($dru_vnd_drush_local, 0775)
+    drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+    provision_file()->chmod($dru_vnd_drush_above, 0775)
+    drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+    provision_file()->chmod($dru_vnd_symf_con_loc, 0775)
+    drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+    provision_file()->chmod($dru_vnd_symf_con_abo, 0775)
+    drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
+  }
+}
+
+/**
+ * Lock site-local drush and symfony/console etc
+ * to avoid conflicts with Aegir own drush version.
+ */
+function provision_lock_some_vnd(d()->root) {
+
+  $dru_vnd_drush_local = d()->root . '/vendor/drush';
+  $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console';
+  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console';
+
+  if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+    provision_file()->chmod($dru_vnd_drush_local, 0400)
+    drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+    provision_file()->chmod($dru_vnd_drush_above, 0400)
+    drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+    provision_file()->chmod($dru_vnd_symf_con_loc, 0400)
+    drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
+  }
+  if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+    provision_file()->chmod($dru_vnd_symf_con_abo, 0400)
+    drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
+  }
+}
+
+/**
  * Add platform root auto-discovery to avoid confusing
  * Composer based D8+ codebase root with Drupal real root.
  */

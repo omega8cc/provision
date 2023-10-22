@@ -16,6 +16,9 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
+
+  provision_lock_some_vnd(d()->root);
+
   if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
     if (drush_get_option('force', false)) {
       drush_log("clearing error");
@@ -176,6 +179,8 @@ function drush_provision_drupal_post_provision_backup() {
       ->succeed('Created symlink @path to @target')
       ->fail('Could not create symlink @path to @target: @reason');
   }
+
+  provision_unlock_some_vnd(d()->root);
 }
 
 /**

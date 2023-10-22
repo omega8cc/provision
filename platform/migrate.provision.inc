@@ -10,6 +10,7 @@
  * Implementation of drush_hook_COMMAND_validate().
  */
 function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
+  provision_lock_some_vnd(d()->root);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -335,4 +336,6 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   provision_file()->unlink($internal_backup_flag)
     ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate')
     ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate');
+
+  provision_unlock_some_vnd(d()->root);
 }

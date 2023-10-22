@@ -4,6 +4,7 @@
  * Make sure we have a valid site being restored, and that the file being restored from exists
  */
 function drush_provision_drupal_provision_restore_validate($restore_file = null) {
+  provision_lock_some_vnd(d()->root);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
   $exists = provision_file()->exists($restore_file)
@@ -63,5 +64,6 @@ function drush_provision_drupal_provision_restore($restore_file) {
       ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore')
       ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore');
   }
-}
 
+  provision_unlock_some_vnd(d()->root);
+}

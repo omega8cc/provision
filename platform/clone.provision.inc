@@ -13,6 +13,7 @@
  * Make sure we have a valid site being cloned, and that the file being cloned from exists
  */
 function drush_provision_drupal_provision_clone_validate($new_name = null, $platform = null) {
+  provision_lock_some_vnd(d()->root);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -128,5 +129,6 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
+  provision_unlock_some_vnd(d()->root);
 
 }
