@@ -26,9 +26,10 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $data['drush_aliases'] = array_unique($data['drush_aliases']);
     }
 
-    // ignore site-local drush and use the Octopus local drush
+    // Ignore site-local drush and use the Octopus local drush
     if (!empty(d()->drush_script)) {
       $data['path-aliases']['%drush-script'] = d()->drush_script;
+    }
     else {
       $octopus_drush_script = d('@server_master')->aegir_root . "/tools/drush/drush.php";
       $data['path-aliases']['%drush-script'] = $octopus_drush_script;
