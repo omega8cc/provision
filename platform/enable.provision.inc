@@ -17,5 +17,3 @@ function drush_provision_drupal_post_provision_enable() {
     d()->write_alias();
   }
 }
-
-

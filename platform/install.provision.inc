@@ -106,7 +106,7 @@ function drush_provision_drupal_provision_install() {
 
     // call a backend task to do the actual installation.
     $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
-    
+
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
@@ -124,7 +124,7 @@ function drush_provision_drupal_provision_install() {
   elseif (d()->install_method == 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
   }
-  
+
   drush_set_option('installed', TRUE, 'site');
   _provision_drupal_maintain_aliases();
 
@@ -150,4 +150,3 @@ function drush_provision_drupal_post_provision_install() {
     _provision_client_create_symlink();
   }
 }
-

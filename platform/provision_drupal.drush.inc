@@ -758,7 +758,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
     foreach ($paths as $path) {
       $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     }
-  } 
+  }
 
   foreach ($files as $name => $info) {
     if (drush_drupal_major_version() >= 8) {
