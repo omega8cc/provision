@@ -20,7 +20,7 @@ function drush_provision_drupal_provision_install_validate() {
   }
   if (_provision_drupal_site_exists()) {
 
-    provision_lock_some_vnd(d()->root);
+    provision_lock_some_vnd();
 
     // If "force-reinstall" option is set, delete the database and files.
     if (drush_get_option('force-reinstall', FALSE)) {
@@ -59,7 +59,7 @@ function drush_provision_drupal_provision_install_validate() {
       )));
     }
 
-    provision_unlock_some_vnd(d()->root);
+    provision_unlock_some_vnd();
   }
 }
 
@@ -98,7 +98,7 @@ function drush_provision_drupal_provision_install() {
 
   provision_save_site_data();
 
-  provision_lock_some_vnd(d()->root);
+  provision_lock_some_vnd();
 
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
@@ -155,5 +155,5 @@ function drush_provision_drupal_post_provision_install() {
   else {
     _provision_client_create_symlink();
   }
-  provision_unlock_some_vnd(d()->root);
+  provision_unlock_some_vnd();
 }

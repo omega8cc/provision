@@ -17,7 +17,7 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
-  provision_lock_some_vnd(d()->root);
+  provision_lock_some_vnd();
 
   if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
     if (drush_get_option('force', false)) {
@@ -180,7 +180,7 @@ function drush_provision_drupal_post_provision_backup() {
       ->fail('Could not create symlink @path to @target: @reason');
   }
 
-  provision_unlock_some_vnd(d()->root);
+  provision_unlock_some_vnd();
 }
 
 /**
