@@ -47,7 +47,7 @@ class Provision_Context_site extends Provision_Context {
     $this->setProperty('profile', 'standard');
     $this->setProperty('install_method', 'profile');
 
-    // ignore site-local drush and use the Octopus local drush
+    // Ignore site-local drush and use the Octopus local drush
     $octopus_drush_script = d('@server_master')->aegir_root . "/tools/drush/drush.php";
     $this->setProperty('drush_script', $octopus_drush_script);
   }
