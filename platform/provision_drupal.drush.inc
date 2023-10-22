@@ -545,7 +545,9 @@ function _provision_drupal_ensure_htaccess_update() {
  */
 function _provision_drupal_rebuild_caches() {
   if (d()->type === 'site') {
-    drush_include_engine('drupal', 'clear');
+    if (drush_drupal_major_version() < 10) {
+      drush_include_engine('drupal', 'clear');
+    }
   }
 }
 
