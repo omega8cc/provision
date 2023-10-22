@@ -136,7 +136,7 @@ function provision_is_local_host($host) {
  * Unlock site-local drush and symfony/console etc
  * in the Aegir post-task procedure.
  */
-function provision_unlock_some_vnd(d()->root) {
+function provision_unlock_some_vnd() {
 
   $dru_vnd_drush_local = d()->root . '/vendor/drush';
   $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -165,7 +165,7 @@ function provision_unlock_some_vnd(d()->root) {
  * Lock site-local drush and symfony/console etc
  * to avoid conflicts with Aegir own drush version.
  */
-function provision_lock_some_vnd(d()->root) {
+function provision_lock_some_vnd() {
 
   $dru_vnd_drush_local = d()->root . '/vendor/drush';
   $dru_vnd_drush_above = d()->root . '/../vendor/drush';
