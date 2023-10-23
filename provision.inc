@@ -173,8 +173,8 @@ function provision_lock_some_vnd() {
 
   $dru_vnd_drush_local = d()->root . '/vendor/drush';
   $dru_vnd_drush_above = d()->root . '/../vendor/drush';
-  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console';
-  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console';
+  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
+  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
 
   if (provision_file()->exists($dru_vnd_drush_local)->status()) {
     provision_file()->chmod($dru_vnd_drush_local, 0400);
