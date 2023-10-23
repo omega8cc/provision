@@ -15,12 +15,13 @@
  * Check that we are trying to install a new site , and a new site only
  */
 function drush_provision_drupal_provision_install_validate() {
+
+  provision_lock_some_vnd();
+
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
   if (_provision_drupal_site_exists()) {
-
-    provision_lock_some_vnd();
 
     // If "force-reinstall" option is set, delete the database and files.
     if (drush_get_option('force-reinstall', FALSE)) {
@@ -58,8 +59,6 @@ function drush_provision_drupal_provision_install_validate() {
         '!file' => d()->site_path . '/settings.php',
       )));
     }
-
-    provision_unlock_some_vnd();
   }
 }
 
@@ -95,11 +94,7 @@ function drush_provision_drupal_provision_install() {
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);
-
   provision_save_site_data();
-
-  provision_lock_some_vnd();
-
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
   // Install site according to install_method.
