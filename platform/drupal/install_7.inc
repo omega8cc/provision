@@ -84,6 +84,7 @@ function install_main() {
   // We have an existing settings.php.
 
   switch (substr(drush_core_version(), 0, 1)) {
+    case '10':
     case '9':
     case '8':
     case '7':
