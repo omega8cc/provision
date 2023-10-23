@@ -110,11 +110,11 @@ function drush_provision_drupal_provision_install() {
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() < 10) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
-      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+      drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
       drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_provision_install");
     }
 
