@@ -111,7 +111,7 @@ function drush_provision_drupal_provision_install() {
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
-    if (drush_drupal_major_version() < 10) {
+    if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
@@ -139,7 +139,7 @@ function drush_provision_drupal_post_provision_install() {
 
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
-    if (drush_drupal_major_version() < 10) {
+    if (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
