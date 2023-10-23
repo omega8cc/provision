@@ -138,6 +138,8 @@ function provision_is_local_host($host) {
  */
 function provision_unlock_some_vnd() {
 
+  drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+
   $dru_vnd_drush_local = d()->root . '/vendor/drush';
   $dru_vnd_drush_above = d()->root . '/../vendor/drush';
   $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console';
@@ -166,6 +168,8 @@ function provision_unlock_some_vnd() {
  * to avoid conflicts with Aegir own drush version.
  */
 function provision_lock_some_vnd() {
+
+  drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
   $dru_vnd_drush_local = d()->root . '/vendor/drush';
   $dru_vnd_drush_above = d()->root . '/../vendor/drush';
