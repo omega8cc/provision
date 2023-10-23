@@ -66,6 +66,7 @@ function drush_provision_drupal_provision_install_validate() {
  * Set up the directories and settings.php file that we need.
  */
 function drush_provision_drupal_pre_provision_install() {
+  provision_lock_some_vnd();
   // This is the actual drupal provisioning requirements.
   _provision_drupal_create_directories();
 }
@@ -74,6 +75,7 @@ function drush_provision_drupal_pre_provision_install() {
  * If the install went south, and the site is not PROVISION_SITE_INSTALLED, clean up behind ourselves
  */
 function drush_provision_drupal_pre_provision_install_rollback() {
+  provision_lock_some_vnd();
   provision_file()->chmod(d()->site_path, 0755);
   _provision_recursive_delete( d()->site_path );
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
@@ -91,6 +93,7 @@ function drush_provision_drupal_pre_provision_install_rollback() {
  */
 function drush_provision_drupal_provision_install() {
  // Requires at least the database settings to complete.
+  provision_lock_some_vnd();
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);
