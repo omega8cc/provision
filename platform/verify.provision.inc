@@ -154,6 +154,8 @@ function drush_provision_drupal_pre_provision_verify() {
       drush_log($line, $line_status);
     }
 
+    provision_lock_some_vnd();
+
     provision_file()->writable(d()->root . '/sites')
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
