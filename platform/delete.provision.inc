@@ -55,13 +55,14 @@ function drush_provision_drupal_provision_delete() {
     _provision_client_delete_symlink();
 
     provision_drupal_push_site($override_slave_authority = TRUE);
-    provision_unlock_some_vnd();
   }
   elseif (d()->type === 'platform') {
 
     // Add platform root auto-discovery to avoid confusing
     // Composer based D8+ codebase root with Drupal real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
+
+    provision_unlock_some_vnd();
 
     // Make sure if we are within parent codebase directory
     $test_parent = dirname(d()->root);

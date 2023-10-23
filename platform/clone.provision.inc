@@ -129,6 +129,5 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
-  provision_unlock_some_vnd();
 
 }

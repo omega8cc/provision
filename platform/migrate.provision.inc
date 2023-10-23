@@ -336,6 +336,4 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   provision_file()->unlink($internal_backup_flag)
     ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate')
     ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate');
-
-  provision_unlock_some_vnd();
 }

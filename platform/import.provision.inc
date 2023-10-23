@@ -64,6 +64,5 @@ function drush_provision_drupal_post_provision_import() {
     drush_include_engine('drupal', 'cron_key');
 
     provision_reload_config('site');
-    provision_unlock_some_vnd();
   }
 }

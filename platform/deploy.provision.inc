@@ -227,5 +227,4 @@ function drush_provision_drupal_post_provision_deploy() {
       }
     }
   }
-  provision_unlock_some_vnd();
 }

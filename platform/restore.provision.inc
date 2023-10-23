@@ -64,6 +64,4 @@ function drush_provision_drupal_provision_restore($restore_file) {
       ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore')
       ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore');
   }
-
-  provision_unlock_some_vnd();
 }
