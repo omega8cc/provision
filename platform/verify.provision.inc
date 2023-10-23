@@ -501,7 +501,7 @@ function drush_provision_drupal_post_provision_verify() {
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() < 10) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('installed', TRUE, 'site');
