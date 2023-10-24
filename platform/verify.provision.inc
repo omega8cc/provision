@@ -515,7 +515,5 @@ function drush_provision_drupal_post_provision_verify() {
     if (!provision_file()->exists($iniFile)->status() && provision_file()->exists($iniTpl)->status()) {
       provision_file()->copy($iniTpl, $iniFile);
     }
-
-    provision_unlock_some_vnd();
   }
 }
