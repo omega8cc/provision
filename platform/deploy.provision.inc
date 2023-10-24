@@ -207,7 +207,7 @@ function drush_provision_drupal_post_provision_deploy() {
     }
   }
   else {
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_post_provision_deploy");
   }
 
