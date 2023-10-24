@@ -121,7 +121,13 @@ function _provision_system_query($type) {
 
   foreach ($extensions_data as $name => $extension_data) {
     $package = (object) $extension_data->info;
-    $package->filename = drupal_get_filename($type, $name);
+
+    if ($type == 'module') {
+      $package->filename = \Drupal::service('extension.list.module')->getPathname($name);
+    }
+    elseif ($type == 'theme') {
+      $package->filename = \Drupal::service('extension.list.theme')->getPathname($name);
+    }
 
     $frags = explode("/", $package->filename);
     // Flag site-specific packages.
