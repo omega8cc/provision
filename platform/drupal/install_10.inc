@@ -94,7 +94,7 @@ function install_main() {
 
   require_once DRUPAL_ROOT . '/core/includes/install.core.inc';
 
-  drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+  drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
 
   // We have an existing settings.php.
   require_once DRUSH_BASE_PATH . '/commands/sql/sql.drush.inc';

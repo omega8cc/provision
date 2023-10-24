@@ -19,7 +19,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
   provision_lock_some_vnd();
 
-  if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE)) {
+  if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
     if (drush_get_option('force', false)) {
       drush_log("clearing error");
       drush_set_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
