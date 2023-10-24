@@ -20,12 +20,12 @@ function drush_provision_drupal_provision_verify_validate() {
     provision_drupal_push_site();
 
     drush_errors_on();
-    if (drush_drupal_major_version() < 10) {
+    if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-      drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_provision_verify_validate");
+      drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_provision_verify_validate");
     }
   }
 }
@@ -501,7 +501,7 @@ function drush_provision_drupal_post_provision_verify() {
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
-    if (drush_drupal_major_version() < 10) {
+    if (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('installed', TRUE, 'site');
