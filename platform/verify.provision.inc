@@ -141,31 +141,33 @@ function drush_provision_drupal_pre_provision_verify() {
         )));
     }
 
-    // Fix ownership early enough
-    $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
-    $result = drush_shell_exec_output();
-    foreach ($result as $index => $line) {
-      if (!$success) { // Log the entire error as a warning.
-        $line_status = 'warning';
+    if (!preg_match("/\/aegir\/distro\//i", d()->root) && !preg_match("/\/var\/aegir\//i", d()->root)) {
+      // Fix ownership early enough
+      $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
+      $result = drush_shell_exec_output();
+      foreach ($result as $index => $line) {
+        if (!$success) { // Log the entire error as a warning.
+          $line_status = 'warning';
+        }
+        else { // Only log the last line as success.
+          $line_status = $index+1 == count($result) ? 'success' : 'notice';
+        }
+        drush_log($line, $line_status);
       }
-      else { // Only log the last line as success.
-        $line_status = $index+1 == count($result) ? 'success' : 'notice';
-      }
-      drush_log($line, $line_status);
-    }
 
-    // Fix permissions early enough
-    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);
-    provision_lock_some_vnd();
-    $result = drush_shell_exec_output();
-    foreach ($result as $index => $line) {
-      if (!$success) { // Log the entire error as a warning.
-        $line_status = 'warning';
+      // Fix permissions early enough
+      $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);
+      provision_lock_some_vnd();
+      $result = drush_shell_exec_output();
+      foreach ($result as $index => $line) {
+        if (!$success) { // Log the entire error as a warning.
+          $line_status = 'warning';
+        }
+        else { // Only log the last line as success.
+          $line_status = $index+1 == count($result) ? 'success' : 'notice';
+        }
+        drush_log($line, $line_status);
       }
-      else { // Only log the last line as success.
-        $line_status = $index+1 == count($result) ? 'success' : 'notice';
-      }
-      drush_log($line, $line_status);
     }
 
     provision_file()->writable(d()->root . '/sites')
