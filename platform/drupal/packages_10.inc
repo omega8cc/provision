@@ -138,7 +138,12 @@ function _provision_system_query($type) {
     $package->filename = realpath($package->filename);
 
     if ($type == 'module') {
-      $package->schema_version = drupal_get_installed_schema_version($name);
+      if (drush_drupal_major_version() <= 9) {
+        $package->schema_version = drupal_get_installed_schema_version($name);
+      }
+      else {
+        $package->schema_version = \Drupal::service('update.update_hook_registry')->getInstalledVersion($name);
+      }
 
       if(!file_exists($package->filename)) {
         drush_log(dt("@name.info.yml not found.", array("@name" => $name)), 'notice');
