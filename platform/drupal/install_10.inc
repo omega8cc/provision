@@ -162,7 +162,7 @@ function install_main() {
     ->save();
 
   // Add platform root auto-discovery to avoid confusing
-  // Composer based D9 codebase root with Drupal real root.
+  // Composer based D10 codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   // Disable Redis integration until module is installed
