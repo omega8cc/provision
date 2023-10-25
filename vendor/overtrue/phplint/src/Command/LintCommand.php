@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the overtrue/phplint.
+ * This file is part of the overtrue/phplint
  *
  * (c) overtrue <i@overtrue.me>
  *
@@ -11,8 +11,11 @@
 
 namespace Overtrue\PHPLint\Command;
 
+use DateTime;
+use Exception;
 use JakubOnderka\PhpConsoleColor\ConsoleColor;
 use JakubOnderka\PhpConsoleHighlighter\Highlighter;
+use N98\JUnitXml\Document;
 use Overtrue\PHPLint\Cache;
 use Overtrue\PHPLint\Linter;
 use Symfony\Component\Console\Command\Command;
@@ -116,6 +119,12 @@ class LintCommand extends Command
                 null,
                 InputOption::VALUE_OPTIONAL,
                 'Path to store JSON results.'
+            )
+            ->addOption(
+                'xml',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Path to store JUnit XML results.'
             );
     }
 
@@ -158,13 +167,13 @@ class LintCommand extends Command
         $startTime = microtime(true);
         $startMemUsage = memory_get_usage(true);
 
-        $output->writeln($this->getApplication()->getLongVersion()." by overtrue and contributors.\n");
+        $output->writeln($this->getApplication()->getLongVersion() . " by overtrue and contributors.\n");
 
         $options = $this->mergeOptions();
         $verbosity = $output->getVerbosity();
 
         if ($verbosity >= OutputInterface::VERBOSITY_DEBUG) {
-            $output->writeln('Options: '.json_encode($options)."\n");
+            $output->writeln('Options: ' . json_encode($options) . "\n");
         }
 
         $linter = new Linter($options['path'], $options['exclude'], $options['extensions']);
@@ -198,7 +207,9 @@ class LintCommand extends Command
 
         $output->writeln(sprintf(
             "\n\nTime: <info>%s</info>\tMemory: <info>%s</info>\tCache: <info>%s</info>\n",
-            $timeUsage, $memUsage, $usingCache
+            $timeUsage,
+            $memUsage,
+            $usingCache
         ));
 
         if ($errCount > 0) {
@@ -210,13 +221,19 @@ class LintCommand extends Command
             $output->writeln("<info>OK! (Files: {$fileCount}, Success: {$fileCount})</info>");
         }
 
+        $context = [
+            'time_usage' => $timeUsage,
+            'memory_usage' => $memUsage,
+            'using_cache' => 'Yes' == $usingCache,
+            'files_count' => $fileCount,
+        ];
+
         if (!empty($options['json'])) {
-            $this->dumpResult((string) $options['json'], $errors, $options, [
-                'time_usage' => $timeUsage,
-                'memory_usage' => $memUsage,
-                'using_cache' => 'Yes' == $usingCache,
-                'files_count' => $fileCount,
-            ]);
+            $this->dumpJsonResult((string) $options['json'], $errors, $options, $context);
+        }
+
+        if (!empty($options['xml'])) {
+            $this->dumpXmlResult((string) $options['xml'], $errors, $options, $context);
         }
 
         return $code;
@@ -228,7 +245,7 @@ class LintCommand extends Command
      * @param array  $options
      * @param array  $context
      */
-    protected function dumpResult($path, array $errors, array $options, array $context = [])
+    protected function dumpJsonResult($path, array $errors, array $options, array $context = [])
     {
         $result = [
             'status' => 'success',
@@ -237,6 +254,28 @@ class LintCommand extends Command
         ];
 
         \file_put_contents($path, \json_encode(\array_merge($result, $context)));
+    }
+
+    /**
+     * @param string $path
+     * @param array  $errors
+     * @param array  $options
+     * @param array  $context
+     *
+     * @throws Exception
+     */
+    protected function dumpXmlResult($path, array $errors, array $options, array $context = [])
+    {
+        $document = new Document();
+        $suite = $document->addTestSuite();
+        $suite->setName('PHP Linter');
+        $suite->setTimestamp(new DateTime());
+        $suite->setTime($context['time_usage']);
+        $testCase = $suite->addTestCase();
+        foreach ($errors as $errorName => $value) {
+            $testCase->addError($errorName, 'Error', $value['error']);
+        }
+        $document->save($path);
     }
 
     /**
@@ -263,7 +302,7 @@ class LintCommand extends Command
             $process = str_pad(" {$i} / {$fileCount} ({$percent}%)", 18, ' ', STR_PAD_LEFT);
 
             if ($verbosity >= OutputInterface::VERBOSITY_VERBOSE) {
-                $filename = str_pad(" {$i}: ".$file->getRelativePathname(), $maxColumns - 10, ' ', \STR_PAD_RIGHT);
+                $filename = str_pad(" {$i}: " . $file->getRelativePathname(), $maxColumns - 10, ' ', \STR_PAD_RIGHT);
                 $status = \str_pad(('ok' === $status ? '<info>OK</info>' : '<error>Error</error>'), 20, ' ', \STR_PAD_RIGHT);
                 $output->writeln(\sprintf("%s\t%s\t%s", $filename, $status, $process));
             } else {
@@ -290,10 +329,10 @@ class LintCommand extends Command
     protected function showErrors($errors)
     {
         $i = 0;
-        $this->output->writeln("\nThere was ".count($errors).' errors:');
+        $this->output->writeln("\nThere was " . count($errors) . ' errors:');
 
         foreach ($errors as $filename => $error) {
-            $this->output->writeln('<comment>'.++$i.". {$filename}:{$error['line']}".'</comment>');
+            $this->output->writeln('<comment>' . ++$i . ". {$filename}:{$error['line']}" . '</comment>');
 
             $this->output->write($this->getHighlightedCodeSnippet($filename, $error['line']));
 
@@ -322,7 +361,7 @@ class LintCommand extends Command
 
         foreach ($lines as $i => $line) {
             $snippet .= (abs($lineNumber) === $i + 1 ? '  > ' : '    ');
-            $snippet .= str_pad($i + 1, $lineStrlen, ' ', STR_PAD_LEFT).'| '.rtrim($line).PHP_EOL;
+            $snippet .= str_pad($i + 1, $lineStrlen, ' ', STR_PAD_LEFT) . '| ' . rtrim($line) . PHP_EOL;
         }
 
         return $snippet;
@@ -362,7 +401,7 @@ class LintCommand extends Command
     protected function mergeOptions()
     {
         $options = $this->input->getOptions();
-        $options['path'] = $this->input->getArgument('path');
+        $options['path'] = $this->input->getArgument('path') ?: '.';
         $options['cache'] = $this->input->getOption('cache');
 
         $config = [];
@@ -406,7 +445,7 @@ class LintCommand extends Command
             $dir = is_dir($first) ? $first : dirname($first);
         }
 
-        $filename = rtrim($dir, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'.phplint.yml';
+        $filename = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.phplint.yml';
 
         return realpath($filename);
     }
