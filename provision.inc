@@ -138,7 +138,9 @@ function provision_is_local_host($host) {
  */
 function provision_unlock_some_vnd() {
 
-  if (!preg_match("/\/aegir\/distro\//i", d()->root) && !preg_match("/\/var\/aegir\//i", d()->root)) {
+  if (provision_file()->exists(d()->root)->status() &&
+      !preg_match("/\/aegir\/distro\//i", d()->root) &&
+      !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -172,7 +174,9 @@ function provision_unlock_some_vnd() {
  */
 function provision_lock_some_vnd() {
 
-  if (!preg_match("/\/aegir\/distro\//i", d()->root) && !preg_match("/\/var\/aegir\//i", d()->root)) {
+  if (provision_file()->exists(d()->root)->status() &&
+     !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+     !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 

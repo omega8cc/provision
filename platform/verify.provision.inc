@@ -141,7 +141,10 @@ function drush_provision_drupal_pre_provision_verify() {
         )));
     }
 
-    if (!preg_match("/\/aegir\/distro\//i", d()->root) && !preg_match("/\/var\/aegir\//i", d()->root)) {
+    if (provision_file()->exists(d()->root)->status() &&
+       !preg_match("/\/aegir\/distro\//i", d()->root) &&
+       !preg_match("/\/var\/aegir\//i", d()->root)) {
+
       // Fix ownership early enough
       $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
       $result = drush_shell_exec_output();
