@@ -194,33 +194,28 @@ function provision_lock_some_vnd() {
   }
 
   $this_user = provision_current_user();
-  $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log';
+  $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
 
   if (provision_file()->exists($psr_tpl)->status()) {
 
     $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
     $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
 
-    $psr_bad_local = $dru_vnd_psr_local . '/src/LoggerTrait.php';
-    $psr_bad_above = $dru_vnd_psr_above . '/src/LoggerTrait.php';
-
-    $psr_good_local = $dru_vnd_psr_local . '/Psr/Log/LoggerTrait.php';
-    $psr_good_above = $dru_vnd_psr_above . '/Psr/Log/LoggerTrait.php';
+    $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
+    $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
 
     if (provision_file()->exists($dru_vnd_psr_local)->status()) {
-      if (provision_file()->exists($psr_bad_local)->status()) {
-        _provision_recursive_delete($dru_vnd_psr_local);
-        $target_dir = d()->root . '/vendor/psr/';
-        $command = "cp -a $psr_tpl $target_dir";
+      if (!provision_file()->exists($psr_good_local)->status()) {
+        $target_dir = d()->root . '/vendor/psr/log/src/';
+        $command = "cp -a $psr_tpl/* $target_dir";
         $success = drush_shell_exec($command);
       }
     }
 
     if (provision_file()->exists($dru_vnd_psr_above)->status()) {
-      if (provision_file()->exists($psr_bad_above)->status()) {
-        _provision_recursive_delete($dru_vnd_psr_above);
-        $target_dir = d()->root . '/../vendor/psr/';
-        $command = "cp -a $psr_tpl $target_dir";
+      if (!provision_file()->exists($psr_good_above)->status()) {
+        $target_dir = d()->root . '/../vendor/psr/log/src/';
+        $command = "cp -a $psr_tpl/* $target_dir";
         $success = drush_shell_exec($command);
       }
     }
