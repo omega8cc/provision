@@ -173,7 +173,7 @@ function _provision_find_profiles() {
     foreach ($info_files as $path => $info_file) {
       $path = realpath($path);
       $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($path));
-      if ($info['type'] == 'profile' && (!isset($info['hidden']) || !$info['hidden'])) {
+      if (isset($info['type']) && $info['type'] == 'profile' && (!isset($info['hidden']) || !$info['hidden'])) {
         $profile = new stdClass();
         $profile->name = $info['name'];
         $profile->info = $info;
