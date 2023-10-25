@@ -57,7 +57,7 @@ function drush_provision_drupal_pre_provision_verify() {
       }
     }
   }
-  elseif (d()->type === 'platform') {
+  elseif (d()->type === 'platform' && provision_file()->exists(d()->root)->status()) {
 
     // Add platform root auto-discovery to avoid confusing
     // Composer based D8+ codebase root with Drupal real root.
