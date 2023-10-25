@@ -277,7 +277,7 @@ function drush_provision_drupal_provision_install_import(){
 
   // Import the database file
   $alias = d()->drush_alias;
-  $command = "drush {$alias} sqlq 'SOURCE {$file_to_import}'";
+  $command = "drush {$alias} sqlq --file={$file_to_import}";
   provision_process($command, NULL, dt('Importing database file...'));
   provision_process('drush cc drush', NULL, 'Clearing drush caches');
 
