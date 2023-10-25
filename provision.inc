@@ -223,11 +223,11 @@ function provision_lock_some_vnd() {
 
   $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
   $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
-  $command = 'patch -d d()->root -p1 < $patchFile';
+  $webRoot = d()->root;
+  $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
   if (provision_file()->exists($patchTpl)->status()) {
     if (!provision_file()->exists($patchFile)->status()) {
-      provision_file()->copy($patchTpl, $patchFile);
       $success = drush_shell_exec($command);
       $result = drush_shell_exec_output();
       foreach ($result as $index => $line) {
@@ -239,6 +239,7 @@ function provision_lock_some_vnd() {
         }
         drush_log($line, $line_status);
       }
+      provision_file()->copy($patchTpl, $patchFile);
     }
   }
 }
