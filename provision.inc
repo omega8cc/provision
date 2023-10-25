@@ -138,28 +138,31 @@ function provision_is_local_host($host) {
  */
 function provision_unlock_some_vnd() {
 
-  drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+  if (!preg_match("/\/aegir\/distro\//i", d()->root)) && (!preg_match("/\/var\/aegir\//i", d()->root)) {
 
-  $dru_vnd_drush_local = d()->root . '/vendor/drush';
-  $dru_vnd_drush_above = d()->root . '/../vendor/drush';
-  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
-  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+    drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
-  if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-    provision_file()->chmod($dru_vnd_drush_local, 0775);
-    drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-    provision_file()->chmod($dru_vnd_drush_above, 0775);
-    drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
-    provision_file()->chmod($dru_vnd_symf_con_loc, 0775);
-    drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
-    provision_file()->chmod($dru_vnd_symf_con_abo, 0775);
-    drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
+    $dru_vnd_drush_local = d()->root . '/vendor/drush';
+    $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+    $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
+    $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+
+    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+      provision_file()->chmod($dru_vnd_drush_local, 0775);
+      drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+      provision_file()->chmod($dru_vnd_drush_above, 0775);
+      drush_log(dt('Built-in drush unlocked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_loc, 0775);
+      drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_abo, 0775);
+      drush_log(dt('Symfony/console unlocked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
+    }
   }
 }
 
@@ -169,77 +172,80 @@ function provision_unlock_some_vnd() {
  */
 function provision_lock_some_vnd() {
 
-  drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+  if (!preg_match("/\/aegir\/distro\//i", d()->root)) && (!preg_match("/\/var\/aegir\//i", d()->root)) {
 
-  $dru_vnd_drush_local = d()->root . '/vendor/drush';
-  $dru_vnd_drush_above = d()->root . '/../vendor/drush';
-  $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
-  $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+    drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
-  if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-    provision_file()->chmod($dru_vnd_drush_local, 0400);
-    drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-    provision_file()->chmod($dru_vnd_drush_above, 0400);
-    drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
-    provision_file()->chmod($dru_vnd_symf_con_loc, 0400);
-    drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
-  }
-  if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
-    provision_file()->chmod($dru_vnd_symf_con_abo, 0400);
-    drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
-  }
+    $dru_vnd_drush_local = d()->root . '/vendor/drush';
+    $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+    $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
+    $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
 
-  $this_user = provision_current_user();
-  $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+      provision_file()->chmod($dru_vnd_drush_local, 0400);
+      drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_local)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+      provision_file()->chmod($dru_vnd_drush_above, 0400);
+      drush_log(dt('Built-in drush locked in: !vendor', array('!vendor' => $dru_vnd_drush_above)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_loc, 0400);
+      drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_loc)), 'message');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_abo, 0400);
+      drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
+    }
 
-  if (provision_file()->exists($psr_tpl)->status()) {
+    $this_user = provision_current_user();
+    $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
 
-    $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
-    $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
+    if (provision_file()->exists($psr_tpl)->status()) {
 
-    $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
-    $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
+      $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
+      $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
 
-    if (provision_file()->exists($dru_vnd_psr_local)->status()) {
-      if (!provision_file()->exists($psr_good_local)->status()) {
-        $target_dir = d()->root . '/vendor/psr/log/src/';
-        $command = "cp -a $psr_tpl/* $target_dir";
-        $success = drush_shell_exec($command);
+      $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
+      $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
+
+      if (provision_file()->exists($dru_vnd_psr_local)->status()) {
+        if (!provision_file()->exists($psr_good_local)->status()) {
+          $target_dir = d()->root . '/vendor/psr/log/src/';
+          $command = "cp -a $psr_tpl/* $target_dir";
+          $success = drush_shell_exec($command);
+        }
+      }
+
+      if (provision_file()->exists($dru_vnd_psr_above)->status()) {
+        if (!provision_file()->exists($psr_good_above)->status()) {
+          $target_dir = d()->root . '/../vendor/psr/log/src/';
+          $command = "cp -a $psr_tpl/* $target_dir";
+          $success = drush_shell_exec($command);
+        }
       }
     }
 
-    if (provision_file()->exists($dru_vnd_psr_above)->status()) {
-      if (!provision_file()->exists($psr_good_above)->status()) {
-        $target_dir = d()->root . '/../vendor/psr/log/src/';
-        $command = "cp -a $psr_tpl/* $target_dir";
+    $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+    $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
+    $webRoot = d()->root;
+    $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
+
+    if (provision_file()->exists($patchTpl)->status()) {
+      if (!provision_file()->exists($patchFile)->status()) {
         $success = drush_shell_exec($command);
-      }
-    }
-  }
-
-  $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
-  $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
-  $webRoot = d()->root;
-  $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
-
-  if (provision_file()->exists($patchTpl)->status()) {
-    if (!provision_file()->exists($patchFile)->status()) {
-      $success = drush_shell_exec($command);
-      $result = drush_shell_exec_output();
-      foreach ($result as $index => $line) {
-        if (!$success) { // Log the entire error as a warning.
-          $line_status = 'warning';
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+            $line_status = 'warning';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
         }
-        else { // Only log the last line as success.
-          $line_status = $index+1 == count($result) ? 'success' : 'notice';
-        }
-        drush_log($line, $line_status);
+        provision_file()->copy($patchTpl, $patchFile);
       }
-      provision_file()->copy($patchTpl, $patchFile);
     }
   }
 }
