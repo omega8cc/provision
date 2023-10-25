@@ -192,6 +192,60 @@ function provision_lock_some_vnd() {
     provision_file()->chmod($dru_vnd_symf_con_abo, 0400);
     drush_log(dt('Symfony/console locked in: !vendor', array('!vendor' => $dru_vnd_symf_con_abo)), 'message');
   }
+
+  $this_user = provision_current_user();
+  $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log';
+
+  if (provision_file()->exists($psr_tpl)->status()) {
+
+    $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
+    $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
+
+    $psr_bad_local = $dru_vnd_psr_local . '/src/LoggerTrait.php';
+    $psr_bad_above = $dru_vnd_psr_above . '/src/LoggerTrait.php';
+
+    $psr_good_local = $dru_vnd_psr_local . '/Psr/Log/LoggerTrait.php';
+    $psr_good_above = $dru_vnd_psr_above . '/Psr/Log/LoggerTrait.php';
+
+    if (provision_file()->exists($dru_vnd_psr_local)->status()) {
+      if (provision_file()->exists($psr_bad_local)->status()) {
+        _provision_recursive_delete($dru_vnd_psr_local);
+        $target_dir = d()->root . '/vendor/psr/';
+        $command = "cp -a $psr_tpl $target_dir";
+        $success = drush_shell_exec($command);
+      }
+    }
+
+    if (provision_file()->exists($dru_vnd_psr_above)->status()) {
+      if (provision_file()->exists($psr_bad_above)->status()) {
+        _provision_recursive_delete($dru_vnd_psr_above);
+        $target_dir = d()->root . '/../vendor/psr/';
+        $command = "cp -a $psr_tpl $target_dir";
+        $success = drush_shell_exec($command);
+      }
+    }
+  }
+
+  $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+  $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
+  $command = "cd d()->root;patch -p0 < $patchFile";
+
+  if (provision_file()->exists($patchTpl)->status()) {
+    if (!provision_file()->exists($patchFile)->status()) {
+      provision_file()->copy($patchTpl, $patchFile);
+      $success = drush_shell_exec($command);
+      $result = drush_shell_exec_output();
+      foreach ($result as $index => $line) {
+        if (!$success) { // Log the entire error as a warning.
+          $line_status = 'warning';
+        }
+        else { // Only log the last line as success.
+          $line_status = $index+1 == count($result) ? 'success' : 'notice';
+        }
+        drush_log($line, $line_status);
+      }
+    }
+  }
 }
 
 /**
