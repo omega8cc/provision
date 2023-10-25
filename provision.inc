@@ -228,7 +228,7 @@ function provision_lock_some_vnd() {
 
   $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
   $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
-  $command = "cd d()->root;patch -p1 < $patchFile";
+  $command = 'patch -d d()->root -p1 < $patchFile';
 
   if (provision_file()->exists($patchTpl)->status()) {
     if (!provision_file()->exists($patchFile)->status()) {
