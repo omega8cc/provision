@@ -627,6 +627,38 @@ location ~* /(?:.+)/files/styles/adaptive/(?:.+)$ {
 <?php endif; ?>
 
 ###
+### The css aggregation for Drupal 10.1 and newer.
+###
+location ~* /sites/.*/files/css/(.*)$ {
+  access_log off;
+  log_not_found off;
+  expires    30d;
+  add_header Access-Control-Allow-Origin *;
+  add_header X-Content-Type-Options nosniff;
+  add_header X-XSS-Protection "1; mode=block";
+<?php if ($nginx_config_mode == 'extended'): ?>
+  set $nocache_details "Skip";
+<?php endif; ?>
+  try_files  /sites/$main_site_name/files/css/$1 $uri @drupal;
+}
+
+###
+### The js aggregation for Drupal 10.1 and newer.
+###
+location ~* /sites/.*/files/js/(.*)$ {
+  access_log off;
+  log_not_found off;
+  expires    30d;
+  add_header Access-Control-Allow-Origin *;
+  add_header X-Content-Type-Options nosniff;
+  add_header X-XSS-Protection "1; mode=block";
+<?php if ($nginx_config_mode == 'extended'): ?>
+  set $nocache_details "Skip";
+<?php endif; ?>
+  try_files  /sites/$main_site_name/files/js/$1 $uri @drupal;
+}
+
+###
 ### The files/styles support.
 ###
 location ~* /sites/.*/files/styles/(.*)$ {
@@ -920,6 +952,34 @@ location ^~ /files/ {
     try_files   $uri =404;
   }
 <?php endif; ?>
+
+  ###
+  ### Sub-location to support files/css with short URIs.
+  ###
+  location ~* /files/css/(.*)$ {
+    access_log off;
+    log_not_found off;
+    expires    30d;
+<?php if ($nginx_config_mode == 'extended'): ?>
+    set $nocache_details "Skip";
+<?php endif; ?>
+    rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
+    try_files  /sites/$main_site_name/files/css/$1 $uri @drupal;
+  }
+
+  ###
+  ### Sub-location to support files/js with short URIs.
+  ###
+  location ~* /files/js/(.*)$ {
+    access_log off;
+    log_not_found off;
+    expires    30d;
+<?php if ($nginx_config_mode == 'extended'): ?>
+    set $nocache_details "Skip";
+<?php endif; ?>
+    rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
+    try_files  /sites/$main_site_name/files/js/$1 $uri @drupal;
+  }
 
   ###
   ### Sub-location to support files/styles with short URIs.

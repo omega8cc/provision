@@ -577,6 +577,34 @@ location ^~ /<?php print $subdir; ?> {
     }
 
     ###
+    ### Sub-location to support css with short URIs.
+    ###
+    location ~* /<?php print $subdir; ?>/files/css/(.*)$ {
+      access_log off;
+      log_not_found off;
+      expires    30d;
+<?php if ($nginx_config_mode == 'extended'): ?>
+      set $nocache_details "Skip";
+<?php endif; ?>
+      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/css/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+    }
+
+    ###
+    ### Sub-location to support js with short URIs.
+    ###
+    location ~* /<?php print $subdir; ?>/files/js/(.*)$ {
+      access_log off;
+      log_not_found off;
+      expires    30d;
+<?php if ($nginx_config_mode == 'extended'): ?>
+      set $nocache_details "Skip";
+<?php endif; ?>
+      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/js/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+    }
+
+    ###
     ### Sub-location to support files/imagecache with short URIs.
     ###
     location ~* /<?php print $subdir; ?>/files/imagecache/(.*)$ {
