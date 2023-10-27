@@ -521,4 +521,5 @@ function drush_provision_drupal_post_provision_verify() {
       provision_file()->copy($iniTpl, $iniFile);
     }
   }
+  provision_unlock_some_vnd();
 }
