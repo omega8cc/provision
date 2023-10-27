@@ -149,7 +149,7 @@ function drush_provision_drupal_pre_provision_verify() {
       $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
       // Fix permissions early enough
-      $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);
+      //$success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);
       provision_lock_some_vnd();
     }
 
