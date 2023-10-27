@@ -21,6 +21,7 @@ function drush_provision_drupal_pre_provision_disable($backup_file = null) {
 function drush_provision_drupal_post_provision_disable() {
   if (d()->type == 'site') {
     d()->write_alias();
+    provision_unlock_some_vnd();
   }
 }
 
