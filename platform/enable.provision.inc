@@ -10,12 +10,12 @@ function drush_provision_drupal_provision_enable_validate() {
     d()->site_enabled = true;
     provision_lock_some_vnd();
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+    provision_unlock_some_vnd();
   }
 }
 
 function drush_provision_drupal_post_provision_enable() {
   if (d()->type == 'site') {
     d()->write_alias();
-    provision_unlock_some_vnd();
   }
 }
