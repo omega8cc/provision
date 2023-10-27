@@ -141,17 +141,8 @@ function drush_provision_drupal_pre_provision_verify() {
         )));
     }
 
-    if (provision_file()->exists(d()->root)->status() &&
-       !preg_match("/\/aegir\/distro\//i", d()->root) &&
-       !preg_match("/\/var\/aegir\//i", d()->root)) {
-
-      // Fix ownership early enough
-      $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
-
-      // Fix permissions early enough
-      //$success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);
-      provision_lock_some_vnd();
-    }
+    // Fix ownership early enough
+    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
     provision_file()->writable(d()->root . '/sites')
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
