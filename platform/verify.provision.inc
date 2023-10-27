@@ -521,4 +521,7 @@ function drush_provision_drupal_post_provision_verify() {
       provision_file()->copy($iniTpl, $iniFile);
     }
   }
+  if (d()->type === 'platform') {
+    provision_lock_some_vnd();
+  }
 }
