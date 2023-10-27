@@ -146,8 +146,7 @@ function drush_provision_drupal_pre_provision_verify() {
        !preg_match("/\/var\/aegir\//i", d()->root)) {
 
       // Fix ownership early enough
-      $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
-      $result = drush_shell_exec_output();
+      $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
       // Fix permissions early enough
       $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s", d()->root);

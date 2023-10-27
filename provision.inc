@@ -145,8 +145,7 @@ function provision_unlock_some_vnd() {
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
     // Fix ownership first
-    $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
-    $result = drush_shell_exec_output();
+    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -185,8 +184,7 @@ function provision_lock_some_vnd() {
     drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
     // Fix ownership first
-    $success = drush_shell_exec("sudo /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
-    $result = drush_shell_exec_output();
+    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
