@@ -139,8 +139,8 @@ function provision_is_local_host($host) {
 function provision_unlock_some_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-      !preg_match("/\/aegir\/distro\//i", d()->root) &&
-      !preg_match("/\/var\/aegir\//i", d()->root)) {
+      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+      !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
