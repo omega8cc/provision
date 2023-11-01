@@ -188,6 +188,22 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
   );
 
+  $items['provision-dlock'] = array(
+    'description' => 'Lock a platform local Drush.',
+    'examples' => array(
+      'drush @platform provision-dlock' => 'Lock the platform local Drush as defined by the platform Drush alias generated with provision-save.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+  );
+
+  $items['provision-dunlock'] = array(
+    'description' => 'Unlock a platform local Drush.',
+    'examples' => array(
+      'drush @platform provision-dunlock' => 'Unlock the platform local Drush as defined by the platform Drush alias generated with provision-save.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+  );
+
   $items['provision-verify'] = array(
     'aliases' => array('v', 'pv', 'verify'),
     'arguments' => array('domain.com' => dt('The domain of the site to verify).')),
