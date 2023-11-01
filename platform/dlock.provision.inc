@@ -6,6 +6,7 @@
 
 function drush_provision_drupal_provision_dlock() {
   if (d()->type === 'platform') {
+    d()->root = provision_auto_fix_platform_root(d()->root);
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/lock-local-drush-permissions.sh --root=%s --mode=%s", d()->root, "lock");
   }
   else {
