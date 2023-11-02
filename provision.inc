@@ -219,7 +219,13 @@ function provision_lock_some_vnd() {
     if (drush_drupal_major_version() >= 10) {
 
       $this_user = provision_current_user();
-      $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+
+      if ($this_user == 'aegir' ) {
+        $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
+      }
+      else {
+        $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+      }
 
       if (provision_file()->exists($psr_tpl)->status()) {
 
@@ -246,7 +252,12 @@ function provision_lock_some_vnd() {
         }
       }
 
-      $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+      if ($this_user == 'aegir' ) {
+        $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
+      }
+      else {
+        $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+      }
       $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
