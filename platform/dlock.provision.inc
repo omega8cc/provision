@@ -1,27 +1,39 @@
 <?php
 
 /**
- * Dummy drush hooks for the provision-dlock command
+ * Drush hooks for the provision-dlock command
  */
 
-function drush_provision_drupal_provision_dlock() {
+function drush_provision_dlock() {
   if (d()->type === 'platform') {
-    d()->root = provision_auto_fix_platform_root(d()->root);
-    provision_lock_some_vnd();
-    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/lock-local-drush-permissions.sh --root=%s --mode=%s", d()->root, "lock");
+
+    $dru_vnd_drush_local = d()->root . '/vendor/drush';
+    $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+    $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
+    $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+
+    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+      provision_file()->chmod($dru_vnd_drush_local, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+     }
+    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+      provision_file()->chmod($dru_vnd_drush_above, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_loc, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_abo, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
   }
   else {
     return TRUE;
-  }
-
-  $result = drush_shell_exec_output();
-  foreach ($result as $index => $line) {
-    if (!$success) { // Log the entire error as a warning.
-      $line_status = 'warning';
-    }
-    else { // Only log the last line as success.
-      $line_status = $index+1 == count($result) ? 'success' : 'notice';
-    }
-    drush_log($line, $line_status);
   }
 }
