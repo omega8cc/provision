@@ -216,6 +216,26 @@ function provision_lock_some_vnd() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+
+    if (!provision_file()->exists($drush_lock_ctrl)->status()) {
+      // Create drush-lock flag file.
+      $drush_lock_ctrl_info = "Drush-Lock Flag File \n";
+      $local_description = 'Drush-Lock Flag File';
+      provision_file()->file_put_contents($drush_lock_ctrl, $drush_lock_ctrl_info)
+        ->succeed('Generated ' . $local_description)
+      	->fail('Could not generate ' . $local_description);
+    }
+
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+
+    if (provision_file()->exists($drush_unlock_ctrl)->status()) {
+      // Delete drush-unlocked flag file.
+      provision_file()->unlink($drush_unlock_ctrl)
+        ->succeed('Removed Drush-UnLocked Flag File')
+        ->fail('Could not remove Drush-UnLocked Flag File');
+    }
+
     if (drush_drupal_major_version() >= 10) {
 
       $this_user = provision_current_user();
