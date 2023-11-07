@@ -16,6 +16,13 @@ function drush_provision_dunlock() {
     $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
     $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
 
+    $bin_vnd_drush_local = d()->root . '/vendor/bin/drush';
+    $bin_vnd_drush_above = d()->root . '/../vendor/bin/drush';
+    $dru_dru_dru_php_local = d()->root . '/vendor/drush/drush/drush.php';
+    $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
+    $dru_dru_drush_local = d()->root . '/vendor/drush/drush/drush';
+    $dru_dru_drush_above = d()->root . '/../vendor/drush/drush/drush';
+
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
       provision_file()->chmod($dru_vnd_drush_local, 0775)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
@@ -33,6 +40,36 @@ function drush_provision_dunlock() {
     }
     if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
       provision_file()->chmod($dru_vnd_symf_con_abo, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($bin_vnd_drush_local)->status()) {
+      provision_file()->chmod($bin_vnd_drush_local, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($bin_vnd_drush_above)->status()) {
+      provision_file()->chmod($bin_vnd_drush_above, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_dru_dru_php_local)->status()) {
+      provision_file()->chmod($dru_dru_dru_php_local, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_dru_dru_php_above)->status()) {
+      provision_file()->chmod($dru_dru_dru_php_above, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_dru_drush_local)->status()) {
+      provision_file()->chmod($dru_dru_drush_local, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_dru_drush_above)->status()) {
+      provision_file()->chmod($dru_dru_drush_above, 0775)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
