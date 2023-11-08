@@ -25,8 +25,5 @@ class Provision_Context_platform extends Provision_Context {
     $this->setProperty('root');
     $this->setProperty('makefile', '');
     $this->setProperty('make_working_copy', FALSE);
-    // ignore site-local drush and use the Octopus local drush
-    $octopus_drush_script = d('@server_master')->aegir_root . "/tools/drush/drush.php";
-    $this->setProperty('drush_script', $octopus_drush_script);
   }
 }
