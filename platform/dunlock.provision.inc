@@ -74,6 +74,64 @@ function drush_provision_dunlock() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
+    if (drush_drupal_major_version() >= 10) {
+
+      $this_user = provision_current_user();
+
+      if ($this_user == 'aegir' ) {
+        $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
+      }
+      else {
+        $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+      }
+
+      if (provision_file()->exists($psr_tpl)->status()) {
+
+        $vnd_psr_log_orig_local = d()->root . '/vendor/psr/._orig_log';
+        $vnd_psr_log_orig_above = d()->root . '/../vendor/psr/._orig_log';
+
+        $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
+        $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
+
+        $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
+        $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
+
+        if (provision_file()->exists($dru_vnd_psr_local)->status()) {
+          if (provision_file()->exists($psr_good_local)->status()) {
+            if (provision_file()->exists($vnd_psr_log_orig_local)->status()) {
+              $command = "rm -rf $dru_vnd_psr_local";
+              $success = drush_shell_exec($command);
+              $command = "mv -f $vnd_psr_log_orig_local $dru_vnd_psr_local";
+              $success = drush_shell_exec($command);
+            }
+            else {
+              $command = "rm -rf $dru_vnd_psr_local";
+              $success = drush_shell_exec($command);
+              $command = "cd " . d()->root . " && composer require psr/log";
+              $success = drush_shell_exec($command);
+            }
+          }
+        }
+
+        if (provision_file()->exists($dru_vnd_psr_above)->status()) {
+          if (provision_file()->exists($psr_good_above)->status()) {
+            if (provision_file()->exists($vnd_psr_log_orig_above)->status()) {
+              $command = "rm -rf $dru_vnd_psr_above";
+              $success = drush_shell_exec($command);
+              $command = "mv -f $vnd_psr_log_orig_above $dru_vnd_psr_above";
+              $success = drush_shell_exec($command);
+            }
+            else {
+              $command = "rm -rf $dru_vnd_psr_above";
+              $success = drush_shell_exec($command);
+              $command = "cd " . d()->root . " && composer require psr/log";
+              $success = drush_shell_exec($command);
+            }
+          }
+        }
+      }
+    }
+
     // Delete drush-lock flag file.
     provision_file()->unlink($drush_lock_ctrl)
       ->succeed('Removed Drush-Lock Flag File')
