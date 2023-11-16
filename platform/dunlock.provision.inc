@@ -115,10 +115,12 @@ function drush_provision_dunlock() {
             else {
               $randstr = genRandStr(24);
               $psrback = $psr_bak . "/psr-log-" . $randstr;
-              $command = "mv -f $dru_vnd_psr_local $psrback";
+              $command = "cp -a $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
-              $command = sprintf("cd %s %s", d()->root, escapeshellcmd(' && composer require psr/log'));
-              $success = drush_shell_exec($command);
+              $approot = d()->root;
+              $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
+              $output = implode('', drush_shell_exec_output());
+              drush_log("PSR/LOG " . $output);
             }
           }
         }
@@ -136,10 +138,12 @@ function drush_provision_dunlock() {
             else {
               $randstr = genRandStr(24);
               $psrback = $psr_bak . "/psr-log-" . $randstr;
-              $command = "mv -f $dru_vnd_psr_above $psrback";
+              $command = "cp -a $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
-              $command = sprintf("cd %s %s", d()->root, escapeshellcmd(' && composer require psr/log'));
-              $success = drush_shell_exec($command);
+              $approot = d()->root . "/../";
+              $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
+              $output = implode('', drush_shell_exec_output());
+              drush_log("PSR/LOG " . $output);
             }
           }
         }
