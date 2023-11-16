@@ -117,7 +117,7 @@ function drush_provision_dunlock() {
               $psrback = $psr_bak . "/psr-log-" . $randstr;
               $command = "mv -f $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
-              $command = "cd " . d()->root . " && composer require psr/log";
+              $command = sprintf("cd %s %s", d()->root, escapeshellcmd(' && composer require psr/log'));
               $success = drush_shell_exec($command);
             }
           }
@@ -138,7 +138,7 @@ function drush_provision_dunlock() {
               $psrback = $psr_bak . "/psr-log-" . $randstr;
               $command = "mv -f $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
-              $command = "cd " . d()->root . " && composer require psr/log";
+              $command = sprintf("cd %s %s", d()->root, escapeshellcmd(' && composer require psr/log'));
               $success = drush_shell_exec($command);
             }
           }
