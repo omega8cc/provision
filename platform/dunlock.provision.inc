@@ -4,6 +4,10 @@
  * Drush hooks for the provision-dunlock command
  */
 
+function genRandStr($length = 12) {
+  return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
+}
+
 function drush_provision_dunlock() {
 
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
@@ -80,9 +84,11 @@ function drush_provision_dunlock() {
 
       if ($this_user == 'aegir' ) {
         $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
+        $psr_bak = '/var/aegir/backups';
       }
       else {
         $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+        $psr_bak = '/data/disk/' . $this_user . '/backups';
       }
 
       if (provision_file()->exists($psr_tpl)->status()) {
@@ -99,13 +105,17 @@ function drush_provision_dunlock() {
         if (provision_file()->exists($dru_vnd_psr_local)->status()) {
           if (provision_file()->exists($psr_good_local)->status()) {
             if (provision_file()->exists($vnd_psr_log_orig_local)->status()) {
-              $command = "rm -rf $dru_vnd_psr_local";
+              $randstr = genRandStr(24);
+              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $command = "mv -f $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
               $command = "mv -f $vnd_psr_log_orig_local $dru_vnd_psr_local";
               $success = drush_shell_exec($command);
             }
             else {
-              $command = "rm -rf $dru_vnd_psr_local";
+              $randstr = genRandStr(24);
+              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $command = "mv -f $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
               $command = "cd " . d()->root . " && composer require psr/log";
               $success = drush_shell_exec($command);
@@ -116,13 +126,17 @@ function drush_provision_dunlock() {
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
           if (provision_file()->exists($psr_good_above)->status()) {
             if (provision_file()->exists($vnd_psr_log_orig_above)->status()) {
-              $command = "rm -rf $dru_vnd_psr_above";
+              $randstr = genRandStr(24);
+              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $command = "mv -f $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
               $command = "mv -f $vnd_psr_log_orig_above $dru_vnd_psr_above";
               $success = drush_shell_exec($command);
             }
             else {
-              $command = "rm -rf $dru_vnd_psr_above";
+              $randstr = genRandStr(24);
+              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $command = "mv -f $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
               $command = "cd " . d()->root . " && composer require psr/log";
               $success = drush_shell_exec($command);
