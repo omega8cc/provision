@@ -25,11 +25,5 @@ class Provision_Context_platform extends Provision_Context {
     $this->setProperty('root');
     $this->setProperty('makefile', '');
     $this->setProperty('make_working_copy', FALSE);
-    // Ignore site-local drush and use the Aegir own drush
-    $aegir_drush_script = d('@server_master')->aegir_root . "/tools/drush/drush.php";
-    if (!provision_file()->exists($aegir_drush_script)->status()) {
-      $aegir_drush_script = "/var/aegir/drush/drush.php";
-    }
-    $this->setProperty('drush_script', $aegir_drush_script);
   }
 }

@@ -26,18 +26,6 @@ class Provision_Config_Drushrc_Alias extends Provision_Config_Drushrc {
       $data['drush_aliases'] = array_unique($data['drush_aliases']);
     }
 
-    // Ignore site-local drush and use the Aegir own drush
-    if (!empty(d()->drush_script)) {
-      $data['path-aliases']['%drush-script'] = d()->drush_script;
-    }
-    else {
-      $aegir_drush_script = d('@server_master')->aegir_root . "/tools/drush/drush.php";
-      if (!provision_file()->exists($aegir_drush_script)->status()) {
-        $aegir_drush_script = "/var/aegir/drush/drush.php";
-      }
-      $data['path-aliases']['%drush-script'] = $aegir_drush_script;
-    }
-
     $this->data = array(
       'aliasname' => ltrim($context, '@'),
       'options' => $data,

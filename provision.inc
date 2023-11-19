@@ -249,6 +249,9 @@ function provision_lock_some_vnd() {
 
       if (provision_file()->exists($psr_tpl)->status()) {
 
+        $vnd_psr_log_orig_local = d()->root . '/vendor/psr/._orig_log';
+        $vnd_psr_log_orig_above = d()->root . '/../vendor/psr/._orig_log';
+
         $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
         $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
 
@@ -257,6 +260,10 @@ function provision_lock_some_vnd() {
 
         if (provision_file()->exists($dru_vnd_psr_local)->status()) {
           if (!provision_file()->exists($psr_good_local)->status()) {
+            if (!provision_file()->exists($vnd_psr_log_orig_local)->status()) {
+              $command = "cp -a $dru_vnd_psr_local $vnd_psr_log_orig_local";
+              $success = drush_shell_exec($command);
+            }
             $target_dir = d()->root . '/vendor/psr/log/src/';
             $command = "cp -a $psr_tpl/* $target_dir";
             $success = drush_shell_exec($command);
@@ -265,6 +272,10 @@ function provision_lock_some_vnd() {
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
           if (!provision_file()->exists($psr_good_above)->status()) {
+            if (!provision_file()->exists($vnd_psr_log_orig_above)->status()) {
+              $command = "cp -a $dru_vnd_psr_above $vnd_psr_log_orig_above";
+              $success = drush_shell_exec($command);
+            }
             $target_dir = d()->root . '/../vendor/psr/log/src/';
             $command = "cp -a $psr_tpl/* $target_dir";
             $success = drush_shell_exec($command);
