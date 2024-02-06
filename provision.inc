@@ -565,11 +565,11 @@ function provision_posix_groupname($group) {
   // we do this both ways, so that the function returns NULL if no such user was found.
   if (is_numeric($group)) {
     $info = posix_getgrgid($group);
-    $group = $info['name'];
+    $group = isset($info['name']) ? $info['name'] : FALSE;
   }
   else {
     $info = posix_getgrnam($group);
-    $group = $info['name'];
+    $group = isset($info['name']) ? $info['name'] : FALSE;
   }
   return $group;
 }
