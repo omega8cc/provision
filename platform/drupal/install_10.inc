@@ -88,7 +88,7 @@ function install_mail($key, &$message, $params) {
 
 
 function install_main() {
-  global $profile, $install_locale, $conf, $url, $base_url;
+  global $profile, $install_locale, $config, $url, $base_url;
 
   $client_email = drush_get_option('client_email');
 
@@ -102,12 +102,12 @@ function install_main() {
   $sql = drush_sql_get_class();
   $db_spec = $sql->db_spec();
 
-  $db_spec['db_prefix'] = $GLOBALS['db_prefix'];
+  #$db_spec['db_prefix'] = $GLOBALS['db_prefix'];
+  $db_spec['db_prefix'] = isset($GLOBALS['db_prefix'])? $GLOBALS['db_prefix']: '';
 
   if ($db_spec['driver'] == 'mysqli') {
     $db_spec['driver'] = 'mysql';
   }
-
 
   unset($config['site_name']);
   unset($config['site_mail']);
