@@ -175,13 +175,13 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
     rewrite ^/<?php print $subdir; ?>/sites/default/files/imagecache/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 last;
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
-  location ~* ^/<?php print $subdir; ?>/sites/default/files/styles {
+  location ~* ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles) {
     access_log off;
     log_not_found off;
     expires    30d;
     set $nocache_details "Skip";
-    rewrite ^/<?php print $subdir; ?>/sites/default/files/styles/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/styles/$1 last;
-    try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles)/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 last;
+    try_files /$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
   location ~* ^/<?php print $subdir; ?>/sites/default/files {
     access_log off;
@@ -551,13 +551,13 @@ location ^~ /<?php print $subdir; ?> {
   ### Adaptive Image Styles support.
   ### http://drupal.org/project/ais
   ###
-  location ~* ^/<?php print $subdir; ?>/(?:.+)/files/styles/adaptive/(?:.+)$ {
+  location ~* ^/<?php print $subdir; ?>/(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
     if ( $http_cookie ~* "ais=(?<ais_cookie>[a-z0-9-_]+)" ) {
-      rewrite ^/<?php print $subdir; ?>/(.+)/files/styles/adaptive/(.+)$ /<?php print $subdir; ?>/$1/files/styles/$ais_cookie/$2 last;
+      rewrite ^/<?php print $subdir; ?>/(.+)/files/(css|js|styles)/adaptive/(.+)$ /<?php print $subdir; ?>/$1/files/$2/$ais_cookie/$3 last;
     }
     access_log off;
     set $nocache_details "Skip";
-    try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
+    try_files /$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 <?php endif; ?>
 
@@ -573,7 +573,7 @@ location ^~ /<?php print $subdir; ?> {
     ###
     ### Sub-location to support files/styles with short URIs.
     ###
-    location ~* /<?php print $subdir; ?>/files/styles/(.*)$ {
+    location ~* /<?php print $subdir; ?>/files/(css|js|styles)/(.*)$ {
       access_log off;
       log_not_found off;
       expires    30d;
@@ -581,7 +581,7 @@ location ^~ /<?php print $subdir; ?> {
       set $nocache_details "Skip";
 <?php endif; ?>
       rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/styles/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/(css|js|styles)/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -647,7 +647,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   ### The s3/files/styles (s3fs) support.
   ###
-  location ~* ^/<?php print $subdir; ?>/s3/files/styles/(.*)$ {
+  location ~* ^/<?php print $subdir; ?>/s3/files/(css|js|styles)/(.*)$ {
     access_log off;
     log_not_found off;
     expires    30d;
@@ -657,13 +657,13 @@ location ^~ /<?php print $subdir; ?> {
 <?php if ($nginx_config_mode == 'extended'): ?>
     set $nocache_details "Skip";
 <?php endif; ?>
-    try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/styles/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+    try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
   ### Imagecache and imagecache_external support.
   ###
-  location ~* ^/<?php print $subdir; ?>/((?:external|system|files/imagecache|files/styles)/.*) {
+  location ~* ^/<?php print $subdir; ?>/((?:external|system|files/imagecache|files/(css|js|styles))/.*) {
     access_log off;
     log_not_found off;
     expires    30d;
