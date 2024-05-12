@@ -288,6 +288,8 @@ function _provision_drupal_create_settings_file() {
  *   The url of the site being invoked.
   */
 function _provision_drupal_create_directories($url = NULL) {
+  // Ensure that the stat cache is cleared, so that we have an up-to-date view of the filesystem.
+  clearstatcache();
   if (is_null($url)) {
     if (d()->type == 'site') {
       $url = d()->uri;

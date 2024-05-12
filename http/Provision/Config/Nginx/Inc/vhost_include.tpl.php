@@ -877,6 +877,14 @@ location = /composer.lock {
   access_log off;
   return 404;
 }
+location ^~ /vendor/composer/ {
+  access_log off;
+  return 404;
+}
+location = /CHANGELOG.txt {
+  access_log off;
+  return 404;
+}
 
 ###
 ### Support for dynamic .json requests.
