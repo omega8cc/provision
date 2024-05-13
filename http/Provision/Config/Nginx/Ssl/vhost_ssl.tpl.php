@@ -27,12 +27,23 @@ if (!$nginx_has_http2 && $server->nginx_has_http2) {
   $nginx_has_http2 = $server->nginx_has_http2;
 }
 
+$nginx_has_http3 = d('@server_master')->nginx_has_http3;
+if (!$nginx_has_http3) {
+  $nginx_has_http3 = drush_get_option('nginx_has_http3');
+}
+if (!$nginx_has_http3 && $server->nginx_has_http3) {
+  $nginx_has_http3 = $server->nginx_has_http3;
+}
+
 $aegir_root = d('@server_master')->aegir_root;
 
 if ($nginx_has_http2) {
   $ssl_args = "ssl http2";
 }
 else {
+  $ssl_args = "ssl";
+}
+if ($nginx_has_http3) {
   $ssl_args = "ssl";
 }
 
@@ -61,6 +72,11 @@ else {
 server {
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
+<?php if ($nginx_has_http3): ?>
+  listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic reuseport"; ?>;
+  http2 on;
+  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>;"; ma=86400';
+<?php endif; ?>
 <?php
   // if we use redirections, we need to change the redirection
   // target to be the original site URL ($this->uri instead of
@@ -152,6 +168,11 @@ server {
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
   listen        <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen        <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
+<?php if ($nginx_has_http3): ?>
+  listen        <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic reuseport"; ?>;
+  http2 on;
+  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>;"; ma=86400';
+<?php endif; ?>
   server_name   <?php
     // this is the main vhost, so we need to put the redirection
     // target as the hostname (if it exists) and not the original URL

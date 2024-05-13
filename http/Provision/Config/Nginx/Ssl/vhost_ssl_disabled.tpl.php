@@ -12,10 +12,18 @@ if (!$nginx_has_http2 && $server->nginx_has_http2) {
   $nginx_has_http2 = $server->nginx_has_http2;
 }
 
+$nginx_has_http3 = drush_get_option('nginx_has_http3');
+if (!$nginx_has_http3 && $server->nginx_has_http3) {
+  $nginx_has_http3 = $server->nginx_has_http3;
+}
+
 if ($nginx_has_http2) {
   $ssl_args = "ssl http2";
 }
 else {
+  $ssl_args = "ssl";
+}
+if ($nginx_has_http3) {
   $ssl_args = "ssl";
 }
 
@@ -32,6 +40,11 @@ else {
 server {
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
+<?php if ($nginx_has_http3): ?>
+  listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic reuseport"; ?>;
+  http2 on;
+  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>;"; ma=86400';
+<?php endif; ?>
   server_name  <?php print $this->uri . ' ' . implode(' ', str_replace('/', '.', $this->aliases)); ?>;
 <?php if ($satellite_mode == 'boa'): ?>
   root         /var/www/nginx-default;
