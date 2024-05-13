@@ -1528,6 +1528,9 @@ location = /index.php {
   add_header X-Content-Type-Options nosniff;
   add_header X-XSS-Protection "1; mode=block";
 <?php endif; ?>
+<?php if ($nginx_has_http3): ?>
+  add_header Alt-Svc 'h3=":443"; ma=86400';
+<?php endif; ?>
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
   try_files     $uri =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
