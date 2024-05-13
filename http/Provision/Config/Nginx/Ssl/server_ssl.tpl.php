@@ -54,7 +54,7 @@ server {
 <?php endif; ?>
 <?php if ($nginx_has_http3): ?>
   http2 on;
-  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>;"; ma=86400';
+  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>"; ma=86400';
 <?php endif; ?>
   server_name  _;
   ssl_stapling               on;

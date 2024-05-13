@@ -43,7 +43,7 @@ server {
 <?php if ($nginx_has_http3): ?>
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic reuseport"; ?>;
   http2 on;
-  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>;"; ma=86400';
+  add_header Alt-Svc 'h3=":<?php print "{$http_ssl_port}"; ?>"; ma=86400';
 <?php endif; ?>
   server_name  <?php print $this->uri . ' ' . implode(' ', str_replace('/', '.', $this->aliases)); ?>;
 <?php if ($satellite_mode == 'boa'): ?>
