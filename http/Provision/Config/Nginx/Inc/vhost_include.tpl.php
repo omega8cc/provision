@@ -168,6 +168,14 @@ add_header X-Content-Type-Options nosniff;
 add_header X-XSS-Protection "1; mode=block";
 <?php endif; ?>
 
+###
+### Add recommended HTTP/3 headers
+### https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Alt-Svc
+###
+<?php if ($nginx_has_http3): ?>
+add_header Alt-Svc 'h3=":443"; ma=86400';
+<?php endif; ?>
+
 <?php if ($satellite_mode == 'boa'): ?>
 ###
 ### Force clean URLs for Drupal 8+.
