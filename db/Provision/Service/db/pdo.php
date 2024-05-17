@@ -3,8 +3,8 @@
 // simple wrapper class for PDO based db services
 
 class Provision_Service_db_pdo extends Provision_Service_db {
+  public $PDO_type = '';
   public $conn;
-  protected $creds;
   private $dsn;
 
   function init_server() {

@@ -2,6 +2,7 @@
 
 class Provision_Service_db extends Provision_Service {
   protected $service = 'db';
+  protected $creds;
 
   /**
    * Register the db handler for sites, based on the db_server option.
