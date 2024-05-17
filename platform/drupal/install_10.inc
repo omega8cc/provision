@@ -108,8 +108,10 @@ function install_main() {
     $db_spec['driver'] = 'mysql';
   }
 
-  unset($config['site_name']);
-  unset($config['site_mail']);
+  if (isset($config)) {
+    unset($config['site_name']);
+    unset($config['site_mail']);
+  }
   unset($GLOBALS['db_url']);
 
   $account_pass = provision_password();
