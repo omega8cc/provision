@@ -41,10 +41,10 @@ server {
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
-  listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
+  #listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
   http2                      on;
-  http3                      on;
-  http3_hq                   on;
+  #http3                      on;
+  #http3_hq                   on;
 <?php endif; ?>
   server_name  <?php print $this->uri . ' ' . implode(' ', str_replace('/', '.', $this->aliases)); ?>;
 <?php if ($satellite_mode == 'boa'): ?>

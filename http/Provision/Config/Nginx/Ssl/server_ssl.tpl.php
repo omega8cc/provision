@@ -41,21 +41,21 @@ server {
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
-  listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
+  #listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
 <?php endif; ?>
 <?php else: ?>
 <?php foreach ($server->ip_addresses as $ip) :?>
   listen       <?php print "{$ip}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
-  listen       <?php print "{$ip}:{$http_ssl_port} quic"; ?>;
+  #listen       <?php print "{$ip}:{$http_ssl_port} quic"; ?>;
 <?php endif; ?>
 <?php endforeach; ?>
   #listen       <?php print "[::]:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php endif; ?>
 <?php if ($nginx_has_http3): ?>
   http2                      on;
-  http3                      on;
-  http3_hq                   on;
+  #http3                      on;
+  #http3_hq                   on;
 <?php endif; ?>
   server_name  _;
   ssl_stapling               on;
