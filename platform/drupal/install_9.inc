@@ -156,12 +156,6 @@ function install_main() {
   }
   _provision_drupal_create_directories();
 
-  // Set files paths
-  \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$url/private/files")
-    ->set('path.temporary', "sites/$url/private/temp")
-    ->save();
-
   // Add platform root auto-discovery to avoid confusing
   // Composer based D9 codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);

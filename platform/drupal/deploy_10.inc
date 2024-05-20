@@ -24,14 +24,8 @@ else {
 }
 
 if ($url_changed) {
-  _provision_platform_drupal_deploy_9_replace($old_url, $new_url);
-  _provision_platform_drupal_deploy_9_replace('default', $new_url);
-
-  // Update files paths
-  \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$new_url/private/files")
-    ->set('path.temporary', "sites/$new_url/private/temp")
-    ->save();
+  _provision_platform_drupal_deploy_10_replace($old_url, $new_url);
+  _provision_platform_drupal_deploy_10_replace('default', $new_url);
 
   // Detect and update default site name, if needed
   $old_name = \Drupal::config('system.site')->get('name');
@@ -42,7 +36,7 @@ if ($url_changed) {
   }
 }
 
-function _provision_platform_drupal_deploy_9_replace($old_url, $new_url) {
+function _provision_platform_drupal_deploy_10_replace($old_url, $new_url) {
   // Update absolute URLs to files for sites cloned/migrated/renamed in the multisite install.
   $replace_abs_patterns = array(
     ':old' => '//' . $old_url . '/sites/' . $old_url . '/files',

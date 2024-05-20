@@ -137,6 +137,7 @@ if (isset($_SERVER['db_name'])) {
 
   $settings['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
   $settings['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
+  $config['system.file']['path']['private'] = 'sites/<?php print $this->uri ?>/private/files';
   $settings['file_temp_path'] = 'sites/<?php print $this->uri ?>/private/temp';
   $config['system.file']['path']['temporary'] = 'sites/<?php print $this->uri ?>/private/temp';
   $settings['config_sync_directory'] = 'sites/<?php print $this->uri ?>/private/config/sync';
