@@ -1037,7 +1037,7 @@ location ^~ /files/ {
     try_files  /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
 
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
     expires       30d;
     access_log    off;
     log_not_found off;
