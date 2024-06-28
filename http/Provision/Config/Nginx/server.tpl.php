@@ -282,7 +282,7 @@ map $http_user_agent $is_crawler {
   ~*SiteBot|PECL|Automatic|CCBot|BuzzTrack|Sistrix|Offline  is_crawler;
   ~*SWEB|Morfeus|GSLFbot|HiScan|Riddler|DBot|SEOkicks|MJ12  is_crawler;
   ~*PChomebot|Scrap|HTMLParser|Nutch|Mireo|Semrush|Ahrefs   is_crawler;
-  ~*AspiegelBot|bytedance|PetalBot|Amazonbot|facebookext    is_crawler;
+  ~*AspiegelBot|bytedance|PetalBot                          is_crawler;
 }
 
 ###
