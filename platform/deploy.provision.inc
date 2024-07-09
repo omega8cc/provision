@@ -186,13 +186,19 @@ function drush_provision_drupal_post_provision_deploy() {
   $dis_auto_up_db_site = $aegir_root . '/static/control/' . d()->uri . '_DisAutoUpDb.info';
   if (provision_is_hostmaster_site()) {
     // Call the drush updatedb command.
+    drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
     provision_backend_invoke(d()->name, 'updatedb');
   else {
-    if (is_file($dis_auto_up_db_global) || is_file($dis_auto_up_db_site)) {
-      $auto_up_db = "DISABLE";
+    if (is_file($dis_auto_up_db_global)) {
+      drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+    }
+    elseif (is_file($dis_auto_up_db_site)) {
+      drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_site)), 'info');
     }
     else {
       // Call the drush updatedb command.
+      drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
+      drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
       provision_backend_invoke(d()->name, 'updatedb');
     }
   }
