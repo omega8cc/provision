@@ -180,8 +180,23 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Registry rebuilt with --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
   }
-  // Call the drush updatedb command.
-  provision_backend_invoke(d()->name, 'updatedb');
+
+  $aegir_root = d('@server_master')->aegir_root;
+  $dis_auto_up_db_global = $aegir_root . '/static/control/DisAutoUpDb.info';
+  $dis_auto_up_db_site = $aegir_root . '/static/control/' . d()->uri . '_DisAutoUpDb.info';
+  if (provision_is_hostmaster_site()) {
+    // Call the drush updatedb command.
+    provision_backend_invoke(d()->name, 'updatedb');
+  else {
+    if (is_file($dis_auto_up_db_global) || is_file($dis_auto_up_db_site)) {
+      $auto_up_db = "DISABLE";
+    }
+    else {
+      // Call the drush updatedb command.
+      provision_backend_invoke(d()->name, 'updatedb');
+    }
+  }
+
   // Run registry-rebuild with cache-clear, if available.
   if (function_exists('drush_registry_rebuild')) {
     if (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
