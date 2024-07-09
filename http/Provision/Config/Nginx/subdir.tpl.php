@@ -154,7 +154,6 @@ if ( $rce = "AB" ) {
 ### Add recommended HTTP headers
 ###
 add_header X-Content-Type-Options nosniff;
-add_header X-XSS-Protection "1; mode=block";
 
 ###
 ### Helper locations to avoid 404 on legacy images paths
@@ -163,7 +162,6 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
 
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
-  add_header X-XSS-Protection "1; mode=block";
 
   root  <?php print "{$this->root}"; ?>;
 
@@ -292,7 +290,6 @@ location ^~ /<?php print $subdir; ?> {
       add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
       add_header Access-Control-Allow-Origin *;
       add_header X-Content-Type-Options nosniff;
-      add_header X-XSS-Protection "1; mode=block";
       rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
       try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -302,7 +299,6 @@ location ^~ /<?php print $subdir; ?> {
       add_header Cache-Control "private, must-revalidate, proxy-revalidate";
       add_header Access-Control-Allow-Origin *;
       add_header X-Content-Type-Options nosniff;
-      add_header X-XSS-Protection "1; mode=block";
       rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
       try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -319,7 +315,6 @@ location ^~ /<?php print $subdir; ?> {
     expires       30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files     /sites/$subdir_main_site_name/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
   }
 
@@ -332,7 +327,6 @@ location ^~ /<?php print $subdir; ?> {
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
 <?php if ($nginx_config_mode == 'extended'): ?>
     try_files /sites/$subdir_main_site_name/files/$host.robots.txt /sites/$subdir_main_site_name/files/robots.txt /sites/$host/files/robots.txt /robots.txt $uri @cache_<?php print $subdir_loc; ?>;
 <?php else: ?>
@@ -568,7 +562,6 @@ location ^~ /<?php print $subdir; ?> {
 
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
 
     ###
     ### Sub-location to support files/styles with short URIs.
@@ -653,7 +646,6 @@ location ^~ /<?php print $subdir; ?> {
     expires    30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
 <?php if ($nginx_config_mode == 'extended'): ?>
     set $nocache_details "Skip";
 <?php endif; ?>
@@ -669,7 +661,6 @@ location ^~ /<?php print $subdir; ?> {
     expires    30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
 <?php if ($nginx_config_mode == 'extended'): ?>
     set $nocache_details "Skip";
 <?php endif; ?>
@@ -744,7 +735,6 @@ location ^~ /<?php print $subdir; ?> {
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
@@ -763,7 +753,6 @@ location ^~ /<?php print $subdir; ?> {
     add_header Cache-Control "max-age=31449600, no-transform, public";
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -776,7 +765,6 @@ location ^~ /<?php print $subdir; ?> {
     expires     max; #if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /cache/perm/$host${uri}_.css /$1 $uri =404;
   }
 
@@ -788,7 +776,6 @@ location ^~ /<?php print $subdir; ?> {
     expires     max; # if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /cache/perm/$host${uri}_.js /$1 $uri =404;
   }
 
@@ -800,7 +787,6 @@ location ^~ /<?php print $subdir; ?> {
     expires     max; ### if using aggregator
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /cache/normal/$host${uri}_.json /$1 $uri =404;
   }
 
@@ -822,7 +808,6 @@ location ^~ /<?php print $subdir; ?> {
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /$1 $uri =404;
   }
 
@@ -836,7 +821,6 @@ location ^~ /<?php print $subdir; ?> {
     log_not_found off;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /$1 $uri =404;
   }
 
@@ -848,7 +832,6 @@ location ^~ /<?php print $subdir; ?> {
     expires     30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files   /$1 $uri =404;
   }
 
@@ -927,7 +910,6 @@ location ^~ /<?php print $subdir; ?> {
     expires         30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files /$1 $uri =404;
   }
 
@@ -941,7 +923,6 @@ location ^~ /<?php print $subdir; ?> {
     expires         30d;
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     try_files /$1 $uri =404;
   }
 
@@ -962,7 +943,6 @@ location ^~ /<?php print $subdir; ?> {
     add_header Cache-Control "must-revalidate, post-check=0, pre-check=0";
     add_header Access-Control-Allow-Origin *;
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     charset    utf-8;
     types { }
     default_type text/xml;
@@ -1143,7 +1123,6 @@ location ^~ /<?php print $subdir; ?> {
     add_header X-Server-Sub-Name "$subdir_main_site_name";
     add_header X-Response-Status "$status";
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
 <?php endif; ?>
 
     root          <?php print "{$this->root}"; ?>;
@@ -1271,7 +1250,6 @@ location @cache_<?php print $subdir_loc; ?> {
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
   add_header Access-Control-Allow-Origin *;
   add_header X-Content-Type-Options nosniff;
-  add_header X-XSS-Protection "1; mode=block";
   charset    utf-8;
   try_files  /cache/normal/$host${uri}_$args.html @drupal_<?php print $subdir_loc; ?>;
 }

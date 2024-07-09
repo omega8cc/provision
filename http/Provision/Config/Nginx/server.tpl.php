@@ -332,7 +332,6 @@ server {
     expires 99s;
     add_header Cache-Control "public, must-revalidate, proxy-revalidate";
     add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
     root   /var/www/nginx-default;
     index  index.html index.htm;
 <?php else: ?>
