@@ -868,11 +868,7 @@ location ~* \.(?:js|htc)$ {
 ###
 ### Deny listed requests for security reasons.
 ###
-location = /composer.json {
-  access_log off;
-  return 404;
-}
-location = /composer.lock {
+location ~* /.*composer\.(json|lock)$ {
   access_log off;
   return 404;
 }
