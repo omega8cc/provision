@@ -188,6 +188,7 @@ function drush_provision_drupal_post_provision_deploy() {
     // Call the drush updatedb command.
     drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
     provision_backend_invoke(d()->name, 'updatedb');
+  }
   else {
     if (is_file($dis_auto_up_db_global)) {
       drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
