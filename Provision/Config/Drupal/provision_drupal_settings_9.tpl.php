@@ -158,7 +158,7 @@ if (isset($_SERVER['db_name'])) {
 
 <?php if (!$this->site_enabled) : ?>
   /**
-   * Useless currently, because it is ignored in Drupal 8 anyway.
+   * Useless currently, because it is ignored in Drupal 8+ anyway.
    */
   $settings['maintenance_mode'] = 1;
 <?php endif; ?>
