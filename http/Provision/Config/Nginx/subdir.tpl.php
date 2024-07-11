@@ -166,8 +166,6 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscr
 ###
 location ^~ /<?php print $subdir; ?>/sites/default/files {
 
-  add_header Access-Control-Allow-Origin *;
-  add_header X-Content-Type-Options nosniff;
 
   root  <?php print "{$this->root}"; ?>;
 
@@ -294,8 +292,6 @@ location ^~ /<?php print $subdir; ?> {
       add_header X-Header "CDN Far Future Generator 1.0";
       add_header Cache-Control "no-transform, public";
       add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
-      add_header Access-Control-Allow-Origin *;
-      add_header X-Content-Type-Options nosniff;
       rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
       try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -303,8 +299,6 @@ location ^~ /<?php print $subdir; ?> {
       expires epoch;
       add_header X-Header "CDN Far Future Generator 1.1";
       add_header Cache-Control "private, must-revalidate, proxy-revalidate";
-      add_header Access-Control-Allow-Origin *;
-      add_header X-Content-Type-Options nosniff;
       rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
       try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -319,8 +313,6 @@ location ^~ /<?php print $subdir; ?> {
     access_log    off;
     log_not_found off;
     expires       30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files     /sites/$subdir_main_site_name/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
   }
 
@@ -331,8 +323,6 @@ location ^~ /<?php print $subdir; ?> {
   location = /<?php print $subdir; ?>/robots.txt {
     access_log    off;
     log_not_found off;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
 <?php if ($nginx_config_mode == 'extended'): ?>
     try_files /sites/$subdir_main_site_name/files/$host.robots.txt /sites/$subdir_main_site_name/files/robots.txt /sites/$host/files/robots.txt /robots.txt $uri @cache_<?php print $subdir_loc; ?>;
 <?php else: ?>
@@ -566,8 +556,6 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ^~ /<?php print $subdir; ?>/files/ {
 
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
 
     ###
     ### Sub-location to support files/styles with short URIs.
@@ -650,8 +638,6 @@ location ^~ /<?php print $subdir; ?> {
     access_log off;
     log_not_found off;
     expires    30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
 <?php if ($nginx_config_mode == 'extended'): ?>
     set $nocache_details "Skip";
 <?php endif; ?>
@@ -665,8 +651,6 @@ location ^~ /<?php print $subdir; ?> {
     access_log off;
     log_not_found off;
     expires    30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
 <?php if ($nginx_config_mode == 'extended'): ?>
     set $nocache_details "Skip";
 <?php endif; ?>
@@ -739,8 +723,6 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/(.*/wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css)) {
     access_log off;
     log_not_found off;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
@@ -757,8 +739,6 @@ location ^~ /<?php print $subdir; ?> {
 <?php endif; ?>
     add_header X-Header "AdvAgg Generator 2.0";
     add_header Cache-Control "max-age=31449600, no-transform, public";
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -769,8 +749,6 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/(.*\.css)$ {
     access_log  off;
     expires     max; #if using aggregator
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /cache/perm/$host${uri}_.css /$1 $uri =404;
   }
 
@@ -780,8 +758,6 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/(.*\.(?:js|htc))$ {
     access_log  off;
     expires     max; # if using aggregator
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /cache/perm/$host${uri}_.js /$1 $uri =404;
   }
 
@@ -791,8 +767,6 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/(.*\.json)$ {
     access_log  off;
     expires     max; ### if using aggregator
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /cache/normal/$host${uri}_.json /$1 $uri =404;
   }
 
@@ -812,8 +786,6 @@ location ^~ /<?php print $subdir; ?> {
     expires       30d;
     access_log    off;
     log_not_found off;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /$1 $uri =404;
   }
 
@@ -825,8 +797,6 @@ location ^~ /<?php print $subdir; ?> {
     expires     30d;
     access_log    off;
     log_not_found off;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /$1 $uri =404;
   }
 
@@ -836,8 +806,6 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/((?:cross-?domain)\.xml)$ {
     access_log  off;
     expires     30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files   /$1 $uri =404;
   }
 
@@ -914,8 +882,6 @@ location ^~ /<?php print $subdir; ?> {
     }
     access_log      off;
     expires         30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files /$1 $uri =404;
   }
 
@@ -927,8 +893,6 @@ location ^~ /<?php print $subdir; ?> {
     rewrite     ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
     access_log      off;
     expires         30d;
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     try_files /$1 $uri =404;
   }
 
@@ -947,8 +911,6 @@ location ^~ /<?php print $subdir; ?> {
     add_header X-Header "Boost Citrus 1.0";
     add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
     add_header Cache-Control "must-revalidate, post-check=0, pre-check=0";
-    add_header Access-Control-Allow-Origin *;
-    add_header X-Content-Type-Options nosniff;
     charset    utf-8;
     types { }
     default_type text/xml;
@@ -1128,7 +1090,6 @@ location ^~ /<?php print $subdir; ?> {
     add_header X-This-Proto "$http_x_forwarded_proto";
     add_header X-Server-Sub-Name "$subdir_main_site_name";
     add_header X-Response-Status "$status";
-    add_header X-Content-Type-Options nosniff;
 <?php endif; ?>
 
     root          <?php print "{$this->root}"; ?>;
@@ -1254,8 +1215,6 @@ location @cache_<?php print $subdir_loc; ?> {
   add_header X-Header "Boost Citrus 1.0";
   add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
-  add_header Access-Control-Allow-Origin *;
-  add_header X-Content-Type-Options nosniff;
   charset    utf-8;
   try_files  /cache/normal/$host${uri}_$args.html @drupal_<?php print $subdir_loc; ?>;
 }

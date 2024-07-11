@@ -331,7 +331,6 @@ server {
 <?php if ($satellite_mode == 'boa'): ?>
     expires 99s;
     add_header Cache-Control "public, must-revalidate, proxy-revalidate";
-    add_header X-Content-Type-Options nosniff;
     root   /var/www/nginx-default;
     index  index.html index.htm;
 <?php else: ?>
