@@ -172,11 +172,11 @@ add_header Referrer-Policy "no-referrer-when-downgrade";
 add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 <?php endif; ?>
 
+<?php if ($nginx_has_http3): ?>
 ###
 ### Add recommended HTTP/3 headers
 ### https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Alt-Svc
 ###
-<?php if ($nginx_has_http3): ?>
 #add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
 
