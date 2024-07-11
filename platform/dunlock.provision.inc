@@ -148,6 +148,33 @@ function drush_provision_dunlock() {
           }
         }
       }
+
+      if ($this_user == 'aegir' ) {
+        $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
+      }
+      else {
+        $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+      }
+      $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
+      $webRoot = d()->root;
+      $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
+
+      if (provision_file()->exists($patchTpl)->status()) {
+        if (!provision_file()->exists($patchFile)->status()) {
+          $success = drush_shell_exec($command);
+          $result = drush_shell_exec_output();
+          foreach ($result as $index => $line) {
+            if (!$success) { // Log the entire error as a warning.
+              $line_status = 'warning';
+            }
+            else { // Only log the last line as success.
+              $line_status = $index+1 == count($result) ? 'success' : 'notice';
+            }
+            drush_log($line, $line_status);
+          }
+          provision_file()->copy($patchTpl, $patchFile);
+        }
+      }
     }
 
     // Delete drush-lock flag file.
