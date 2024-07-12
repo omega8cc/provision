@@ -149,6 +149,14 @@ function drush_provision_dunlock() {
         }
       }
 
+      $is_patched = "YES";
+      $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+      $search_string = ': void';
+      $file_content = file_get_contents($file_path);
+      if (strpos($file_content, $search_string) !== false) {
+        $is_patched = "NO";
+      }
+
       if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
@@ -159,20 +167,20 @@ function drush_provision_dunlock() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status()) {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'YES') {
         if (!provision_file()->exists($patchFile)->status()) {
-          $success = drush_shell_exec($command);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            if (!$success) { // Log the entire error as a warning.
-              $line_status = 'warning';
-            }
-            else { // Only log the last line as success.
-              $line_status = $index+1 == count($result) ? 'success' : 'notice';
-            }
-            drush_log($line, $line_status);
-          }
           provision_file()->copy($patchTpl, $patchFile);
+        }
+        $success = drush_shell_exec($command);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+            $line_status = 'warning';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
         }
       }
     }
