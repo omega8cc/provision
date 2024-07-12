@@ -180,10 +180,11 @@ if ($nginx_has_gzip) {
   fastcgi_intercept_errors        on;
 <?php if ($satellite_mode == 'boa'): ?>
   server_tokens                  off;
-  fastcgi_hide_header         'Link';
-  fastcgi_hide_header  'X-Generator';
-  fastcgi_hide_header 'X-Powered-By';
 <?php endif; ?>
+  fastcgi_hide_header           Link;
+  fastcgi_hide_header    X-Generator;
+  fastcgi_hide_header   X-Powered-By;
+  fastcgi_hide_header  Cache-Control;
 
  ## SSL performance
   ssl_session_cache   shared:SSL:10m;
