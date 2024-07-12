@@ -1070,23 +1070,10 @@ location ^~ /<?php print $subdir; ?> {
     }
 
     ###
-    ### Ensure security and privacy headers are added only if not set by Drupal.
+    ### Basic security/privacy headers.
     ###
-    if ($sent_http_strict_transport_security = '') {
-      add_header Strict-Transport-Security "max-age=86400";    # 1 day for now
-    }
-    if ($sent_http_x_content_type_options = '') {
-      add_header X-Content-Type-Options "nosniff";
-    }
-    if ($sent_http_content_security_policy = '') {
-      add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
-    }
-    if ($sent_http_referrer_policy = '') {
-      add_header Referrer-Policy "no-referrer-when-downgrade";
-    }
-    if ($sent_http_permissions_policy = '') {
-      add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
-    }
+    add_header Referrer-Policy "no-referrer-when-downgrade";
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 
     ###
     ### Add headers for debugging
@@ -1094,9 +1081,11 @@ location ^~ /<?php print $subdir; ?> {
     add_header X-Debug-NoCache-Switch "$nocache";
     add_header X-Debug-NoCache-Auth "$http_authorization";
     add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
+
     add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
 
     try_files     /index.php =404; ### check for existence of php file first
+
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
