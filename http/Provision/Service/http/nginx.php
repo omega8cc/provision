@@ -32,7 +32,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->setProperty('provision_db_cloaking', FALSE);
     $this->server->setProperty('phpfpm_mode', 'port');
     $this->server->setProperty('subdirs_support', FALSE);
-    $this->server->setProperty('satellite_mode', 'vanilla');
+    $this->server->setProperty('satellite_mode', 'boa');
     if (provision_hosting_feature_enabled('subdirs')) {
       $this->server->subdirs_support = TRUE;
       $this->configs['site'][] = 'Provision_Config_Nginx_Subdir';

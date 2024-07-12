@@ -95,11 +95,8 @@ else {
 if ($nginx_has_gzip) {
   print "  gzip_static       on;\n";
 }
-
 ?>
 
-<?php if ($nginx_config_mode == 'extended'): ?>
-<?php if ($satellite_mode == 'boa'): ?>
  ## FastCGI params
   fastcgi_param  SCRIPT_FILENAME     $document_root$fastcgi_script_name;
   fastcgi_param  QUERY_STRING        $query_string;
@@ -126,29 +123,22 @@ if ($nginx_has_gzip) {
   fastcgi_index  index.php;
   # Block https://httpoxy.org/ attacks.
   fastcgi_param  HTTP_PROXY          "";
-<?php endif; ?>
 
  ## Size Limits
   client_body_buffer_size        64k;
   client_header_buffer_size      32k;
-<?php if ($satellite_mode == 'boa'): ?>
   client_max_body_size          395m;
-<?php endif; ?>
   connection_pool_size           256;
   fastcgi_buffer_size           512k;
   fastcgi_buffers             512 8k;
   fastcgi_temp_file_write_size  512k;
   large_client_header_buffers 32 64k;
-<?php if ($satellite_mode == 'boa'): ?>
   map_hash_bucket_size           192;
-<?php endif; ?>
   request_pool_size               4k;
   server_names_hash_bucket_size  512;
-<?php if ($satellite_mode == 'boa'): ?>
   server_names_hash_max_size    8192;
   types_hash_bucket_size         512;
   variables_hash_max_size       1024;
-<?php endif; ?>
 
  ## Timeouts
   client_body_timeout            180;
@@ -178,9 +168,7 @@ if ($nginx_has_gzip) {
   recursive_error_pages           on;
   reset_timedout_connection       on;
   fastcgi_intercept_errors        on;
-<?php if ($satellite_mode == 'boa'): ?>
   server_tokens                  off;
-<?php endif; ?>
   fastcgi_hide_header           Link;
   fastcgi_hide_header    X-Generator;
   fastcgi_hide_header   X-Powered-By;
@@ -189,7 +177,6 @@ if ($nginx_has_gzip) {
  ## SSL performance
   ssl_session_cache   shared:SSL:10m;
 
-<?php if ($satellite_mode == 'boa'): ?>
  ## SSL protocols, ciphers and settings
   ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
   ssl_ciphers ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-CCM:DHE-RSA-AES256-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-CCM8:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:!ECDHE-ECDSA-AES256-SHA384:!ECDHE-ECDSA-AES128-SHA256;
@@ -197,7 +184,6 @@ if ($nginx_has_gzip) {
 
   ## GeoIP support
   geoip_country /usr/share/GeoIP/GeoIP.dat;
-<?php endif; ?>
 
  ## Compression
   gzip_buffers      16 8k;
@@ -225,7 +211,6 @@ if ($nginx_has_gzip) {
     text/xml;
   gzip_vary         on;
   gzip_proxied      any;
-<?php endif; ?>
 
  ## Default index files
   index         index.php index.html;
@@ -240,10 +225,9 @@ if ($nginx_has_gzip) {
   access_log             /var/log/nginx/access.log main;
 
 <?php print $extra_config; ?>
-<?php if ($nginx_config_mode == 'extended'): ?>
-<?php if ($satellite_mode == 'boa'): ?>
+
   error_log              /var/log/nginx/error.log crit;
-<?php endif; ?>
+
 #######################################################
 ###  nginx default maps
 #######################################################
@@ -318,7 +302,6 @@ map $args $is_denied {
   default  '';
   ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\.\/ is_denied;
 }
-<?php endif; ?>
 
 #######################################################
 ###  nginx default server
@@ -329,18 +312,13 @@ server {
   #listen       [::]:<?php print $http_port; ?>;
   server_name  _;
   location / {
-<?php if ($satellite_mode == 'boa'): ?>
     expires 99s;
     add_header Cache-Control "public, must-revalidate, proxy-revalidate";
     root   /var/www/nginx-default;
     index  index.html index.htm;
-<?php else: ?>
-    return 404;
-<?php endif; ?>
   }
 }
 
-<?php if ($satellite_mode == 'boa'): ?>
 server {
   listen       *:<?php print $http_port; ?>;
   #listen       [::]:<?php print $http_port; ?>;
@@ -352,7 +330,6 @@ server {
     deny all;
   }
 }
-<?php endif; ?>
 
 #######################################################
 ###  nginx virtual domains

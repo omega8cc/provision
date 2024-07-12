@@ -47,22 +47,17 @@ if ($nginx_has_http3) {
   $ssl_args = "ssl";
 }
 
-if ($satellite_mode == 'boa') {
-  $ssl_listen_ipv4 = "*";
-  $ssl_listen_ipv6 = "[::]";
-  $main_name = $this->uri;
-  if ($this->redirection) {
-    $main_name = $this->redirection;
-  }
-  $legacy_tls_ctrl = $aegir_root . "/static/control/tls-legacy-enable-" . $main_name . ".info";
-  $legacy_tls_enable = FALSE;
-  if (provision_file()->exists($legacy_tls_ctrl)->status()) {
-    $legacy_tls_enable = TRUE;
-  }
+$ssl_listen_ipv4 = "*";
+$ssl_listen_ipv6 = "[::]";
+$main_name = $this->uri;
+if ($this->redirection) {
+  $main_name = $this->redirection;
 }
-else {
-  $ssl_listen_ipv4 = $ip_address;
-  $ssl_listen_ipv6 = "[::]";
+
+$legacy_tls_ctrl = $aegir_root . "/static/control/tls-legacy-enable-" . $main_name . ".info";
+$legacy_tls_enable = FALSE;
+if (provision_file()->exists($legacy_tls_ctrl)->status()) {
+  $legacy_tls_enable = TRUE;
 }
 ?>
 
@@ -91,7 +86,6 @@ server {
     print "  server_name  {$alias_url};\n";
   }
 ?>
-<?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
   resolver 1.1.1.1 1.0.0.1 valid=300s;
@@ -100,14 +94,12 @@ server {
 <?php if ($legacy_tls_enable): ?>
   ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
 <?php endif; ?>
-<?php endif; ?>
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
   ssl_certificate            <?php print $ssl_chain_cert; ?>;
 <?php else: ?>
   ssl_certificate            <?php print $ssl_cert; ?>;
 <?php endif; ?>
-<?php if ($satellite_mode == 'boa'): ?>
 
   ###
   ### Allow access to letsencrypt.org ACME challenges directory.
@@ -118,7 +110,6 @@ server {
     try_files $uri 404;
   }
 
-<?php endif; ?>
   return 301 $scheme://<?php print $this->redirection; ?>$request_uri;
 }
 <?php endif; ?>
@@ -199,7 +190,6 @@ server {
       }
     } ?>;
   root          <?php print "{$this->root}"; ?>;
-<?php if ($satellite_mode == 'boa'): ?>
   ssl_stapling               on;
   ssl_stapling_verify        on;
   resolver 1.1.1.1 1.0.0.1 valid=300s;
@@ -207,7 +197,6 @@ server {
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
   ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
-<?php endif; ?>
 <?php endif; ?>
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>

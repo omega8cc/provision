@@ -45,7 +45,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->setProperty('nginx_has_gzip', FALSE);
     $this->server->setProperty('provision_db_cloaking', FALSE);
     $this->server->setProperty('phpfpm_mode', 'port');
-    $this->server->setProperty('satellite_mode', 'vanilla');
+    $this->server->setProperty('satellite_mode', 'boa');
   }
 
   function save_server() {

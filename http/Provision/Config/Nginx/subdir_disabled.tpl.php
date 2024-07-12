@@ -6,11 +6,7 @@ if (!$satellite_mode && $server->satellite_mode) {
 ?>
 
 location ^~ /<?php print $subdir; ?>/ {
-<?php if ($satellite_mode == 'boa'): ?>
   root   /var/www/nginx-default;
   index  index.html index.htm;
   ### Do not reveal Aegir front-end URL here.
-<?php else: ?>
-  return 302 <?php print $this->platform->server->web_disable_url . '/' . $this->uri ?>;
-<?php endif; ?>
 }

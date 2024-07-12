@@ -30,34 +30,23 @@ if ($nginx_has_http3) {
   $ssl_args = "ssl";
 }
 
-if ($satellite_mode == 'boa') {
-  $ssl_listen_ipv4 = "*";
-  $ssl_listen_ipv6 = "[::]";
-}
+$ssl_listen_ipv4 = "*";
+$ssl_listen_ipv6 = "[::]";
 ?>
 
 server {
-<?php if ($satellite_mode == 'boa'): ?>
+
   listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
+
 <?php if ($nginx_has_http3): ?>
   #listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
-<?php endif; ?>
-<?php else: ?>
-<?php foreach ($server->ip_addresses as $ip) :?>
-  listen       <?php print "{$ip}:{$http_ssl_port} {$ssl_args}"; ?>;
-<?php if ($nginx_has_http3): ?>
-  #listen       <?php print "{$ip}:{$http_ssl_port} quic"; ?>;
-<?php endif; ?>
-<?php endforeach; ?>
-  #listen       <?php print "[::]:{$http_ssl_port} {$ssl_args}"; ?>;
-<?php endif; ?>
-<?php if ($nginx_has_http3): ?>
-  http2                      on;
   #http3                      on;
   #http3_hq                   on;
 <?php endif; ?>
+
   server_name  _;
+  http2                      on;
   ssl_stapling               on;
   ssl_stapling_verify        on;
   resolver 1.1.1.1 1.0.0.1 valid=300s;
@@ -66,11 +55,7 @@ server {
   ssl_certificate      /etc/ssl/private/nginx-wild-ssl.crt;
   ssl_certificate_key  /etc/ssl/private/nginx-wild-ssl.key;
   location / {
-<?php if ($satellite_mode == 'boa'): ?>
     root                 /var/www/nginx-default;
     index                index.html index.htm;
-<?php else: ?>
-    return 404;
-<?php endif; ?>
   }
 }
