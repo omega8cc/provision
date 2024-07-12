@@ -1309,7 +1309,9 @@ location @modern {
 ### Send all non-static requests to php-fpm, restricted to known php file.
 ###
 location = /index.php {
+
   limit_conn limreq 88;
+
   ###
   ### Detect supported no-cache exceptions
   ###
@@ -1328,6 +1330,7 @@ location = /index.php {
   if ( $cache_uid ) {
     set $nocache_details "DrupalCookie";
   }
+
   ###
   ### Use Nginx cache for all visitors by default.
   ###
@@ -1335,24 +1338,7 @@ location = /index.php {
   if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
     set $nocache "NoCache";
   }
-  ###
-  ### Ensure security and privacy headers are added only if not set by Drupal.
-  ###
-  if ($sent_http_strict_transport_security = '') {
-    add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
-  }
-  if ($sent_http_x_content_type_options = '') {
-    add_header X-Content-Type-Options "nosniff";
-  }
-  if ($sent_http_content_security_policy = '') {
-    add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
-  }
-  if ($sent_http_referrer_policy = '') {
-    add_header Referrer-Policy "no-referrer-when-downgrade";
-  }
-  if ($sent_http_permissions_policy = '') {
-    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
-  }
+
   ###
   ### Add headers for debugging
   ###
@@ -1373,11 +1359,37 @@ location = /index.php {
   add_header X-NoCache "$nocache_details";
   add_header X-This-Proto "$http_x_forwarded_proto";
   add_header X-Server-Name "$main_site_name";
+
 <?php if ($nginx_has_http3): ?>
   #add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
+
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
+
+  ###
+  ### Ensure security and privacy headers are added only if not set by Drupal.
+  ###
+  if ( !$sent_http_strict_transport_security ) {
+    add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
+  }
+  if ( !$sent_http_x_content_type_options ) {
+    add_header X-Content-Type-Options "nosniff";
+  }
+  if ( !$sent_http_content_security_policy ) {
+    add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
+  }
+  if ( !$sent_http_referrer_policy ) {
+    add_header Referrer-Policy "no-referrer-when-downgrade";
+  }
+  if ( !$sent_http_permissions_policy ) {
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
+  }
+
   try_files     $uri =404; ### check for existence of php file first
+
+  ###
+  ### FastCGI
+  ###
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -1385,9 +1397,6 @@ location = /index.php {
 <?php else: ?>
   fastcgi_pass  unix:<?php print $phpfpm_socket_path; ?>;
 <?php endif; ?>
-  ###
-  ### FastCGI
-  ###
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD; ### Nginx default, but added for clarity
   fastcgi_cache_min_uses 1;
