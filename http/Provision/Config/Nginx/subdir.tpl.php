@@ -202,6 +202,11 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
+  ### Add recommended HTTP header
+  ###
+  add_header X-Content-Type-Options "nosniff";
+
+  ###
   ### Include high load protection config if exists.
   ###
   include /data/conf/nginx_high_load.c*;

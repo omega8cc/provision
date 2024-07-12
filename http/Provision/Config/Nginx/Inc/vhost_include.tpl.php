@@ -153,6 +153,11 @@ if ($is_denied) {
   return 403;
 }
 
+###
+### Add recommended HTTP header
+###
+add_header X-Content-Type-Options "nosniff";
+
 <?php if ($nginx_has_http3): ?>
 ###
 ### Add recommended HTTP/3 headers
