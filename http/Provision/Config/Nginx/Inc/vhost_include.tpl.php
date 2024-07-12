@@ -160,16 +160,6 @@ if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
 if ($is_denied) {
   return 403;
 }
-
-###
-### Add recommended security and privacy HTTP headers
-### Customize/override per site with seckit module
-###
-add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
-add_header X-Content-Type-Options "nosniff";
-add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
-add_header Referrer-Policy "no-referrer-when-downgrade";
-add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 <?php endif; ?>
 
 <?php if ($nginx_has_http3): ?>
@@ -1237,15 +1227,20 @@ location ~ ^/(?<esi>esi/.*)"$ {
   ssi on;
   ssi_silent_errors on;
   internal;
+<?php if ($satellite_mode == 'boa'): ?>
   limit_conn limreq 888;
+  add_header X-Device "$device";
+  add_header X-GeoIP-Country-Code "$geoip_country_code";
+  add_header X-GeoIP-Country-Name "$geoip_country_name";
+<?php endif; ?>
+<?php if ($nginx_config_mode == 'extended'): ?>
   add_header X-Device "$device";
   add_header X-Speed-Micro-Cache "$upstream_cache_status";
   add_header X-Speed-Micro-Cache-Expire "5s";
   add_header X-NoCache "$nocache_details";
-  add_header X-GeoIP-Country-Code "$geoip_country_code";
-  add_header X-GeoIP-Country-Name "$geoip_country_name";
   add_header X-This-Proto "$http_x_forwarded_proto";
   add_header X-Server-Name "$main_site_name";
+<?php endif; ?>
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
   ###
   ### Set correct, local $uri.
@@ -1266,6 +1261,26 @@ location ~ ^/(?<esi>esi/.*)"$ {
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache "NoCache";
   }
+<?php if ($nginx_config_mode == 'extended'): ?>
+  ###
+  ### Ensure security and privacy headers are added only if not set by Drupal.
+  ###
+  if ($sent_http_strict_transport_security = '') {
+    add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
+  }
+  if ($sent_http_x_content_type_options = '') {
+    add_header X-Content-Type-Options "nosniff";
+  }
+  if ($sent_http_content_security_policy = '') {
+    add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
+  }
+  if ($sent_http_referrer_policy = '') {
+    add_header Referrer-Policy "no-referrer-when-downgrade";
+  }
+  if ($sent_http_permissions_policy = '') {
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
+  }
+<?php endif; ?>
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD;
   fastcgi_cache_min_uses 1;
@@ -1470,9 +1485,35 @@ location = /index.php {
   if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
     set $nocache "NoCache";
   }
+<?php if ($nginx_config_mode == 'extended'): ?>
+  ###
+  ### Ensure security and privacy headers are added only if not set by Drupal.
+  ###
+  if ($sent_http_strict_transport_security = '') {
+    add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
+  }
+  if ($sent_http_x_content_type_options = '') {
+    add_header X-Content-Type-Options "nosniff";
+  }
+  if ($sent_http_content_security_policy = '') {
+    add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
+  }
+  if ($sent_http_referrer_policy = '') {
+    add_header Referrer-Policy "no-referrer-when-downgrade";
+  }
+  if ($sent_http_permissions_policy = '') {
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
+  }
+  ###
+  ### Add headers for debugging
+  ###
   add_header X-Debug-NoCache-Switch "$nocache";
   add_header X-Debug-NoCache-Auth "$http_authorization";
   add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
+<?php endif; ?>
+  ###
+  ### FastCGI
+  ###
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD; ### Nginx default, but added for clarity
   fastcgi_cache_min_uses 1;

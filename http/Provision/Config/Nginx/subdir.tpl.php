@@ -150,16 +150,6 @@ if ( $rce = "AB" ) {
 }
 
 <?php if ($nginx_config_mode == 'extended'): ?>
-###
-### Add recommended security and privacy HTTP headers
-### Customize/override per site with seckit module
-###
-add_header Strict-Transport-Security "max-age=86400";  # 1 day for now
-add_header X-Content-Type-Options "nosniff";
-add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
-add_header Referrer-Policy "no-referrer-when-downgrade";
-add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
-
 
 ###
 ### Helper locations to avoid 404 on legacy images paths
@@ -1156,6 +1146,32 @@ location ^~ /<?php print $subdir; ?> {
     if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
       set $nocache "NoCache";
     }
+<?php if ($nginx_config_mode == 'extended'): ?>
+    ###
+    ### Ensure security and privacy headers are added only if not set by Drupal.
+    ###
+    if ($sent_http_strict_transport_security = '') {
+      add_header Strict-Transport-Security "max-age=86400";    # 1 day for now
+    }
+    if ($sent_http_x_content_type_options = '') {
+      add_header X-Content-Type-Options "nosniff";
+    }
+    if ($sent_http_content_security_policy = '') {
+      add_header Content-Security-Policy "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' https:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
+    }
+    if ($sent_http_referrer_policy = '') {
+      add_header Referrer-Policy "no-referrer-when-downgrade";
+    }
+    if ($sent_http_permissions_policy = '') {
+      add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
+    }
+    ###
+    ### Add headers for debugging
+    ###
+    add_header X-Debug-NoCache-Switch "$nocache";
+    add_header X-Debug-NoCache-Auth "$http_authorization";
+    add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
+<?php endif; ?>
     fastcgi_cache speed;
     fastcgi_cache_methods GET HEAD; ### Nginx default, but added for clarity
     fastcgi_cache_min_uses 1;
