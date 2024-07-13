@@ -279,7 +279,7 @@ function drush_provision_drupal_post_provision_deploy() {
           runDrush($appRoot, $drushCommand, 'default');
         }
       }
-      else
+      else {
         // Call the drush updatedb command with Aegir own Drush 8
         drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
         drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
