@@ -170,6 +170,70 @@ function drush_provision_drupal_provision_deploy() {
 }
 
 /**
+ * Custom helper function findAppRoot
+ */
+function findAppRoot($startDir) {
+  $dir = realpath($startDir);
+  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
+    $dir = dirname($dir);
+  }
+  return is_dir($dir . '/vendor') ? $dir : null;
+}
+
+/**
+ * Custom helper function runDrush with respawn support
+ */
+function runDrush($appRoot, $command, $cacheClear = 'default') {
+  // Define local drush path
+  $drushPath = 'vendor/bin/drush';
+
+  // Check if the local Drush exists and is executable
+  $drushAbsolutePath = $appRoot . '/' . $drushPath;
+  if (!is_executable($drushAbsolutePath)) {
+    drush_log(dt('Drush executable not found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'warning');
+  }
+
+  // Normalize command if it is updb to updatedb
+  if ($command[0] === 'updb') {
+    $command[0] = 'updatedb';
+  }
+
+  // Add the --yes and --cache-clear options to bypass confirmation prompts and handle cache clearing
+  array_push($command, '--yes', "--cache-clear=$cacheClear");
+
+  // Prepare the command to run Drush
+  $cmd = escapeshellcmd($drushPath) . ' ' . implode(' ', array_map('escapeshellarg', $command));
+
+  // Change directory to app root
+  chdir($appRoot);
+
+  // Run the Drush command and handle respawning
+  $descriptorspec = array(
+    0 => STDIN,
+    1 => STDOUT,
+    2 => STDERR,
+  );
+
+  $process = proc_open($cmd, $descriptorspec, $pipes, $appRoot);
+
+  if (is_resource($process)) {
+    // Wait for the process to complete
+    $exitCode = proc_close($process);
+
+    // Check if Drush command was successful
+    if ($exitCode === 0) {
+      drush_log(dt('runDrush: command completed successfully @drush_cmnd', array('@drush_cmnd' => $command)), 'info');
+    }
+    else {
+      drush_log(dt('runDrush: command failed with exit code @exitCode', array('@exitCode' => $exitCode)), 'warning');
+    }
+  }
+  else {
+    drush_log(dt('runDrush: Failed to run command @drush_cmnd', array('@drush_cmnd' => $command)), 'warning');
+  }
+}
+
+/**
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
@@ -197,10 +261,30 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_site)), 'info');
     }
     else {
-      // Call the drush updatedb command.
-      drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
-      drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
-      provision_backend_invoke(d()->name, 'updatedb');
+      if (drush_drupal_major_version() >= 10) {
+        // Call the drush updatedb command with site-local Drush
+
+        // Define the initial path and Drush command
+        $initialPath = d()->root;
+        $drushCommand = ['updb'];
+
+        // Find the app root directory
+        $appRoot = findAppRoot($initialPath);
+
+        if ($appRoot === null) {
+          drush_log(dt('runDrush: Could not find the vendor directory in @appRoot', array('@appRoot' => $appRoot)), 'warning');
+        }
+        else {
+          // Run the Drush command with the --cache-clear option set to 'default'
+          runDrush($appRoot, $drushCommand, 'default');
+        }
+      }
+      else
+        // Call the drush updatedb command with Aegir own Drush 8
+        drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
+        drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+        provision_backend_invoke(d()->name, 'updatedb');
+      }
     }
   }
 
