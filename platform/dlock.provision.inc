@@ -109,6 +109,14 @@ function drush_provision_dlock() {
         }
       }
 
+      $is_patched = "YES";
+      $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+      $search_string = ': void';
+      $file_content = file_get_contents($file_path);
+      if (strpos($file_content, $search_string) !== false) {
+        $is_patched = "NO";
+      }
+
       if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
@@ -119,7 +127,7 @@ function drush_provision_dlock() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status()) {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
         if (!provision_file()->exists($patchFile)->status()) {
           $success = drush_shell_exec($command);
           $result = drush_shell_exec_output();
