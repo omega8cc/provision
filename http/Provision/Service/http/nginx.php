@@ -27,11 +27,12 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->setProperty('nginx_is_modern', FALSE);
     $this->server->setProperty('nginx_has_etag', FALSE);
     $this->server->setProperty('nginx_has_http2', FALSE);
+    $this->server->setProperty('nginx_has_http3', FALSE);
     $this->server->setProperty('nginx_has_gzip', FALSE);
     $this->server->setProperty('provision_db_cloaking', FALSE);
     $this->server->setProperty('phpfpm_mode', 'port');
     $this->server->setProperty('subdirs_support', FALSE);
-    $this->server->setProperty('satellite_mode', 'vanilla');
+    $this->server->setProperty('satellite_mode', 'boa');
     if (provision_hosting_feature_enabled('subdirs')) {
       $this->server->subdirs_support = TRUE;
       $this->configs['site'][] = 'Provision_Config_Nginx_Subdir';
@@ -63,6 +64,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->nginx_is_modern = preg_match("/nginx\/1\.((1\.(8|9|(1[0-9]+)))|((2|3|4|5|6|7|8|9|[1-9][0-9]+)\.))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_etag = preg_match("/nginx\/1\.([12][0-9]|[3]\.([12][0-9]|[3-9]))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
+    $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
@@ -118,6 +120,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->nginx_is_modern = preg_match("/nginx\/1\.((1\.(8|9|(1[0-9]+)))|((2|3|4|5|6|7|8|9|[1-9][0-9]+)\.))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_etag = preg_match("/nginx\/1\.([12][0-9]|[3]\.([12][0-9]|[3-9]))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
+    $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
@@ -209,7 +212,9 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     }
 
     // Return the socket path based on the PHP version.
-    if (strtok(phpversion(), '.') == 7) {
+    $major_php = strtok(phpversion(), '.');
+
+    if ($major_php == 7 || $major_php == 8) {
       return static::getPhp7FpmSocketPath();
     }
     else {

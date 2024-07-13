@@ -88,7 +88,7 @@ function install_mail($key, &$message, $params) {
 
 
 function install_main() {
-  global $profile, $install_locale, $conf, $url, $base_url;
+  global $profile, $install_locale, $config, $url, $base_url;
 
   $client_email = drush_get_option('client_email');
 
@@ -102,15 +102,16 @@ function install_main() {
   $sql = drush_sql_get_class();
   $db_spec = $sql->db_spec();
 
-  $db_spec['db_prefix'] = $GLOBALS['db_prefix'];
+  $db_spec['db_prefix'] = isset($GLOBALS['db_prefix'])? $GLOBALS['db_prefix']: '';
 
   if ($db_spec['driver'] == 'mysqli') {
     $db_spec['driver'] = 'mysql';
   }
 
-
-  unset($config['site_name']);
-  unset($config['site_mail']);
+  if (isset($config)) {
+    unset($config['site_name']);
+    unset($config['site_mail']);
+  }
   unset($GLOBALS['db_url']);
 
   $account_pass = provision_password();
@@ -155,12 +156,6 @@ function install_main() {
   }
   _provision_drupal_create_directories();
 
-  // Set files paths
-  \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$url/private/files")
-    ->set('path.temporary', "sites/$url/private/temp")
-    ->save();
-
   // Add platform root auto-discovery to avoid confusing
   // Composer based D10 codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
@@ -171,9 +166,7 @@ function install_main() {
     provision_file()->create_dir($redisCtrl, dt("Redis tmp off ctrl dir created"), 0711);
   }
 
-/*
   $account = \Drupal\user\Entity\User::load(1);
- */
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
@@ -181,7 +174,6 @@ function install_main() {
 
   // Store the one time login link in an option so the front end can direct the
   // user to their new site.
-/*
   $onetime = provision_generate_login_reset();
   drush_set_option('login_link', $onetime);
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'message');
@@ -189,7 +181,6 @@ function install_main() {
   if ($client_email) {
     install_send_welcome_mail($url, $account, $install_locale, $client_email, $onetime);
   }
- */
 }
 install_main();
 

@@ -27,12 +27,6 @@ if ($url_changed) {
   _provision_platform_drupal_deploy_9_replace($old_url, $new_url);
   _provision_platform_drupal_deploy_9_replace('default', $new_url);
 
-  // Update files paths
-  \Drupal::configFactory()->getEditable('system.file')
-    ->set('path.private', "sites/$new_url/private/files")
-    ->set('path.temporary', "sites/$new_url/private/temp")
-    ->save();
-
   // Detect and update default site name, if needed
   $old_name = \Drupal::config('system.site')->get('name');
   if ($old_name == $old_url) {
