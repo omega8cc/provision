@@ -92,7 +92,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     provision_save_site_data();
 
     // Load the newly created information, including re-loading the new db creds.
-    provision_lock_some_vnd();
+    provision_lock_drush_local_vnd();
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     _provision_drupal_create_settings_file();
     provision_drupal_push_site($override_slave_authority = TRUE);

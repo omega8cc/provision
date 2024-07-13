@@ -384,13 +384,13 @@ function provision_unlock_some_vnd() {
  * Lock site-local drush and symfony/console etc
  * to avoid conflicts with Aegir own drush version.
  */
-function provision_lock_some_vnd() {
+function provision_lock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
      !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
-    drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+    drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
     // Fix ownership first
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);

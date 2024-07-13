@@ -89,7 +89,7 @@ function drush_provision_drupal_pre_provision_install_rollback() {
  */
 function drush_provision_drupal_provision_install() {
  // Requires at least the database settings to complete.
-  provision_lock_some_vnd();
+  provision_lock_drush_local_vnd();
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);

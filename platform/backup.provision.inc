@@ -17,7 +17,7 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
-  provision_lock_some_vnd();
+  provision_lock_drush_local_vnd();
 
   if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
     if (drush_get_option('force', false)) {

@@ -12,7 +12,7 @@
  */
 function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
-    provision_lock_some_vnd();
+    provision_lock_drush_local_vnd();
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
 
@@ -493,6 +493,6 @@ function drush_provision_drupal_post_provision_verify() {
     }
   }
   if (d()->type === 'platform') {
-    provision_lock_some_vnd();
+    provision_lock_drush_local_vnd();
   }
 }
