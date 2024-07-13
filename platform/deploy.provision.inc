@@ -209,27 +209,74 @@ function runDrush($appRoot, $command, $cacheClear = 'default') {
 
   // Run the Drush command and handle respawning
   $descriptorspec = array(
-    0 => STDIN,
-    1 => STDOUT,
-    2 => STDERR,
+    0 => array('pipe', 'r'),  // stdin
+    1 => array('pipe', 'w'),  // stdout
+    2 => array('pipe', 'w')   // stderr
   );
 
   $process = proc_open($cmd, $descriptorspec, $pipes, $appRoot);
-
   if (is_resource($process)) {
+    // Capture the output and error streams
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+
+    // Close the streams
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+
     // Wait for the process to complete
     $exitCode = proc_close($process);
 
+    // Log the output and error
+    logOutput($stdout, $stderr, $exitCode, $cmd);
+
     // Check if Drush command was successful
     if ($exitCode === 0) {
-      drush_log(dt('runDrush: command completed successfully @drush_cmnd', array('@drush_cmnd' => $command)), 'info');
+      logDrush('runDrush: command completed successfully: ' . $cmd, 'info');
     }
     else {
-      drush_log(dt('runDrush: command failed with exit code @exitCode', array('@exitCode' => $exitCode)), 'warning');
+      logDrush('runDrush: command failed with exit code ' . $exitCode . ': ' . $cmd, 'warning');
     }
   }
   else {
-    drush_log(dt('runDrush: Failed to run command @drush_cmnd', array('@drush_cmnd' => $command)), 'warning');
+    logDrush('runDrush: Failed to run command: ' . $cmd, 'warning');
+  }
+}
+
+/**
+ * Custom helper function logOutput
+ */
+function logOutput($stdout, $stderr, $exitCode, $cmd) {
+  // Define the log file
+  $aegir_root = d('@server_master')->aegir_root;
+  $logFile = $aegir_root . '/log/drush_tmp_log.txt';
+
+  // Prepare the log entry
+  $logEntry = "Command: $cmd\n";
+  $logEntry .= "Exit Code: $exitCode\n";
+  $logEntry .= "Standard Output:\n$stdout\n";
+  $logEntry .= "Standard Error:\n$stderr\n";
+  $logEntry .= "=====================\n";
+
+  // Write the log entry to the file
+  file_put_contents($logFile, $logEntry);
+
+  // Log the entry using Drush
+  logDrush($logEntry, $exitCode === 0 ? 'info' : 'warning');
+}
+
+/**
+ * Custom helper function logDrush
+ */
+function logDrush($message, $type = 'info') {
+  // Check if Drush is available
+  if (function_exists('drush_log')) {
+    // Log the message using Drush
+    drush_log($message, $type);
+  }
+  else {
+    // Fallback logging mechanism
+    error_log("[$type] $message");
   }
 }
 
