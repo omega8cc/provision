@@ -11,7 +11,7 @@ function drush_provision_dlock() {
      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
      !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
-    drush_log(dt('Drupal root reported in provision_lock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+    drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
     // Fix ownership first
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
@@ -109,6 +109,14 @@ function drush_provision_dlock() {
         }
       }
 
+      $is_patched = "YES";
+      $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+      $search_string = ': void';
+      $file_content = file_get_contents($file_path);
+      if (strpos($file_content, $search_string) !== false) {
+        $is_patched = "NO";
+      }
+
       if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
@@ -119,7 +127,7 @@ function drush_provision_dlock() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status()) {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
         if (!provision_file()->exists($patchFile)->status()) {
           $success = drush_shell_exec($command);
           $result = drush_shell_exec_output();

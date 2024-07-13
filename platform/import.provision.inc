@@ -12,7 +12,7 @@
  */
 function drush_provision_drupal_provision_import() {
   if (d()->type === 'site') {
-    provision_lock_some_vnd();
+    provision_lock_drush_local_vnd();
     if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }

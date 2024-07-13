@@ -34,7 +34,7 @@ function drush_provision_drupal_provision_delete() {
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
-    provision_lock_some_vnd();
+    provision_lock_drush_local_vnd();
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
