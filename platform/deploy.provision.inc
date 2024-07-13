@@ -311,6 +311,12 @@ function drush_provision_drupal_post_provision_deploy() {
       if (drush_drupal_major_version() >= 10) {
         // Call the drush updatedb command with site-local Drush
 
+        // Unlock site-local Drush first
+        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+        if (provision_file()->exists($drush_lock_ctrl)->status()) {
+          provision_unlock_drush_local_vnd();
+        }
+
         // Define the initial path and Drush command
         $initialPath = d()->root;
         $drushCommand = ['updb'];
@@ -319,11 +325,17 @@ function drush_provision_drupal_post_provision_deploy() {
         $appRoot = findAppRoot($initialPath);
 
         if ($appRoot === null) {
-          drush_log(dt('runDrush: Could not find the vendor directory in @appRoot', array('@appRoot' => $appRoot)), 'warning');
+          drush_log(dt('runDrush: Could not find the vendor directory in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          // Call the drush updatedb command with Aegir own Drush 8
+          drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
+          drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+          provision_backend_invoke(d()->name, 'updatedb');
         }
         else {
           // Run the Drush command with the --cache-clear option set to 'default'
           runDrush($appRoot, $drushCommand, 'default');
+          // Lock site-local Drush again
+          provision_lock_drush_local_vnd();
         }
       }
       else {
