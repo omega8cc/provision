@@ -184,15 +184,6 @@ function findAppRoot($startDir) {
  * Custom helper function runDrush with respawn support
  */
 function runDrush($appRoot, $command, $cacheClear = 'default') {
-  // Define local drush path
-  $drushPath = 'vendor/bin/drush';
-
-  // Check if the local Drush exists and is executable
-  $drushAbsolutePath = $appRoot . '/' . $drushPath;
-  if (!is_executable($drushAbsolutePath)) {
-    drush_log(dt('Drush executable not found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'warning');
-  }
-
   // Normalize command if it is updb to updatedb
   if ($command[0] === 'updb') {
     $command[0] = 'updatedb';
@@ -324,8 +315,15 @@ function drush_provision_drupal_post_provision_deploy() {
         // Find the app root directory
         $appRoot = findAppRoot($initialPath);
 
-        if ($appRoot === null) {
-          drush_log(dt('runDrush: Could not find the vendor directory in @appRoot', array('@appRoot' => $appRoot)), 'info');
+        // Define local drush path
+        $drushPath = 'vendor/bin/drush';
+
+        // Check if the local Drush exists and is executable
+        $drushAbsolutePath = $appRoot . '/' . $drushPath;
+
+        if (!is_executable($drushAbsolutePath)) {
+          provision_lock_drush_local_vnd();
+          drush_log(dt('Drush executable not found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // Call the drush updatedb command with Aegir own Drush 8
           drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
           drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
@@ -340,6 +338,7 @@ function drush_provision_drupal_post_provision_deploy() {
       }
       else {
         // Call the drush updatedb command with Aegir own Drush 8
+        provision_lock_drush_local_vnd();
         drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
         drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
         provision_backend_invoke(d()->name, 'updatedb');

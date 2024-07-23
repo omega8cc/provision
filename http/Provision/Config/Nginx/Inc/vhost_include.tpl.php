@@ -154,9 +154,10 @@ if ($is_denied) {
 }
 
 ###
-### Add recommended HTTP header
+### Add recommended HTTP headers
 ###
 add_header X-Content-Type-Options "nosniff";
+add_header X-Frame-Options "SAMEORIGIN" always;
 
 <?php if ($nginx_has_http3): ?>
 ###
@@ -1369,6 +1370,7 @@ location = /index.php {
   ###
   ### Basic security/privacy headers.
   ###
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Referrer-Policy "no-referrer-when-downgrade";
   add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 
