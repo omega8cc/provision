@@ -202,9 +202,10 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
-  ### Add recommended HTTP header
+  ### Add recommended HTTP headers
   ###
   add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
 
   ###
   ### Include high load protection config if exists.
@@ -1072,6 +1073,7 @@ location ^~ /<?php print $subdir; ?> {
     ###
     ### Basic security/privacy headers.
     ###
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "no-referrer-when-downgrade";
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 
