@@ -209,7 +209,7 @@ if (isset($_SERVER['db_name'])) {
   # Additional platform wide configuration settings.
   <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
-    include('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+    include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
   }
 
   # Additional platform wide configuration settings.
@@ -219,5 +219,5 @@ if (isset($_SERVER['db_name'])) {
 
   # Additional site configuration settings.
   if (is_readable('<?php print $this->site_path  ?>/local.settings.php')) {
-    include('<?php print $this->site_path  ?>/local.settings.php');
+    include_once('<?php print $this->site_path  ?>/local.settings.php');
   }
