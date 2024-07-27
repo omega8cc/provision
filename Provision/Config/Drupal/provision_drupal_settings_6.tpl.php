@@ -163,8 +163,8 @@ if (isset($_SERVER['db_name'])) {
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
-  if (is_readable('/data/conf/global-6.inc')) {
-    include_once('/data/conf/global-6.inc');
+  if (is_readable('/data/conf/global/global-6.inc')) {
+    include_once('/data/conf/global/global-6.inc');
   }
   elseif (is_readable('/data/conf/global.inc')) {
     include_once('/data/conf/global.inc');
