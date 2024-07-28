@@ -1370,7 +1370,6 @@ location = /index.php {
   ###
   ### Basic security/privacy headers.
   ###
-  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Referrer-Policy "no-referrer-when-downgrade";
   add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 
