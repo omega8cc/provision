@@ -92,7 +92,13 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     provision_save_site_data();
 
     // Load the newly created information, including re-loading the new db creds.
-    provision_lock_drush_local_vnd();
+    // Lock site-local Drush if unlocked
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+      drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     _provision_drupal_create_settings_file();
     provision_drupal_push_site($override_slave_authority = TRUE);
@@ -322,7 +328,13 @@ function drush_provision_drupal_post_provision_deploy() {
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
 
         if (!is_executable($drushAbsolutePath)) {
-          provision_lock_drush_local_vnd();
+          // Lock site-local Drush if unlocked
+          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+            drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+            provision_lock_drush_local_vnd();
+          }
           drush_log(dt('Drush executable not found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // Call the drush updatedb command with Aegir own Drush 8
           drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
@@ -333,12 +345,24 @@ function drush_provision_drupal_post_provision_deploy() {
           // Run the Drush command with the --cache-clear option set to 'default'
           runDrush($appRoot, $drushCommand, 'default');
           // Lock site-local Drush again
-          provision_lock_drush_local_vnd();
+          // Lock site-local Drush if unlocked
+          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+            drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+            provision_lock_drush_local_vnd();
+          }
         }
       }
       else {
         // Call the drush updatedb command with Aegir own Drush 8
-        provision_lock_drush_local_vnd();
+        // Lock site-local Drush if unlocked
+        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+        $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+        if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+          drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_lock_drush_local_vnd();
+        }
         drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
         drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
         provision_backend_invoke(d()->name, 'updatedb');

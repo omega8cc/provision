@@ -88,8 +88,14 @@ function drush_provision_drupal_pre_provision_install_rollback() {
  * weird problems such as the multiple database connections don't confuse drupal.
  */
 function drush_provision_drupal_provision_install() {
- // Requires at least the database settings to complete.
-  provision_lock_drush_local_vnd();
+  // Requires at least the database settings to complete.
+  // Lock site-local Drush if unlocked
+  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+    provision_lock_drush_local_vnd();
+  }
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);

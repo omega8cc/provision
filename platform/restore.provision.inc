@@ -4,7 +4,13 @@
  * Make sure we have a valid site being restored, and that the file being restored from exists
  */
 function drush_provision_drupal_provision_restore_validate($restore_file = null) {
-  provision_lock_drush_local_vnd();
+  // Lock site-local Drush if unlocked
+  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+    provision_lock_drush_local_vnd();
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
   $exists = provision_file()->exists($restore_file)
