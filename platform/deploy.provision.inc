@@ -311,6 +311,7 @@ function drush_provision_drupal_post_provision_deploy() {
         // Unlock site-local Drush first
         $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
         if (provision_file()->exists($drush_lock_ctrl)->status()) {
+          drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
 
@@ -326,6 +327,7 @@ function drush_provision_drupal_post_provision_deploy() {
 
         // Check if the local Drush exists and is executable
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
+        drush_log(dt('Detected Local Drush Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
         if (!is_executable($drushAbsolutePath)) {
           // Lock site-local Drush if unlocked
