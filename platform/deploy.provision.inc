@@ -345,7 +345,12 @@ function drush_provision_drupal_post_provision_deploy() {
         }
         else {
           // Run the Drush command with the --cache-clear option set to 'default'
-          runDrush($appRoot, $drushCommand, 'default');
+          // runDrush($appRoot, $drushCommand, 'default');
+          $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
+          drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
+          $output = implode('', drush_shell_exec_output());
+          drush_log("LOCAL/DRUSH/LOG " . $output);
           // Lock site-local Drush again
           // Lock site-local Drush if unlocked
           $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
