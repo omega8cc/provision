@@ -327,7 +327,7 @@ function drush_provision_drupal_post_provision_deploy() {
 
         // Check if the local Drush exists and is executable
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
-        drush_log(dt('Detected Local Drush Path @path', array('@path' => $drushAbsolutePath)), 'info');
+        drush_log(dt('LOCAL/DRUSH/DETECTED Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
         if (!is_executable($drushAbsolutePath)) {
           // Lock site-local Drush if unlocked
@@ -344,6 +344,10 @@ function drush_provision_drupal_post_provision_deploy() {
           provision_backend_invoke(d()->name, 'updatedb');
         }
         else {
+          drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush --version');
+          $output = implode('', drush_shell_exec_output());
+          drush_log("LOCAL/DRUSH/VERSION " . $output);
           // Run the Drush command with the --cache-clear option set to 'default'
           // runDrush($appRoot, $drushCommand, 'default');
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
