@@ -202,14 +202,17 @@ if (isset($_SERVER['db_name'])) {
 <?php print $extra_config; ?>
 
   # Additional host wide configuration settings. Useful for safely specifying configuration settings.
-  if (is_readable('<?php print $this->platform->server->include_path  ?>/global.inc')) {
-    include('<?php print $this->platform->server->include_path  ?>/global.inc');
+  if (is_readable('/data/conf/global/global-8.inc')) {
+    include_once('/data/conf/global/global-8.inc');
+  }
+  elseif (is_readable('/data/conf/global.inc')) {
+    include_once('/data/conf/global.inc');
   }
 
   # Additional platform wide configuration settings.
   <?php $this->platform->root = provision_auto_fix_platform_root($this->platform->root); ?>
   if (is_readable('<?php print $this->platform->root  ?>/sites/all/platform.settings.php')) {
-    include('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
+    include_once('<?php print $this->platform->root ?>/sites/all/platform.settings.php');
   }
 
   # Additional platform wide configuration settings.
@@ -219,5 +222,5 @@ if (isset($_SERVER['db_name'])) {
 
   # Additional site configuration settings.
   if (is_readable('<?php print $this->site_path  ?>/local.settings.php')) {
-    include('<?php print $this->site_path  ?>/local.settings.php');
+    include_once('<?php print $this->site_path  ?>/local.settings.php');
   }
