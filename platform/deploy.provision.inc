@@ -397,8 +397,13 @@ function drush_provision_drupal_post_provision_deploy() {
 
       // Rebuild the node access tables only if necessary.
       if (!function_exists("node_access_needs_rebuild") || node_access_needs_rebuild()) {
-        node_access_rebuild();
-        drush_log(dt('Rebuilt node access table'));
+        if (function_exists("node_access_rebuild")) {
+          node_access_rebuild();
+          drush_log(dt('Rebuilt node access table'));
+        }
+        else {
+          drush_log(dt('OPS, NO rebuild of node access table available'));
+        }
       }
     }
     else {
