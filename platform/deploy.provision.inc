@@ -377,6 +377,13 @@ function drush_provision_drupal_post_provision_deploy() {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
+          // Lock site-local Drush in the old platform again
+          if (!drush_get_option('deploy_replace_site', FALSE)) {
+            if (drush_get_option('old_platform', FALSE)) {
+              provision_backend_invoke($old_platform, 'provision-verify');
+              sleep(5);
+            }
+          }
         }
       }
       else {
