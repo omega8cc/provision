@@ -187,97 +187,6 @@ function findAppRoot($startDir) {
 }
 
 /**
- * Custom helper function runDrush with respawn support
- */
-function runDrush($appRoot, $command, $cacheClear = 'default') {
-  // Normalize command if it is updb to updatedb
-  if ($command[0] === 'updb') {
-    $command[0] = 'updatedb';
-  }
-
-  // Add the --yes and --cache-clear options to bypass confirmation prompts and handle cache clearing
-  array_push($command, '--yes', "--cache-clear=$cacheClear");
-
-  // Prepare the command to run Drush
-  $cmd = escapeshellcmd($drushPath) . ' ' . implode(' ', array_map('escapeshellarg', $command));
-
-  // Change directory to app root
-  chdir($appRoot);
-
-  // Run the Drush command and handle respawning
-  $descriptorspec = array(
-    0 => array('pipe', 'r'),  // stdin
-    1 => array('pipe', 'w'),  // stdout
-    2 => array('pipe', 'w')   // stderr
-  );
-
-  $process = proc_open($cmd, $descriptorspec, $pipes, $appRoot);
-  if (is_resource($process)) {
-    // Capture the output and error streams
-    $stdout = stream_get_contents($pipes[1]);
-    $stderr = stream_get_contents($pipes[2]);
-
-    // Close the streams
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-
-    // Wait for the process to complete
-    $exitCode = proc_close($process);
-
-    // Log the output and error
-    logOutput($stdout, $stderr, $exitCode, $cmd);
-
-    // Check if Drush command was successful
-    if ($exitCode === 0) {
-      logDrush('runDrush: command completed successfully: ' . $cmd, 'info');
-    }
-    else {
-      logDrush('runDrush: command failed with exit code ' . $exitCode . ': ' . $cmd, 'warning');
-    }
-  }
-  else {
-    logDrush('runDrush: Failed to run command: ' . $cmd, 'warning');
-  }
-}
-
-/**
- * Custom helper function logOutput
- */
-function logOutput($stdout, $stderr, $exitCode, $cmd) {
-  // Define the log file
-  $aegir_root = d('@server_master')->aegir_root;
-  $logFile = $aegir_root . '/log/drush_tmp_log.txt';
-
-  // Prepare the log entry
-  $logEntry = "Command: $cmd\n";
-  $logEntry .= "Exit Code: $exitCode\n";
-  $logEntry .= "Standard Output:\n$stdout\n";
-  $logEntry .= "Standard Error:\n$stderr\n";
-  $logEntry .= "=====================\n";
-
-  // Write the log entry to the file
-  file_put_contents($logFile, $logEntry);
-
-  // Log the entry using Drush
-  logDrush($logEntry, $exitCode === 0 ? 'info' : 'warning');
-}
-
-/**
- * Custom helper function logDrush
- */
-function logDrush($message, $type = 'info') {
-  // Check if Drush is available
-  if (function_exists('drush_log')) {
-    // Log the message using Drush
-    drush_log($message, $type);
-  }
-  else {
-    // Fallback logging mechanism
-    error_log("[$type] $message");
-  }
-}
-
-/**
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
@@ -363,7 +272,6 @@ function drush_provision_drupal_post_provision_deploy() {
           $output = implode('', drush_shell_exec_output());
           drush_log("LOCAL/DRUSH/VERSION " . $output);
           // Run the Drush command with the --cache-clear option set to 'default'
-          // runDrush($appRoot, $drushCommand, 'default');
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
           drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
