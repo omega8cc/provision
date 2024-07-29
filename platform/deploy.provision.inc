@@ -308,19 +308,25 @@ function drush_provision_drupal_post_provision_deploy() {
       if (drush_drupal_major_version() >= 10) {
         // Call the drush updatedb command with site-local Drush
 
-        // Unlock site-local Drush first
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        if (provision_file()->exists($drush_lock_ctrl)->status()) {
-          drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-          provision_unlock_drush_local_vnd();
-        }
-
-        // Unlock site-local Drush on the old platform too
+        // Unlock site-local Drush in the old platform too
         if (!drush_get_option('deploy_replace_site', FALSE)) {
           if (drush_get_option('old_platform', FALSE)) {
             provision_backend_invoke($old_platform, 'provision-unlock');
             sleep(5);
           }
+        }
+
+        // Update Drush 10 aliases
+        drush_log(dt('DRUSH/TEN/ALIASES/UPDATE drush10 site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
+        $result = drush_shell_cd_and_exec($aegir_root, 'drush10 site:alias-convert ~/.drush/sites --yes');
+        $output = implode('', drush_shell_exec_output());
+        drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+
+        // Unlock site-local Drush in the new platform
+        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+        if (provision_file()->exists($drush_lock_ctrl)->status()) {
+          drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+          provision_unlock_drush_local_vnd();
         }
 
         // Define the initial path and Drush command
