@@ -277,15 +277,14 @@ function drush_provision_drupal_post_provision_deploy() {
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
           $output = implode('', drush_shell_exec_output());
           drush_log("LOCAL/DRUSH/LOG " . $output);
-          // Lock site-local Drush again
-          // Lock site-local Drush if unlocked
+          // Lock site-local Drush again if unlocked
           $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
           $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
           if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
-          // Lock site-local Drush in the old platform again
+          // Lock site-local Drush in the old platform again too
           if (!drush_get_option('deploy_replace_site', FALSE)) {
             if (drush_get_option('old_platform', FALSE)) {
               provision_backend_invoke($old_platform, 'provision-verify');
