@@ -315,6 +315,14 @@ function drush_provision_drupal_post_provision_deploy() {
           provision_unlock_drush_local_vnd();
         }
 
+        // Unlock site-local Drush on the old platform too
+        if (!drush_get_option('deploy_replace_site', FALSE)) {
+          if (drush_get_option('old_platform', FALSE)) {
+            provision_backend_invoke($old_platform, 'provision-unlock');
+            sleep(5);
+          }
+        }
+
         // Define the initial path and Drush command
         $initialPath = d()->root;
         $drushCommand = ['updb'];
