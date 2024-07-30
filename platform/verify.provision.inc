@@ -12,7 +12,7 @@
  */
 function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
-    // Lock site-local Drush if unlocked
+    // Lock Site-Local Drush if Unlocked
     $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
     $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
     if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
@@ -499,7 +499,7 @@ function drush_provision_drupal_post_provision_verify() {
     }
   }
   if (d()->type === 'platform') {
-    // Lock site-local Drush if unlocked
+    // Lock Site-Local Drush if Unlocked
     $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
     $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
     if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {

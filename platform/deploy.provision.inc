@@ -92,7 +92,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     provision_save_site_data();
 
     // Load the newly created information, including re-loading the new db creds.
-    // Lock site-local Drush if unlocked
+    // Lock Site-Local Drush if Unlocked
     $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
     $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
     if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
@@ -202,22 +202,22 @@ function drush_provision_drupal_post_provision_deploy() {
   $dis_auto_up_db_global = $aegir_root . '/static/control/DisAutoUpDb.info';
   $dis_auto_up_db_site = $aegir_root . '/static/control/' . d()->uri . '_DisAutoUpDb.info';
   if (provision_is_hostmaster_site()) {
-    // Call the drush updatedb command.
-    drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
+    // Always Call The Drush updatedb Command With Aegir Own Drush 8 In The Hostmaster Site
+    drush_log(dt('AEGIR/DRUSH Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
     provision_backend_invoke(d()->name, 'updatedb');
   }
   else {
     if (is_file($dis_auto_up_db_global)) {
-      drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+      drush_log(dt('DRUSH/CTRL/UPDATEDB skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
     }
     elseif (is_file($dis_auto_up_db_site)) {
-      drush_log(dt('Database update skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_site)), 'info');
+      drush_log(dt('DRUSH/CTRL/UPDATEDB skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_site)), 'info');
     }
     else {
       if (drush_drupal_major_version() >= 10) {
-        // Call the drush updatedb command with site-local Drush
 
-        // Unlock site-local Drush in the old platform too
+        // Unlock Site-Local Drush In The Old Platform Too
+        // Otherwise Site-Local Drush In The New Platform Would Complain
         if (!drush_get_option('deploy_replace_site', FALSE)) {
           if (drush_get_option('old_platform', FALSE)) {
             provision_backend_invoke($old_platform, 'provision-unlock');
@@ -225,66 +225,82 @@ function drush_provision_drupal_post_provision_deploy() {
           }
         }
 
-        // Update Drush 10 aliases
+        // Update Drush 10+ Aliases
         drush_log(dt('DRUSH/TEN/ALIASES/UPDATE drush10 site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
         $result = drush_shell_cd_and_exec($aegir_root, 'drush10 site:alias-convert ~/.drush/sites --yes');
         $output = implode('', drush_shell_exec_output());
         drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
 
-        // Unlock site-local Drush in the new platform
+        // Unlock Site-Local Drush In The New Platform
         $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
         if (provision_file()->exists($drush_lock_ctrl)->status()) {
           drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
 
-        // Define the initial path and Drush command
+        // Define The Initial Path And Drush Command
         $initialPath = d()->root;
         $drushCommand = ['updb'];
 
-        // Find the app root directory
+        // Find The App Root Directory
         $appRoot = findAppRoot($initialPath);
 
-        // Define local drush path
+        // Define Local Drush Path
         $drushPath = 'vendor/bin/drush';
 
-        // Check if the local Drush exists and is executable
+        // Check If The Local Drush Exists And Is Executable
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
         drush_log(dt('LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
         if (!is_executable($drushAbsolutePath)) {
-          // Lock site-local Drush if unlocked
+          // Log The Useful Info
+          drush_log(dt('LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
+          // Lock Site-Local Drush if Unlocked
           $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
           $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
           if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
-          drush_log(dt('Drush executable not found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
-          // Call the drush updatedb command with Aegir own Drush 8
-          drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
-          drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+          // Log The Useful Info
+          drush_log(dt('AEGIR/DRUSH Invoking updatedb with Drush 8 in drush_provision_drupal_post_provision_deploy'), 'info');
+          // Tell How-To Skip Drush updatedb
+          drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+          // Call The Drush updatedb Command With Aegir Own Drush 8
           provision_backend_invoke(d()->name, 'updatedb');
         }
         else {
+          // Log The Useful Info
           drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          // Check And Display Site-Local Drush Version
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush --version');
           $output = implode('', drush_shell_exec_output());
           drush_log("LOCAL/DRUSH/VERSION " . $output);
-          // Run the Drush command with the --cache-clear option set to 'default'
+          // Tell How-To Skip Drush updatedb
+          drush_log(dt('LOCAL/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+          // Figure Out The Drush 10+ Compatible Site Alias
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
+          // Call The Drush updatedb Command with Site-Local Drush
           drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
-          $output = implode('', drush_shell_exec_output());
-          drush_log("LOCAL/DRUSH/LOG " . $output);
-          // Lock site-local Drush again if unlocked
+          $output = drush_shell_exec_output();
+          foreach ($output as $index => $line) {
+            if (!$success) { // Log the entire error as a warning.
+              $line_status = 'warning';
+            }
+            else { // Only log the last line as success.
+              $line_status = $index+1 == count($output) ? 'success' : 'notice';
+            }
+            drush_log($line, $line_status);
+          }
+          // Lock Site-Local Drush Again If Unlocked
           $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
           $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
           if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
-          // Lock site-local Drush in the old platform again too
+          // Lock Site-Local Drush In The Old Platform Again Too
           if (!drush_get_option('deploy_replace_site', FALSE)) {
             if (drush_get_option('old_platform', FALSE)) {
               provision_backend_invoke($old_platform, 'provision-verify');
@@ -294,16 +310,17 @@ function drush_provision_drupal_post_provision_deploy() {
         }
       }
       else {
-        // Call the drush updatedb command with Aegir own Drush 8
-        // Lock site-local Drush if unlocked
+        // Lock Site-Local Drush if Unlocked
         $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
         $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
         if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
           drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
-        drush_log(dt('Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
-        drush_log(dt('To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+        // Tell How-To Skip Drush updatedb
+        drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+        // Call The Drush updatedb Command With Aegir Own Drush 8
+        drush_log(dt('AEGIR/DRUSH Invoking updatedb with Drush 8 in drush_provision_drupal_post_provision_deploy'), 'info');
         provision_backend_invoke(d()->name, 'updatedb');
       }
     }

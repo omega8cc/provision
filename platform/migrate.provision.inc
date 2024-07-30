@@ -10,7 +10,7 @@
  * Implementation of drush_hook_COMMAND_validate().
  */
 function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
-  // Lock site-local Drush if unlocked
+  // Lock Site-Local Drush if Unlocked
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
   $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
   if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
