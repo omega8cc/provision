@@ -13,6 +13,20 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
   './private/temp',
 );
 
+const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
+  './.redisOff',
+  './.redisOn',
+  './files',
+  './libraries',
+  './modules',
+  './private',
+  './themes',
+  './vendor',
+  './drushrc.php',
+  './settings.php',
+  './local.settings.php',
+);
+
 /**
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.
  */
