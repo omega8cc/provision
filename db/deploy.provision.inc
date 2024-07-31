@@ -20,13 +20,21 @@ function drush_db_provision_deploy() {
 // Rollback doesn't apply here yet. Unless we trigger a deploy of the first dump
 // made. Which could go on infinitely if something is really long.
 function drush_db_post_provision_deploy() {
-  $aegir_root = d('@server_master')->aegir_root;
-  $backup_path = d('@server_master')->backup_path;
-  $oct_db_dirx = $backup_path . '/tmp_expim';
-  $oct_db_test = $oct_db_dirx . '/metadata';
-  $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_deploy_' . date("Ymd.His", time());
-  $post_import_flag = $backup_path . '/.post_import_flag.pid';
-  $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+  $enable_myquick = FALSE;
+  $oct_db_test = FALSE;
+  $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+  if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    $aegir_root = d('@server_master')->aegir_root;
+    $backup_path = d('@server_master')->backup_path;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
+    $oct_db_test = $oct_db_dirx . '/metadata';
+    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_deploy_' . date("Ymd.His", time());
+    $post_import_flag = $backup_path . '/.post_import_flag.pid';
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+  }
+
   if (is_file($enable_myquick) && is_file($oct_db_test)) {
     // Rename temporary sql dump dir to site/date specific backup.
     $old = $oct_db_dirx;

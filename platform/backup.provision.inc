@@ -76,7 +76,16 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  * Util function to suggest a filename for a new site backup.
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
-  $suffix = drush_get_option('provision_backup_suffix', '.tar');
+  $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+  if ($backup_mode == 'backup_mysqldump_only' ||
+      $backup_mode == 'site_files_without_db_backup' ||
+      $backup_mode == 'site_files_with_mysqldump') {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+  }
+  else {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar');
+  }
   $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 
   // Use format of mysite.com-2008-01-02, if already existing, add number.
@@ -122,7 +131,12 @@ function drush_provision_drupal_provision_backup() {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
 
-  $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+  if (drush_get_option('backup_mysqldump_only', FALSE)) {
+    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
+  }
+  else {
+    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+  }
   drush_shell_exec($exclude_tag);
 
   $command_base = "tar cpf";
@@ -160,7 +174,15 @@ function drush_provision_drupal_provision_backup() {
 function drush_provision_drupal_provision_backup_get_exclusions() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
   drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
+  $exclusions = "";
+  foreach ($directories as $directory) {
+    $exclusions .= " '$directory'/exclude.tag";
+  }
+  return $exclusions;
+}
 
+function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
+  $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
   $exclusions = "";
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
@@ -174,12 +196,20 @@ function drush_provision_drupal_post_provision_backup() {
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
   if (!is_file($internal_backup_flag)) {
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $oct_db_test = $oct_db_dirx . '/metadata';
-    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $oct_db_test = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    }
+
     if (is_file($enable_myquick) && is_file($oct_db_test)) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;
@@ -211,12 +241,20 @@ function drush_provision_drupal_provision_backup_rollback() {
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')
       ->fail('Failed deleting backup file @path');
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $oct_db_test = $oct_db_dirx . '/metadata';
-    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $oct_db_test = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    }
+
     if (is_file($enable_myquick) && is_file($oct_db_test)) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;

@@ -265,17 +265,25 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $creds = $this->generate_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
-    $mydumper_path = '/usr/local/bin/mydumper';
-    $myloader_path = '/usr/local/bin/myloader';
-    $script_user = d('@server_master')->script_user;
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $myloader_path = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      drush_log(dt("MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
+      $mydumper_path = '/usr/local/bin/mydumper';
+      $myloader_path = '/usr/local/bin/myloader';
+      $script_user = d('@server_master')->script_user;
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
       drush_log(dt("MyQuick import_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
       drush_log(dt("MyQuick import_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    }
+
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
       if (provision_file()->exists($pass_php_inc)->status()) {
@@ -520,17 +528,25 @@ port=%s
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
-    $mydumper_path = '/usr/local/bin/mydumper';
-    $myloader_path = '/usr/local/bin/myloader';
-    $script_user = d('@server_master')->script_user;
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $mydumper_path = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      drush_log(dt("MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
+      $mydumper_path = '/usr/local/bin/mydumper';
+      $myloader_path = '/usr/local/bin/myloader';
+      $script_user = d('@server_master')->script_user;
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
       drush_log(dt("MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
       drush_log(dt("MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    }
+
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
       $oct_db_test = $oct_db_dirx . '/metadata';
