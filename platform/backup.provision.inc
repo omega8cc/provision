@@ -105,8 +105,7 @@ function drush_provision_drupal_provision_backup() {
   // Adds the site directory into the backup file
   drush_log(dt("Adding sites directory to !backup_file", array('!backup_file' => $backup_file)), 'backup');
 
-
-  // synch all filesystem changes back from the remote server.
+  // sync all filesystem changes back from the remote server.
   provision_drupal_fetch_site();
 
   // Check if we are currently cloaking credentials
