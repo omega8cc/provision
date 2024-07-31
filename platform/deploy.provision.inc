@@ -285,8 +285,8 @@ function drush_provision_drupal_post_provision_deploy() {
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
-            if (!$success) { // Log the entire error as a warning.
-              $line_status = 'warning';
+            if (!$success) { // Log the entire error as a notice.
+              $line_status = 'notice';
             }
             else { // Only log the last line as success.
               $line_status = $index+1 == count($output) ? 'success' : 'notice';
