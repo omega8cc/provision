@@ -9,6 +9,7 @@
 const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
   './files/css',
   './files/js',
+  './files/tmp',
   './private/temp',
 );
 
