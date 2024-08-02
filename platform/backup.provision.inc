@@ -9,7 +9,22 @@
 const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
   './files/css',
   './files/js',
+  './files/tmp',
   './private/temp',
+);
+
+const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
+  './.redisOff',
+  './.redisOn',
+  './files',
+  './libraries',
+  './modules',
+  './private',
+  './themes',
+  './vendor',
+  './drushrc.php',
+  './settings.php',
+  './local.settings.php',
 );
 
 /**
@@ -17,7 +32,7 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
-  // Lock site-local Drush if unlocked
+  // Lock Site-Local Drush if Unlocked
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
   $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
   if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
@@ -61,7 +76,16 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  * Util function to suggest a filename for a new site backup.
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
-  $suffix = drush_get_option('provision_backup_suffix', '.tar');
+  $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+  if ($backup_mode == 'backup_mysqldump_only' ||
+      $backup_mode == 'site_files_without_db_backup' ||
+      $backup_mode == 'site_files_with_mysqldump') {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+  }
+  else {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar');
+  }
   $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 
   // Use format of mysite.com-2008-01-02, if already existing, add number.
@@ -81,8 +105,7 @@ function drush_provision_drupal_provision_backup() {
   // Adds the site directory into the backup file
   drush_log(dt("Adding sites directory to !backup_file", array('!backup_file' => $backup_file)), 'backup');
 
-
-  // synch all filesystem changes back from the remote server.
+  // sync all filesystem changes back from the remote server.
   provision_drupal_fetch_site();
 
   // Check if we are currently cloaking credentials
@@ -107,7 +130,12 @@ function drush_provision_drupal_provision_backup() {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
 
-  $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+  if (drush_get_option('backup_mysqldump_only', FALSE)) {
+    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
+  }
+  else {
+    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+  }
   drush_shell_exec($exclude_tag);
 
   $command_base = "tar cpf";
@@ -145,7 +173,15 @@ function drush_provision_drupal_provision_backup() {
 function drush_provision_drupal_provision_backup_get_exclusions() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
   drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
+  $exclusions = "";
+  foreach ($directories as $directory) {
+    $exclusions .= " '$directory'/exclude.tag";
+  }
+  return $exclusions;
+}
 
+function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
+  $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
   $exclusions = "";
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
@@ -159,12 +195,20 @@ function drush_provision_drupal_post_provision_backup() {
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
   if (!is_file($internal_backup_flag)) {
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $oct_db_test = $oct_db_dirx . '/metadata';
-    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $oct_db_test = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    }
+
     if (is_file($enable_myquick) && is_file($oct_db_test)) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;
@@ -173,7 +217,7 @@ function drush_provision_drupal_post_provision_backup() {
         ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
-        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_provision_drupal_post_provision_backup @var", array('@var' => $old)), 'info');
+        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_drupal_post_provision_backup @var", array('@var' => $old)), 'info');
       }
     }
   }
@@ -196,12 +240,20 @@ function drush_provision_drupal_provision_backup_rollback() {
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')
       ->fail('Failed deleting backup file @path');
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $oct_db_test = $oct_db_dirx . '/metadata';
-    $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+
+    $enable_myquick = FALSE;
+    $oct_db_test = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    }
+
     if (is_file($enable_myquick) && is_file($oct_db_test)) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;
@@ -210,7 +262,7 @@ function drush_provision_drupal_provision_backup_rollback() {
         ->fail('Moving the Post-DB-Cleanup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
-        drush_log(dt("DEBUG MyQuick tmp_expim dir removed in drush_provision_drupal_provision_backup_rollback @var", array('@var' => $old)), 'info');
+        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_drupal_provision_backup_rollback @var", array('@var' => $old)), 'info');
       }
     }
   }

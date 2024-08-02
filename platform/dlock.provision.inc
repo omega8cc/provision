@@ -129,6 +129,7 @@ function drush_provision_dlock() {
 
       if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
         if (!provision_file()->exists($patchFile)->status()) {
+          drush_log(dt('CORE/PATCH/APPLY @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
           $success = drush_shell_exec($command);
           $result = drush_shell_exec_output();
           foreach ($result as $index => $line) {

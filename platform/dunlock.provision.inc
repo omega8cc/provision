@@ -171,6 +171,7 @@ function drush_provision_dunlock() {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
+        drush_log(dt('CORE/PATCH/REVERT @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($command);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {

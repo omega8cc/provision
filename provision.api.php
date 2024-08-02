@@ -485,8 +485,11 @@ ENV;
  * @see drush_provision_drupal_provision_backup_get_exclusions()
  */
 function hook_provision_backup_exclusions_alter(&$directories) {
-  // Prevent backing up the CiviCRM Smarty cache.
+  // Prevent backing up Twig/Smarty/AdvAgg caches.
+  $directories[] = './files/advagg_css';
+  $directories[] = './files/advagg_js';
   $directories[] = './files/civicrm/templates_c';
+  $directories[] = './files/php';
 }
 
 /**
