@@ -177,17 +177,24 @@ class Provision_Service_db extends Provision_Service {
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
-    drush_log(dt("DEBUG MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
-    $mydumper_path = '/usr/local/bin/mydumper';
-    $myloader_path = '/usr/local/bin/myloader';
-    $script_user = d('@server_master')->script_user;
-    $aegir_root = d('@server_master')->aegir_root;
-    $backup_path = d('@server_master')->backup_path;
-    $oct_db_dirx = $backup_path . '/tmp_expim';
-    $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-    drush_log(dt("DEBUG MyQuick import_site_database db.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
-    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
-    drush_log(dt("DEBUG MyQuick import_site_database db.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+
+    $enable_myquick = FALSE;
+    $myloader_path = FALSE;
+    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+      drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
+      $mydumper_path = '/usr/local/bin/mydumper';
+      $myloader_path = '/usr/local/bin/myloader';
+      $script_user = d('@server_master')->script_user;
+      $aegir_root = d('@server_master')->aegir_root;
+      $backup_path = d('@server_master')->backup_path;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
+      drush_log(dt("MyQuick import_site_database db.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+      drush_log(dt("MyQuick import_site_database db.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
+    }
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
@@ -216,21 +223,21 @@ class Provision_Service_db extends Provision_Service {
         }
       }
       else {
-        drush_log(dt("DEBUG MyQuick import_site_database db.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
+        drush_log(dt("MyQuick import_site_database db.php FAIL no db_name @var", array('@var' => $db_name)), 'info');
       }
 
       if (!is_dir($oct_db_dirx)) {
-        drush_log(dt("DEBUG MyQuick import_site_database db.php fail oct_db_dirx @var", array('@var' => $oct_db_dirx)), 'info');
+        drush_log(dt("MyQuick import_site_database db.php fail oct_db_dirx @var", array('@var' => $oct_db_dirx)), 'info');
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (dir: %dir)', array('%dir' => $oct_db_dirx)));
       }
 
       $threads = provision_count_cpus();
       $threads = intval($threads / 4) + 1;
-      drush_log(dt("DEBUG MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
-      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
-      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
-      drush_log(dt("DEBUG MyQuick import_site_database db.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
+      drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
+      drush_log(dt("MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
+      drush_log(dt("MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+      drush_log(dt("MyQuick import_site_database db.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
+      drush_log(dt("MyQuick import_site_database db.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
 
       // Create pre-db-import flag file.
       $pre_import_flag = $backup_path . '/.pre_import_flag.pid';
@@ -249,7 +256,7 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_host &&
         $oct_db_port) {
         $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --overwrite-tables --verbose=1');
-        drush_log(dt("DEBUG MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
+        drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
 
         if (!$command) {

@@ -137,7 +137,7 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
- * Unlock site-local drush and symfony/console etc
+ * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir tasks like updatedb.
  */
 function provision_unlock_drush_local_vnd() {
@@ -303,6 +303,7 @@ function provision_unlock_drush_local_vnd() {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
+        drush_log(dt('CORE/PATCH/REVERT @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($command);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
@@ -333,12 +334,12 @@ function provision_unlock_drush_local_vnd() {
 
   }
   else {
-    drush_log(dt('Site-local Drush unlock skipped in provision_unlock_drush_local_vnd because ctrl file is not present @path', array('@path' => $drush_lock_ctrl)), 'info');
+    drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because ctrl file is not present @path', array('@path' => $drush_lock_ctrl)), 'info');
   }
 }
 
 /**
- * Unlock site-local drush and symfony/console etc
+ * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir post-task procedure.
  */
 function provision_unlock_some_vnd() {
@@ -381,7 +382,7 @@ function provision_unlock_some_vnd() {
 }
 
 /**
- * Lock site-local drush and symfony/console etc
+ * Lock Site-Local Drush And Symfony/Console etc
  * to avoid conflicts with Aegir own drush version.
  */
 function provision_lock_drush_local_vnd() {
@@ -510,6 +511,7 @@ function provision_lock_drush_local_vnd() {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
+        drush_log(dt('CORE/PATCH/APPLY @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($command);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {

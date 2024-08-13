@@ -10,7 +10,13 @@
  * Implementation of drush_hook_COMMAND_validate().
  */
 function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
-  provision_lock_drush_local_vnd();
+  // Lock Site-Local Drush if Unlocked
+  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+    provision_lock_drush_local_vnd();
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -127,7 +133,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     $www_new_uri = "www." . $raw_new_uri;
     if (is_array($old_aliases) && !empty($old_aliases)) {
       foreach ($old_aliases as $alias) {
-        drush_log(dt("DEBUG RENAME old_aliases is @this", array('@this' => $alias)), 'info');
+        drush_log(dt("LOG/RENAME old_aliases is @this", array('@this' => $alias)), 'info');
         if (!preg_match("/^www\./", $pre_old_uri) && preg_match("/^www\./", $pre_new_uri)) {
           $new_aliases[] = str_replace($www_old_uri, $raw_new_uri, $alias);
         }
@@ -147,10 +153,10 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
         drush_set_option('rename_only', TRUE);
         foreach ($new_aliases as $alias) {
-          drush_log(dt("DEBUG RENAME new_aliases is @this", array('@this' => $alias)), 'info');
+          drush_log(dt("LOG/RENAME new_aliases is @this", array('@this' => $alias)), 'info');
         }
         foreach ($unique_aliases as $alias) {
-          drush_log(dt("DEBUG RENAME unique_aliases is @this", array('@this' => $alias)), 'info');
+          drush_log(dt("LOG/RENAME unique_aliases is @this", array('@this' => $alias)), 'info');
         }
       }
       drush_set_option('aliases', $unique_aliases);
@@ -158,7 +164,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     else {
       $detected_aliases = provision_drupal_find_aliases();
       foreach ($detected_aliases as $alias) {
-        drush_log(dt("DEBUG RENAME detected_aliases is @this", array('@this' => $alias)), 'info');
+        drush_log(dt("LOG/RENAME detected_aliases is @this", array('@this' => $alias)), 'info');
       }
       drush_set_option('aliases', $detected_aliases);
     }
@@ -188,18 +194,18 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
           $temp_options_ssl_enabled = $options['ssl_enabled'];
           $temp_options_ssl_key = $options['ssl_key'];
           $temp_uri_verify = $local_uri_verify;
-          drush_log(dt("DEBUG TO DISABLE ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
-          drush_log(dt("DEBUG TO DISABLE ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
-          drush_log(dt("DEBUG TO DISABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
+          drush_log(dt("LOG/TO DISABLE ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
+          drush_log(dt("LOG/TO DISABLE ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
+          drush_log(dt("LOG/TO DISABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
           drush_set_option('encryption_was_enabled', TRUE);
           drush_set_option('temp_options_ssl_enabled', $options['ssl_enabled']);
           drush_set_option('temp_options_ssl_key', $options['ssl_key']);
           drush_set_option('temp_uri_verify', $temp_uri_verify);
           $options['ssl_enabled'] = 0;
           unset($options['ssl_key']);
-          drush_log(dt("DEBUG DISABLED ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
-          drush_log(dt("DEBUG DISABLED ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
-          drush_log(dt("DEBUG DISABLED temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
+          drush_log(dt("LOG/DISABLED ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
+          drush_log(dt("LOG/DISABLED ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
+          drush_log(dt("LOG/DISABLED temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
           drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
           sleep(5); // A small trick to avoid high load and race conditions.
         }
@@ -246,14 +252,14 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       // Re-enable encryption again if needed and only when platform has changed
       $encryption_was_enabled = drush_get_option('encryption_was_enabled');
       if ($encryption_was_enabled) {
-        drush_log(dt("DEBUG ENABLE encryption_was_enabled WAS @this", array('@this' => $encryption_was_enabled)), 'info');
+        drush_log(dt("LOG/ENABLE encryption_was_enabled WAS @this", array('@this' => $encryption_was_enabled)), 'info');
         $temp_options_ssl_enabled = drush_get_option('encryption_was_enabled');
         $temp_options_ssl_key = drush_get_option('encryption_was_enabled');
         $temp_uri_verify = drush_get_option('temp_uri_verify');
         if ($temp_options_ssl_enabled && $temp_options_ssl_key) {
-          drush_log(dt("DEBUG ENABLE temp_options_ssl_enabled WAS @this", array('@this' => $temp_options_ssl_enabled)), 'info');
-          drush_log(dt("DEBUG ENABLE temp_options_ssl_key WAS @this", array('@this' => $temp_options_ssl_key)), 'info');
-          drush_log(dt("DEBUG ENABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
+          drush_log(dt("LOG/ENABLE temp_options_ssl_enabled WAS @this", array('@this' => $temp_options_ssl_enabled)), 'info');
+          drush_log(dt("LOG/ENABLE temp_options_ssl_key WAS @this", array('@this' => $temp_options_ssl_key)), 'info');
+          drush_log(dt("LOG/ENABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
           $options['ssl_enabled'] = $temp_options_ssl_enabled;
           $options['ssl_key'] = $temp_options_ssl_key;
           drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
@@ -294,7 +300,7 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   if (!is_null($new_name) && ($new_name != d()->name)) {
     // Use correct context for cleanup operations.
     $source_name = drush_get_option('source_name');
-    drush_log(dt("DEBUG RENAME source_name is @this", array('@this' => $source_name)), 'info');
+    drush_log(dt("LOG/RENAME source_name is @this", array('@this' => $source_name)), 'info');
     // Remove the existing drush alias.
     $config = new Provision_Config_Drushrc_Alias(d()->name);
     $config->unlink();
@@ -311,12 +317,12 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   if ($rename_only) {
     // We run this extra tricky backend verify to avoid issue #1004526.
     if (!provision_is_hostmaster_site()) {
-      drush_log(dt("DEBUG RENAME new_uri is @this", array('@this' => $new_name)), 'info');
+      drush_log(dt("LOG/RENAME new_uri is @this", array('@this' => $new_name)), 'info');
       $deploy_replace_site = drush_get_option('deploy_replace_site');
-      drush_log(dt("DEBUG RENAME deploy_replace_site is @this", array('@this' => $deploy_replace_site)), 'info');
+      drush_log(dt("LOG/RENAME deploy_replace_site is @this", array('@this' => $deploy_replace_site)), 'info');
       $final_aliases = drush_get_option('aliases');
       foreach ($final_aliases as $alias) {
-        drush_log(dt("DEBUG RENAME final_aliases is @this", array('@this' => $alias)), 'info');
+        drush_log(dt("LOG/RENAME final_aliases is @this", array('@this' => $alias)), 'info');
       }
       provision_reload_config('site', drush_get_option('new_site_path', d($new_name)->site_path) . '/drushrc.php');
       d($new_name)->aliases = drush_set_option('aliases', $final_aliases);

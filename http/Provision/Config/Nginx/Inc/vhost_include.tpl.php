@@ -592,35 +592,13 @@ location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
 }
 
 ###
-### The css aggregation for Drupal 10.1 and newer.
-###
-location ~* /sites/.*/files/css/(.*)$ {
-  access_log off;
-  log_not_found off;
-  expires    30d;
-  set $nocache_details "Skip";
-  try_files  /sites/$main_site_name/files/css/$1 $uri @drupal;
-}
-
-###
-### The js aggregation for Drupal 10.1 and newer.
-###
-location ~* /sites/.*/files/js/(.*)$ {
-  access_log off;
-  log_not_found off;
-  expires    30d;
-  set $nocache_details "Skip";
-  try_files  /sites/$main_site_name/files/js/$1 $uri @drupal;
-}
-
-###
 ### The files/styles support.
 ###
 location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
   access_log off;
   log_not_found off;
-  expires    30d;
-  set $nocache_details "Skip";
+  expires max;
+  add_header Cache-Control "public";
   try_files  /sites/$main_site_name/files/$1/$2 $uri @drupal;
 }
 
@@ -630,8 +608,8 @@ location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
 location ~* /s3/files/(css|js|styles)/(.*)$ {
   access_log off;
   log_not_found off;
-  expires    30d;
-  set $nocache_details "Skip";
+  expires max;
+  add_header Cache-Control "public";
   try_files  /sites/$main_site_name/files/$1/$2 $uri @drupal;
 }
 
@@ -641,11 +619,11 @@ location ~* /s3/files/(css|js|styles)/(.*)$ {
 location ~* /sites/.*/files/imagecache/(.*)$ {
   access_log off;
   log_not_found off;
-  expires    30d;
+  expires max;
   # fix common problems with old paths after import from standalone to Aegir multisite
   rewrite ^/sites/(.*)/files/imagecache/(.*)/sites/default/files/(.*)$ /sites/$main_site_name/files/imagecache/$2/$3 last;
   rewrite ^/sites/(.*)/files/imagecache/(.*)/files/(.*)$               /sites/$main_site_name/files/imagecache/$2/$3 last;
-  set $nocache_details "Skip";
+  add_header Cache-Control "public";
   try_files  /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
 }
 
@@ -866,8 +844,8 @@ location ^~ /files/ {
   location ~* /files/css/(.*)$ {
     access_log off;
     log_not_found off;
-    expires    30d;
-    set $nocache_details "Skip";
+    expires max;
+    add_header Cache-Control "public";
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files  /sites/$main_site_name/files/css/$1 $uri @drupal;
   }
@@ -878,8 +856,8 @@ location ^~ /files/ {
   location ~* /files/js/(.*)$ {
     access_log off;
     log_not_found off;
-    expires    30d;
-    set $nocache_details "Skip";
+    expires max;
+    add_header Cache-Control "public";
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files  /sites/$main_site_name/files/js/$1 $uri @drupal;
   }
@@ -890,8 +868,8 @@ location ^~ /files/ {
   location ~* /files/(css|js|styles)/(.*)$ {
     access_log off;
     log_not_found off;
-    expires    30d;
-    set $nocache_details "Skip";
+    expires max;
+    add_header Cache-Control "public";
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files  /sites/$main_site_name/files/$1/$2 $uri @drupal;
   }
@@ -902,12 +880,12 @@ location ^~ /files/ {
   location ~* /files/imagecache/(.*)$ {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires max;
     # fix common problems with old paths after import from standalone to Aegir multisite
     rewrite ^/files/imagecache/(.*)/sites/default/files/(.*)$ /sites/$main_site_name/files/imagecache/$1/$2 last;
     rewrite ^/files/imagecache/(.*)/files/(.*)$               /sites/$main_site_name/files/imagecache/$1/$2 last;
     rewrite ^/sites/(.*)/files/imagecache/(.*)/sites/(.*)/files/(.*)$ /sites/$main_site_name/files/imagecache/$2/$4 last;
-    set $nocache_details "Skip";
+    add_header Cache-Control "public";
     rewrite  ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files  /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
@@ -926,7 +904,7 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires       30d;
     access_log    off;
     log_not_found off;
@@ -940,7 +918,7 @@ location ^~ /downloads/ {
 ### Serve & no-log static files & images directly,
 ### without all standard drupal rewrites, php-fpm etc.
 ###
-location ~* ^.+\.(?:jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|mp3|wav|midi)$ {
+location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
   expires       30d;
   access_log    off;
   log_not_found off;
@@ -1370,7 +1348,6 @@ location = /index.php {
   ###
   ### Basic security/privacy headers.
   ###
-  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Referrer-Policy "no-referrer-when-downgrade";
   add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
 

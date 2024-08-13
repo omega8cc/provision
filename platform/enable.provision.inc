@@ -8,7 +8,13 @@
 function drush_provision_drupal_provision_enable_validate() {
   if (d()->type == 'site') {
     d()->site_enabled = true;
-    provision_lock_drush_local_vnd();
+    // Lock Site-Local Drush if Unlocked
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+      drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
   }
 }
@@ -16,6 +22,12 @@ function drush_provision_drupal_provision_enable_validate() {
 function drush_provision_drupal_post_provision_enable() {
   if (d()->type == 'site') {
     d()->write_alias();
-    provision_unlock_some_vnd();
+    // Unlock Site-Local Drush If Locked
+    //$drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    //$drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+    //if (!provision_file()->exists($drush_unlock_ctrl)->status() || provision_file()->exists($drush_lock_ctrl)->status()) {
+    //  drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
+    //  provision_unlock_some_vnd();
+    //}
   }
 }

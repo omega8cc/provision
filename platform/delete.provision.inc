@@ -34,7 +34,13 @@ function drush_provision_drupal_provision_delete() {
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
-    provision_lock_drush_local_vnd();
+    // Lock Site-Local Drush if Unlocked
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+      drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
@@ -62,7 +68,13 @@ function drush_provision_drupal_provision_delete() {
     // Composer based D8+ codebase root with Drupal real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
-    provision_unlock_some_vnd();
+    // Unlock Site-Local Drush If Locked
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+    if (!provision_file()->exists($drush_unlock_ctrl)->status() || provision_file()->exists($drush_lock_ctrl)->status()) {
+      drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
+      provision_unlock_some_vnd();
+    }
 
     // Make sure if we are within parent codebase directory
     $test_parent = dirname(d()->root);

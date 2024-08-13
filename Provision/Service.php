@@ -281,9 +281,10 @@ class Provision_Service extends Provision_ChainedState {
       // Only attempt to restart if the command has been filled in.
       if ($cmd = $this->server->{"{$this->service}_restart_cmd"}) {
         if ($this->server->shell_exec($cmd)) {
-          drush_log(dt('%service on %server has been restarted', array(
+          drush_log(dt('%service on %server has been restarted with %cmd', array(
             '%service' => $service,
-            '%server' => $this->server->remote_host))
+            '%server' => $this->server->remote_host,
+            '%cmd' => $cmd))
           , 'success');
 
           return TRUE;
