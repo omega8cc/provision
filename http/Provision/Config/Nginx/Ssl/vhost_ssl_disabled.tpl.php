@@ -17,16 +17,7 @@ if (!$nginx_has_http3 && $server->nginx_has_http3) {
   $nginx_has_http3 = $server->nginx_has_http3;
 }
 
-if ($nginx_has_http2) {
-  $ssl_args = "ssl http2";
-}
-else {
-  $ssl_args = "ssl";
-}
-if ($nginx_has_http3) {
-  $ssl_args = "ssl";
-}
-
+$ssl_args = "ssl";
 $ssl_listen_ipv4 = "*";
 $ssl_listen_ipv6 = "[::]";
 ?>
@@ -36,9 +27,11 @@ server {
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
   #listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
-  http2                      on;
   #http3                      on;
   #http3_hq                   on;
+<?php endif; ?>
+<?php if ($nginx_has_http2): ?>
+  http2                      on;
 <?php endif; ?>
   server_name  <?php print $this->uri . ' ' . implode(' ', str_replace('/', '.', $this->aliases)); ?>;
   root         /var/www/nginx-default;
