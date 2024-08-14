@@ -36,24 +36,13 @@ if (!$nginx_has_http3 && $server->nginx_has_http3) {
 }
 
 $aegir_root = d('@server_master')->aegir_root;
-
-if ($nginx_has_http2) {
-  $ssl_args = "ssl http2";
-}
-else {
-  $ssl_args = "ssl";
-}
-if ($nginx_has_http3) {
-  $ssl_args = "ssl";
-}
-
+$ssl_args = "ssl";
 $ssl_listen_ipv4 = "*";
 $ssl_listen_ipv6 = "[::]";
 $main_name = $this->uri;
 if ($this->redirection) {
   $main_name = $this->redirection;
 }
-
 $legacy_tls_ctrl = $aegir_root . "/static/control/tls-legacy-enable-" . $main_name . ".info";
 $legacy_tls_enable = FALSE;
 if (provision_file()->exists($legacy_tls_ctrl)->status()) {
@@ -69,9 +58,11 @@ server {
   #listen       <?php print "{$ssl_listen_ipv6}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
   #listen       <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
-  http2                      on;
   #http3                      on;
   #http3_hq                   on;
+<?php endif; ?>
+<?php if ($nginx_has_http2): ?>
+  http2                      on;
 <?php endif; ?>
 <?php
   // if we use redirections, we need to change the redirection
