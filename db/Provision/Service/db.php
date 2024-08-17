@@ -196,7 +196,7 @@ class Provision_Service_db extends Provision_Service {
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_site_database is: @var", array('@var' => $backup_mode)), 'info');
 
-    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    if ($backup_mode !== 'backup_mysqldump_only' && $backup_mode !== 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
       $mydumper_path = '/usr/local/bin/mydumper';
       $myloader_path = '/usr/local/bin/myloader';

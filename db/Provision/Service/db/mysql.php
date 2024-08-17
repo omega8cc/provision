@@ -74,7 +74,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
     $host = ($host) ? $host : '%';
 
-    if ($host != "127.0.0.1") {
+    if ($host !== "127.0.0.1") {
       $extra_host = "127.0.0.1";
       $this->grant_privileges($name, $username, $password, $extra_host);
     }
@@ -234,7 +234,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $success = $this->query("DROP USER `%s`@`%s`", $username, $host) && $success;
     }
 
-    if ($host != "127.0.0.1") {
+    if ($host !== "127.0.0.1") {
       $extra_host = "127.0.0.1";
       $success_extra_host = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $extra_host);
 
@@ -284,7 +284,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
 
-    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    if ($backup_mode !== 'backup_mysqldump_only' && $backup_mode !== 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
       $mydumper_path = '/usr/local/bin/mydumper';
       $myloader_path = '/usr/local/bin/myloader';
@@ -561,7 +561,7 @@ port=%s
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
 
-    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    if ($backup_mode !== 'backup_mysqldump_only' && $backup_mode !== 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
       $mydumper_path = '/usr/local/bin/mydumper';
       $myloader_path = '/usr/local/bin/myloader';
@@ -677,7 +677,7 @@ port=%s
           $err = fread($pipes[2], 4096);
           // Close stderr as well.
           fclose($pipes[2]);
-          if (proc_close($process) != 0) {
+          if (proc_close($process) !== 0) {
             drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump (command: %command) (error: %msg)', array('%msg' => $err, '%command' => $cmd)));
           }
         }

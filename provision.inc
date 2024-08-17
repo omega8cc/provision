@@ -589,7 +589,7 @@ function provision_get_base_url() {
   $base_url = 'http://' . d()->uri;
 
   $http_port = d()->server->http_port;
-  if (!is_null($http_port) && ($http_port != 80)) {
+  if (!is_null($http_port) && ($http_port !== 80)) {
     $base_url .= ':' . $http_port;
   }
   return $base_url;
