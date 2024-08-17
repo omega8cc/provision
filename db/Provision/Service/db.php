@@ -180,7 +180,8 @@ class Provision_Service_db extends Provision_Service {
 
     $enable_myquick = FALSE;
     $myloader_path = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
+    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_site_database is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');

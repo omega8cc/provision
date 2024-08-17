@@ -23,7 +23,8 @@ function drush_db_post_provision_deploy() {
 
   $enable_myquick = FALSE;
   $oct_db_test = FALSE;
-  $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+  $backup_mode = drush_get_option('selected_backup_mode', FALSE);
+  drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_db_post_provision_deploy is: @var", array('@var' => $backup_mode)), 'info');
 
   if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
     $aegir_root = d('@server_master')->aegir_root;

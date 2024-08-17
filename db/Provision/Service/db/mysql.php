@@ -268,7 +268,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $enable_myquick = FALSE;
     $myloader_path = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
+    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
@@ -531,7 +532,8 @@ port=%s
 
     $enable_myquick = FALSE;
     $mydumper_path = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', 'control_file');
+    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
+    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
