@@ -31,7 +31,7 @@ function drush_db_post_provision_deploy() {
         drush_set_option('backup_mode', $backup_mode);
         drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
       }
-      unlink(AEGIR_BACKUP_MODE_CTRL);
+      //unlink(AEGIR_BACKUP_MODE_CTRL);
     }
     else {
       drush_log("Backup mode control file not found.", 'info');
