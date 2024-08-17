@@ -22,9 +22,6 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
   './private',
   './themes',
   './vendor',
-  './drushrc.php',
-  './settings.php',
-  './local.settings.php',
 );
 
 /**
@@ -215,12 +212,7 @@ function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
   drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
   $exclusions = "";
   foreach ($directories as $directory) {
-    if (is_dir($directory)) {
-      $exclusions .= " '$directory'/exclude.tag";
-    }
-    else {
-      $exclusions .= " '$directory'.exclude.tag";
-    }
+    $exclusions .= " '$directory'/exclude.tag";
   }
   drush_log(dt("In drush_provision_drupal_provision_backup_get_exclusions_sqldump: @var", array('@var' => $exclusions)), 'info');
   return $exclusions;
