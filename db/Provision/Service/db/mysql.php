@@ -270,10 +270,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $myloader_path = FALSE;
     $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     if (empty($backup_mode)) {
-      $task = drush_get_context('HOSTING_TASK');
-      if (!empty($task->task_args['backup_mode'])) {
-        $backup_mode = $task->task_args['backup_mode'];
-      }
+      $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
 
@@ -540,10 +537,7 @@ port=%s
     $mydumper_path = FALSE;
     $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     if (empty($backup_mode)) {
-      $task = drush_get_context('HOSTING_TASK');
-      if (!empty($task->task_args['backup_mode'])) {
-        $backup_mode = $task->task_args['backup_mode'];
-      }
+      $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
 
