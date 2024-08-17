@@ -206,12 +206,13 @@ function drush_provision_drupal_provision_backup_get_exclusions() {
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
   }
-  drush_log(dt('In drush_provision_drupal_provision_backup_get_exclusions: @path.', array('@path' => $exclusions, 'info');
+  drush_log(dt("In drush_provision_drupal_provision_backup_get_exclusions: @var", array('@var' => $exclusions)), 'info');
   return $exclusions;
 }
 
 function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
+  drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
   $exclusions = "";
   foreach ($directories as $directory) {
     if (is_dir($directory)) {
@@ -221,7 +222,7 @@ function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
       $exclusions .= " '$directory'.exclude.tag";
     }
   }
-  drush_log(dt('In drush_provision_drupal_provision_backup_get_exclusions_sqldump: @path.', array('@path' => $exclusions, 'info');
+  drush_log(dt("In drush_provision_drupal_provision_backup_get_exclusions_sqldump: @var", array('@var' => $exclusions)), 'info');
   return $exclusions;
 }
 
