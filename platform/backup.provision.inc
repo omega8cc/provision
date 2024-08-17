@@ -92,9 +92,9 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
   }
   drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
 
-  if ($backup_mode == 'backup_mysqldump_only' ||
-      $backup_mode == 'site_files_without_db_backup' ||
-      $backup_mode == 'site_files_with_mysqldump') {
+  if ($backup_mode === 'backup_mysqldump_only' ||
+      $backup_mode === 'site_files_without_db_backup' ||
+      $backup_mode === 'site_files_with_mysqldump') {
     $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
   }
   else {
@@ -159,7 +159,7 @@ function drush_provision_drupal_provision_backup() {
     }
   }
   drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
-  if ($backup_mode == 'backup_mysqldump_only') {
+  if ($backup_mode === 'backup_mysqldump_only') {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
   }
   else {
@@ -206,6 +206,7 @@ function drush_provision_drupal_provision_backup_get_exclusions() {
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
   }
+  drush_log(dt('In drush_provision_drupal_provision_backup_get_exclusions: @path.', array('@path' => $exclusions, 'info');
   return $exclusions;
 }
 
@@ -213,8 +214,14 @@ function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
   $exclusions = "";
   foreach ($directories as $directory) {
-    $exclusions .= " '$directory'/exclude.tag";
+    if (is_dir($directory)) {
+      $exclusions .= " '$directory'/exclude.tag";
+    }
+    else {
+      $exclusions .= " '$directory'.exclude.tag";
+    }
   }
+  drush_log(dt('In drush_provision_drupal_provision_backup_get_exclusions_sqldump: @path.', array('@path' => $exclusions, 'info');
   return $exclusions;
 }
 
