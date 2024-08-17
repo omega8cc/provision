@@ -465,6 +465,7 @@ function provision_count_cpus() {
 
 define('CRITICAL_LOAD_MULTIPLIER', 5);
 define('CRITICAL_LOAD_THRESHOLD', 10);
+define('AEGIR_BACKUP_MODE_CTRL', '/tmp/aegir_backup_mode.txt');
 
 /**
  * determine if overall load of the machine is critical
