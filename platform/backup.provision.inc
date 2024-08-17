@@ -78,7 +78,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 function drush_provision_drupal_provision_backup_suggest_filename() {
   $backup_mode = drush_get_option('selected_backup_mode', FALSE);
   if (empty($backup_mode)) {
-    $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
+    $backup_mode = &drush_get_context('BACKUP_MODE', FALSE);
   }
   drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
 
@@ -136,7 +136,7 @@ function drush_provision_drupal_provision_backup() {
 
   $backup_mode = drush_get_option('selected_backup_mode', FALSE);
   if (empty($backup_mode)) {
-    $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
+    $backup_mode = &drush_get_context('BACKUP_MODE', FALSE);
   }
   drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
   if ($backup_mode == 'backup_mysqldump_only') {
@@ -209,7 +209,7 @@ function drush_provision_drupal_post_provision_backup() {
     $oct_db_test = FALSE;
     $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     if (empty($backup_mode)) {
-      $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
+      $backup_mode = &drush_get_context('BACKUP_MODE', FALSE);
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
 
@@ -258,7 +258,7 @@ function drush_provision_drupal_provision_backup_rollback() {
     $oct_db_test = FALSE;
     $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     if (empty($backup_mode)) {
-      $backup_mode = drush_get_context('BACKUP_MODE', FALSE);
+      $backup_mode = &drush_get_context('BACKUP_MODE', FALSE);
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
 
