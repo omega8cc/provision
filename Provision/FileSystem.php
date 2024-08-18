@@ -351,7 +351,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       $this->tokens['@reason'] = dt("A file already exists at @path");
       $this->last_status = FALSE;
     }
-    elseif (is_link($path) && (readlink($path) !== $target)) {
+    elseif (is_link($path) && (readlink($path) != $target)) {
       $this->tokens['@reason'] = dt("A symlink already exists at target, but it is pointing to @link", array("@link" => readlink($path)));
       $this->last_status = FALSE;
     }
@@ -442,7 +442,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     if (!is_link($path)) {
       if ($dh = @opendir($path)) {
         while (($file = readdir($dh)) !== false) {
-          if ($file !== '.' && $file !== '..') {
+          if ($file != '.' && $file != '..') {
             $status = $this->_call_recursive($func, $path . "/" . $file, $arg) && $status;
           }
         }

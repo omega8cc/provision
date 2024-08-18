@@ -243,7 +243,7 @@ function drush_provision_drupal_post_provision_backup() {
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
 
-    if ($backup_mode !== 'backup_mysqldump_only' && $backup_mode !== 'site_files_with_mysqldump') {
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
@@ -302,7 +302,7 @@ function drush_provision_drupal_provision_backup_rollback() {
     }
     drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
 
-    if ($backup_mode !== 'backup_mysqldump_only' && $backup_mode !== 'site_files_with_mysqldump') {
+    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';

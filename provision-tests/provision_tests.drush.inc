@@ -123,7 +123,7 @@ function drush_provision_tests_run() {
   drush_log(dt('Releasing lock on task queue.'));
   lock_release('hosting_queue_tasks_running');
 
-  if (drush_get_error() !== DRUSH_SUCCESS) {
+  if (drush_get_error() != DRUSH_SUCCESS) {
     drush_set_error(drush_get_error(), 'Running tests failed');
     exit(1);
   }
@@ -184,7 +184,7 @@ function drush_provision_tests_new_run() {
   drush_log('Releasing tasks lock.');
   lock_release('hosting_queue_tasks_running');
 
-  if (drush_get_error() !== DRUSH_SUCCESS) {
+  if (drush_get_error() != DRUSH_SUCCESS) {
     drush_set_error(drush_get_error(), 'Running tests failed');
     exit(1);
   }
@@ -244,7 +244,7 @@ function drush_provision_tests_provision_demo_content() {
   drush_log('Releasing tasks lock.');
   lock_release('hosting_queue_tasks_running');
 
-  if (drush_get_error() !== DRUSH_SUCCESS) {
+  if (drush_get_error() != DRUSH_SUCCESS) {
     drush_set_error(drush_get_error(), 'Setting up demo content failed');
     exit(1);
   }

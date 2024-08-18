@@ -47,7 +47,7 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_name = NUL
   drush_set_option('old_platform', d()->platform->name);
 
   // If we are renaming the site, pick this up early.
-  if (!is_null($new_name) && ($new_name !== d()->name)) {
+  if (!is_null($new_name) && ($new_name != d()->name)) {
     drush_set_option('target_name', $new_name);
     drush_set_option('source_name', d()->uri);
   }
@@ -103,7 +103,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // we should update the info collected about source and target platform first.
     // Note that we have to exclude Hostmaster platform from this extra verify.
     if (!provision_is_hostmaster_site() && drush_get_option('provision_verify_platforms_before_migrate', TRUE)) {
-      if (!is_null(d($platform)->name) && (d($platform)->name !== d()->platform->name)) {
+      if (!is_null(d($platform)->name) && (d($platform)->name != d()->platform->name)) {
         provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->platform->name, 'verify'), array('force' => TRUE));
         sleep(5); // A small trick to avoid high load and race conditions.
         provision_backend_invoke('@hostmaster', 'hosting-task', array(d($platform)->name, 'verify'), array('force' => TRUE));
@@ -112,7 +112,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     }
   }
 
-  if (!is_null($new_name) && ($new_name !== d()->name)) {
+  if (!is_null($new_name) && ($new_name != d()->name)) {
     // XXX: right now we just drop SSL configuration when migrating, because
     // we do not check if the site name change is compatible with the
     // certificate. This can be removed when we a) check for wildcard
@@ -297,7 +297,7 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
     d()->service('http')->sync(d()->site_path);
   }
 
-  if (!is_null($new_name) && ($new_name !== d()->name)) {
+  if (!is_null($new_name) && ($new_name != d()->name)) {
     // Use correct context for cleanup operations.
     $source_name = drush_get_option('source_name');
     drush_log(dt("LOG/RENAME source_name is @this", array('@this' => $source_name)), 'info');
