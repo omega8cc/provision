@@ -22,7 +22,7 @@ if (drush_drupal_major_version() >= 8) {
   // https://www.drupal.org/project/drupal/issues/2942001
   drush_set_option('themes', _scrub_object(\Drupal::service('theme_handler')->rebuildThemeData()), 'site');
 }
-elseif (drush_drupal_major_version() === 7) {
+elseif (drush_drupal_major_version() == 7) {
   drush_set_option('modules', _scrub_object(system_rebuild_module_data()), 'site');
   drush_set_option('themes', _scrub_object(system_rebuild_theme_data()), 'site');
 }

@@ -86,7 +86,7 @@ function _provision_drupal_parse_info_file($filename) {
 
       // Create nested arrays
       foreach ($keys as $key) {
-        if ($key === '') {
+        if ($key == '') {
           $key = count($parent);
         }
         if (!isset($parent[$key]) || !is_array($parent[$key])) {
@@ -101,7 +101,7 @@ function _provision_drupal_parse_info_file($filename) {
       }
 
       // Insert actual value
-      if ($last === '') {
+      if ($last == '') {
         $last = count($parent);
       }
       $parent[$last] = $value;
@@ -157,17 +157,17 @@ function _provision_drupal_system_map() {
     $module->info = provision_parse_info_file($info_file);
 
     // Skip hidden modules
-    if (isset($module->info['hidden']) && $module->info['hidden'] === 1) {
+    if (isset($module->info['hidden']) && $module->info['hidden'] == 1) {
       continue;
     }
     $frags = explode("/", $module->filename);
     // flag site-specific modules
-    if ($frags[0] === 'sites' && $frags[1] != 'all') {
+    if ($frags[0] == 'sites' && $frags[1] != 'all') {
       $module->platform = -1;
     }
 
     $module->filename = realpath($module->filename);
-    if ($module->schema_version === -1) {
+    if ($module->schema_version == -1) {
       $module->schema_version = 0;
     }
     $packages['modules'][$module->name] = $module;
@@ -179,14 +179,14 @@ function _provision_drupal_system_map() {
   foreach (_provision_system_query("theme") as $theme) {
     $frags = explode("/", $theme->filename);
     // flag site-specific themes
-    if ($frags[0] === 'sites' && $frags[1] != 'all') {
+    if ($frags[0] == 'sites' && $frags[1] != 'all') {
       $theme->platform = -1;
     }
     $info_file = sprintf("%s/%s.info", dirname($theme->filename), $theme->name);
     $theme->info = provision_parse_info_file($info_file);
     $theme->filename = realpath($theme->filename);
 
-    if ($theme->schema_version === -1) {
+    if ($theme->schema_version == -1) {
       $theme->schema_version = 0;
     }
 
@@ -213,7 +213,7 @@ function _provision_find_profiles() {
 
     while (FALSE !== ($name = readdir($dir))) {
       $languages = array();
-      if (($name === '..') || ($name === '.') || (!is_dir("$profiles_subdir/$name"))) {
+      if (($name == '..') || ($name == '.') || (!is_dir("$profiles_subdir/$name"))) {
         continue;
       }
 
@@ -225,7 +225,7 @@ function _provision_find_profiles() {
       if (file_exists($info_file)) {
         $profile->info = provision_parse_info_file($info_file);
         // Skip hidden profiles
-        if (isset($profile->info['hidden']) && $profile->info['hidden'] === 1) {
+        if (isset($profile->info['hidden']) && $profile->info['hidden'] == 1) {
           continue;
         }
       }

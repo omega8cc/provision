@@ -123,13 +123,13 @@ function provision_is_local_host($host) {
   // your site alias.  Note that sometimes 'uname -n' does not return the
   // correct value.  To fix it, put the correct hostname in /etc/hostname
   // and then run 'hostname -F /etc/hostname'.
-  return ($host === 'localhost') ||
-    ($host === '127.0.0.1') ||
-    (gethostbyname($host) === '127.0.0.1') ||
-    (gethostbyname($host) === '127.0.1.1') || // common setting on
+  return ($host == 'localhost') ||
+    ($host == '127.0.0.1') ||
+    (gethostbyname($host) == '127.0.0.1') ||
+    (gethostbyname($host) == '127.0.1.1') || // common setting on
                                              // ubuntu and friends
-    ($host === strtolower(php_uname('n'))) ||
-    ($host === provision_fqdn());
+    ($host == strtolower(php_uname('n'))) ||
+    ($host == provision_fqdn());
 }
 
 function genRandStrUnlock($length = 12) {
@@ -214,7 +214,7 @@ function provision_unlock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
         $psr_bak = '/var/aegir/backups';
       }
@@ -289,7 +289,7 @@ function provision_unlock_drush_local_vnd() {
         $is_patched = "NO";
       }
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
       else {
@@ -299,7 +299,7 @@ function provision_unlock_drush_local_vnd() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched === 'YES') {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'YES') {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
@@ -311,7 +311,7 @@ function provision_unlock_drush_local_vnd() {
             $line_status = 'warning';
           }
           else { // Only log the last line as success.
-            $line_status = $index+1 === count($result) ? 'success' : 'notice';
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
           }
           drush_log($line, $line_status);
         }
@@ -446,7 +446,7 @@ function provision_lock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
       }
       else {
@@ -497,7 +497,7 @@ function provision_lock_drush_local_vnd() {
         $is_patched = "NO";
       }
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
       else {
@@ -507,7 +507,7 @@ function provision_lock_drush_local_vnd() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched === 'NO') {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
@@ -519,7 +519,7 @@ function provision_lock_drush_local_vnd() {
             $line_status = 'warning';
           }
           else { // Only log the last line as success.
-            $line_status = $index+1 === count($result) ? 'success' : 'notice';
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
           }
           drush_log($line, $line_status);
         }
@@ -565,7 +565,7 @@ function provision_auto_fix_platform_root($isroot) {
  */
 function provision_is_hostmaster_site() {
   // If the current root and URI matches "@hostmaster" root and URI, this is hostmaster.
-  return d()->root === d('@hostmaster')->root && d()->uri === d('@hostmaster')->uri;
+  return d()->root == d('@hostmaster')->root && d()->uri == d('@hostmaster')->uri;
 }
 
 /**
@@ -648,7 +648,7 @@ function _provision_recursive_delete($path) {
     $d = dir($path);
     if (!empty($d)) {
       while (($entry = $d->read()) !== FALSE) {
-        if ($entry === '.' || $entry === '..') {
+        if ($entry == '.' || $entry == '..') {
           continue;
         }
         $entry_path = $path . '/' . $entry;

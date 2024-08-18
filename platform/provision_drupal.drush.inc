@@ -220,7 +220,7 @@ function provision_drupal_push_site($override_slave_authority = FALSE) {
   if (d()->type === 'site') {
     // Check whether we're hosted on a cluster, in which case, the master is
     // authoritative.
-    $cluster = d()->platform->web_server->http_service_type === 'cluster' ? TRUE : FALSE;
+    $cluster = d()->platform->web_server->http_service_type == 'cluster' ? TRUE : FALSE;
     $options = array();
     if ($override_slave_authority || $cluster) {
       $exclude = NULL;
@@ -291,7 +291,7 @@ function _provision_drupal_create_directories($url = NULL) {
   // Ensure that the stat cache is cleared, so that we have an up-to-date view of the filesystem.
   clearstatcache();
   if (is_null($url)) {
-    if (d()->type === 'site') {
+    if (d()->type == 'site') {
       $url = d()->uri;
     }
     else {
@@ -489,7 +489,7 @@ function _provision_drupal_ensure_htaccess_update() {
   // Composer based D8+ codebase root with Drupal real root.
   d()->root = provision_auto_fix_platform_root(d()->root);
 
-  if (drush_drupal_major_version() === 7) {
+  if (drush_drupal_major_version() == 7) {
 
     // Copied from modules/system/system.install system_requirements()
     $htaccess_files['public://.htaccess'] = array(
@@ -517,7 +517,7 @@ function _provision_drupal_ensure_htaccess_update() {
       }
     }
   }
-  elseif (drush_drupal_major_version() === 6 && function_exists('file_create_htaccess')) {
+  elseif (drush_drupal_major_version() == 6 && function_exists('file_create_htaccess')) {
 
     // Copied from modules/system/system.install system_requirements()
     $htaccess_files['files_htaccess'] = array(
@@ -822,7 +822,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
     // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
-    if (empty($files[$name]->info['version']) || $files[$name]->info['version'] === 'VERSION') {
+    if (empty($files[$name]->info['version']) || $files[$name]->info['version'] == 'VERSION') {
       $files[$name]->version = drush_drupal_version();
     }
     else {
@@ -867,7 +867,7 @@ function provision_prepare_environment() {
 
   // As of Drupal 7 there is no more mysqli type
   if (drush_drupal_major_version() >= 7) {
-    $_SERVER['db_type'] = ($_SERVER['db_type'] === 'mysqli') ? 'mysql' : $_SERVER['db_type'];
+    $_SERVER['db_type'] = ($_SERVER['db_type'] == 'mysqli') ? 'mysql' : $_SERVER['db_type'];
   }
 
   // Invoke provision_prepare_environment: Allow other scripts to react to the

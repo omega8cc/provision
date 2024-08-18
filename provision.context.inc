@@ -18,7 +18,7 @@
  *
  * @return provision_Context
  *   provision_Context object (by reference) or NULL if it can't be loaded and
- *   $allow_creation === FALSE.
+ *   $allow_creation == FALSE.
  */
 function & d($name = NULL, $_root_object = FALSE, $allow_creation = TRUE) {
   static $instances = NULL;
@@ -38,7 +38,7 @@ function & d($name = NULL, $_root_object = FALSE, $allow_creation = TRUE) {
    * senior Aegir developpers three full days of headbanging on keyboards to
    * figure that stuff out.
    */
-  if (drush_get_context('DRUSH_BOOTSTRAP_PHASE') === DRUSH_BOOTSTRAP_NONE) {
+  if (drush_get_context('DRUSH_BOOTSTRAP_PHASE') == DRUSH_BOOTSTRAP_NONE) {
     $ret = drush_set_error('DRUSH_BOOTSTRAPPING', 'drush is still bootstrapping, d() should be ran only within a hook or a function');
     return $ret;
   }
@@ -47,7 +47,7 @@ function & d($name = NULL, $_root_object = FALSE, $allow_creation = TRUE) {
     return $name;
   }
 
-  if ($name === 'all') {
+  if ($name == 'all') {
     return $instances;
   }
 

@@ -33,10 +33,10 @@ function drush_provision_drupal_provision_import() {
 
 function drush_provision_drupal_post_provision_import() {
   if (d()->type === 'site') {
-    if (drush_drupal_major_version() === 6) {
+    if (drush_drupal_major_version() == 6) {
       d()->profile = drush_set_option('profile', drush_get_option('profile', 'default', 'site'));
     }
-    elseif (drush_drupal_major_version() === 7) {
+    elseif (drush_drupal_major_version() == 7) {
       d()->profile = drush_set_option('profile', drush_get_option('profile', 'standard', 'site'));
     }
     elseif (drush_drupal_major_version() >= 8) {

@@ -20,7 +20,7 @@ define('MAINTENANCE_MODE', 'install');
  */
 function install_verify_drupal() {
   $result = @db_query("SELECT name FROM {system} WHERE name = 'system'");
-  return $result && db_result($result) === 'system';
+  return $result && db_result($result) == 'system';
 }
 
 /**
@@ -201,17 +201,17 @@ function install_main() {
   $severity = drupal_requirements_severity($requirements);
 
   // If there are issues, report them.
-  if ($severity === REQUIREMENT_ERROR) {
+  if ($severity == REQUIREMENT_ERROR) {
     foreach ($requirements as $requirement) {
-      if (isset($requirement['severity']) && $requirement['severity'] === REQUIREMENT_ERROR) {
+      if (isset($requirement['severity']) && $requirement['severity'] == REQUIREMENT_ERROR) {
         drush_log($requirement['description'] .' ('. st('Currently using !item !version', array('!item' => $requirement['title'], '!version' => $requirement['value'])) .')', 'error');
       }
     }
     $missing_requirement = TRUE;
   }
-  if ($severity === REQUIREMENT_WARNING) {
+  if ($severity == REQUIREMENT_WARNING) {
     foreach ($requirements as $requirement) {
-      if (isset($requirement['severity']) && $requirement['severity'] === REQUIREMENT_WARNING) {
+      if (isset($requirement['severity']) && $requirement['severity'] == REQUIREMENT_WARNING) {
         $message = $requirement['description'];
         if (isset($requirement['value']) && $requirement['value']) {
           $message .= ' ('. st('Currently using !item !version', array('!item' => $requirement['title'], '!version' => $requirement['value'])) .')';
@@ -326,13 +326,13 @@ function install_main() {
 
       // If the profile doesn't move on to a new task we assume
       // that it is done.
-      if ($task === 'profile') {
+      if ($task == 'profile') {
         $task = 'profile-finished';
       }
     }
   }
 
-  if ($task === 'profile-finished') {
+  if ($task == 'profile-finished') {
     // profile-finished task
     // Secondary locale import
     if (!empty($install_locale) && ($install_locale != 'en')) {

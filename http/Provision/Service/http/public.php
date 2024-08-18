@@ -21,7 +21,7 @@ class Provision_Service_http_public extends Provision_Service_http {
     $data['http_port'] = $this->server->http_port;
 
     // TODO: move away from drush_get_context entirely.
-    if ($config === 'site') {
+    if ($config == 'site') {
 
       // DO not create it with the port here. Protocol only is enough.
       $data['redirect_url'] = "http://{$this->context->uri}";
@@ -35,7 +35,7 @@ class Provision_Service_http_public extends Provision_Service_http {
   function init_server() {
     parent::init_server();
     // System account
-    if ($this->server->name === '@server_master') {
+    if ($this->server->name == '@server_master') {
       $this->server->setProperty('web_group', _provision_default_web_group());
     }
     else {

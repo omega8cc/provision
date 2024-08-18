@@ -33,7 +33,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
     // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
-    if (empty($files[$name]->info['version']) || $files[$name]->info['version'] === 'VERSION') {
+    if (empty($files[$name]->info['version']) || $files[$name]->info['version'] == 'VERSION') {
       $files[$name]->version = drush_drupal_version();
     }
     else {
@@ -101,7 +101,7 @@ function _provision_drupal_system_map() {
 function _provision_system_query($type) {
   $packages = array();
 
-  if ($type === 'theme') {
+  if ($type == 'theme') {
     /** @var \Drupal\Core\Extension\Extension[] $extensions_data */
     // Could be replaced with:
     // \Drupal::service('extension.list.theme')->reset()
@@ -122,22 +122,22 @@ function _provision_system_query($type) {
   foreach ($extensions_data as $name => $extension_data) {
     $package = (object) $extension_data->info;
 
-    if ($type === 'module') {
+    if ($type == 'module') {
       $package->filename = \Drupal::service('extension.list.module')->getPathname($name);
     }
-    elseif ($type === 'theme') {
+    elseif ($type == 'theme') {
       $package->filename = \Drupal::service('extension.list.theme')->getPathname($name);
     }
 
     $frags = explode("/", $package->filename);
     // Flag site-specific packages.
-    if ($frags[0] === 'sites' && $frags[1] != 'all') {
+    if ($frags[0] == 'sites' && $frags[1] != 'all') {
       $package->platform = -1;
     }
     $package->status = $extension_data->status;
     $package->filename = realpath($package->filename);
 
-    if ($type === 'module') {
+    if ($type == 'module') {
       if (drush_drupal_major_version() <= 9) {
         $package->schema_version = drupal_get_installed_schema_version($name);
       }
@@ -186,7 +186,7 @@ function _provision_find_profiles() {
     foreach ($info_files as $path => $info_file) {
       $path = realpath($path);
       $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($path));
-      if ($info['type'] === 'profile' && (!isset($info['hidden']) || !$info['hidden'])) {
+      if ($info['type'] == 'profile' && (!isset($info['hidden']) || !$info['hidden'])) {
         $profile = new stdClass();
         $profile->name = $info['name'];
         $profile->info = $info;

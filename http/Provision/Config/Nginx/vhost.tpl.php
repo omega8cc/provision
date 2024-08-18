@@ -23,7 +23,7 @@ if ($this->redirection) {
       // if we use redirections, we need to change the redirection
       // target to be the original site URL ($this->uri instead of
       // $alias_url)
-      if ($this->redirection && $alias_url === $this->redirection) {
+      if ($this->redirection && $alias_url == $this->redirection) {
         $this->uri = str_replace('/', '.', $this->uri);
         print "  server_name  {$this->uri};\n";
       } else {
@@ -31,7 +31,7 @@ if ($this->redirection) {
         print "  server_name  {$alias_url};\n";
       }
       print "  access_log   off;\n";
-      if ($satellite_mode === 'boa') {
+      if ($satellite_mode == 'boa') {
         print "\n";
         print "  ###\n";
         print "  ### Allow access to letsencrypt.org ACME challenges directory.\n";
