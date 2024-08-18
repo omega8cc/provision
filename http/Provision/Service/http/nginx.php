@@ -185,9 +185,9 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     // Report results in the log if requested.
     if (!empty($server_task)) {
       drush_log(dt('PHP-FPM @mode mode detected -' . '@task' . '- @yes_or_no socket found @path.', array(
-        '@mode' => ($mode == 'socket') ? 'unix socket' : 'port',
+        '@mode' => ($mode === 'socket') ? 'unix socket' : 'port',
         '@task' => strtoupper($server_task),
-        '@yes_or_no' => ($mode == 'socket') ? 'YES' : 'NO',
+        '@yes_or_no' => ($mode === 'socket') ? 'YES' : 'NO',
         '@path' => ($socket_path ? $socket_path : self::SOCKET_PATH_PHP5 . ' or ' . static::getPhp7FpmSocketPath()),
       )), 'info');
     }
@@ -207,14 +207,14 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
    */
   public static function getPhpFpmSocketPath() {
     // Simply return FALSE if we're in port mode.
-    if (self::getPhpFpmMode() == 'port') {
+    if (self::getPhpFpmMode() === 'port') {
       return FALSE;
     }
 
     // Return the socket path based on the PHP version.
     $major_php = strtok(phpversion(), '.');
 
-    if ($major_php == 7 || $major_php == 8) {
+    if ($major_php === 7 || $major_php === 8) {
       return static::getPhp7FpmSocketPath();
     }
     else {
@@ -266,7 +266,7 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
 
     foreach ($options as $test) {
       if (is_executable($test)) {
-        $command = ($test == '/etc/init.d/nginx') ? $test : $test . ' -s';
+        $command = ($test === '/etc/init.d/nginx') ? $test : $test . ' -s';
         break;
       }
     }

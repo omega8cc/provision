@@ -38,7 +38,7 @@ class Provision_Config_SubdirVhost extends Provision_Config_Http {
     $parent_site_drushrc = $drush_home_dir . $this->uri() . '.alias.drushrc.php';
     drush_log(dt('Checking for parent site %vhost', ['%vhost' => $this->uri()]), 'notice');
     if (provision_file()->exists($parent_site_drushrc)->status()
-      || $this->uri() == d('@hostmaster')->uri) { // The Hostmaster site's alias is always `@hostmaster`
+      || $this->uri() === d('@hostmaster')->uri) { // The Hostmaster site's alias is always `@hostmaster`
       drush_log(dt('Parent site (%vhost) was found.', ['%vhost' => $this->uri()]), 'notice');
       return TRUE;
     }
@@ -58,7 +58,7 @@ class Provision_Config_SubdirVhost extends Provision_Config_Http {
       ];
       if ($this->parent_site()) {
         drush_log(dt('Parent site (%vhost) exists for alias %alias, skipping generation of default parent vhost.', $log_vars), 'notice');
-        if (drush_parse_command()['command'] == 'provision-install') {
+        if (drush_parse_command()['command'] === 'provision-install') {
           drush_log(dt('Parent site (%vhost) re-verify required to include subdir config for %alias', $log_vars), 'warning');
         }
       }

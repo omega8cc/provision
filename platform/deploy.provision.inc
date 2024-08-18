@@ -116,7 +116,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
 
     if (isset($site_packages['modules']) && is_array($site_packages['modules'])) {
       foreach ($site_packages['modules'] as $name => $module) {
-        if ($module['status'] == 1) {
+        if ($module['status'] === 1) {
           if (isset($module['platform']) && $module['platform'] !== '-1') {
             drush_log(dt("The !name module is installed in the site's modules directory. Skipping schema version check.", array('!name' => $name)), 'info');
           }
@@ -289,7 +289,7 @@ function drush_provision_drupal_post_provision_deploy() {
               $line_status = 'notice';
             }
             else { // Only log the last line as success.
-              $line_status = $index+1 == count($output) ? 'success' : 'notice';
+              $line_status = $index+1 === count($output) ? 'success' : 'notice';
             }
             drush_log($line, $line_status);
           }

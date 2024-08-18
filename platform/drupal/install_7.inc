@@ -101,7 +101,7 @@ function install_main() {
 
   $db_spec['db_prefix'] = $GLOBALS['db_prefix'];
 
-  if ($db_spec['driver'] == 'mysqli') {
+  if ($db_spec['driver'] === 'mysqli') {
     $db_spec['driver'] = 'mysql';
   }
 

@@ -53,7 +53,7 @@ class Provision_Context {
    *       drush context cache.
    */
   function __get($name) {
-    if ($name == 'options') {
+    if ($name === 'options') {
       return array_merge(provision_sitealias_get_record($this->name), array_filter(drush_get_context('stdin')), array_filter(drush_get_context('options')), array_filter(drush_get_context('cli')));
     }
     if (array_key_exists($name, $this->properties)) {

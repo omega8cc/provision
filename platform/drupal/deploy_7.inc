@@ -70,7 +70,7 @@ function _provision_platform_drupal_deploy_7_replace($old_url, $new_url) {
       }
 
       // Replace in the optional summary.
-      if ($info['type'] == 'text_with_summary') {
+      if ($info['type'] === 'text_with_summary') {
         drush_log('Replacing summary in ' . $key, 'debug');
         db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_summary     = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);
         db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_summary = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);

@@ -29,7 +29,7 @@ if ($url_changed) {
 
   // Detect and update default site name, if needed
   $old_name = \Drupal::config('system.site')->get('name');
-  if ($old_name == $old_url) {
+  if ($old_name === $old_url) {
     \Drupal::configFactory()->getEditable('system.site')
       ->set('name', "$new_url")
       ->save();

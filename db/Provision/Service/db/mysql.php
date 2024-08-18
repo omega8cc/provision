@@ -80,7 +80,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // Support for ProxySQL integration
-    if ($name && $this->server->db_port == '6033') {
+    if ($name && $this->server->db_port === '6033') {
       if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
         include('/opt/tools/drush/proxysql_adm_pwd.inc');
         $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
@@ -188,7 +188,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
     if (!$grant_found) {
       // Support for ProxySQL integration
-      if ($name && $this->server->db_port == '6033') {
+      if ($name && $this->server->db_port === '6033') {
         if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
           include('/opt/tools/drush/proxysql_adm_pwd.inc');
           $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
@@ -311,7 +311,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
 
-        if ($this->server->db_port == '6033') {
+        if ($this->server->db_port === '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
             include('/opt/tools/drush/proxysql_adm_pwd.inc');
             if ($writer_node_ip) {
@@ -595,7 +595,7 @@ port=%s
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
 
-        if ($this->server->db_port == '6033') {
+        if ($this->server->db_port === '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
             include('/opt/tools/drush/proxysql_adm_pwd.inc');
             if ($writer_node_ip) {
@@ -729,7 +729,7 @@ port=%s
       // XXX: failed to execute? unsure when this happens
       $return_value = -1;
     }
-  return ($return_value == 0);
+  return ($return_value === 0);
   }
 
   function utf8mb4_is_supported() {
