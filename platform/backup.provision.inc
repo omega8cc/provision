@@ -164,7 +164,15 @@ function drush_provision_drupal_provision_backup() {
   }
   drush_shell_exec($exclude_tag);
 
-  $command_base = "tar cpf";
+  if (!empty($backup_mode)) {
+    // Follow symlinks to include all files
+    $command_base = "tar cphf";
+  }
+  else {
+    // Do not follow symlinks
+    $command_base = "tar cpf";
+  }
+
   $command_arguments = " %s --exclude-tag=exclude.tag";
   if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
