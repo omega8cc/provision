@@ -48,16 +48,16 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
     $data = parent::config_data($config, $class);
     $data['http_ssl_port'] = $this->server->http_ssl_port;
 
-    if ($config === 'server') {
+    if ($config == 'server') {
       // Generate a certificate for the default SSL vhost, and retrieve the
       // path to the cert and key files. It will be generated if not found.
       $certs = $this->get_certificates('default');
       $data = array_merge($data, $certs);
     }
 
-    if ($config === 'site' && $this->context->ssl_enabled) {
+    if ($config == 'site' && $this->context->ssl_enabled) {
       foreach ($this->context->ip_addresses as $server => $ip_address) {
-        if ($server === $this->server->name || '@' . $server === $this->server->name) {
+        if ($server == $this->server->name || '@' . $server == $this->server->name) {
           $data['ip_address'] = $ip_address;
           break;
         }
@@ -66,7 +66,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
         drush_log(dt('No proper IP provided by the frontend for server %servername, using wildcard', array('%servername' => $this->server->name)), 'info');
         $data['ip_address'] = '*';
       }
-      if ($this->context->ssl_enabled === 2) {
+      if ($this->context->ssl_enabled == 2) {
         $data['ssl_redirection'] = TRUE;
         $data['redirect_url'] = "https://{$this->context->uri}";
       }
@@ -150,7 +150,7 @@ class Provision_Service_http_ssl extends Provision_Service_http_public {
         || drush_set_error('SSL_KEY_GEN_FAIL', dt('failed to generate SSL key in %path', array('%path' => $path . '/openssl.key')));
 
       // Generate the CSR to make the key certifiable by third parties
-      $domain = $ssl_key === 'default' ? 'default.invalid' : $this->context->uri;
+      $domain = $ssl_key == 'default' ? 'default.invalid' : $this->context->uri;
       $ident = "/CN={$domain}/emailAddress=abuse@{$domain}";
       drush_shell_exec("openssl req -new -subj '%s' -key %s/openssl.key -out %s/openssl.csr -batch", $ident, $path, $path)
         || drush_log(dt('failed to generate signing request for certificate in %path', array('%path' => $path . '/openssl.csr')));

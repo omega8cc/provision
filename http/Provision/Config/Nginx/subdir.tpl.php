@@ -342,9 +342,9 @@ location ^~ /<?php print $subdir; ?> {
     deny         all;
 
     try_files    /cron.php $uri =404;
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
     fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -792,9 +792,9 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     try_files    /$1 $uri =404;
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
     fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -958,9 +958,9 @@ location ^~ /<?php print $subdir; ?> {
 
     access_log   off;
     try_files    /$1.php =404; ### check for existence of php file first
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
     fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1087,9 +1087,9 @@ location ^~ /<?php print $subdir; ?> {
 
     try_files     /index.php =404; ### check for existence of php file first
 
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass  127.0.0.1:9000;
 <?php else: ?>
     fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1221,9 +1221,9 @@ location @allowupdate_<?php print $subdir_loc; ?> {
   fastcgi_index update.php;
   fastcgi_intercept_errors on;
 
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1261,9 +1261,9 @@ location @allowauthorize_<?php print $subdir_loc; ?> {
   fastcgi_index authorize.php;
   fastcgi_intercept_errors on;
 
-<?php if ($satellite_mode === 'boa'): ?>
+<?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode === 'port'): ?>
+<?php elseif ($phpfpm_mode == 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;

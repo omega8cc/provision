@@ -82,7 +82,7 @@ function drush_provision_dunlock() {
 
       $this_user = provision_current_user();
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
         $psr_bak = '/var/aegir/backups';
       }
@@ -157,7 +157,7 @@ function drush_provision_dunlock() {
         $is_patched = "NO";
       }
 
-      if ($this_user === 'aegir' ) {
+      if ($this_user == 'aegir' ) {
         $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
       }
       else {
@@ -167,7 +167,7 @@ function drush_provision_dunlock() {
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched === 'YES') {
+      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'YES') {
         if (!provision_file()->exists($patchFile)->status()) {
           provision_file()->copy($patchTpl, $patchFile);
         }
@@ -179,7 +179,7 @@ function drush_provision_dunlock() {
             $line_status = 'warning';
           }
           else { // Only log the last line as success.
-            $line_status = $index+1 === count($result) ? 'success' : 'notice';
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
           }
           drush_log($line, $line_status);
         }

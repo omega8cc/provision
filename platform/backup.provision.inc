@@ -166,10 +166,10 @@ function drush_provision_drupal_provision_backup() {
 
   $command_base = "tar cpf";
   $command_arguments = " %s --exclude-tag=exclude.tag";
-  if (substr($backup_file, -2) === 'gz') {
+  if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
   }
-  elseif (substr($backup_file, -3) === 'bz2') {
+  elseif (substr($backup_file, -3) == 'bz2') {
     $command = $command_base . 'j' . $command_arguments;
   } else {
     $command = $command_base . $command_arguments;

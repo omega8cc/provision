@@ -533,7 +533,7 @@ function hook_provision_db_options_alter(&$options, $dsn) {
  *   should be 16 characters or fewer.
  */
 function hook_provision_suggest_db_name_alter(&$database) {
-    if (d()->db_server->name === '@server_myremoteserver') {
+    if (d()->db_server->name == '@server_myremoteserver') {
         $database = substr('r_' . $database, 0, 15);
     }
 }
@@ -562,7 +562,7 @@ function hook_provision_db_username_alter(&$user, $host, $op = '') {
   ];
   // On grant and revoke we need to make sure we're NOT sending the username
   // in the username@host format.
-  if ($op === 'grant' || $op === 'revoke') {
+  if ($op == 'grant' || $op == 'revoke') {
     $user = explode('@', $user)[0];
   }
   else {

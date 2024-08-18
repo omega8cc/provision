@@ -46,7 +46,7 @@ class Provision_Context_server extends Provision_Context {
   function init_server() {
 
     $this->setProperty('remote_host', 'localhost');
-    if ($this->name === '@server_master') {
+    if ($this->name == '@server_master') {
       $this->setProperty('aegir_root', getenv('HOME'));
       $this->setProperty('script_user', provision_current_user());
     }
@@ -187,7 +187,7 @@ class Provision_Context_server extends Provision_Context {
         // We need to do this due to how drush creates the rsync command.
         // If the option is present at all , even if false or null, it will
         // add it to the command.
-        if (!isset($additional_options['no-delete']) || $additional_options['no-delete'] === FALSE ) {
+        if (!isset($additional_options['no-delete']) || $additional_options['no-delete'] == FALSE ) {
           $options['delete'] = TRUE;
         }
 
@@ -229,7 +229,7 @@ class Provision_Context_server extends Provision_Context {
         // We need to do this due to how drush creates the rsync command.
         // If the option is present at all, even if false or null, it will
         // add it to the command.
-        if (!isset($additional_options['no-delete']) || $additional_options['no-delete'] === FALSE ) {
+        if (!isset($additional_options['no-delete']) || $additional_options['no-delete'] == FALSE ) {
           $options['delete'] = TRUE;
         }
 

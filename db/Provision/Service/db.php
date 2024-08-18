@@ -222,7 +222,7 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass = $db_passwd;
         $oct_db_host = $db_host;
         $oct_db_port = $db_port;
-        if ($this->server->db_port === '6033') {
+        if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
             include('/opt/tools/drush/proxysql_adm_pwd.inc');
             if ($writer_node_ip) {
@@ -322,7 +322,7 @@ class Provision_Service_db extends Provision_Service {
     $db_type = drush_get_option('db_type', function_exists('mysqli_connect') ? 'mysqli' : 'mysql');
     // As of Drupal 7 there is no more mysqli type
     if (drush_drupal_major_version() >= 7) {
-      $db_type = ($db_type === 'mysqli') ? 'mysql' : $db_type;
+      $db_type = ($db_type == 'mysqli') ? 'mysql' : $db_type;
     }
 
     //TODO - this should not be here at all

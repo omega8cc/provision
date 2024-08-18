@@ -47,7 +47,7 @@ function drush_provision_drupal_pre_provision_verify() {
     provision_file()->create_dir($config_root, dt('Provision configuration root'), 0711);
     provision_file()->create_dir(d()->config_path, dt('Provision configuration'), 0711);
     provision_file()->create_dir(d()->clients_path, dt('Provision client home'), 0750);
-    if (d()->name === '@server_master') {
+    if (d()->name == '@server_master') {
       provision_file()->create_dir(d()->backup_path, dt('Backup'), 0750);
       provision_file()->create_dir(d()->include_path, dt('Provision PHP configuration'), 0711);
       if (!provision_file()->exists(d()->include_path . '/global.inc')->succeed('Global configuration file exists')->status()) {
@@ -462,7 +462,7 @@ function drush_provision_drupal_pre_provision_verify() {
 
     // If this is the hostmaster site, save the ~/.drush/drushrc.php file.
     $hostmaster = provision_sitealias_get_record('@hostmaster');
-    if (d()->root === $hostmaster['root'] && d()->uri === $hostmaster['uri']) {
+    if (d()->root == $hostmaster['root'] && d()->uri == $hostmaster['uri']) {
       $aegir_drushrc = new Provision_Config_Drushrc_Aegir();
       $aegir_drushrc->write();
 

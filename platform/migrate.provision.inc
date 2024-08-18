@@ -55,7 +55,7 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_name = NUL
     drush_set_option('target_name', d()->name);
 
     // Detect if the platform stays the same.
-    if (d()->platform->name === $platform) {
+    if (d()->platform->name == $platform) {
       drush_log('Replacing the existing site on the same platform');
       // deploying over existing site.
       drush_set_option('deploy_replace_site', TRUE);
@@ -150,7 +150,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       $unique_aliases = array_unique($new_aliases); // Make sure there are no duplicates.
       $options['aliases'] = array(); // Reset original aliases array.
       $options['aliases'] = $unique_aliases; // Use rewritten aliases array.
-      if (!is_null(d($platform)->name) && (d($platform)->name === d()->platform->name)) {
+      if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
         drush_set_option('rename_only', TRUE);
         foreach ($new_aliases as $alias) {
           drush_log(dt("LOG/RENAME new_aliases is @this", array('@this' => $alias)), 'info');
