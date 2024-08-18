@@ -67,7 +67,7 @@ function provision_drush_init() {
 function _provision_drush_check_user() {
   $command = drush_get_command();
   $name = posix_getpwuid(posix_geteuid());
-  if (preg_match("/^provision-\b/", $command['command']) && $name['name'] == 'root') {
+  if (preg_match("/^provision-\b/", $command['command']) && $name['name'] === 'root') {
     return drush_set_error('PROVISION_IS_ROOT', dt('You are running the provision script as the root user. Exiting'));
   }
 }

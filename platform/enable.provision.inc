@@ -6,7 +6,7 @@
  * Enable a site that has been disabled
  */
 function drush_provision_drupal_provision_enable_validate() {
-  if (d()->type == 'site') {
+  if (d()->type === 'site') {
     d()->site_enabled = true;
     // Lock Site-Local Drush if Unlocked
     $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
@@ -20,7 +20,7 @@ function drush_provision_drupal_provision_enable_validate() {
 }
 
 function drush_provision_drupal_post_provision_enable() {
-  if (d()->type == 'site') {
+  if (d()->type === 'site') {
     d()->write_alias();
     // Unlock Site-Local Drush If Locked
     //$drush_lock_ctrl = d()->root . '/local_drush_locked.pid';

@@ -280,9 +280,9 @@ location = /fpm-status {
   access_log   off;
   allow        127.0.0.1;
   deny         all;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -296,9 +296,9 @@ location = /fpm-ping {
   access_log   off;
   allow        127.0.0.1;
   deny         all;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -313,9 +313,9 @@ location = /cron.php {
   allow        127.0.0.1;
   deny         all;
   try_files    $uri =404;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -995,9 +995,9 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
     return 403;
   }
   try_files    $uri =404;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1137,9 +1137,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   ###
   fastcgi_param QUERY_STRING q=$esi;
   fastcgi_param SCRIPT_FILENAME $document_root/index.php;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass  127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass  unix:<?php print $phpfpm_socket_path; ?>;
@@ -1356,9 +1356,9 @@ location = /index.php {
   ###
   ### FastCGI
   ###
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass  127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass  unix:<?php print $phpfpm_socket_path; ?>;
@@ -1390,9 +1390,9 @@ location ~* ^/(?:core/)?(?:boost_stats|rtoc|js)\.php$ {
   }
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1431,9 +1431,9 @@ location @allowupdate {
   fastcgi_intercept_errors on;
   include fastcgi_params;
   limit_conn   limreq 8;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
@@ -1450,9 +1450,9 @@ location @allowauthorize {
   fastcgi_intercept_errors on;
   include fastcgi_params;
   limit_conn   limreq 8;
-<?php if ($satellite_mode == 'boa'): ?>
+<?php if ($satellite_mode === 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
-<?php elseif ($phpfpm_mode == 'port'): ?>
+<?php elseif ($phpfpm_mode === 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
   fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;

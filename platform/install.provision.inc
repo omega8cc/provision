@@ -108,7 +108,7 @@ function drush_provision_drupal_provision_install() {
   )), 'ok');
 
   // Run Drupal installation if option was specified
-  if (d()->install_method == 'profile') {
+  if (d()->install_method === 'profile') {
 
     // call a backend task to do the actual installation.
     $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
@@ -127,7 +127,7 @@ function drush_provision_drupal_provision_install() {
     drush_set_option('profile_installed', TRUE, 'site');
   }
   // If install_method is 'manual', do nothing.
-  elseif (d()->install_method == 'manual') {
+  elseif (d()->install_method === 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/install.php');
   }
 
@@ -143,7 +143,7 @@ function drush_provision_drupal_provision_install() {
 function drush_provision_drupal_post_provision_install() {
 
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
-  if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
+  if (d()->install_method === 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
     if (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }

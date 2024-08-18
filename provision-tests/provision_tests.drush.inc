@@ -347,7 +347,7 @@ function drush_provision_tests_en_module_on_site($module, $site) {
   // Failing 'en' only results in a warning, so we need to set our own error.
   $log = array_slice(drush_get_log(), 10);
   foreach ($log as $serial => $entry) {
-    if ($entry['type'] == 'warning' && $entry['message'] == "$module was not found and will not be enabled.") {
+    if ($entry['type'] === 'warning' && $entry['message'] === "$module was not found and will not be enabled.") {
       drush_set_error('DRUSH_FRAMEWORK_ERROR', "Error enabling module: $module on site: $site.");
     }
   }
@@ -402,12 +402,12 @@ function drush_provision_tests_add_custom_test_task() {
   // 10 usually is the node ID for the hostmaster site itself.
   $node->rid = 10;
 
-  // Published status == 1
+  // Published status === 1
   $node->status = 1;
 
   $node->task_type = 'verify';
 
-  // Setting status to HOSTING_TASK_QUEUED == 0
+  // Setting status to HOSTING_TASK_QUEUED === 0
   $node->task_status = 0;
 
   node_save($node);

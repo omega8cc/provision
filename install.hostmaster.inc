@@ -122,7 +122,7 @@ Don't worry: you will get to review those settings after the final install");
     print "\n"; // add a newline since the user's didn't print
   }
 
-  if (drush_get_option('aegir_host') == 'localhost') {
+  if (drush_get_option('aegir_host') === 'localhost') {
     $default_email = 'webmaster@example.com';
   } else {
     $default_email = 'webmaster@' . drush_get_option('aegir_host');
@@ -222,7 +222,7 @@ function drush_provision_hostmaster_install($site = NULL) {
   );
 
   $master_db = sprintf("mysql://%s:%s@%s:%s", urlencode($aegir_db_user), urlencode($aegir_db_pass), $aegir_db_host, $aegir_db_port);
-  if ($aegir_http_host == $aegir_db_host) {
+  if ($aegir_http_host === $aegir_db_host) {
     $master_context['db_service_type'] = 'mysql';
     $master_context['master_db'] = $master_db;
     $dbserver = $server;

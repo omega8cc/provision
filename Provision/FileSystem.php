@@ -145,7 +145,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
     }
     clearstatcache(); // this needs to be called, otherwise we get the old info 
-    $this->last_status = substr(sprintf('%o', fileperms($path)), -4) == sprintf('%04o', $perms);
+    $this->last_status = substr(sprintf('%o', fileperms($path)), -4) === sprintf('%04o', $perms);
 
     return $this;
   }
@@ -182,7 +182,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     }
 
     clearstatcache(); // this needs to be called, otherwise we get the old info 
-    $this->last_status = $owner == provision_posix_username(fileowner($path));
+    $this->last_status = $owner === provision_posix_username(fileowner($path));
 
     return $this;
   }
@@ -224,7 +224,7 @@ class Provision_FileSystem extends Provision_ChainedState {
     }
 
     clearstatcache(); // this needs to be called, otherwise we get the old info 
-    $this->last_status = $group == provision_posix_groupname(filegroup($path));
+    $this->last_status = $group === provision_posix_groupname(filegroup($path));
 
     return $this;
   }
@@ -296,11 +296,11 @@ class Provision_FileSystem extends Provision_ChainedState {
         chdir($target);
 
         // We need to check if the archive is gzipped and choose the command accordingly
-        if (substr($path, -2) == 'gz') {
+        if (substr($path, -2) === 'gz') {
           // same here: some do not support -z
           $command = 'gunzip -c %s | tar pxf -';
         }
-        elseif (substr($path, -2) == 'bz2') {
+        elseif (substr($path, -2) === 'bz2') {
           $command = 'bunzip2 -c %s | tar pxf -';
         }
         else {
@@ -355,7 +355,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       $this->tokens['@reason'] = dt("A symlink already exists at target, but it is pointing to @link", array("@link" => readlink($path)));
       $this->last_status = FALSE;
     }
-    elseif (is_link($path) && (readlink($path) == $target)) {
+    elseif (is_link($path) && (readlink($path) === $target)) {
       $this->last_status = TRUE;
     }
     elseif (symlink($target, $path)) {
