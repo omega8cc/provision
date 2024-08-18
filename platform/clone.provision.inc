@@ -61,7 +61,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   if (!is_file($enable_fast_track)) {
     // If the site is cloned between platforms and not just in the same platform,
     // we should update the info collected about source and target platform first.
-    if (!is_null(d($platform)->name) && (d($platform)->name !== d()->platform->name)) {
+    if (!is_null(d($platform)->name) && (d($platform)->name != d()->platform->name)) {
       provision_backend_invoke('@hostmaster', 'hosting-task', array(d()->platform->name, 'verify'), array('force' => TRUE));
       sleep(5); // A small trick to avoid high load and race conditions.
       provision_backend_invoke('@hostmaster', 'hosting-task', array(d($platform)->name, 'verify'), array('force' => TRUE));

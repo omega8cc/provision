@@ -171,7 +171,7 @@ function _provision_drupal_system_map() {
     }
     $frags = explode("/", $module->filename);
     // flag site-specific modules
-    if ($frags[0] === 'sites' && $frags[1] !== 'all') {
+    if ($frags[0] === 'sites' && $frags[1] != 'all') {
       $module->platform = -1;
     }
 
@@ -189,7 +189,7 @@ function _provision_drupal_system_map() {
   foreach (_provision_system_query("theme") as $theme) {
     $frags = explode("/", $theme->filename);
     // flag site-specific themes
-    if ($frags[0] === 'sites' && $frags[1] !== 'all') {
+    if ($frags[0] === 'sites' && $frags[1] != 'all') {
       $theme->platform = -1;
     }
     $info_file = sprintf("%s/%s.info", dirname($theme->filename), $theme->name);

@@ -310,7 +310,7 @@ function _provision_drupal_create_directories($url = NULL) {
 
   $chgrp = array();
   // special case: platform. do not handle files dir
-  if ($url !== 'all') {
+  if ($url != 'all') {
     $mkdir["sites/$url/files"]            = 02775;
     $chgrp["sites/$url/files"]            = d('@server_master')->web_group;
 
@@ -558,9 +558,9 @@ function provision_drupal_find_sites() {
   if ($dir = opendir("./sites")) {
     while (FALSE !== ($subdir = readdir($dir))) {
       // skip internal directory pointers
-      if ($subdir !== '.' && $subdir !== '..') {
+      if ($subdir != '.' && $subdir != '..') {
         $file = "./sites/$subdir/settings.php";
-        if (file_exists("$file") && ($subdir !== 'default') && !is_link("./sites/$subdir")) {
+        if (file_exists("$file") && ($subdir != 'default') && !is_link("./sites/$subdir")) {
           $sites[$subdir] = $file;
         }
       }
@@ -593,7 +593,7 @@ function provision_drupal_find_aliases() {
       if ($dir = opendir(d()->root . "/sites")) {
         while (FALSE !== ($subdir = readdir($dir))) {
           // skip internal directory pointers
-          if ($subdir !== '.' && $subdir !== '..') {
+          if ($subdir != '.' && $subdir != '..') {
             $path = d()->root . '/sites/' . $subdir;
             if (is_link($path)) {
               if (d()->uri === readlink($path)) {
@@ -780,7 +780,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
       $files[$name]->info = provision_parse_info_file($info_file);
     }
     // Skip hidden modules
-    if (isset($files[$name]->info['hidden']) && $files[$name]->info['hidden'] !== FALSE) {
+    if (isset($files[$name]->info['hidden']) && $files[$name]->info['hidden'] != FALSE) {
       unset($files[$name]);
       continue;
     }
@@ -938,7 +938,7 @@ function _provision_client_delete_old_symlink() {
     // only iterate if the symlink location changed
     if ($dh = @opendir(d()->server->clients_path)) {
       while (($file = readdir($dh)) !== false) {
-        if ($file !== '.' && $file !== '..') {
+        if ($file != '.' && $file != '..') {
           $path = d()->server->clients_path . '/' . $file . '/' . d()->uri;
           if (is_file($path) || is_link($path)) {
             provision_file()->unlink($path);

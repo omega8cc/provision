@@ -125,7 +125,7 @@ function _provision_system_query($type) {
 
     $frags = explode("/", $package->filename);
     // Flag site-specific packages.
-    if ($frags[0] === 'sites' && $frags[1] !== 'all') {
+    if ($frags[0] === 'sites' && $frags[1] != 'all') {
       $package->platform = -1;
     }
     $package->status = $extension_data->status;
@@ -141,12 +141,12 @@ function _provision_system_query($type) {
       else {
         $info = Symfony\Component\Yaml\Yaml::parse(file_get_contents($package->filename));
         // Skip hidden modules
-        if (isset($info['hidden']) && $info['hidden'] !== FALSE) {
+        if (isset($info['hidden']) && $info['hidden'] != FALSE) {
           continue;
         }
         // The 'drupal_get_filename()' function is returning at least one profile as a module
         // (profile 'standard').  Make sure this is really a module.  If not, skip it.
-        if (isset($info['type']) && $info['type'] !== 'module') {
+        if (isset($info['type']) && $info['type'] != 'module') {
           continue;
         }
       }
