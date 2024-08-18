@@ -73,21 +73,38 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  * Util function to suggest a filename for a new site backup.
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
-  $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-  if (empty($backup_mode)) {
-    if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-      $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-      if ($backup_mode) {
-        drush_set_option('backup_mode', $backup_mode);
-        drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-      }
-      //unlink(AEGIR_BACKUP_MODE_CTRL);
+
+  if (!provision_is_hostmaster_site()) {
+    if (defined('SELECTED_BACKUP_MODE')) {
+      $backup_mode = SELECTED_BACKUP_MODE;
+      drush_set_option('backup_mode', $backup_mode);
     }
     else {
-      drush_log("Backup mode control file not found.", 'info');
+      $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     }
+    if (empty($backup_mode)) {
+      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+        if ($backup_mode) {
+          drush_set_option('backup_mode', $backup_mode);
+          if (!defined('SELECTED_BACKUP_MODE')) {
+            define('SELECTED_BACKUP_MODE', $backup_mode);
+          }
+          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+        }
+        //unlink(AEGIR_BACKUP_MODE_CTRL);
+      }
+      else {
+        drush_log("Backup mode control file not found.", 'info');
+      }
+    }
+    if (!empty($backup_mode)) {
+      if (!defined('SELECTED_BACKUP_MODE')) {
+        define('SELECTED_BACKUP_MODE', $backup_mode);
+      }
+    }
+    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
   }
-  drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
 
   if ($backup_mode === 'backup_mysqldump_only' ||
       $backup_mode === 'site_files_without_db_backup' ||
@@ -141,21 +158,38 @@ function drush_provision_drupal_provision_backup() {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
 
-  $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-  if (empty($backup_mode)) {
-    if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-      $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-      if ($backup_mode) {
-        drush_set_option('backup_mode', $backup_mode);
-        drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-      }
-      //unlink(AEGIR_BACKUP_MODE_CTRL);
+  if (!provision_is_hostmaster_site()) {
+    if (defined('SELECTED_BACKUP_MODE')) {
+      $backup_mode = SELECTED_BACKUP_MODE;
+      drush_set_option('backup_mode', $backup_mode);
     }
     else {
-      drush_log("Backup mode control file not found.", 'info');
+      $backup_mode = drush_get_option('selected_backup_mode', FALSE);
     }
+    if (empty($backup_mode)) {
+      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+        if ($backup_mode) {
+          drush_set_option('backup_mode', $backup_mode);
+          if (!defined('SELECTED_BACKUP_MODE')) {
+            define('SELECTED_BACKUP_MODE', $backup_mode);
+          }
+          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+        }
+        //unlink(AEGIR_BACKUP_MODE_CTRL);
+      }
+      else {
+        drush_log("Backup mode control file not found.", 'info');
+      }
+    }
+    if (!empty($backup_mode)) {
+      if (!defined('SELECTED_BACKUP_MODE')) {
+        define('SELECTED_BACKUP_MODE', $backup_mode);
+      }
+    }
+    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
   }
-  drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
+
   if ($backup_mode === 'backup_mysqldump_only') {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
   }
@@ -235,21 +269,38 @@ function drush_provision_drupal_post_provision_backup() {
 
     $enable_myquick = FALSE;
     $oct_db_test = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
+
+    if (!provision_is_hostmaster_site()) {
+      if (defined('SELECTED_BACKUP_MODE')) {
+        $backup_mode = SELECTED_BACKUP_MODE;
+        drush_set_option('backup_mode', $backup_mode);
       }
       else {
-        drush_log("Backup mode control file not found.", 'info');
+        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
       }
+      if (empty($backup_mode)) {
+        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          if ($backup_mode) {
+            drush_set_option('backup_mode', $backup_mode);
+            if (!defined('SELECTED_BACKUP_MODE')) {
+              define('SELECTED_BACKUP_MODE', $backup_mode);
+            }
+            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+          }
+          //unlink(AEGIR_BACKUP_MODE_CTRL);
+        }
+        else {
+          drush_log("Backup mode control file not found.", 'info');
+        }
+      }
+      if (!empty($backup_mode)) {
+        if (!defined('SELECTED_BACKUP_MODE')) {
+          define('SELECTED_BACKUP_MODE', $backup_mode);
+        }
+      }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       $aegir_root = d('@server_master')->aegir_root;
@@ -294,21 +345,38 @@ function drush_provision_drupal_provision_backup_rollback() {
 
     $enable_myquick = FALSE;
     $oct_db_test = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
+
+    if (!provision_is_hostmaster_site()) {
+      if (defined('SELECTED_BACKUP_MODE')) {
+        $backup_mode = SELECTED_BACKUP_MODE;
+        drush_set_option('backup_mode', $backup_mode);
       }
       else {
-        drush_log("Backup mode control file not found.", 'info');
+        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
       }
+      if (empty($backup_mode)) {
+        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          if ($backup_mode) {
+            drush_set_option('backup_mode', $backup_mode);
+            if (!defined('SELECTED_BACKUP_MODE')) {
+              define('SELECTED_BACKUP_MODE', $backup_mode);
+            }
+            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+          }
+          //unlink(AEGIR_BACKUP_MODE_CTRL);
+        }
+        else {
+          drush_log("Backup mode control file not found.", 'info');
+        }
+      }
+      if (!empty($backup_mode)) {
+        if (!defined('SELECTED_BACKUP_MODE')) {
+          define('SELECTED_BACKUP_MODE', $backup_mode);
+        }
+      }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       $aegir_root = d('@server_master')->aegir_root;

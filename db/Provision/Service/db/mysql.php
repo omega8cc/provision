@@ -268,21 +268,38 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $enable_myquick = FALSE;
     $myloader_path = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
+
+    if (!provision_is_hostmaster_site()) {
+      if (defined('SELECTED_BACKUP_MODE')) {
+        $backup_mode = SELECTED_BACKUP_MODE;
+        drush_set_option('backup_mode', $backup_mode);
       }
       else {
-        drush_log("Backup mode control file not found.", 'info');
+        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
       }
+      if (empty($backup_mode)) {
+        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          if ($backup_mode) {
+            drush_set_option('backup_mode', $backup_mode);
+            if (!defined('SELECTED_BACKUP_MODE')) {
+              define('SELECTED_BACKUP_MODE', $backup_mode);
+            }
+            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+          }
+          //unlink(AEGIR_BACKUP_MODE_CTRL);
+        }
+        else {
+          drush_log("Backup mode control file not found.", 'info');
+        }
+      }
+      if (!empty($backup_mode)) {
+        if (!defined('SELECTED_BACKUP_MODE')) {
+          define('SELECTED_BACKUP_MODE', $backup_mode);
+        }
+      }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
@@ -545,21 +562,38 @@ port=%s
 
     $enable_myquick = FALSE;
     $mydumper_path = FALSE;
-    $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
+
+    if (!provision_is_hostmaster_site()) {
+      if (defined('SELECTED_BACKUP_MODE')) {
+        $backup_mode = SELECTED_BACKUP_MODE;
+        drush_set_option('backup_mode', $backup_mode);
       }
       else {
-        drush_log("Backup mode control file not found.", 'info');
+        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
       }
+      if (empty($backup_mode)) {
+        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          if ($backup_mode) {
+            drush_set_option('backup_mode', $backup_mode);
+            if (!defined('SELECTED_BACKUP_MODE')) {
+              define('SELECTED_BACKUP_MODE', $backup_mode);
+            }
+            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+          }
+          //unlink(AEGIR_BACKUP_MODE_CTRL);
+        }
+        else {
+          drush_log("Backup mode control file not found.", 'info');
+        }
+      }
+      if (!empty($backup_mode)) {
+        if (!defined('SELECTED_BACKUP_MODE')) {
+          define('SELECTED_BACKUP_MODE', $backup_mode);
+        }
+      }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
       drush_log(dt("MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
