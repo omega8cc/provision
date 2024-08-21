@@ -131,14 +131,7 @@ if ($subdir_main_site_name = '') {
   set $subdir_main_site_name "$server_name";
 }
 
-###
-### Dynamically include the whitelist file based on the $subdir_main_site_name
-###
-include <?php print $aegir_root; ?>/config/includes/ip_whitelists/$subdir_main_site_name.conf;
-
-###
-### Mitigation for https://www.drupal.org/SA-CORE-2018-002
-###
+# Mitigation for https://www.drupal.org/SA-CORE-2018-002
 set $rce "ZZ";
 if ( $query_string ~* (23value|23default_value|element_parents=%23) ) {
   set $rce "A";
