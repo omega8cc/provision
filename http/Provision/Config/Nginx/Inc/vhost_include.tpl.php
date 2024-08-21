@@ -97,11 +97,6 @@ if ($main_site_name = '') {
 }
 
 ###
-### Dynamically include the whitelist file based on the $main_site_name
-###
-include <?php print $aegir_root; ?>/config/includes/ip_whitelists/$main_site_name.conf;
-
-###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
