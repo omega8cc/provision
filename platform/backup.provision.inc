@@ -7,8 +7,12 @@
  */
 
 const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
+  './files/advagg_css',
+  './files/advagg_js',
+  './files/civicrm/templates_c',
   './files/css',
   './files/js',
+  './files/php',
   './files/tmp',
   './private/temp',
 );
@@ -253,7 +257,6 @@ function drush_provision_drupal_provision_backup_get_exclusions() {
 
 function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
-  drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
   $exclusions = "";
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
