@@ -56,7 +56,7 @@ function drush_db_post_provision_deploy() {
     }
   }
 
-  if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+  if (empty($backup_mode)) {
     $aegir_root = d('@server_master')->aegir_root;
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
