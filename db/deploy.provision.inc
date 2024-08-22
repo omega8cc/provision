@@ -48,12 +48,12 @@ function drush_db_post_provision_deploy() {
         drush_log("Backup mode control file not found.", 'info');
       }
     }
-    if (!empty($backup_mode)) {
+    if (isset($backup_mode)) {
       if (!defined('SELECTED_BACKUP_MODE')) {
         define('SELECTED_BACKUP_MODE', $backup_mode);
       }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_db_post_provision_deploy is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_db_post_provision_deploy is: @var", array('@var' => $backup_mode)), 'info');
   }
 
   if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {

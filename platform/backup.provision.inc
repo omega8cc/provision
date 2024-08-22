@@ -98,18 +98,20 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
         drush_log("Backup mode control file not found.", 'info');
       }
     }
-    if (!empty($backup_mode)) {
+    if (isset($backup_mode)) {
       if (!defined('SELECTED_BACKUP_MODE')) {
         define('SELECTED_BACKUP_MODE', $backup_mode);
       }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
   }
 
-  if ($backup_mode === 'backup_mysqldump_only' ||
+  if (isset($backup_mode)) {
+    if ($backup_mode === 'backup_mysqldump_only' ||
       $backup_mode === 'site_files_without_db_backup' ||
       $backup_mode === 'site_files_with_mysqldump') {
-    $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+    }
   }
   else {
     $suffix = drush_get_option('provision_backup_suffix', '.tar');
@@ -182,12 +184,12 @@ function drush_provision_drupal_provision_backup() {
         drush_log("Backup mode control file not found.", 'info');
       }
     }
-    if (!empty($backup_mode)) {
+    if (isset($backup_mode)) {
       if (!defined('SELECTED_BACKUP_MODE')) {
         define('SELECTED_BACKUP_MODE', $backup_mode);
       }
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
     }
-    drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
   }
 
   if ($backup_mode === 'backup_mysqldump_only') {
@@ -198,7 +200,7 @@ function drush_provision_drupal_provision_backup() {
   }
   drush_shell_exec($exclude_tag);
 
-  if (!empty($backup_mode)) {
+  if (isset($backup_mode)) {
     // Follow symlinks to include all files
     $command_base = "tar cphf";
   }
@@ -294,12 +296,12 @@ function drush_provision_drupal_post_provision_backup() {
           drush_log("Backup mode control file not found.", 'info');
         }
       }
-      if (!empty($backup_mode)) {
+      if (isset($backup_mode)) {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
     }
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
@@ -370,12 +372,12 @@ function drush_provision_drupal_provision_backup_rollback() {
           drush_log("Backup mode control file not found.", 'info');
         }
       }
-      if (!empty($backup_mode)) {
+      if (isset($backup_mode)) {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
     }
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
