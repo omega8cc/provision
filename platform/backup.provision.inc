@@ -198,9 +198,11 @@ function drush_provision_drupal_provision_backup() {
 
   if (isset($backup_mode) && $backup_mode == 'backup_mysqldump_only') {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
+    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
   }
   else {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
+    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions();
   }
   drush_shell_exec($exclude_tag);
 
@@ -224,6 +226,7 @@ function drush_provision_drupal_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
+  drush_shell_exec($exclude_clean);
 
   // Get the size of the backup
   $size = filesize($backup_file);
