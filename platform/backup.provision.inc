@@ -107,9 +107,9 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
   }
 
   if (isset($backup_mode)) {
-    if ($backup_mode === 'backup_mysqldump_only' ||
-      $backup_mode === 'site_files_without_db_backup' ||
-      $backup_mode === 'site_files_with_mysqldump') {
+    if ($backup_mode == 'backup_mysqldump_only' ||
+      $backup_mode == 'site_files_without_db_backup' ||
+      $backup_mode == 'site_files_with_mysqldump') {
       $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
     }
   }
@@ -192,7 +192,7 @@ function drush_provision_drupal_provision_backup() {
     }
   }
 
-  if ($backup_mode === 'backup_mysqldump_only') {
+  if (isset($backup_mode) && $backup_mode == 'backup_mysqldump_only') {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
   }
   else {
@@ -304,7 +304,7 @@ function drush_provision_drupal_post_provision_backup() {
       }
     }
 
-    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    if (empty($backup_mode)) {
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
@@ -380,7 +380,7 @@ function drush_provision_drupal_provision_backup_rollback() {
       }
     }
 
-    if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
+    if (empty($backup_mode)) {
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
