@@ -293,12 +293,12 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           drush_log("Backup mode control file not found.", 'info');
         }
       }
-      if (!empty($backup_mode)) {
+      if (isset($backup_mode)) {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in import_dump is: @var", array('@var' => $backup_mode)), 'info');
     }
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
@@ -587,12 +587,12 @@ port=%s
           drush_log("Backup mode control file not found.", 'info');
         }
       }
-      if (!empty($backup_mode)) {
+      if (isset($backup_mode)) {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in generate_dump is: @var", array('@var' => $backup_mode)), 'info');
     }
 
     if ($backup_mode != 'backup_mysqldump_only' && $backup_mode != 'site_files_with_mysqldump') {
