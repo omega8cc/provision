@@ -368,7 +368,9 @@ function install_main() {
 
   $client_email = install_validate_client_email(drush_get_option('client_email', FALSE));
 
+/*
   $account = install_create_admin_user($client_email);
+ */
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
@@ -380,9 +382,11 @@ function install_main() {
   drush_set_option('login_link', $onetime . '/login');
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime . '/login')), 'success');
 
+/*
   if ($client_email) {
     install_send_welcome_mail($url, $account, $profile, $install_locale, $client_email, $onetime);
   }
+ */
   variable_set('install_task', 'done');
 }
 /**
