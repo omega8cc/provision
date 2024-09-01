@@ -166,7 +166,9 @@ function install_main() {
     provision_file()->create_dir($redisCtrl, dt("Redis tmp off ctrl dir created"), 0711);
   }
 
+/*
   $account = \Drupal\user\Entity\User::load(1);
+ */
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
@@ -178,9 +180,11 @@ function install_main() {
   drush_set_option('login_link', $onetime);
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'message');
 
+/*
   if ($client_email) {
     install_send_welcome_mail($url, $account, $install_locale, $client_email, $onetime);
   }
+ */
 }
 install_main();
 

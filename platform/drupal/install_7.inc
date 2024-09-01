@@ -162,7 +162,9 @@ function install_main() {
   }
   _provision_drupal_create_directories();
 
+/*
   $account = user_load(1);
+ */
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
@@ -174,9 +176,11 @@ function install_main() {
   drush_set_option('login_link', $onetime);
   drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'success');
 
+/*
   if (drush_get_option('client_email', FALSE)) {
     install_send_welcome_mail($url, $account, $install_locale, $client_email, $onetime);
   }
+ */
 }
 install_main();
 
