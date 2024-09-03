@@ -196,7 +196,7 @@ server {
   ssl_certificate            <?php print $ssl_cert; ?>;
 <?php endif; ?>
   <?php print $extra_config; ?>
-  include                    <?php print $server->include_path; ?>/ip_access/{$this->uri}.*;
+  include                    <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>.*;
   include                    <?php print $server->include_path; ?>/nginx_vhost_common.conf;
 }
 
