@@ -323,10 +323,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
-        $oct_db_user = $db_user;
-        $oct_db_pass = $db_passwd;
-        $oct_db_host = $db_host;
-        $oct_db_port = $db_port;
+
+        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
+        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
+        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
+        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
@@ -612,7 +613,8 @@ port=%s
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
       $oct_db_test = $oct_db_dirx . '/metadata';
-      while (is_file($oct_db_test) && $count <= 6) {
+      $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
+      while ((is_file($oct_db_test) || is_file($oct_db_test_p)) && $count <= 6) {
         $count++;
         sleep(10);
         drush_log(dt("MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", array('@var' => $count)), 'info');
@@ -624,10 +626,11 @@ port=%s
 
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
-        $oct_db_user = $db_user;
-        $oct_db_pass = $db_passwd;
-        $oct_db_host = $db_host;
-        $oct_db_port = $db_port;
+
+        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
+        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
+        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
+        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
@@ -674,7 +677,7 @@ port=%s
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=50000 --build-empty-files --threads=' . $threads . ' --less-locking --long-query-guard=900 --verbose=1');
+        $command = sprintf($mydumper_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --outputdir=' . $oct_db_dirx . ' --rows=50000 --build-empty-files --threads=' . $threads . ' --less-locking --long-query-guard=900 --clear --verbose=1');
         drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         drush_shell_exec($command);
       }
