@@ -611,7 +611,9 @@ port=%s
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
       $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-      drush_log(dt("MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+      if (provision_file()->exists($myquick_creds_log)->status()) {
+        drush_log(dt("MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
+      }
       $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
       drush_log(dt("MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
     }

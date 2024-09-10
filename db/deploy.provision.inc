@@ -80,8 +80,8 @@ function drush_db_post_provision_deploy() {
       drush_log(dt("MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", array('@var' => $old)), 'info');
     }
     provision_file()->unlink($post_import_flag)
-      ->succeed('Removed Post-DB-Import Flag-File in drush_db_post_provision_deploy')
-      ->fail('Could not remove Post-DB-Import Flag-File in drush_db_post_provision_deploy');
+      ->succeed('MyQuick Removed Post-DB-Import Flag-File in drush_db_post_provision_deploy')
+      ->fail('MyQuick Could not remove Post-DB-Import Flag-File in drush_db_post_provision_deploy');
   }
   else {
     provision_file()->unlink(d()->site_path . '/database.sql')
