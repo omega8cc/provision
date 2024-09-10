@@ -23,6 +23,7 @@ function drush_db_post_provision_deploy() {
 
   $enable_myquick = FALSE;
   $oct_db_test = FALSE;
+  $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
   if (!provision_is_hostmaster_site()) {
     if (defined('SELECTED_BACKUP_MODE')) {
