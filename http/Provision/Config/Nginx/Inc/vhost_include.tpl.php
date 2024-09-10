@@ -1349,7 +1349,7 @@ location = /index.php {
   ### Basic security/privacy headers.
   ###
   add_header Referrer-Policy "no-referrer-when-downgrade";
-  add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), fullscreen=(self), autoplay=()";
+  add_header Permissions-Policy "geolocation=(), camera=(), fullscreen=(self), autoplay=()";
 
   try_files     $uri =404; ### check for existence of php file first
 
