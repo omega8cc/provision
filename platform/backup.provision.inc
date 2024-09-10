@@ -277,6 +277,7 @@ function drush_provision_drupal_post_provision_backup() {
 
     $enable_myquick = FALSE;
     $oct_db_test = FALSE;
+    $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
     if (!provision_is_hostmaster_site()) {
       if (defined('SELECTED_BACKUP_MODE')) {
@@ -353,6 +354,7 @@ function drush_provision_drupal_provision_backup_rollback() {
 
     $enable_myquick = FALSE;
     $oct_db_test = FALSE;
+    $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
     if (!provision_is_hostmaster_site()) {
       if (defined('SELECTED_BACKUP_MODE')) {
