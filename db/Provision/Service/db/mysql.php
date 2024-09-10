@@ -613,7 +613,8 @@ port=%s
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
       $oct_db_test = $oct_db_dirx . '/metadata';
-      while (is_file($oct_db_test) && $count <= 6) {
+      $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
+      while ((is_file($oct_db_test) || is_file($oct_db_test_p)) && $count <= 6) {
         $count++;
         sleep(10);
         drush_log(dt("MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", array('@var' => $count)), 'info');

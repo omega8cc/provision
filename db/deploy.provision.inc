@@ -61,12 +61,13 @@ function drush_db_post_provision_deploy() {
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $oct_db_test = $oct_db_dirx . '/metadata';
+    $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
     $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_deploy_' . date("Ymd.His", time());
     $post_import_flag = $backup_path . '/.post_import_flag.pid';
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
   }
 
-  if (is_file($enable_myquick) && is_file($oct_db_test)) {
+  if (is_file($enable_myquick) && (is_file($oct_db_test) || is_file($oct_db_test_p))) {
     // Rename temporary sql dump dir to site/date specific backup.
     $old = $oct_db_dirx;
     $new = $uri_db_dirz;
