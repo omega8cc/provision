@@ -492,7 +492,7 @@ location ^~ /audio/download {
 ###
 ### Deny listed requests for security reasons.
 ###
-location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|pl|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
+location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
   access_log off;
   return 404;
 }
@@ -890,7 +890,7 @@ location ^~ /files/ {
     try_files  /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
 
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
     expires       30d;
     access_log    off;
     log_not_found off;
@@ -904,7 +904,7 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires       30d;
     access_log    off;
     log_not_found off;
@@ -918,7 +918,7 @@ location ^~ /downloads/ {
 ### Serve & no-log static files & images directly,
 ### without all standard drupal rewrites, php-fpm etc.
 ###
-location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|cgi|bat|pl|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
   expires       30d;
   access_log    off;
   log_not_found off;
