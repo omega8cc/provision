@@ -101,6 +101,19 @@ server {
     try_files $uri 404;
   }
 
+  ###
+  ### Allow access to SQL Adminer.
+  ###
+  location ^~ /sqladmin/ {
+    if ($is_crawler) {
+      return 403;
+    }
+    include /var/aegir/config/includes/ip_access/sqladmin.*;
+    alias /var/www/adminer;
+    index index.php index.html;
+    try_files $uri 404;
+  }
+
   return 301 $scheme://<?php print $this->redirection; ?>$request_uri;
 }
 <?php endif; ?>

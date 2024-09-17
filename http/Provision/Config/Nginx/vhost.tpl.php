@@ -42,6 +42,19 @@ if ($this->redirection) {
         print "    try_files \$uri 404;\n";
         print "  }\n";
         print "\n";
+        print "  ###\n";
+        print "  ### Allow access to SQL Adminer.\n";
+        print "  ###\n";
+        print "  location ^~ /sqladmin/ {\n";
+        print "    if ($is_crawler) {\n";
+        print "      return 403;\n";
+        print "    }\n";
+        print "    include /var/aegir/config/includes/ip_access/sqladmin.*;\n";
+        print "    alias /var/www/adminer;\n";
+        print "    index index.php index.html;\n";
+        print "    try_files $uri 404;\n";
+        print "  }\n";
+        print "\n";
       }
       print "  return 301 \$scheme://{$this->redirection}\$request_uri;\n";
       print "}\n";
