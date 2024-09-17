@@ -108,7 +108,7 @@ server {
     if ($is_crawler) {
       return 403;
     }
-    include /var/aegir/config/includes/ip_access/sqladmin.*;
+    include /var/aegir/config/includes/ip_access/sqladmin*;
     alias /var/www/adminer;
     index index.php index.html;
     try_files $uri 404;
@@ -209,7 +209,7 @@ server {
   ssl_certificate            <?php print $ssl_cert; ?>;
 <?php endif; ?>
   <?php print $extra_config; ?>
-  include                    <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>.*;
+  include                    <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>*;
   include                    <?php print $server->include_path; ?>/nginx_vhost_common.conf;
 }
 
