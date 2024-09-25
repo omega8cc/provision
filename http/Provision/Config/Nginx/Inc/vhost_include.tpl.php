@@ -456,7 +456,6 @@ location ^~ /admin {
   if ( $is_bot ) {
     return 403;
   }
-  access_log off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
