@@ -940,6 +940,8 @@ location ^~ /<?php print $subdir; ?> {
   ### Redirect to working homepage.
   ###
   location = /<?php print $subdir; ?> {
+    access_log off;
+    log_not_found off;
     return 301 $scheme://$host/<?php print $subdir; ?>/;
   }
 
