@@ -196,6 +196,7 @@ if ($user_socket = '') {
 location ^~ /httprl_async_function_callback {
   location ~* ^/httprl_async_function_callback {
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files  $uri @drupal;
   }
@@ -207,6 +208,7 @@ location ^~ /httprl_async_function_callback {
 location ^~ /admin/httprl-test {
   location ~* ^/admin/httprl-test {
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files  $uri @drupal;
   }
@@ -280,6 +282,7 @@ location = /fpm-status {
   access_log   off;
   allow        127.0.0.1;
   deny         all;
+  log_not_found off;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -296,6 +299,7 @@ location = /fpm-ping {
   access_log   off;
   allow        127.0.0.1;
   deny         all;
+  log_not_found off;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -371,6 +375,7 @@ location ^~ /hosting/c/server_master {
     return 403;
   }
   access_log off;
+  log_not_found off;
   return 301 $scheme://$host/hosting/sites;
 }
 
@@ -387,6 +392,7 @@ location ^~ /hosting/c/server_localhost {
     return 403;
   }
   access_log off;
+  log_not_found off;
   return 301 $scheme://$host/hosting/sites;
 }
 
@@ -398,6 +404,7 @@ location ^~ /hosting/sites {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -410,6 +417,7 @@ location ^~ /hosting {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -419,6 +427,7 @@ location ^~ /hosting {
 ###
 location ^~ /admin/settings/performance/cache-backend {
   access_log off;
+  log_not_found off;
   return 301 $scheme://$host/admin/settings/performance;
 }
 
@@ -427,6 +436,7 @@ location ^~ /admin/settings/performance/cache-backend {
 ###
 location ^~ /admin/config/development/performance/redis {
   access_log off;
+  log_not_found off;
   return 301 $scheme://$host/admin/config/development/performance;
 }
 
@@ -435,6 +445,7 @@ location ^~ /admin/config/development/performance/redis {
 ###
 location ^~ /admin/reports/redis {
   access_log off;
+  log_not_found off;
   return 301 $scheme://$host/admin/reports;
 }
 
@@ -458,6 +469,7 @@ location ^~ /civicrm {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -470,6 +482,7 @@ location ~* ^/\w\w/civicrm {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -494,6 +507,7 @@ location ^~ /audio/download {
 ###
 location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -502,6 +516,7 @@ location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|
 ###
 location ~* /(?:modules|themes|libraries)/.*\.(?:txt|md)$ {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -510,6 +525,7 @@ location ~* /(?:modules|themes|libraries)/.*\.(?:txt|md)$ {
 ###
 location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -542,6 +558,7 @@ location ~* ^/files/webform/ {
 ###
 location = /autodiscover/autodiscover.xml {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -550,6 +567,7 @@ location = /autodiscover/autodiscover.xml {
 ###
 location ~* (?:cgi-bin|vti-bin) {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -561,6 +579,7 @@ location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/) {
     return 403;
   }
   access_log off;
+  log_not_found off;
   try_files $uri @drupal;
 }
 
@@ -574,6 +593,7 @@ location ~* \.r\.(?:jpe?g|png|gif) {
   }
   rewrite ^/(.*)\.r(\.(?:jpe?g|png|gif))$ /$1$2 last;
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files  $uri @drupal;
 }
@@ -587,6 +607,7 @@ location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
     rewrite ^/(.+)/files/(css|js|styles)/adaptive/(.+)$ /$1/files/$2/$ais_cookie/$3 last;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files  $uri @drupal;
 }
@@ -643,6 +664,7 @@ location ~* /(?:external|system)/ {
 ###
 location ~* ^/sites/.*/files/backup_migrate/ {
   access_log off;
+  log_not_found off;
   deny all;
 }
 
@@ -651,6 +673,7 @@ location ~* ^/sites/.*/files/backup_migrate/ {
 ###
 location ~* ^/sites/.*/files/config_.* {
   access_log off;
+  log_not_found off;
   deny all;
 }
 
@@ -683,6 +706,7 @@ location ~* ^/sites/.*/private/ {
     return 403;
   }
   access_log off;
+  log_not_found off;
 }
 
 ###
@@ -695,6 +719,7 @@ location ~* /files/private/ {
     return 403;
   }
   access_log off;
+  log_not_found off;
 }
 
 ###
@@ -712,6 +737,7 @@ location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
 location ~* files/advagg_(?:css|js)/ {
   expires    max;
   access_log off;
+  log_not_found off;
 <?php if ($nginx_has_etag): ?>
   etag       off;
 <?php else: ?>
@@ -738,6 +764,7 @@ location ~* \.css$ {
   access_log  off;
   expires     max; #if using aggregator
   try_files   /cache/perm/$host${uri}_.css $uri =404;
+  log_not_found off;
 }
 
 ###
@@ -761,6 +788,7 @@ location ~* \.(?:js|htc)$ {
   access_log  off;
   expires     max; # if using aggregator
   try_files   /cache/perm/$host${uri}_.js $uri =404;
+  log_not_found off;
 }
 
 ###
@@ -768,14 +796,17 @@ location ~* \.(?:js|htc)$ {
 ###
 location ~* /.*composer\.(json|lock)$ {
   access_log off;
+  log_not_found off;
   return 404;
 }
 location ^~ /vendor/composer/ {
   access_log off;
+  log_not_found off;
   return 404;
 }
 location = /CHANGELOG.txt {
   access_log off;
+  log_not_found off;
   return 404;
 }
 
@@ -797,6 +828,7 @@ location ~* ^/sites/.*/files/.*\.json$ {
   access_log  off;
   expires     max; ### if using aggregator
   try_files   /cache/normal/$host${uri}_.json $uri =404;
+  log_not_found off;
 }
 
 ###
@@ -804,6 +836,7 @@ location ~* ^/sites/.*/files/.*\.json$ {
 ###
 location @uncached {
   access_log off;
+  log_not_found off;
   expires max; # max if using aggregator, otherwise sane expire time
 }
 
@@ -983,6 +1016,7 @@ location ~* /(?:cross-?domain)\.xml$ {
   access_log  off;
   expires     30d;
   try_files   $uri =404;
+  log_not_found off;
 }
 
 ###
@@ -991,6 +1025,7 @@ location ~* /(?:cross-?domain)\.xml$ {
 location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tinymce|wysiwyg_spellcheck|ecc|civicrm|fbconnect|radioactivity|statistics)/.*\.php$ {
   limit_conn   limreq 88;
   access_log   off;
+  log_not_found off;
   if ( $is_bot ) {
     return 403;
   }
@@ -1026,6 +1061,7 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
   }
   access_log      off;
   expires         30d;
+  log_not_found off;
   try_files $uri =404;
 }
 
@@ -1035,6 +1071,7 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
 location ~* ^/sites/.*/files/ {
   access_log      off;
   expires         30d;
+  log_not_found off;
   try_files $uri =404;
 }
 
@@ -1044,6 +1081,7 @@ location ~* ^/sites/.*/files/ {
 location ~* \.xml$ {
   location ~* ^/autodiscover/autodiscover\.xml {
     access_log off;
+    log_not_found off;
     return 400;
   }
   if ( $request_method = POST ) {
@@ -1071,6 +1109,7 @@ location ~* ^/(?:admin|user|cart|checkout|logout) {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -1079,6 +1118,7 @@ location ~* ^/\w\w/(?:admin|user|cart|checkout|logout) {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -1091,6 +1131,7 @@ location ~* ^/(?:.*/)?(?:node/[0-9]+/edit|node/add|comment/reply) {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -1106,6 +1147,7 @@ location ~* ^/(?:.*/)?(?:node/[0-9]+/delete|approve) {
     return 403;
   }
   access_log off;
+  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -1390,6 +1432,7 @@ location ~* ^/(?:core/)?(?:boost_stats|rtoc|js)\.php$ {
   }
   access_log   off;
   try_files    $uri =404; ### check for existence of php file first
+  log_not_found off;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
