@@ -1092,6 +1092,7 @@ location ~* \.xml$ {
   }
   error_page 405 = @drupal;
   access_log off;
+  log_not_found off;
   add_header X-Header "Boost Citrus 1.0";
   add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";

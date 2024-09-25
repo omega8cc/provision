@@ -701,6 +701,7 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/(.*/files/advagg_(?:css|js).*) {
     expires max;
     access_log off;
+    log_not_found off;
 <?php if ($nginx_has_etag): ?>
     etag off;
 <?php else: ?>
@@ -811,6 +812,7 @@ location ^~ /<?php print $subdir; ?> {
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
     access_log off;
+    log_not_found off;
     if ( $is_bot ) {
       return 403;
     }
@@ -857,6 +859,7 @@ location ^~ /<?php print $subdir; ?> {
     root  <?php print "{$this->root}"; ?>;
     rewrite ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
     access_log off;
+    log_not_found off;
     expires 30d;
     try_files /$1 $uri =404;
   }
