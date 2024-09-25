@@ -30,7 +30,7 @@ if ($this->redirection) {
         $alias_url = str_replace('/', '.', $alias_url);
         print "  server_name  {$alias_url};\n";
       }
-      print "  access_log   off;\n";
+      print "  access_log off;\n";
       print "  log_not_found off;\n";
       if ($satellite_mode == 'boa') {
         print "\n";
