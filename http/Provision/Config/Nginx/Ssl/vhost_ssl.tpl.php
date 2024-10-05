@@ -101,6 +101,9 @@ server {
     try_files $uri 404;
   }
 
+  access_log off;
+  log_not_found off;
+
   return 301 $scheme://<?php print $this->redirection; ?>$request_uri;
 }
 <?php endif; ?>

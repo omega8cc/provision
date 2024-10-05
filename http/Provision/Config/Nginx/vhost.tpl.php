@@ -30,7 +30,8 @@ if ($this->redirection) {
         $alias_url = str_replace('/', '.', $alias_url);
         print "  server_name  {$alias_url};\n";
       }
-      print "  access_log   off;\n";
+      print "  access_log off;\n";
+      print "  log_not_found off;\n";
       if ($satellite_mode == 'boa') {
         print "\n";
         print "  ###\n";
@@ -180,10 +181,14 @@ server {
 if ($this->redirection || $ssl_redirection) {
   if ($ssl_redirection && !$this->redirection) {
     // redirect aliases in non-ssl to the same alias on ssl.
+    print "  access_log off;\n";
+    print "  log_not_found off;\n";
     print "\n  return 301 https://\$host\$request_uri;\n";
   }
   elseif ($ssl_redirection && $this->redirection) {
     // redirect all aliases + main uri to the main https uri.
+    print "  access_log off;\n";
+    print "  log_not_found off;\n";
     print "\n  return 301 https://{$this->redirection}\$request_uri;\n";
   }
   elseif (!$ssl_redirection && $this->redirection) {

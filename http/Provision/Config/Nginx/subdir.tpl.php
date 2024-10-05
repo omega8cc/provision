@@ -156,7 +156,7 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
   location ~* ^/<?php print $subdir; ?>/sites/default/files/imagecache {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires 30d;
     set $nocache_details "Skip";
     rewrite ^/<?php print $subdir; ?>/sites/default/files/imagecache/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 last;
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -164,7 +164,7 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
   location ~* ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles) {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires 30d;
     set $nocache_details "Skip";
     rewrite ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles)/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 last;
     try_files /$2 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -172,7 +172,7 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
   location ~* ^/<?php print $subdir; ?>/sites/default/files {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires 30d;
     rewrite ^/<?php print $subdir; ?>/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
     try_files /$1 $uri =404;
   }
@@ -245,6 +245,7 @@ location ^~ /<?php print $subdir; ?> {
   location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
     location ~* ^/<?php print $subdir; ?>/httprl_async_function_callback {
       access_log off;
+      log_not_found off;
       set $nocache_details "Skip";
       try_files /httprl_async_function_callback $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -256,6 +257,7 @@ location ^~ /<?php print $subdir; ?> {
   location ^~ /<?php print $subdir; ?>/admin/httprl-test {
     location ~* ^/<?php print $subdir; ?>/admin/httprl-test {
       access_log off;
+      log_not_found off;
       set $nocache_details "Skip";
       try_files /admin/httprl-test $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -265,9 +267,9 @@ location ^~ /<?php print $subdir; ?> {
   ### CDN Far Future expiration support.
   ###
   location ^~ /<?php print $subdir; ?>/cdn/farfuture/ {
-    access_log    off;
+    access_log off;
     log_not_found off;
-    etag          off;
+    etag off;
     gzip_http_version 1.1;
     if_modified_since exact;
     set $nocache_details "Skip";
@@ -293,10 +295,10 @@ location ^~ /<?php print $subdir; ?> {
   ### If favicon else return error 204.
   ###
   location = /<?php print $subdir; ?>/favicon.ico {
-    access_log    off;
+    access_log off;
     log_not_found off;
-    expires       30d;
-    try_files     /sites/$subdir_main_site_name/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
+    expires 30d;
+    try_files /sites/$subdir_main_site_name/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
   }
 
   ###
@@ -304,7 +306,7 @@ location ^~ /<?php print $subdir; ?> {
   ### and static file in the sites/domain/files directory.
   ###
   location = /<?php print $subdir; ?>/robots.txt {
-    access_log    off;
+    access_log off;
     log_not_found off;
     try_files /sites/$subdir_main_site_name/files/$host.robots.txt /sites/$subdir_main_site_name/files/robots.txt /sites/$host/files/robots.txt /robots.txt $uri @cache_<?php print $subdir_loc; ?>;
   }
@@ -338,10 +340,10 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name cron.php;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    allow        127.0.0.1;
-    deny         all;
+    allow 127.0.0.1;
+    deny all;
 
-    try_files    /cron.php $uri =404;
+    try_files /cron.php $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -356,10 +358,11 @@ location ^~ /<?php print $subdir; ?> {
   ### for running sites cron in Drupal 8+.
   ###
   location = /<?php print $subdir; ?>/cron/ {
-    access_log   off;
-    allow        127.0.0.1;
-    deny         all;
-    try_files    $uri @drupal_<?php print $subdir_loc; ?>;
+    access_log off;
+    log_not_found off;
+    allow 127.0.0.1;
+    deny all;
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
@@ -392,6 +395,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ^~ /<?php print $subdir; ?>/admin/settings/performance/cache-backend {
     access_log off;
+    log_not_found off;
     return 301 $scheme://$host/<?php print $subdir; ?>/admin/settings/performance;
   }
 
@@ -400,6 +404,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ^~ /<?php print $subdir; ?>/admin/config/development/performance/redis {
     access_log off;
+    log_not_found off;
     return 301 $scheme://$host/<?php print $subdir; ?>/admin/config/development/performance;
   }
 
@@ -408,6 +413,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ^~ /<?php print $subdir; ?>/admin/reports/redis {
     access_log off;
+    log_not_found off;
     return 301 $scheme://$host/<?php print $subdir; ?>/admin/reports;
   }
 
@@ -419,6 +425,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /admin $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -431,6 +438,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -443,6 +451,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -455,7 +464,7 @@ location ^~ /<?php print $subdir; ?> {
       if ( $is_bot ) {
         return 403;
       }
-      access_log    off;
+      access_log off;
       log_not_found off;
       set $nocache_details "Skip";
       try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -467,6 +476,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
     access_log off;
+    log_not_found off;
     return 404;
   }
 
@@ -475,6 +485,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* /(?:modules|themes|libraries)/.*\.(?:txt|md)$ {
     access_log off;
+    log_not_found off;
     return 404;
   }
 
@@ -483,6 +494,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* /files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) {
     access_log off;
+    log_not_found off;
     return 404;
   }
 
@@ -491,6 +503,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location = /<?php print $subdir; ?>/autodiscover/autodiscover.xml {
     access_log off;
+    log_not_found off;
     return 404;
   }
 
@@ -504,6 +517,7 @@ location ^~ /<?php print $subdir; ?> {
     }
     rewrite ^/<?php print $subdir; ?>/(.*)\.r(\.(?:jpe?g|png|gif))$ /<?php print $subdir; ?>/$1$2 last;
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -517,6 +531,7 @@ location ^~ /<?php print $subdir; ?> {
       rewrite ^/<?php print $subdir; ?>/(.+)/files/(css|js|styles)/adaptive/(.+)$ /<?php print $subdir; ?>/$1/files/$2/$ais_cookie/$3 last;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -533,10 +548,10 @@ location ^~ /<?php print $subdir; ?> {
     location ~* /<?php print $subdir; ?>/files/(css|js|styles)/(.*)$ {
       access_log off;
       log_not_found off;
-      expires    30d;
+      expires 30d;
       set $nocache_details "Skip";
-      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/(css|js|styles)/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/(css|js|styles)/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -545,10 +560,10 @@ location ^~ /<?php print $subdir; ?> {
     location ~* /<?php print $subdir; ?>/files/css/(.*)$ {
       access_log off;
       log_not_found off;
-      expires    30d;
+      expires 30d;
       set $nocache_details "Skip";
-      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/css/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/css/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -557,10 +572,10 @@ location ^~ /<?php print $subdir; ?> {
     location ~* /<?php print $subdir; ?>/files/js/(.*)$ {
       access_log off;
       log_not_found off;
-      expires    30d;
+      expires 30d;
       set $nocache_details "Skip";
-      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/js/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/js/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -569,21 +584,21 @@ location ^~ /<?php print $subdir; ?> {
     location ~* /<?php print $subdir; ?>/files/imagecache/(.*)$ {
       access_log off;
       log_not_found off;
-      expires    30d;
+      expires 30d;
       # fix common problems with old paths after import from standalone to Aegir multisite
       rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1/$2 last;
       rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/files/(.*)$               /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1/$2 last;
       set $nocache_details "Skip";
-      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
-      expires       30d;
-      access_log    off;
+      expires 30d;
+      access_log off;
       log_not_found off;
-      rewrite  ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files   $uri =404;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      try_files $uri =404;
     }
     try_files /$1 $uri @cache_<?php print $subdir_loc; ?>;
   }
@@ -595,9 +610,9 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/s3/files/(css|js|styles)/(.*)$ {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires 30d;
     set $nocache_details "Skip";
-    try_files  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 $uri @drupal_<?php print $subdir_loc; ?>;
+    try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
@@ -606,7 +621,7 @@ location ^~ /<?php print $subdir; ?> {
   location ~* ^/<?php print $subdir; ?>/((?:external|system|files/imagecache|files/(css|js|styles))/.*) {
     access_log off;
     log_not_found off;
-    expires    30d;
+    expires 30d;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -616,6 +631,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/backup_migrate/ {
     access_log off;
+    log_not_found off;
     deny all;
   }
 
@@ -624,6 +640,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/config_.* {
     access_log off;
+    log_not_found off;
     deny all;
   }
 
@@ -636,7 +653,8 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
-    rewrite    ^/<?php print $subdir; ?>/sites/.*/files/private/(.*)$ $scheme://$host/<?php print $subdir; ?>/system/files/private/$1 permanent;
+    log_not_found off;
+    rewrite ^/<?php print $subdir; ?>/sites/.*/files/private/(.*)$ $scheme://$host/<?php print $subdir; ?>/system/files/private/$1 permanent;
     add_header X-Header "Private Generator 1.0a";
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -651,6 +669,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     internal;
   }
 
@@ -663,6 +682,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     internal;
   }
 
@@ -679,10 +699,11 @@ location ^~ /<?php print $subdir; ?> {
   ### Advagg_css and Advagg_js support.
   ###
   location ~* ^/<?php print $subdir; ?>/(.*/files/advagg_(?:css|js).*) {
-    expires    max;
+    expires max;
     access_log off;
+    log_not_found off;
 <?php if ($nginx_has_etag): ?>
-    etag       off;
+    etag off;
 <?php else: ?>
     add_header ETag "";
 <?php endif; ?>
@@ -696,27 +717,30 @@ location ^~ /<?php print $subdir; ?> {
   ### Make css files compatible with boost caching.
   ###
   location ~* ^/<?php print $subdir; ?>/(.*\.css)$ {
-    access_log  off;
-    expires     max; #if using aggregator
-    try_files   /cache/perm/$host${uri}_.css /$1 $uri =404;
+    access_log off;
+    log_not_found off;
+    expires max; #if using aggregator
+    try_files /cache/perm/$host${uri}_.css /$1 $uri =404;
   }
 
   ###
   ### Make js files compatible with boost caching.
   ###
   location ~* ^/<?php print $subdir; ?>/(.*\.(?:js|htc))$ {
-    access_log  off;
-    expires     max; # if using aggregator
-    try_files   /cache/perm/$host${uri}_.js /$1 $uri =404;
+    access_log off;
+    log_not_found off;
+    expires max; # if using aggregator
+    try_files /cache/perm/$host${uri}_.js /$1 $uri =404;
   }
 
   ###
   ### Support for static .json files with fast 404 +Boost compatibility.
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/files/(.*\.json)$ {
-    access_log  off;
-    expires     max; ### if using aggregator
-    try_files   /cache/normal/$host${uri}_.json /$1 $uri =404;
+    access_log off;
+    log_not_found off;
+    expires max; ### if using aggregator
+    try_files /cache/normal/$host${uri}_.json /$1 $uri =404;
   }
 
   ###
@@ -731,10 +755,10 @@ location ^~ /<?php print $subdir; ?> {
   ### without all standard drupal rewrites, php-fpm etc.
   ###
   location ~* ^/<?php print $subdir; ?>/(.+\.(?:jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|aspx?|class|otf|ttf|woff2?|eot|less))$ {
-    expires       30d;
-    access_log    off;
+    expires 30d;
+    access_log off;
     log_not_found off;
-    try_files   /$1 $uri =404;
+    try_files /$1 $uri =404;
   }
 
   ###
@@ -742,19 +766,20 @@ location ^~ /<?php print $subdir; ?> {
   ### without all standard drupal rewrites, php-fpm etc.
   ###
   location ~* ^/<?php print $subdir; ?>/(.+\.(?:avi|mpe?g|mov|wmv|mp3|mp4|m4a|ogg|ogv|flv|wav|midi|zip|tar|t?gz|rar|dmg|exe))$ {
-    expires     30d;
-    access_log    off;
+    expires 30d;
+    access_log off;
     log_not_found off;
-    try_files   /$1 $uri =404;
+    try_files /$1 $uri =404;
   }
 
   ###
   ### Serve & no-log some static files as is, without forcing default_type.
   ###
   location ~* ^/<?php print $subdir; ?>/((?:cross-?domain)\.xml)$ {
-    access_log  off;
-    expires     30d;
-    try_files   /$1 $uri =404;
+    access_log off;
+    log_not_found off;
+    expires 30d;
+    try_files /$1 $uri =404;
   }
 
   ###
@@ -762,9 +787,8 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.*/(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tinymce|wysiwyg_spellcheck|ecc|civicrm|fbconnect|radioactivity)/.*\.php)$ {
 
-    limit_conn   limreq 88;
-
-    include       fastcgi_params;
+    limit_conn limreq 88;
+    include fastcgi_params;
 
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
@@ -787,11 +811,12 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name $1;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    access_log   off;
+    access_log off;
+    log_not_found off;
     if ( $is_bot ) {
       return 403;
     }
-    try_files    /$1 $uri =404;
+    try_files /$1 $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -821,8 +846,9 @@ location ^~ /<?php print $subdir; ?> {
     if ( $is_bot ) {
       return 403;
     }
-    access_log      off;
-    expires         30d;
+    access_log off;
+    log_not_found off;
+    expires 30d;
     try_files /$1 $uri =404;
   }
 
@@ -831,9 +857,10 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(sites/.*/files/.*) {
     root  <?php print "{$this->root}"; ?>;
-    rewrite     ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
-    access_log      off;
-    expires         30d;
+    rewrite ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
+    access_log off;
+    log_not_found off;
+    expires 30d;
     try_files /$1 $uri =404;
   }
 
@@ -849,10 +876,11 @@ location ^~ /<?php print $subdir; ?> {
     }
     error_page 405 = @drupal_<?php print $subdir_loc; ?>;
     access_log off;
+    log_not_found off;
     add_header X-Header "Boost Citrus 1.0";
     add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
     add_header Cache-Control "must-revalidate, post-check=0, pre-check=0";
-    charset    utf-8;
+    charset utf-8;
     types { }
     default_type text/xml;
     try_files /cache/normal/$host${uri}_.xml /cache/normal/$host${uri}_.html /$1 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -866,6 +894,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -878,6 +907,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -893,6 +923,7 @@ location ^~ /<?php print $subdir; ?> {
       return 403;
     }
     access_log off;
+    log_not_found off;
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
@@ -909,6 +940,8 @@ location ^~ /<?php print $subdir; ?> {
   ### Redirect to working homepage.
   ###
   location = /<?php print $subdir; ?> {
+    access_log off;
+    log_not_found off;
     return 301 $scheme://$host/<?php print $subdir; ?>/;
   }
 
@@ -927,13 +960,12 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/((core/)?(boost_stats|rtoc|js))\.php$ {
 
-    limit_conn   limreq 88;
-
     if ( $is_bot ) {
       return 404;
     }
 
-    include       fastcgi_params;
+    limit_conn limreq 88;
+    include fastcgi_params;
 
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
@@ -956,8 +988,9 @@ location ^~ /<?php print $subdir; ?> {
     set $real_fastcgi_script_name $1.php;
     fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
-    access_log   off;
-    try_files    /$1.php =404; ### check for existence of php file first
+    access_log off;
+    log_not_found off;
+    try_files /$1.php =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -1085,7 +1118,7 @@ location ^~ /<?php print $subdir; ?> {
 
     add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
 
-    try_files     /index.php =404; ### check for existence of php file first
+    try_files /index.php =404; ### check for existence of php file first
 
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
@@ -1153,8 +1186,8 @@ location @cache_<?php print $subdir_loc; ?> {
   add_header X-Header "Boost Citrus 1.0";
   add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
-  charset    utf-8;
-  try_files  /cache/normal/$host${uri}_$args.html @drupal_<?php print $subdir_loc; ?>;
+  charset utf-8;
+  try_files /cache/normal/$host${uri}_$args.html @drupal_<?php print $subdir_loc; ?>;
 }
 
 ###
@@ -1193,9 +1226,8 @@ location @modern_<?php print $subdir_loc; ?> {
 ###
 location @allowupdate_<?php print $subdir_loc; ?> {
 
-  limit_conn   limreq 8;
-
-  include       fastcgi_params;
+  limit_conn limreq 8;
+  include fastcgi_params;
 
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
@@ -1235,8 +1267,8 @@ location @allowupdate_<?php print $subdir_loc; ?> {
 ###
 location @allowauthorize_<?php print $subdir_loc; ?> {
 
-  limit_conn   limreq 8;
-  include       fastcgi_params;
+  limit_conn limreq 8;
+  include fastcgi_params;
 
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";

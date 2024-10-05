@@ -325,6 +325,7 @@ server {
   location /nginx_status {
     stub_status on;
     access_log off;
+    log_not_found off;
     allow 127.0.0.1;
     deny all;
   }
