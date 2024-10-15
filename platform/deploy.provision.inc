@@ -246,7 +246,7 @@ function drush_provision_drupal_post_provision_deploy() {
         $appRoot = findAppRoot($initialPath);
 
         // Define Local Drush Path
-        $drushPath = 'vendor/bin/drush';
+        $drushPath = 'vendor/drush/drush/drush.php';
 
         // Check If The Local Drush Exists And Is Executable
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
@@ -271,9 +271,9 @@ function drush_provision_drupal_post_provision_deploy() {
         }
         else {
           // Log The Useful Info
-          drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          drush_log(dt('LOCAL/DRUSH/CMD vendor/drush/drush/drush.php --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
           // Check And Display Site-Local Drush Version
-          $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush --version');
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php --version');
           $output = implode('', drush_shell_exec_output());
           drush_log("LOCAL/DRUSH/VERSION " . $output);
           // Tell How-To Skip Drush updatedb
@@ -281,8 +281,8 @@ function drush_provision_drupal_post_provision_deploy() {
           // Figure Out The Drush 10+ Compatible Site Alias
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
           // Call The Drush updatedb Command with Site-Local Drush
-          drush_log(dt('LOCAL/DRUSH/CMD vendor/bin/drush @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-          $result = drush_shell_cd_and_exec($appRoot, 'vendor/bin/drush ' . $dnameten . ' updatedb --yes --cache-clear=default');
+          drush_log(dt('LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . $dnameten . ' updatedb --yes --cache-clear=default');
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
             if (!$success) { // Log the entire error as a notice.
