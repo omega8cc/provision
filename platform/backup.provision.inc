@@ -96,7 +96,6 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
       }
       else {
         drush_log("Backup mode control file not found.", 'info');
@@ -182,7 +181,6 @@ function drush_provision_drupal_provision_backup() {
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
       }
       else {
         drush_log("Backup mode control file not found.", 'info');
@@ -297,7 +295,6 @@ function drush_provision_drupal_post_provision_backup() {
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
-          //unlink(AEGIR_BACKUP_MODE_CTRL);
         }
         else {
           drush_log("Backup mode control file not found.", 'info');
@@ -374,7 +371,6 @@ function drush_provision_drupal_provision_backup_rollback() {
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
-          //unlink(AEGIR_BACKUP_MODE_CTRL);
         }
         else {
           drush_log("Backup mode control file not found.", 'info');
