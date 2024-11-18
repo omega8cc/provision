@@ -166,99 +166,172 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function revoke($name, $username, $host = '') {
+    // Define the desired hosts
     if (provision_file()->exists('/data/conf/clstr.cnf')->status()) {
-      $host = '%';
+      $desired_hosts = ['%', '127.0.0.1', 'localhost'];
     }
-    $host = ($host) ? $host : '%';
-    drush_command_invoke_all_ref('provision_db_username_alter', $username, '', 'revoke');
-    $success = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $host);
+    else {
+      $desired_hosts = ['127.0.0.1', 'localhost'];
+    }
 
-    // check if there are any privileges left for the user
-    $grants = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
-    $grant_found = FALSE;
-    if ($grants) {
-      while ($grant = $grants->fetch()) {
-        // those are empty grants: just the user line
-        if (!preg_match("/^GRANT USAGE ON /", array_pop($grant))) {
-          // real grant, we shouldn't remove the user
-          $grant_found = TRUE;
-          break;
-        }
+    // Fetch all host entries for the user
+    $hosts_result = $this->query("SELECT host FROM mysql.user WHERE user = '%s'", $username);
+
+    if (!$hosts_result) {
+      // User does not exist
+      //error_log("User `$username` does not exist.");
+      drush_log(dt("REVOKE/0: This user does not exist: @var", array('@var' => $username)), 'warning');
+      //return false;
+    }
+
+    $success = true;
+
+    while ($row = $hosts_result->fetch_assoc()) {
+      $host = $row['host'];
+
+      // Skip desired hosts; handle them separately if needed
+      if (in_array($host, $desired_hosts)) {
+        continue;
       }
-    }
-    if (!$grant_found) {
-      // Support for ProxySQL integration
-      if ($name && $this->server->db_port == '6033') {
-        if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
-          include('/opt/tools/drush/proxysql_adm_pwd.inc');
-          $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
-          $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-          drush_shell_exec($command);
-          if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
-            drush_log(dt("Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
-          }
-          elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
-            drush_log(dt("Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
-          }
-          else {
-            $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
 
-            $proxysqlc = "LOAD MYSQL USERS TO RUNTIME;";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-
-            $proxysqlc = "SAVE MYSQL USERS FROM RUNTIME;";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-
-            $proxysqlc = "SAVE MYSQL USERS TO DISK;";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-
-            $proxysqlc = "DELETE FROM mysql_query_rules where username='" . $name . "';";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-
-            $proxysqlc = "LOAD MYSQL QUERY RULES TO RUNTIME;";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-
-            $proxysqlc = "SAVE MYSQL QUERY RULES TO DISK;";
-            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
-            drush_shell_exec($command);
-          }
-        }
+      // Revoke all privileges for the user@host
+      $revoke_query = sprintf(
+        "REVOKE ALL PRIVILEGES, GRANT OPTION FROM `%s`@`%s`",
+        $username,
+        $host
+      );
+      $revoke_success = $this->query($revoke_query);
+      if (!$revoke_success) {
+        //error_log("Failed to revoke privileges for user `$username`@`$host`.");
+        drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
       }
-      $success = $this->query("DROP USER `%s`@`%s`", $username, $host) && $success;
-    }
+      $success = $success && $revoke_success;
 
-    if ($host != "127.0.0.1") {
-      $extra_host = "127.0.0.1";
-      $success_extra_host = $this->query("REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`", $name, $username, $extra_host);
+      // Check if any privileges remain
+      $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
+      $grant_found = false;
 
-      // check if there are any privileges left for the user
-      $grants = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $extra_host);
-      $grant_found = FALSE;
-      if ($grants) {
-        while ($grant = $grants->fetch()) {
-          // those are empty grants: just the user line
-          if (!preg_match("/^GRANT USAGE ON /", array_pop($grant))) {
-            // real grant, we shouldn't remove the user
-            $grant_found = TRUE;
+      if ($grants_result) {
+        while ($grant = $grants_result->fetch_assoc()) {
+          $grant_statement = array_pop($grant);
+          if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
+            // Real grant found; do not drop the user
+            $grant_found = true;
             break;
           }
         }
       }
+      // Drop the user@host if no real grants are found
       if (!$grant_found) {
-        $success_extra_host = $this->query("DROP USER `%s`@`%s`", $username, $extra_host) && $success_extra_host;
+        // Support for ProxySQL integration
+        if ($name && $this->server->db_port == '6033') {
+          if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
+            include('/opt/tools/drush/proxysql_adm_pwd.inc');
+            $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
+            $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+            drush_shell_exec($command);
+            if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
+              drush_log(dt("REVOKE/PXY: Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+            }
+            elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
+              drush_log(dt("REVOKE/PXY: Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+            }
+            else {
+              $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "LOAD MYSQL USERS TO RUNTIME;";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "SAVE MYSQL USERS FROM RUNTIME;";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "SAVE MYSQL USERS TO DISK;";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "DELETE FROM mysql_query_rules where username='" . $name . "';";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "LOAD MYSQL QUERY RULES TO RUNTIME;";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+
+              $proxysqlc = "SAVE MYSQL QUERY RULES TO DISK;";
+              $command = sprintf('mysql -u admin -h %s -P %s -p%s -e "' . $proxysqlc . '"', '127.0.0.1', '6032', $prxy_adm_paswd);
+              drush_shell_exec($command);
+            }
+          }
+        }
+        $drop_query = sprintf(
+          "DROP USER `%s`@`%s`",
+          $username,
+          $host
+        );
+        $drop_success = $this->query($drop_query);
+        if (!$drop_success) {
+          //error_log("Failed to drop user `$username`@`$host`.");
+          drush_log(dt("DROP/1: Failed to drop db user: @var", array('@var' => $username)), 'warning');
+        }
+        $success = $success && $drop_success;
       }
     }
 
+    // Handle desired hosts separately if necessary
+    foreach ($desired_hosts as $desired_host) {
+      // Optionally revoke undesired privileges
+      $revoke_desired_query = sprintf(
+        "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
+        $name,
+        $username,
+        $desired_host
+      );
+      $revoke_desired = $this->query($revoke_desired_query);
+      if (!$revoke_desired) {
+        //error_log("Failed to revoke privileges for user `$username`@`$desired_host`.");
+        drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
+      }
+      $success = $success && $revoke_desired;
+
+      // Optionally drop the user@desired_host if no grants are present
+      $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
+      $grant_found = false;
+
+      if ($grants_result) {
+        while ($grant = $grants_result->fetch_assoc()) {
+          $grant_statement = array_pop($grant);
+          if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
+            $grant_found = true;
+            break;
+          }
+        }
+      }
+
+      if (!$grant_found) {
+        $drop_desired_query = sprintf(
+          "DROP USER `%s`@`%s`",
+          $username,
+          $desired_host
+        );
+        $drop_desired = $this->query($drop_desired_query);
+        if (!$drop_desired) {
+          //error_log("Failed to drop user `$username`@`$desired_host`.");
+          drush_log(dt("DROP/2: Failed to drop db user: @var", array('@var' => $username)), 'warning');
+        }
+        $success = $success && $drop_desired;
+      }
+    }
+
+    // Optionally, flush privileges to ensure changes take effect immediately
+    // $flush_success = $this->query("FLUSH PRIVILEGES");
+    // $success = $success && $flush_success;
+
     return $success;
   }
-
 
   function import_dump($dump_file, $creds) {
     if (empty($creds)) {
