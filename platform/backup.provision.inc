@@ -109,7 +109,14 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     }
   }
 
-  if (isset($backup_mode)) {
+  // If mounted filesystem for files then use tar pipelines
+  $mounted_arch = "/data/disk/arch";
+  $mounted_bak = d()->platform->server->backup_path;
+
+  if (is_link($mounted_arch) || is_link($mounted_bak) {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
+  }
+  elseif (isset($backup_mode)) {
     if ($backup_mode == 'backup_mysqldump_only' ||
       $backup_mode == 'site_files_without_db_backup' ||
       $backup_mode == 'site_files_with_mysqldump') {
@@ -117,7 +124,7 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     }
   }
   else {
-    $suffix = drush_get_option('provision_backup_suffix', '.tar');
+    $suffix = drush_get_option('provision_backup_suffix', '.tar.');
   }
   $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 
@@ -204,7 +211,11 @@ function drush_provision_drupal_provision_backup() {
   }
   drush_shell_exec($exclude_tag);
 
-  if (isset($backup_mode)) {
+  // If mounted filesystem for files then use tar pipelines
+  $mounted_arch = "/data/disk/arch";
+  $mounted_bak = d()->platform->server->backup_path;
+
+  if (isset($backup_mode) || is_link($mounted_arch) || is_link($mounted_bak) {
     // Follow symlinks to include all files
     $command_base = "tar cphf";
   }
@@ -214,12 +225,35 @@ function drush_provision_drupal_provision_backup() {
   }
 
   $command_arguments = " %s --exclude-tag=exclude.tag";
+
   if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'bz2') {
     $command = $command_base . 'j' . $command_arguments;
-  } else {
+  }
+  elseif (substr($backup_file, -2) == 'xz') {
+    $command = $command_base . 'J' . $command_arguments;
+  }
+  elseif (substr($backup_file, -3) == 'lz4') {
+    if (is_link($mounted_arch) || is_link($mounted_bak) {
+      $command_base = "tar -I lz4 cphf";
+    }
+    else {
+      $command_base = "tar -I lz4 cpf";
+    }
+    $command = $command_base . $command_arguments;
+  }
+  elseif (substr($backup_file, -3) == 'zst') {
+    if (is_link($mounted_arch) || is_link($mounted_bak) {
+      $command_base = "tar -I zstd cphf";
+    }
+    else {
+      $command_base = "tar -I zstd cpf";
+    }
+    $command = $command_base . $command_arguments;
+  }
+  else {
     $command = $command_base . $command_arguments;
   }
   $command .= ' .';
