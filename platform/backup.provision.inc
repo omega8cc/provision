@@ -113,7 +113,7 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  if (is_link($mounted_arch) || is_link($mounted_bak) {
+  if (is_link($mounted_arch) || is_link($mounted_bak)) {
     $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
   }
   elseif (isset($backup_mode)) {
@@ -215,7 +215,7 @@ function drush_provision_drupal_provision_backup() {
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  if (isset($backup_mode) || is_link($mounted_arch) || is_link($mounted_bak) {
+  if (isset($backup_mode) || is_link($mounted_arch) || is_link($mounted_bak)) {
     // Follow symlinks to include all files
     $command_base = "tar cphf";
   }
@@ -236,7 +236,7 @@ function drush_provision_drupal_provision_backup() {
     $command = $command_base . 'J' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'lz4') {
-    if (is_link($mounted_arch) || is_link($mounted_bak) {
+    if (is_link($mounted_arch) || is_link($mounted_bak)) {
       $command_base = "tar -I lz4 cphf";
     }
     else {
@@ -245,7 +245,7 @@ function drush_provision_drupal_provision_backup() {
     $command = $command_base . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'zst') {
-    if (is_link($mounted_arch) || is_link($mounted_bak) {
+    if (is_link($mounted_arch) || is_link($mounted_bak)) {
       $command_base = "tar -I zstd cphf";
     }
     else {
