@@ -215,12 +215,16 @@ function drush_provision_drupal_provision_backup() {
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  if (isset($backup_mode) || is_link($mounted_arch) || is_link($mounted_bak)) {
-    // Follow symlinks to include all files
+  if (isset($backup_mode)) {
+    // Follow symlinks to include all files in custom backup task
     $command_base = "tar cphf";
   }
+  elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+    // Do not follow symlinks on mounted filesystem
+    $command_base = "tar cpf";
+  }
   else {
-    // Do not follow symlinks
+    // Do not follow symlinks by defult
     $command_base = "tar cpf";
   }
 
@@ -236,19 +240,31 @@ function drush_provision_drupal_provision_backup() {
     $command = $command_base . 'J' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'lz4') {
-    if (is_link($mounted_arch) || is_link($mounted_bak)) {
+    if (isset($backup_mode)) {
+      // Follow symlinks to include all files in custom backup task
       $command_base = "tar -I lz4 cphf";
     }
+    elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+      // Do not follow symlinks on mounted filesystem
+      $command_base = "tar -I lz4 cpf";
+    }
     else {
+      // Do not follow symlinks by defult
       $command_base = "tar -I lz4 cpf";
     }
     $command = $command_base . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'zst') {
-    if (is_link($mounted_arch) || is_link($mounted_bak)) {
+    if (isset($backup_mode)) {
+      // Follow symlinks to include all files in custom backup task
       $command_base = "tar -I zstd cphf";
     }
+    elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+      // Do not follow symlinks on mounted filesystem
+      $command_base = "tar -I zstd cpf";
+    }
     else {
+      // Do not follow symlinks by defult
       $command_base = "tar -I zstd cpf";
     }
     $command = $command_base . $command_arguments;
