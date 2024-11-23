@@ -12,13 +12,14 @@
  * Possible variables to set in local.drushrc.php or another drushrc location Drush supports.
  *
  * usage:
- *   $options['provision_backup_suffix'] = '.tar.bz2';
+ *   $options['provision_backup_suffix'] = '.tar.gz';
  *
  * provision_verify_platforms_before_migrate
  *   When migrating many sites turning this off can save time, default TRUE.
  *
  * provision_backup_suffix
- *   Method to set the compression used for backups... e.g. '.tar.bz2' or '.tar.', defaults to '.tar.gz'.
+ *   Method to set the compression used for backups... e.g. '.tar.gz', '.tar.bz2', '.tar.zst',
+ *    '.tar.xz', '.tar.lz4' or '.tar.', defaults to '.tar.'
  *
  * provision_apache_conf_suffix
  *   Set to TRUE to generate apache vhost files with a .conf suffix, default FALSE.
