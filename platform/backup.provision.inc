@@ -109,19 +109,22 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     }
   }
 
-  // If mounted filesystem for files then use tar pipelines
+  // If mounted filesystem for files then use zst (optionally with tar pipelines)
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  if (is_link($mounted_arch) || is_link($mounted_bak)) {
-    $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
-  }
-  elseif (isset($backup_mode)) {
+  if (isset($backup_mode)) {
     if ($backup_mode == 'backup_mysqldump_only' ||
       $backup_mode == 'site_files_without_db_backup' ||
       $backup_mode == 'site_files_with_mysqldump') {
       $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
     }
+    else {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+    }
+  }
+  elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+    $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
   }
   else {
     $suffix = drush_get_option('provision_backup_suffix', '.tar.');
