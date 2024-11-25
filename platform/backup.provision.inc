@@ -245,30 +245,30 @@ function drush_provision_drupal_provision_backup() {
   elseif (substr($backup_file, -3) == 'lz4') {
     if (isset($backup_mode)) {
       // Follow symlinks to include all files in custom backup task
-      $command_base = "tar -I lz4 cphf";
+      $command_base = "tar -c -p -h -I lz4 -f";
     }
     elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
       // Do not follow symlinks on mounted filesystem
-      $command_base = "tar -I lz4 cpf";
+      $command_base = "tar -c -p -I lz4 -f";
     }
     else {
       // Do not follow symlinks by defult
-      $command_base = "tar -I lz4 cpf";
+      $command_base = "tar -c -p -I lz4 -f";
     }
     $command = $command_base . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'zst') {
     if (isset($backup_mode)) {
       // Follow symlinks to include all files in custom backup task
-      $command_base = "tar -I zstd cphf";
+      $command_base = "tar -c -p -h -I zstd -f";
     }
     elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
       // Do not follow symlinks on mounted filesystem
-      $command_base = "tar -I zstd cpf";
+      $command_base = "tar -c -p -I zstd -f";
     }
     else {
       // Do not follow symlinks by defult
-      $command_base = "tar -I zstd cpf";
+      $command_base = "tar -c -p -I zstd -f";
     }
     $command = $command_base . $command_arguments;
   }
