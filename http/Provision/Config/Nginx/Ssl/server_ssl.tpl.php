@@ -40,10 +40,10 @@ server {
 <?php if ($nginx_has_http2): ?>
   http2                      on;
 <?php endif; ?>
-  ssl_stapling               on;
-  ssl_stapling_verify        on;
-  resolver 1.1.1.1 1.0.0.1 valid=300s;
-  resolver_timeout           5s;
+  #ssl_stapling               on;
+  #ssl_stapling_verify        on;
+  #resolver 1.1.1.1 1.0.0.1 valid=300s;
+  #resolver_timeout           5s;
   ssl_dhparam          /etc/ssl/private/nginx-wild-ssl.dhp;
   ssl_certificate      /etc/ssl/private/nginx-wild-ssl.crt;
   ssl_certificate_key  /etc/ssl/private/nginx-wild-ssl.key;
