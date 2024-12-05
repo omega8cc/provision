@@ -37,10 +37,10 @@ server {
   root         /var/www/nginx-default;
   index        index.html index.htm;
   ### Do not reveal Aegir front-end URL here.
-  ssl_stapling               on;
-  ssl_stapling_verify        on;
-  resolver 1.1.1.1 1.0.0.1 valid=300s;
-  resolver_timeout           5s;
+  #ssl_stapling               on;
+  #ssl_stapling_verify        on;
+  #resolver 1.1.1.1 1.0.0.1 valid=300s;
+  #resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
   ssl_certificate_key        <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
