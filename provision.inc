@@ -210,6 +210,23 @@ function provision_unlock_drush_local_vnd() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
+    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+      if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
+        $approot = d()->root;
+        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+        $output = implode('', drush_shell_exec_output());
+        drush_log("DRUSH/DRUSH " . $output);
+      }
+    }
+    elseif (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+      if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
+        $approot = d()->root . "/../";
+        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+        $output = implode('', drush_shell_exec_output());
+        drush_log("DRUSH/DRUSH " . $output);
+      }
+    }
+
     if (drush_drupal_major_version() >= 10) {
 
       $this_user = provision_current_user();
@@ -400,6 +417,26 @@ function provision_lock_drush_local_vnd() {
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
     $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
     $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+
+    $dru_dru_dru_php_local = d()->root . '/vendor/drush/drush/drush.php';
+    $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
+
+    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+      if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
+        $approot = d()->root;
+        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+        $output = implode('', drush_shell_exec_output());
+        drush_log("DRUSH/DRUSH " . $output);
+      }
+    }
+    elseif (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+      if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
+        $approot = d()->root . "/../";
+        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+        $output = implode('', drush_shell_exec_output());
+        drush_log("DRUSH/DRUSH " . $output);
+      }
+    }
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
       provision_file()->chmod($dru_vnd_drush_local, 0400)
