@@ -187,7 +187,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $success = true;
 
-    while ($row = $hosts_result->fetch_assoc()) {
+    while ($row = $hosts_result->fetch()) {
       $host = $row['host'];
 
       // Skip desired hosts; handle them separately if needed
@@ -213,7 +213,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $grant_found = false;
 
       if ($grants_result) {
-        while ($grant = $grants_result->fetch_assoc()) {
+        while ($grant = $grants_result->fetch()) {
           $grant_statement = array_pop($grant);
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
             // Real grant found; do not drop the user
@@ -303,7 +303,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $grant_found = false;
 
       if ($grants_result) {
-        while ($grant = $grants_result->fetch_assoc()) {
+        while ($grant = $grants_result->fetch()) {
           $grant_statement = array_pop($grant);
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
             $grant_found = true;
