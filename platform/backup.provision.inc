@@ -127,7 +127,7 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
   }
   else {
-    $suffix = drush_get_option('provision_backup_suffix', '.tar.');
+    $suffix = drush_get_option('provision_backup_suffix', '.tar');
   }
   $suggested = d()->platform->server->backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
 

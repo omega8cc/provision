@@ -19,7 +19,7 @@
  *
  * provision_backup_suffix
  *   Method to set the compression used for backups... e.g. '.tar.gz', '.tar.bz2', '.tar.zst',
- *    '.tar.xz', '.tar.lz4' or '.tar.', defaults to '.tar.'
+ *    '.tar.xz', '.tar.lz4' or '.tar', defaults to '.tar'
  *
  * provision_apache_conf_suffix
  *   Set to TRUE to generate apache vhost files with a .conf suffix, default FALSE.
