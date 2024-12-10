@@ -113,7 +113,17 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  if (isset($backup_mode)) {
+  if (is_link($mounted_arch) || is_link($mounted_bak)) {
+    if ($backup_mode == 'backup_mysqldump_only' ||
+      $backup_mode == 'site_files_without_db_backup' ||
+      $backup_mode == 'site_files_with_mysqldump') {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+    }
+    else {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
+    }
+  }
+  elseif (isset($backup_mode)) {
     if ($backup_mode == 'backup_mysqldump_only' ||
       $backup_mode == 'site_files_without_db_backup' ||
       $backup_mode == 'site_files_with_mysqldump') {
@@ -122,9 +132,6 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     else {
       $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
     }
-  }
-  elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
-    $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
   }
   else {
     $suffix = drush_get_option('provision_backup_suffix', '.tar');
