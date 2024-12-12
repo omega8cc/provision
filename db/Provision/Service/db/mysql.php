@@ -328,8 +328,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // Optionally, flush privileges to ensure changes take effect immediately
-    // $flush_success = $this->query("FLUSH PRIVILEGES");
-    // $success = $success && $flush_success;
+    $flush_success = $this->query("FLUSH PRIVILEGES");
+    $success = $success && $flush_success;
 
     return $success;
   }
