@@ -161,6 +161,28 @@ if (isset($_SERVER['db_name'])) {
 <?php endif; ?>
 
   /**
+   * Load services definition file.
+   */
+  $settings['container_yamls'][] = __DIR__ . '/services.yml';
+
+  /**
+   * Trusted Host Patterns support.
+   */
+  $conf['trusted_host_patterns'] = array(
+<?php
+  $esc_uri = str_replace('.', '\.', $this->uri);
+  print "    '^{$esc_uri}\$',\n";
+  foreach ($this->aliases as $alias_url) {
+    $esc_alias = preg_replace(['/\./', '/\/.+/'], ['\.', ''], $alias_url);
+    print "    '^{$esc_alias}\$',\n";
+  }
+?>
+    '^localhost$',
+    '^localhost\.*',
+    '\.local$',
+  );
+
+  /**
    * Set the Syslog identity to the site name so it's not always "drupal".
    */
   $conf['syslog_identity'] = '<?php print $this->uri ?>';
