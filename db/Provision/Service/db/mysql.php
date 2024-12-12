@@ -292,7 +292,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $desired_host
       );
       $revoke_desired = $this->query($revoke_desired_query);
-      if (!$revoke_desired) {
+      if (!$revoke_desired && $username != 'site_tmp_test_user') {
         //error_log("Failed to revoke privileges for user `$username`@`$desired_host`.");
         drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
       }
@@ -312,7 +312,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
       }
 
-      if (!$grant_found) {
+      if (!$grant_found && $username != 'site_tmp_test_user') {
         $drop_desired_query = sprintf(
           "DROP USER `%s`@`%s`",
           $username,
