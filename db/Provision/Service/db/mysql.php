@@ -61,7 +61,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $this->create_database($dbname);
     $user     = $dbname . '_user';
     $password = $dbname . '_password';
-    $host     = $dbname . '_host';
+    $host     = 'localhost';
     $status = $this->grant($dbname, $user, $password, $host);
     $this->revoke($dbname, $user, $host);
     $this->drop_database($dbname);
@@ -328,8 +328,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // Optionally, flush privileges to ensure changes take effect immediately
-    // $flush_success = $this->query("FLUSH PRIVILEGES");
-    // $success = $success && $flush_success;
+    $flush_success = $this->query("FLUSH PRIVILEGES");
+    $success = $success && $flush_success;
 
     return $success;
   }
