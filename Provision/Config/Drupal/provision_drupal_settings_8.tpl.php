@@ -169,7 +169,7 @@ if (isset($_SERVER['db_name'])) {
   $settings['container_yamls'][] = __DIR__ . '/services.yml';
 
   /**
-   * Trusted Host Settings support.
+   * Trusted Host Patterns support.
    */
   $settings['trusted_host_patterns'] = array(
 <?php
