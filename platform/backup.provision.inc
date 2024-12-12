@@ -96,7 +96,6 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
       }
       else {
         drush_log("Backup mode control file not found.", 'info');
@@ -110,10 +109,27 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     }
   }
 
-  if (isset($backup_mode)) {
+  // If mounted filesystem for files then use zst (optionally with tar pipelines)
+  $mounted_arch = "/data/disk/arch";
+  $mounted_bak = d()->platform->server->backup_path;
+
+  if (is_link($mounted_arch) || is_link($mounted_bak)) {
     if ($backup_mode == 'backup_mysqldump_only' ||
       $backup_mode == 'site_files_without_db_backup' ||
       $backup_mode == 'site_files_with_mysqldump') {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+    }
+    else {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
+    }
+  }
+  elseif (isset($backup_mode)) {
+    if ($backup_mode == 'backup_mysqldump_only' ||
+      $backup_mode == 'site_files_without_db_backup' ||
+      $backup_mode == 'site_files_with_mysqldump') {
+      $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
+    }
+    else {
       $suffix = drush_get_option('provision_backup_suffix', '.tar.gz');
     }
   }
@@ -182,7 +198,6 @@ function drush_provision_drupal_provision_backup() {
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
-        //unlink(AEGIR_BACKUP_MODE_CTRL);
       }
       else {
         drush_log("Backup mode control file not found.", 'info');
@@ -206,22 +221,65 @@ function drush_provision_drupal_provision_backup() {
   }
   drush_shell_exec($exclude_tag);
 
+  // If mounted filesystem for files then use tar pipelines
+  $mounted_arch = "/data/disk/arch";
+  $mounted_bak = d()->platform->server->backup_path;
+
   if (isset($backup_mode)) {
-    // Follow symlinks to include all files
+    // Follow symlinks to include all files in custom backup task
     $command_base = "tar cphf";
   }
+  elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+    // Do not follow symlinks on mounted filesystem
+    $command_base = "tar cpf";
+  }
   else {
-    // Do not follow symlinks
+    // Do not follow symlinks by defult
     $command_base = "tar cpf";
   }
 
   $command_arguments = " %s --exclude-tag=exclude.tag";
+
   if (substr($backup_file, -2) == 'gz') {
     $command = $command_base . 'z' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'bz2') {
     $command = $command_base . 'j' . $command_arguments;
-  } else {
+  }
+  elseif (substr($backup_file, -2) == 'xz') {
+    $command = $command_base . 'J' . $command_arguments;
+  }
+  elseif (substr($backup_file, -3) == 'lz4') {
+    if (isset($backup_mode)) {
+      // Follow symlinks to include all files in custom backup task
+      $command_base = "tar -c -p -h -I lz4 -f";
+    }
+    elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+      // Do not follow symlinks on mounted filesystem
+      $command_base = "tar -c -p -I lz4 -f";
+    }
+    else {
+      // Do not follow symlinks by defult
+      $command_base = "tar -c -p -I lz4 -f";
+    }
+    $command = $command_base . $command_arguments;
+  }
+  elseif (substr($backup_file, -3) == 'zst') {
+    if (isset($backup_mode)) {
+      // Follow symlinks to include all files in custom backup task
+      $command_base = "tar -c -p -h -I zstd -f";
+    }
+    elseif (is_link($mounted_arch) || is_link($mounted_bak)) {
+      // Do not follow symlinks on mounted filesystem
+      $command_base = "tar -c -p -I zstd -f";
+    }
+    else {
+      // Do not follow symlinks by defult
+      $command_base = "tar -c -p -I zstd -f";
+    }
+    $command = $command_base . $command_arguments;
+  }
+  else {
     $command = $command_base . $command_arguments;
   }
   $command .= ' .';
@@ -297,7 +355,6 @@ function drush_provision_drupal_post_provision_backup() {
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
-          //unlink(AEGIR_BACKUP_MODE_CTRL);
         }
         else {
           drush_log("Backup mode control file not found.", 'info');
@@ -374,7 +431,6 @@ function drush_provision_drupal_provision_backup_rollback() {
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
-          //unlink(AEGIR_BACKUP_MODE_CTRL);
         }
         else {
           drush_log("Backup mode control file not found.", 'info');

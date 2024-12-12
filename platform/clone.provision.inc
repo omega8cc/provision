@@ -13,6 +13,8 @@
  * Make sure we have a valid site being cloned, and that the file being cloned from exists
  */
 function drush_provision_drupal_provision_clone_validate($new_name = null, $platform = null) {
+  // Backup mode ctrl file cleanup
+  unlink(AEGIR_BACKUP_MODE_CTRL);
   // Lock Site-Local Drush if Unlocked
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
   $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';

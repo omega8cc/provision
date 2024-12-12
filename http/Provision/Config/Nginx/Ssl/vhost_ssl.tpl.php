@@ -77,10 +77,10 @@ server {
     print "  server_name  {$alias_url};\n";
   }
 ?>
-  ssl_stapling               on;
-  ssl_stapling_verify        on;
-  resolver 1.1.1.1 1.0.0.1 valid=300s;
-  resolver_timeout           5s;
+  #ssl_stapling               on;
+  #ssl_stapling_verify        on;
+  #resolver 1.1.1.1 1.0.0.1 valid=300s;
+  #resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
   ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
@@ -100,6 +100,9 @@ server {
     alias <?php print $aegir_root; ?>/tools/le/.acme-challenges;
     try_files $uri 404;
   }
+
+  access_log off;
+  log_not_found off;
 
   return 301 $scheme://<?php print $this->redirection; ?>$request_uri;
 }
@@ -181,10 +184,10 @@ server {
       }
     } ?>;
   root          <?php print "{$this->root}"; ?>;
-  ssl_stapling               on;
-  ssl_stapling_verify        on;
-  resolver 1.1.1.1 1.0.0.1 valid=300s;
-  resolver_timeout           5s;
+  #ssl_stapling               on;
+  #ssl_stapling_verify        on;
+  #resolver 1.1.1.1 1.0.0.1 valid=300s;
+  #resolver_timeout           5s;
   ssl_dhparam                /etc/ssl/private/nginx-wild-ssl.dhp;
 <?php if ($legacy_tls_enable): ?>
   ssl_protocols              TLSv1.1 TLSv1.2 TLSv1.3;
