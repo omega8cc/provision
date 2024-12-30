@@ -114,7 +114,7 @@ class DebugClassLoaderTest extends TestCase
         ErrorHandler::register();
 
         try {
-            // Trigger autoloading + E_STRICT at compile time
+            // Trigger autoloading + E_WARNING at compile time
             // which in turn triggers $errorHandler->handle()
             // that again triggers autoloading for ContextErrorException.
             // Error stacking works around the bug above and everything is fine.
@@ -129,7 +129,7 @@ class DebugClassLoaderTest extends TestCase
             $this->assertStringStartsWith(__FILE__, $exception->getFile());
             if (\PHP_VERSION_ID < 70000) {
                 $this->assertMatchesRegularExpression('/^Runtime Notice: Declaration/', $exception->getMessage());
-                $this->assertEquals(E_STRICT, $exception->getSeverity());
+                $this->assertEquals(E_WARNING, $exception->getSeverity());
             } else {
                 $this->assertMatchesRegularExpression('/^Warning: Declaration/', $exception->getMessage());
                 $this->assertEquals(E_WARNING, $exception->getSeverity());

@@ -53,7 +53,6 @@ class ErrorHandler
         \E_USER_DEPRECATED => 'User Deprecated',
         \E_NOTICE => 'Notice',
         \E_USER_NOTICE => 'User Notice',
-        \E_STRICT => 'Runtime Notice',
         \E_WARNING => 'Warning',
         \E_USER_WARNING => 'User Warning',
         \E_COMPILE_WARNING => 'Compile Warning',
@@ -71,7 +70,6 @@ class ErrorHandler
         \E_USER_DEPRECATED => [null, LogLevel::INFO],
         \E_NOTICE => [null, LogLevel::WARNING],
         \E_USER_NOTICE => [null, LogLevel::WARNING],
-        \E_STRICT => [null, LogLevel::WARNING],
         \E_WARNING => [null, LogLevel::WARNING],
         \E_USER_WARNING => [null, LogLevel::WARNING],
         \E_COMPILE_WARNING => [null, LogLevel::WARNING],
@@ -86,7 +84,7 @@ class ErrorHandler
 
     private $thrownErrors = 0x1FFF; // E_ALL - E_DEPRECATED - E_USER_DEPRECATED
     private $scopedErrors = 0x1FFF; // E_ALL - E_DEPRECATED - E_USER_DEPRECATED
-    private $tracedErrors = 0x77FB; // E_ALL - E_STRICT - E_PARSE
+    private $tracedErrors = 0x77FB; // E_ALL - E_PARSE
     private $screamedErrors = 0x55; // E_ERROR + E_CORE_ERROR + E_COMPILE_ERROR + E_PARSE
     private $loggedErrors = 0;
     private $traceReflector;
