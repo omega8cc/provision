@@ -1,7 +1,7 @@
 <?php
 /**
  *  @file
- *    Rebuild all the caches
+ *    Site Installation for Drupal 11.
  */
 
 use \Drupal\Core\Url;
