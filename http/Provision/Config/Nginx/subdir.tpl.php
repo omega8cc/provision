@@ -215,7 +215,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   ### Include PHP-FPM version override logic if exists.
   ###
-  include <?php print $aegir_root; ?>/config/server_master/nginx/post.d/fpm_include*;
+  include  <?php print $aegir_root; ?>/config/server_master/nginx/post.d/fpm_include*;
 
   ###
   ### Allow to use non-default PHP-FPM version for the site
@@ -317,7 +317,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location = /<?php print $subdir; ?>/cron.php {
 
-    include       fastcgi_params;
+    include fastcgi_params;
 
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
@@ -1048,9 +1048,9 @@ location ^~ /<?php print $subdir; ?> {
     add_header X-Server-Sub-Name "$subdir_main_site_name";
     add_header X-Response-Status "$status";
 
-    root          <?php print "{$this->root}"; ?>;
+    root  <?php print "{$this->root}"; ?>;
 
-    include       fastcgi_params;
+    include fastcgi_params;
 
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";

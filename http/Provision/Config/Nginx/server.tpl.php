@@ -307,20 +307,18 @@ map $args $is_denied {
 #######################################################
 
 server {
-  listen       *:<?php print $http_port; ?>;
-  #listen       [::]:<?php print $http_port; ?>;
+  listen  *:<?php print $http_port; ?>;
   server_name  _;
   location / {
     expires 99s;
     add_header Cache-Control "public, must-revalidate, proxy-revalidate";
-    root   /var/www/nginx-default;
+    root  /var/www/nginx-default;
     index  index.html index.htm;
   }
 }
 
 server {
-  listen       *:<?php print $http_port; ?>;
-  #listen       [::]:<?php print $http_port; ?>;
+  listen  *:<?php print $http_port; ?>;
   server_name  127.0.0.1;
   location /nginx_status {
     stub_status on;
@@ -336,7 +334,7 @@ server {
 #######################################################
 
 # virtual hosts
-include <?php print $http_pred_path ?>/*;
-include <?php print $http_platformd_path ?>/*;
-include <?php print $http_vhostd_path ?>/*;
-include <?php print $http_postd_path ?>/*;
+include  <?php print $http_pred_path ?>/*;
+include  <?php print $http_platformd_path ?>/*;
+include  <?php print $http_vhostd_path ?>/*;
+include  <?php print $http_postd_path ?>/*;
