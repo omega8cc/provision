@@ -175,12 +175,12 @@ rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
 ###
 ### Include high level local configuration override if exists.
 ###
-include <?php print $aegir_root; ?>/config/server_master/nginx/post.d/nginx_force_include*;
+include  <?php print $aegir_root; ?>/config/server_master/nginx/post.d/nginx_force_include*;
 
 ###
 ### Include PHP-FPM version override logic if exists.
 ###
-include <?php print $aegir_root; ?>/config/server_master/nginx/post.d/fpm_include*;
+include  <?php print $aegir_root; ?>/config/server_master/nginx/post.d/fpm_include*;
 
 ###
 ### Allow to use non-default PHP-FPM version for the site
@@ -679,7 +679,7 @@ location ~* ^/sites/.*/files/config_.* {
 ###
 ### Include local configuration override if exists.
 ###
-include <?php print $aegir_root; ?>/config/server_master/nginx/post.d/nginx_vhost_include*;
+include  <?php print $aegir_root; ?>/config/server_master/nginx/post.d/nginx_vhost_include*;
 
 ###
 ### Private downloads are always sent to the drupal backend.

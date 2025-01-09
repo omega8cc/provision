@@ -1,7 +1,7 @@
 <?php
 /**
  *  @file
- *    Site Installation for Drupal 10.
+ *    Site Installation for Drupal 11.
  */
 
 use \Drupal\Core\Url;

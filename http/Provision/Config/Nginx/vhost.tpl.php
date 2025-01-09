@@ -18,8 +18,7 @@ if ($this->redirection) {
       print "\n";
       print "# alias redirection virtual host\n";
       print "server {\n";
-      print "  listen       *:{$http_port};\n";
-      print "  #listen       [::]:{$http_port};\n";
+      print "  listen  *:{$http_port};\n";
       // if we use redirections, we need to change the redirection
       // target to be the original site URL ($this->uri instead of
       // $alias_url)
@@ -58,9 +57,8 @@ if ($this->redirection || !$this->redirection) {
       print "\n";
       print "# nodns alias exception virtual host\n";
       print "server {\n";
-      print "  listen       *:{$http_port};\n";
-      print "  #listen       [::]:{$http_port};\n";
-      print "  include       fastcgi_params;\n";
+      print "  listen  *:{$http_port};\n";
+      print "  include fastcgi_params;\n";
       print "  fastcgi_param HTTP_PROXY \"\";\n";
       print "  fastcgi_param MAIN_SITE_NAME {$this->uri};\n";
       print "  set \$main_site_name {$this->uri};\n";
@@ -101,8 +99,8 @@ if ($this->redirection || !$this->redirection) {
       $alias_url = str_replace('/', '.', $alias_url);
       print "  server_name  {$alias_url};\n";
       print "  root  {$this->root};\n";
-      print "  include       " . $server->include_path . "/ip_access/{$this->uri}*;\n";
-      print "  include       " . $server->include_path . "/nginx_vhost_common.conf;\n";
+      print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+      print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
       print "}\n";
     }
   }
@@ -110,7 +108,7 @@ if ($this->redirection || !$this->redirection) {
 ?>
 
 server {
-  include       fastcgi_params;
+  include fastcgi_params;
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
@@ -150,9 +148,8 @@ server {
   }
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
-  listen        *:<?php print $http_port; ?>;
-  #listen        [::]:<?php print $http_port; ?>;
-  server_name   <?php
+  listen  *:<?php print $http_port; ?>;
+  server_name  <?php
     // this is the main vhost, so we need to put the redirection
     // target as the hostname (if it exists) and not the original URL
     // ($this->uri)
@@ -175,7 +172,7 @@ server {
         }
       }
     } ?>;
-  root          <?php print "{$this->root}"; ?>;
+  root  <?php print "{$this->root}"; ?>;
   <?php print $extra_config; ?>
 <?php
 if ($this->redirection || $ssl_redirection) {
@@ -192,17 +189,17 @@ if ($this->redirection || $ssl_redirection) {
     print "\n  return 301 https://{$this->redirection}\$request_uri;\n";
   }
   elseif (!$ssl_redirection && $this->redirection) {
-    print "  include       " . $server->include_path . "/ip_access/{$this->uri}*;\n";
-    print "  include       " . $server->include_path . "/nginx_vhost_common.conf;\n";
+    print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+    print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
   }
 }
 else {
-  print "  include       " . $server->include_path . "/ip_access/{$this->uri}*;\n";
-  print "  include       " . $server->include_path . "/nginx_vhost_common.conf;\n";
+  print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+  print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
 }
 $if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
 if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {
-  print "  include       " . $if_subsite . "/*.conf;\n";
+  print "  include  " . $if_subsite . "/*.conf;\n";
 }
 ?>
 }

@@ -213,6 +213,7 @@ function drush_provision_drupal_pre_provision_verify() {
     $core8_version_id = d()->root . '/core';
     $core9_version_id = d()->root . '/core/themes/olivero';
     $core10_version_f = d()->root . '/core/themes/classy';
+    $core11_version_id = d()->root . '/core/modules/workspaces_ui';
 
     if (provision_file()->exists($pathAll)->status() &&
        (provision_file()->exists($core8_version_id)->status() ||
@@ -232,6 +233,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $core8_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_eight';
         $core9_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_nine';
         $core10_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_ten';
+        $core11_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_eleven';
       }
       else {
         $core6_contrib_dir = '/data/all/000/modules/o_contrib';
@@ -239,23 +241,32 @@ function drush_provision_drupal_pre_provision_verify() {
         $core8_contrib_dir = '/data/all/000/modules/o_contrib_eight';
         $core9_contrib_dir = '/data/all/000/modules/o_contrib_nine';
         $core10_contrib_dir = '/data/all/000/modules/o_contrib_ten';
+        $core11_contrib_dir = '/data/all/000/modules/o_contrib_eleven';
       }
 
       $core6_version_id = d()->root . '/modules/path_alias_cache';
       $core6_contrib_symlink = d()->root . '/modules/o_contrib';
       $core6_contrib_dot = d()->root . '/modules/.o_contrib_dont_use';
+
       $core7_version_id = d()->root . '/modules/overlay';
       $core7_contrib_symlink = d()->root . '/modules/o_contrib_seven';
       $core7_contrib_dot = d()->root . '/modules/.o_contrib_seven_dont_use';
+
       $core8_version_id = d()->root . '/core';
       $core8_contrib_symlink = d()->root . '/modules/o_contrib_eight';
       $core8_contrib_dot = d()->root . '/modules/.o_contrib_eight_dont_use';
+
       $core9_version_id = d()->root . '/core/themes/olivero';
       $core9_contrib_symlink = d()->root . '/modules/o_contrib_nine';
       $core9_contrib_dot = d()->root . '/modules/.o_contrib_nine_dont_use';
+
       $core10_version_f = d()->root . '/core/themes/classy';
       $core10_contrib_symlink = d()->root . '/modules/o_contrib_ten';
       $core10_contrib_dot = d()->root . '/modules/.o_contrib_ten_dont_use';
+
+      $core11_version_id = d()->root . '/core/modules/workspaces_ui';
+      $core11_contrib_symlink = d()->root . '/modules/o_contrib_eleven';
+      $core11_contrib_dot = d()->root . '/modules/.o_contrib_eleven_dont_use';
 
       $core6_contrib_js_file = $core6_contrib_dir . '/js/js.php';
       $core7_contrib_js_file = $core7_contrib_dir . '/js/js.php';
@@ -267,13 +278,35 @@ function drush_provision_drupal_pre_provision_verify() {
           provision_file()->exists($core7_contrib_dir)->status() ||
           provision_file()->exists($core8_contrib_dir)->status() ||
           provision_file()->exists($core9_contrib_dir)->status() ||
-          provision_file()->exists($core10_contrib_dir)->status()) {
+          provision_file()->exists($core10_contrib_dir)->status() ||
+          provision_file()->exists($core11_contrib_dir)->status()) {
         provision_file()->writable(d()->root)
           ->succeed('Drupal root directory @path is writable by the provisioning script')
           ->fail('Drupal root directory @path is not writable by the provisioning script', 'PROVISION_DRUPAL_ROOT_DIR_NOT_WRITABLE');
         provision_file()->writable(d()->root . '/modules')
           ->succeed('Drupal core modules directory @path is writable by the provisioning script')
           ->fail('Drupal core modules directory @path is not writable by the provisioning script', 'PROVISION_CORE_MODULES_DIR_NOT_WRITABLE');
+      }
+
+      // Add symlink to BOA specific contrib in Drupal 11.
+      // Check if static copy exists first
+      if (is_dir($core11_contrib_symlink) && !is_link($core11_contrib_symlink)) {
+        // Run cleanup of previous dot dir if exists
+        // and current contrib is not a symlink again.
+        if (provision_file()->exists($core11_contrib_dot)->status()) {
+          _provision_recursive_delete($core11_contrib_dot);
+          drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $core11_contrib_dot)), 'message');
+        }
+        // Rename static contrib to dot dir if exists
+        rename($core11_contrib_symlink, $core11_contrib_dot);
+        drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $core11_contrib_dot)), 'message');
+      }
+      if (provision_file()->exists($core11_contrib_dir)->status() &&
+          provision_file()->exists($core11_version_id)->status() &&
+          !provision_file()->exists($core11_contrib_symlink)->status()) {
+        provision_file()->symlink($core11_contrib_dir, $core11_contrib_symlink)
+          ->succeed('Created symlink @path to @target')
+          ->fail('Could not create symlink @path to @target: @reason');
       }
 
       // Add symlink to BOA specific contrib in Pressflow 6.
