@@ -82,6 +82,18 @@ function drush_provision_drupal_pre_provision_install_rollback() {
 
 
 /**
+ * Custom helper function findDrupalAppRoot
+ */
+function findDrupalAppRoot($startDir) {
+  $dir = realpath($startDir);
+  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
+    $dir = dirname($dir);
+  }
+  return is_dir($dir . '/vendor') ? $dir : null;
+}
+
+
+/**
  * Install Drupal with the pre-configured settings, by calling an external script
  *
  * This is an external script so that php is running in it's own namespace, and
