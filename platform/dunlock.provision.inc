@@ -48,14 +48,14 @@ function drush_provision_dunlock() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($bin_vnd_drush_local)->status()) {
-      provision_file()->chmod($bin_vnd_drush_local, 0775)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+      provision_file()->unlink($bin_vnd_drush_local)
+      ->succeed('Removed Problematic vendor/bin/drush in provision_unlock_drush_local_vnd')
+      ->fail('Could not remove problematic vendor/bin/drush in provision_unlock_drush_local_vnd');
     }
     if (provision_file()->exists($bin_vnd_drush_above)->status()) {
-      provision_file()->chmod($bin_vnd_drush_above, 0775)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+      provision_file()->unlink($bin_vnd_drush_above)
+      ->succeed('Removed Problematic vendor/bin/drush in provision_unlock_drush_local_vnd')
+      ->fail('Could not remove problematic vendor/bin/drush in provision_unlock_drush_local_vnd');
     }
     if (provision_file()->exists($dru_dru_dru_php_local)->status()) {
       provision_file()->chmod($dru_dru_dru_php_local, 0775)
