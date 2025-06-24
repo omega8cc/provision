@@ -431,12 +431,9 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
-  ### Avoid caching /civicrm* and protect it from bots.
+  ### Avoid caching /civicrm*.
   ###
   location ^~ /<?php print $subdir; ?>/civicrm {
-    if ( $is_bot ) {
-      return 403;
-    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
@@ -444,12 +441,9 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
-  ### Avoid caching /civicrm* requests, but protect from bots on a multi-lingual site
+  ### Avoid caching /civicrm* requests
   ###
   location ^~ /<?php print $subdir; ?>/\w\w/civicrm {
-    if ( $is_bot ) {
-      return 403;
-    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
