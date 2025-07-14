@@ -161,7 +161,7 @@ function drush_provision_drupal_provision_install() {
       }
       else {
         $options = drush_get_merged_options();
-        $cOMMand = $drushPath;
+        $cOMMand = [$drushPath];
         $cOMMand[] = $drushCommand;
         $cOMMand[] = d()->profile;
         $cOMMand[] = '--sites-subdir=' . d()->uri;
