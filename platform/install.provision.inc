@@ -127,7 +127,74 @@ function drush_provision_drupal_provision_install() {
   if (d()->install_method == 'profile') {
 
     // call a backend task to do the actual installation.
-    $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    if (drush_drupal_major_version() > 5 && drush_drupal_major_version() < 11) {
+      $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    }
+    elseif (drush_drupal_major_version() > 10) {
+
+      // Unlock Site-Local Drush In The 11+ Platform if locked
+      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+      if (provision_file()->exists($drush_lock_ctrl)->status()) {
+        drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+        provision_unlock_drush_local_vnd();
+      }
+
+      // Define The Initial Path And Drush Command
+      $initialPath = d()->root;
+      $drushCommand = ['site-install'];
+
+      // Find The App Root Directory
+      $appRoot = findDrupalAppRoot($initialPath);
+
+      // Define Local Drush Path
+      $drushPath = 'vendor/drush/drush/drush.php';
+
+      // Check If The Local Drush Exists And Is Executable
+      $drushAbsolutePath = $appRoot . '/' . $drushPath;
+      drush_log(dt('LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+
+      if (!is_executable($drushAbsolutePath)) {
+        // Log The Useful Info
+        drush_log(dt('LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
+        drush_log(print_r(drush_get_error_log(), 1), 'error');
+        return FALSE;
+      }
+      else {
+        $options = drush_get_merged_options();
+        $cOMMand = $drushPath;
+        $cOMMand[] = $drushCommand;
+        $cOMMand[] = d()->profile;
+        $cOMMand[] = '--sites-subdir=' . d()->uri;
+        $site_name = escapeshellarg($options['#name']);
+        $cOMMand[] = "--site-name=$site_name";
+        if ($options['client_email']) {
+          $cOMMand[] = "--account-mail={$options['client_email']}";
+        }
+        $cOMMand[] = '--yes';
+
+        // Call The Drush site-install Command with Site-Local Drush
+        drush_log(dt('LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand, '@appRoot' => $appRoot)), 'info');
+        $result = drush_shell_cd_and_exec($appRoot, $drushPath . ' ' . $cOMMand);
+        $output = drush_shell_exec_output();
+        foreach ($output as $index => $line) {
+          if (!$success) { // Log the entire error as a notice.
+            $line_status = 'notice';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($output) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+      }
+
+      // Lock Site-Local Drush Again If Unlocked
+      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+      $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+      if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+        drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
+    }
 
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
