@@ -114,6 +114,7 @@ function drush_provision_dlock() {
             $command = "cp -a $psr_tpl/* $target_dir";
             $success = drush_shell_exec($command);
           }
+          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -127,6 +128,7 @@ function drush_provision_dlock() {
             $success = drush_shell_exec($command);
           }
         }
+        $symfonyDir = d()->root . '/../vendor/symfony/';
       }
 
       $is_patched = "YES";
@@ -138,26 +140,35 @@ function drush_provision_dlock() {
       }
 
       if (drush_drupal_major_version() == 10) {
-        $core_patch_fname = "drupal-ten-aegir-01.patch";
+        $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+        $console_patch_fname = "drupal-ten-aegir-console-02.patch";
       }
       elseif (drush_drupal_major_version() == 11) {
-        $core_patch_fname = "drupal-eleven-aegir-01.patch";
+        $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
+        $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
       }
 
       if ($this_user == 'aegir' ) {
-        $patchTpl = '/var/aegir/patches/' . $core_patch_fname;
+        $patchCoreTpl = '/var/aegir/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/var/aegir/patches/' . $console_patch_fname;
       }
       else {
-        $patchTpl = '/data/conf/patches/' . $core_patch_fname;
+        $patchCoreTpl = '/data/conf/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/data/conf/patches/' . $console_patch_fname;
       }
-      $patchFile = d()->root . '/' . $core_patch_fname;
-      $webRoot = d()->root;
-      $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
-        if (!provision_file()->exists($patchFile)->status()) {
-          drush_log(dt('CORE/PATCH/APPLY @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
-          $success = drush_shell_exec($command);
+      $patchCoreFile = d()->root . '/' . $core_patch_fname;
+      $patchConsoleFile = d()->root . '/' . $console_patch_fname;
+
+      $webRoot = d()->root;
+      $commandCore = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchCoreTpl);
+      $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -p1 < ' . $patchConsoleTpl);
+
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'NO') {
+
+        if (!provision_file()->exists($patchCoreFile)->status()) {
+          drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
+          $success = drush_shell_exec($commandCore);
           $result = drush_shell_exec_output();
           foreach ($result as $index => $line) {
             if (!$success) { // Log the entire error as a warning.
@@ -168,7 +179,23 @@ function drush_provision_dlock() {
             }
             drush_log($line, $line_status);
           }
-          provision_file()->copy($patchTpl, $patchFile);
+          provision_file()->copy($patchCoreTpl, $patchCoreFile);
+        }
+
+        if (!provision_file()->exists($patchConsoleFile)->status()) {
+          drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
+          $success = drush_shell_exec($commandConsole);
+          $result = drush_shell_exec_output();
+          foreach ($result as $index => $line) {
+            if (!$success) { // Log the entire error as a warning.
+              $line_status = 'warning';
+            }
+            else { // Only log the last line as success.
+              $line_status = $index+1 == count($result) ? 'success' : 'notice';
+            }
+            drush_log($line, $line_status);
+          }
+          provision_file()->copy($patchConsoleTpl, $patchConsoleFile);
         }
       }
     }

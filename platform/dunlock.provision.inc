@@ -140,6 +140,7 @@ function drush_provision_dunlock() {
               drush_log("PSR/LOG " . $output);
             }
           }
+          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -163,6 +164,7 @@ function drush_provision_dunlock() {
               drush_log("PSR/LOG " . $output);
             }
           }
+          $symfonyDir = d()->root . '/../vendor/symfony/';
         }
       }
 
@@ -175,28 +177,36 @@ function drush_provision_dunlock() {
       }
 
       if (drush_drupal_major_version() == 10) {
-        $core_patch_fname = "drupal-ten-aegir-01.patch";
+        $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+        $console_patch_fname = "drupal-ten-aegir-console-02.patch";
       }
       elseif (drush_drupal_major_version() == 11) {
-        $core_patch_fname = "drupal-eleven-aegir-01.patch";
+        $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
+        $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
       }
 
       if ($this_user == 'aegir' ) {
-        $patchTpl = '/var/aegir/patches/' . $core_patch_fname;
+        $patchCoreTpl = '/var/aegir/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/var/aegir/patches/' . $console_patch_fname;
       }
       else {
-        $patchTpl = '/data/conf/patches/' . $core_patch_fname;
+        $patchCoreTpl = '/data/conf/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/data/conf/patches/' . $console_patch_fname;
       }
-      $patchFile = d()->root . '/' . $core_patch_fname;
-      $webRoot = d()->root;
-      $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'YES') {
-        if (!provision_file()->exists($patchFile)->status()) {
-          provision_file()->copy($patchTpl, $patchFile);
+      $patchCoreFile = d()->root . '/' . $core_patch_fname;
+      $patchConsoleFile = d()->root . '/' . $console_patch_fname;
+
+      $webRoot = d()->root;
+      $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
+      $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
+
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'YES') {
+        if (!provision_file()->exists($patchCoreFile)->status()) {
+          provision_file()->copy($patchCoreTpl, $patchCoreFile);
         }
-        drush_log(dt('CORE/PATCH/REVERT @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
-        $success = drush_shell_exec($command);
+        drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
+        $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
           if (!$success) { // Log the entire error as a warning.
@@ -204,6 +214,22 @@ function drush_provision_dunlock() {
           }
           else { // Only log the last line as success.
             $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+
+        if (!provision_file()->exists($patchConsoleFile)->status()) {
+          provision_file()->copy($patchConsoleTpl, $patchConsoleFile);
+        }
+        drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
+        $success = drush_shell_exec($commandConsole);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+              $line_status = 'warning';
+          }
+          else { // Only log the last line as success.
+              $line_status = $index+1 == count($result) ? 'success' : 'notice';
           }
           drush_log($line, $line_status);
         }
