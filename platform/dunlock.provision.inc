@@ -174,13 +174,20 @@ function drush_provision_dunlock() {
         $is_patched = "NO";
       }
 
+      if (drush_drupal_major_version() == 10) {
+        $core_patch_fname = "drupal-ten-aegir-01.patch";
+      }
+      elseif (drush_drupal_major_version() == 11) {
+        $core_patch_fname = "drupal-eleven-aegir-01.patch";
+      }
+
       if ($this_user == 'aegir' ) {
-        $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
+        $patchTpl = '/var/aegir/patches/' . $core_patch_fname;
       }
       else {
-        $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+        $patchTpl = '/data/conf/patches/' . $core_patch_fname;
       }
-      $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
+      $patchFile = d()->root . '/' . $core_patch_fname;
       $webRoot = d()->root;
       $command = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchTpl);
 
