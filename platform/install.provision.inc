@@ -102,13 +102,24 @@ function findDrupalAppRoot($startDir) {
 function drush_provision_drupal_provision_install() {
   // Requires at least the database settings to complete.
 
-  if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
-    // Lock Site-Local Drush if Unlocked
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-      drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
+  // Determine if codebase locking/unlocking and patching is allowed (default)
+  $no_codebase_lock_unlock = '/data/conf/_no_codebase_lock_unlock.ctrl';
+  if (is_readable($no_codebase_lock_unlock)) {
+    $lock_unlock = FALSE;
+  }
+  else {
+    $lock_unlock = TRUE;
+  }
+
+  if ($lock_unlock)) {
+    if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
+      // Lock Site-Local Drush if Unlocked
+      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+      $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+      if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+        drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
     }
   }
 
@@ -132,11 +143,13 @@ function drush_provision_drupal_provision_install() {
     }
     elseif (drush_drupal_major_version() > 10) {
 
-      // Unlock Site-Local Drush In The 11+ Platform if locked
-      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-      if (provision_file()->exists($drush_lock_ctrl)->status()) {
-        drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-        provision_unlock_drush_local_vnd();
+      if ($lock_unlock)) {
+        // Unlock Site-Local Drush In The 11+ Platform if locked
+        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+        if (provision_file()->exists($drush_lock_ctrl)->status()) {
+          drush_log(dt('D11/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+          provision_unlock_drush_local_vnd();
+        }
       }
 
       // Define The Initial Path And Drush Command
@@ -151,11 +164,11 @@ function drush_provision_drupal_provision_install() {
 
       // Check If The Local Drush Exists And Is Executable
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
-      drush_log(dt('LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+      drush_log(dt('D11/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
       if (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
-        drush_log(dt('LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
+        drush_log(dt('D11/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
         return FALSE;
       }
@@ -173,7 +186,7 @@ function drush_provision_drupal_provision_install() {
         $cOMMand[] = '--yes';
 
         // Call The Drush site-install Command with Site-Local Drush
-        drush_log(dt('LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand, '@appRoot' => $appRoot)), 'info');
+        drush_log(dt('D11/LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand, '@appRoot' => $appRoot)), 'info');
         $result = drush_shell_cd_and_exec($appRoot, $drushPath . ' ' . $cOMMand);
         $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
@@ -187,12 +200,14 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      // Lock Site-Local Drush Again If Unlocked
-      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-      $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-      if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-        drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-        provision_lock_drush_local_vnd();
+      if ($lock_unlock)) {
+        // Lock Site-Local Drush Again If Unlocked
+        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+        $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+        if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+          drush_log(dt('D11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_lock_drush_local_vnd();
+        }
       }
     }
 
