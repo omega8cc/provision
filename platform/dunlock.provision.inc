@@ -169,18 +169,18 @@ function drush_provision_dunlock() {
       }
 
       $is_core_patched = "YES";
-      $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-      $search_string = ': void';
-      $file_content = file_get_contents($file_path);
-      if (strpos($file_content, $search_string) !== false) {
+      $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+      $core_search_string = ': void';
+      $core_file_content = file_get_contents($core_file_path);
+      if (strpos($core_file_content, $core_search_string) !== false) {
         $is_core_patched = "NO";
       }
 
       $is_console_patched = "YES";
-      $file_path = $symfonyDir . 'console/Output/Output.php';
-      $search_string = ': void;';
-      $file_content = file_get_contents($file_path);
-      if (strpos($file_content, $search_string) !== false) {
+      $console_file_path = $symfonyDir . 'console/Output/Output.php';
+      $console_search_string = ': void;';
+      $console_file_content = file_get_contents($console_file_path);
+      if (strpos($console_file_content, $console_search_string) !== false) {
         $is_console_patched = "NO";
       }
 
