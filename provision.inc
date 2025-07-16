@@ -308,7 +308,7 @@ function provision_unlock_drush_local_vnd() {
 
       $is_console_patched = "YES";
       $file_path = $symfonyDir . 'console/Output/Output.php';
-      $search_string = ': void\;';
+      $search_string = ': void;';
       $file_content = file_get_contents($file_path);
       if (strpos($file_content, $search_string) !== false) {
         $is_console_patched = "NO";
@@ -579,7 +579,7 @@ function provision_lock_drush_local_vnd() {
 
       $is_console_patched = "YES";
       $file_path = $symfonyDir . 'console/Output/Output.php';
-      $search_string = ': void\;';
+      $search_string = ': void;';
       $file_content = file_get_contents($file_path);
       if (strpos($file_content, $search_string) !== false) {
         $is_console_patched = "NO";
