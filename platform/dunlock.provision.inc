@@ -202,9 +202,6 @@ function drush_provision_dunlock() {
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
       if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'YES') {
-        if (!provision_file()->exists($patchCoreFile)->status()) {
-          provision_file()->copy($patchCoreTpl, $patchCoreFile);
-        }
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -217,10 +214,12 @@ function drush_provision_dunlock() {
           }
           drush_log($line, $line_status);
         }
+      }
+      if (provision_file()->exists($patchCoreFile)->status()) {
+        provision_file()->unlink($patchCoreFile);
+      }
 
-        if (!provision_file()->exists($patchConsoleFile)->status()) {
-          provision_file()->copy($patchConsoleTpl, $patchConsoleFile);
-        }
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_patched == 'YES') {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
@@ -233,6 +232,9 @@ function drush_provision_dunlock() {
           }
           drush_log($line, $line_status);
         }
+      }
+      if (provision_file()->exists($patchConsoleFile)->status()) {
+        provision_file()->unlink($patchConsoleFile);
       }
     }
 

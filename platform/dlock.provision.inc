@@ -165,38 +165,38 @@ function drush_provision_dlock() {
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -p1 < ' . $patchConsoleTpl);
 
       if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'NO') {
-
-        if (!provision_file()->exists($patchCoreFile)->status()) {
-          drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
-          $success = drush_shell_exec($commandCore);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            if (!$success) { // Log the entire error as a warning.
-              $line_status = 'warning';
-            }
-            else { // Only log the last line as success.
-              $line_status = $index+1 == count($result) ? 'success' : 'notice';
-            }
-            drush_log($line, $line_status);
-          }
-          provision_file()->copy($patchCoreTpl, $patchCoreFile);
+        drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
+        $success = drush_shell_exec($commandCore);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+        if (!$success) { // Log the entire error as a warning.
+          $line_status = 'warning';
         }
-
-        if (!provision_file()->exists($patchConsoleFile)->status()) {
-          drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
-          $success = drush_shell_exec($commandConsole);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            if (!$success) { // Log the entire error as a warning.
-              $line_status = 'warning';
-            }
-            else { // Only log the last line as success.
-              $line_status = $index+1 == count($result) ? 'success' : 'notice';
-            }
-            drush_log($line, $line_status);
-          }
-          provision_file()->copy($patchConsoleTpl, $patchConsoleFile);
+        else { // Only log the last line as success.
+          $line_status = $index+1 == count($result) ? 'success' : 'notice';
         }
+        drush_log($line, $line_status);
+      }
+      if (provision_file()->exists($patchCoreFile)->status()) {
+        provision_file()->unlink($patchCoreFile);
+      }
+
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_patched == 'NO') {
+        drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
+        $success = drush_shell_exec($commandConsole);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+            $line_status = 'warning';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+      }
+      if (provision_file()->exists($patchConsoleFile)->status()) {
+        provision_file()->unlink($patchConsoleFile);
       }
     }
   }
