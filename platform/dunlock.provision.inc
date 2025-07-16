@@ -10,10 +10,15 @@ function genRandStr($length = 12) {
 
 function drush_provision_dunlock() {
 
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+  provision_check_codebase_status();
+  if ($is_console_patched || $is_core_patched) {
+    $is_patched = TRUE;
+  }
+  else {
+    $is_patched = FALSE;
+  }
 
-  if (d()->type === 'platform' && provision_file()->exists($drush_lock_ctrl)->status()) {
+  if (d()->type === 'platform' && $is_patched) {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -140,7 +145,6 @@ function drush_provision_dunlock() {
               drush_log("PSR/LOG " . $output);
             }
           }
-          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -164,24 +168,7 @@ function drush_provision_dunlock() {
               drush_log("PSR/LOG " . $output);
             }
           }
-          $symfonyDir = d()->root . '/../vendor/symfony/';
         }
-      }
-
-      $is_core_patched = "YES";
-      $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-      $core_search_string = ': void';
-      $core_file_content = file_get_contents($core_file_path);
-      if (strpos($core_file_content, $core_search_string) !== false) {
-        $is_core_patched = "NO";
-      }
-
-      $is_console_patched = "YES";
-      $console_file_path = $symfonyDir . 'console/Output/Output.php';
-      $console_search_string = ': void;';
-      $console_file_content = file_get_contents($console_file_path);
-      if (strpos($console_file_content, $console_search_string) !== false) {
-        $is_console_patched = "NO";
       }
 
       if (drush_drupal_major_version() == 10) {
@@ -209,7 +196,7 @@ function drush_provision_dunlock() {
       $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched == 'YES') {
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched) {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -227,7 +214,7 @@ function drush_provision_dunlock() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched == 'YES') {
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched) {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
@@ -245,21 +232,6 @@ function drush_provision_dunlock() {
         provision_file()->unlink($patchConsoleFile);
       }
     }
-
-    // Delete drush-lock flag file.
-    provision_file()->unlink($drush_lock_ctrl)
-      ->succeed('Removed Drush-Lock Flag File')
-      ->fail('Could not remove Drush-Lock Flag File');
-
-    // Create drush-unlock flag file.
-    if (!provision_file()->exists($drush_unlock_ctrl)->status()) {
-      $drush_unlock_ctrl_info = "Drush-UnLock Flag File \n";
-      $local_description = 'Drush-UnLock Flag File';
-      provision_file()->file_put_contents($drush_unlock_ctrl, $drush_unlock_ctrl_info)
-        ->succeed('Generated ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
-    }
-
   }
   else {
     return TRUE;

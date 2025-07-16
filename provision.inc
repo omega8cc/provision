@@ -137,15 +137,69 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
- * Unlock Site-Local Drush And Symfony/Console etc
- * in the Aegir tasks like updatedb.
+ * Check codebase status for core/console patches
  */
-function provision_unlock_drush_local_vnd() {
+function provision_check_codebase_status() {
+
+  $vendor_location_same = d()->root . '/vendor/symfony/console/Input';
+  $vendor_location_above = d()->root . '/../vendor/symfony/console/Input';
+
+  if (provision_file()->exists($vendor_location_same)->status()) {
+    $symfonyDir = d()->root . '/vendor/symfony/';
+  }
+  elseif (provision_file()->exists($vendor_location_above)->status()) {
+    $symfonyDir = d()->root . '/../vendor/symfony/';
+  }
+
+  $is_core_patched = TRUE;
+  $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+  $core_search_string = ': void';
+  $core_file_content = file_get_contents($core_file_path);
+  if (strpos($core_file_content, $core_search_string) !== false) {
+    $is_core_patched = FALSE;
+  }
+
+  $is_console_patched = TRUE;
+  $console_file_path = $symfonyDir . 'console/Output/Output.php';
+  $console_search_string = ': void;';
+  $console_file_content = file_get_contents($console_file_path);
+  if (strpos($console_file_content, $console_search_string) !== false) {
+    $is_console_patched = FALSE;
+  }
 
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
   $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
 
   if (provision_file()->exists($drush_lock_ctrl)->status()) {
+    // Delete drush-locked flag file.
+    provision_file()->unlink($drush_lock_ctrl)
+     ->succeed('Removed Drush-Locked Flag File')
+     ->fail('Could not remove Drush-Locked Flag File');
+  }
+
+  if (provision_file()->exists($drush_unlock_ctrl)->status()) {
+    // Delete drush-unlocked flag file.
+    provision_file()->unlink($drush_unlock_ctrl)
+      ->succeed('Removed Drush-UnLocked Flag File')
+      ->fail('Could not remove Drush-UnLocked Flag File');
+  }
+}
+
+/**
+ * Unlock Site-Local Drush And Symfony/Console etc
+ * in the Aegir tasks like updatedb.
+ */
+function provision_unlock_drush_local_vnd() {
+
+  provision_check_codebase_status();
+  if ($is_console_patched || $is_core_patched) {
+    $is_patched = TRUE;
+  }
+  else {
+    $is_patched = FALSE;
+  }
+
+  if (d()->type === 'platform' && $is_patched) {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -272,7 +326,6 @@ function provision_unlock_drush_local_vnd() {
               drush_log("PSR/LOG " . $output);
             }
           }
-          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -296,24 +349,7 @@ function provision_unlock_drush_local_vnd() {
               drush_log("PSR/LOG " . $output);
             }
           }
-          $symfonyDir = d()->root . '/../vendor/symfony/';
         }
-      }
-
-      $is_core_patched = "YES";
-      $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-      $core_search_string = ': void';
-      $core_file_content = file_get_contents($core_file_path);
-      if (strpos($core_file_content, $core_search_string) !== false) {
-        $is_core_patched = "NO";
-      }
-
-      $is_console_patched = "YES";
-      $console_file_path = $symfonyDir . 'console/Output/Output.php';
-      $console_search_string = ': void;';
-      $console_file_content = file_get_contents($console_file_path);
-      if (strpos($console_file_content, $console_search_string) !== false) {
-        $is_console_patched = "NO";
       }
 
       if (drush_drupal_major_version() == 10) {
@@ -341,7 +377,7 @@ function provision_unlock_drush_local_vnd() {
       $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched == 'YES') {
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched) {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -359,7 +395,7 @@ function provision_unlock_drush_local_vnd() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched == 'YES') {
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched) {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
@@ -377,24 +413,9 @@ function provision_unlock_drush_local_vnd() {
         provision_file()->unlink($patchConsoleFile);
       }
     }
-
-    // Delete drush-lock flag file.
-    provision_file()->unlink($drush_lock_ctrl)
-      ->succeed('Removed Drush-Lock Flag File')
-      ->fail('Could not remove Drush-Lock Flag File');
-
-    // Create drush-unlock flag file.
-    if (!provision_file()->exists($drush_unlock_ctrl)->status()) {
-      $drush_unlock_ctrl_info = "Drush-UnLock Flag File \n";
-      $local_description = 'Drush-UnLock Flag File';
-      provision_file()->file_put_contents($drush_unlock_ctrl, $drush_unlock_ctrl_info)
-        ->succeed('Generated ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
-    }
-
   }
   else {
-    drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because ctrl file is not present @path', array('@path' => $drush_lock_ctrl)), 'info');
+    drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because codebase is already unlocked in @path', array('@path' => d()->root)), 'info');
   }
 }
 
@@ -502,26 +523,6 @@ function provision_lock_drush_local_vnd() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-
-    if (!provision_file()->exists($drush_lock_ctrl)->status()) {
-      // Create drush-lock flag file.
-      $drush_lock_ctrl_info = "Drush-Lock Flag File \n";
-      $local_description = 'Drush-Lock Flag File';
-      provision_file()->file_put_contents($drush_lock_ctrl, $drush_lock_ctrl_info)
-        ->succeed('Generated ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
-    }
-
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-
-    if (provision_file()->exists($drush_unlock_ctrl)->status()) {
-      // Delete drush-unlocked flag file.
-      provision_file()->unlink($drush_unlock_ctrl)
-        ->succeed('Removed Drush-UnLocked Flag File')
-        ->fail('Could not remove Drush-UnLocked Flag File');
-    }
-
     if (drush_drupal_major_version() >= 10) {
 
       $this_user = provision_current_user();
@@ -554,7 +555,6 @@ function provision_lock_drush_local_vnd() {
             $command = "cp -a $psr_tpl/* $target_dir";
             $success = drush_shell_exec($command);
           }
-          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -567,25 +567,10 @@ function provision_lock_drush_local_vnd() {
             $command = "cp -a $psr_tpl/* $target_dir";
             $success = drush_shell_exec($command);
           }
-          $symfonyDir = d()->root . '/../vendor/symfony/';
         }
       }
 
-      $is_core_patched = "YES";
-      $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-      $core_search_string = ': void';
-      $core_file_content = file_get_contents($core_file_path);
-      if (strpos($core_file_content, $core_search_string) !== false) {
-        $is_core_patched = "NO";
-      }
-
-      $is_console_patched = "YES";
-      $console_file_path = $symfonyDir . 'console/Output/Output.php';
-      $console_search_string = ': void;';
-      $console_file_content = file_get_contents($console_file_path);
-      if (strpos($console_file_content, $console_search_string) !== false) {
-        $is_console_patched = "NO";
-      }
+      provision_check_codebase_status();
 
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
@@ -612,7 +597,7 @@ function provision_lock_drush_local_vnd() {
       $commandCore = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched == 'NO') {
+      if (provision_file()->exists($patchCoreTpl)->status() && !$is_core_patched) {
         drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($command);
         $result = drush_shell_exec_output();
@@ -630,7 +615,7 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched == 'NO') {
+      if (provision_file()->exists($patchConsoleTpl)->status() && !$is_console_patched) {
         drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();

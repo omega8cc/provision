@@ -111,12 +111,20 @@ function drush_provision_drupal_provision_install() {
     $lock_unlock = TRUE;
   }
 
+  // Determine if codebase post-locking is allowed (no by default)
+  $yes_codebase_post_lock = '/data/conf/_yes_codebase_post_lock.ctrl';
+  if (is_readable($yes_codebase_post_lock)) {
+    $post_lock = TRUE;
+  }
+  else {
+    $post_lock = FALSE;
+  }
+
   if ($lock_unlock) {
     if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
       // Lock Site-Local Drush if Unlocked
-      $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-      $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-      if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+      provision_check_codebase_status();
+      if (!$is_console_patched || !$is_core_patched) {
         drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -145,8 +153,8 @@ function drush_provision_drupal_provision_install() {
 
       if ($lock_unlock) {
         // Unlock Site-Local Drush In The 11+ Platform if locked
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        if (provision_file()->exists($drush_lock_ctrl)->status()) {
+        provision_check_codebase_status();
+        if ($is_console_patched || $is_core_patched) {
           drush_log(dt('D11/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
@@ -174,20 +182,21 @@ function drush_provision_drupal_provision_install() {
       }
       else {
         $options = drush_get_merged_options();
-        $cOMMand = [$drushPath];
-        $cOMMand[] = $drushCommand;
-        $cOMMand[] = d()->profile;
-        $cOMMand[] = '--sites-subdir=' . d()->uri;
-        $site_name = escapeshellarg($options['#name']);
-        $cOMMand[] = "--site-name=$site_name";
-        if ($options['client_email']) {
-          $cOMMand[] = "--account-mail={$options['client_email']}";
+        $command = [
+          $drushPath,
+          $drushCommand,
+          d()->profile,
+          '--sites-subdir=' . d()->uri,
+          '--site-name=' . $options['#name'],
+        ];
+        if (!empty($options['client_email'])) {
+          $command[] = '--account-mail=' . $options['client_email'];
         }
-        $cOMMand[] = '--yes';
+        $command[] = '--yes';
 
         // Display The Drush site-install Command
-        drush_log(dt('D11/LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand[$drushPath], '@appRoot' => $appRoot)), 'info');
-        foreach ($cOMMand as $index => $line) {
+        drush_log(dt('D11/LOCAL/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
+        foreach ($command as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
             $line_status = 'notice';
           }
@@ -198,7 +207,8 @@ function drush_provision_drupal_provision_install() {
         }
 
         // Call The Drush site-install Command with Site-Local Drush
-        $result = drush_shell_cd_and_exec($appRoot, $drushPath . ' ' . $cOMMand);
+        $cmd_string = implode(' ', array_map('escapeshellarg', $command));
+        $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
         $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
@@ -211,11 +221,10 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      if ($lock_unlock) {
-        // Lock Site-Local Drush Again If Unlocked
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-        if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+      if ($post_lock) {
+        // Lock Site-Local Drush if Unlocked
+        provision_check_codebase_status();
+        if (!$is_console_patched || !$is_core_patched) {
           drush_log(dt('D11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }

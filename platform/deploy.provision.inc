@@ -93,9 +93,8 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
 
     // Load the newly created information, including re-loading the new db creds.
     // Lock Site-Local Drush if Unlocked
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+    provision_check_codebase_status();
+    if (!$is_console_patched || !$is_core_patched) {
       drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }
@@ -232,8 +231,8 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
 
         // Unlock Site-Local Drush In The New Platform
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        if (provision_file()->exists($drush_lock_ctrl)->status()) {
+        provision_check_codebase_status();
+        if ($is_console_patched || $is_core_patched) {
           drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
@@ -256,9 +255,8 @@ function drush_provision_drupal_post_provision_deploy() {
           // Log The Useful Info
           drush_log(dt('LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // Lock Site-Local Drush if Unlocked
-          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+          provision_check_codebase_status();
+          if (!$is_console_patched || !$is_core_patched) {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
@@ -293,10 +291,9 @@ function drush_provision_drupal_post_provision_deploy() {
             }
             drush_log($line, $line_status);
           }
-          // Lock Site-Local Drush Again If Unlocked
-          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+          // Lock Site-Local Drush if Unlocked
+          provision_check_codebase_status();
+          if (!$is_console_patched || !$is_core_patched) {
             drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
@@ -311,9 +308,8 @@ function drush_provision_drupal_post_provision_deploy() {
       }
       else {
         // Lock Site-Local Drush if Unlocked
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-        if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+        provision_check_codebase_status();
+        if (!$is_console_patched || !$is_core_patched) {
           drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }

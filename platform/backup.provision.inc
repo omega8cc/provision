@@ -34,9 +34,8 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
   // Lock Site-Local Drush if Unlocked
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
+  provision_check_codebase_status();
+  if (!$is_console_patched || !$is_core_patched) {
     drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
     provision_lock_drush_local_vnd();
   }
