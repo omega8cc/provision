@@ -141,7 +141,7 @@ function drush_provision_dlock() {
 
       $is_console_patched = "YES";
       $file_path = $symfonyDir . 'console/Output/Output.php';
-      $search_string = ': void';
+      $search_string = 'newline): void';
       $file_content = file_get_contents($file_path);
       if (strpos($file_content, $search_string) !== false) {
         $is_console_patched = "NO";
