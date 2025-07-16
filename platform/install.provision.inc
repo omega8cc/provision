@@ -185,8 +185,19 @@ function drush_provision_drupal_provision_install() {
         }
         $cOMMand[] = '--yes';
 
+        // Display The Drush site-install Command
+        drush_log(dt('D11/LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand[$drushPath], '@appRoot' => $appRoot)), 'info');
+        foreach ($cOMMand as $index => $line) {
+          if (!$success) { // Log the entire error as a notice.
+            $line_status = 'notice';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($output) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+
         // Call The Drush site-install Command with Site-Local Drush
-        drush_log(dt('D11/LOCAL/DRUSH/CMD @cOMMand in @appRoot', array('@cOMMand' => $cOMMand, '@appRoot' => $appRoot)), 'info');
         $result = drush_shell_cd_and_exec($appRoot, $drushPath . ' ' . $cOMMand);
         $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
