@@ -272,6 +272,7 @@ function provision_unlock_drush_local_vnd() {
               drush_log("PSR/LOG " . $output);
             }
           }
+          $symfonyDir = d()->root . '/vendor/symfony/';
         }
 
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
@@ -295,6 +296,7 @@ function provision_unlock_drush_local_vnd() {
               drush_log("PSR/LOG " . $output);
             }
           }
+          $symfonyDir = d()->root . '/../vendor/symfony/';
         }
       }
 
