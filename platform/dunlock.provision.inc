@@ -168,12 +168,20 @@ function drush_provision_dunlock() {
         }
       }
 
-      $is_patched = "YES";
+      $is_core_patched = "YES";
       $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
       $search_string = ': void';
       $file_content = file_get_contents($file_path);
       if (strpos($file_content, $search_string) !== false) {
-        $is_patched = "NO";
+        $is_core_patched = "NO";
+      }
+
+      $is_console_patched = "YES";
+      $file_path = $symfonyDir . 'console/Output/Output.php';
+      $search_string = ': void';
+      $file_content = file_get_contents($file_path);
+      if (strpos($file_content, $search_string) !== false) {
+        $is_console_patched = "NO";
       }
 
       if (drush_drupal_major_version() == 10) {
@@ -201,7 +209,7 @@ function drush_provision_dunlock() {
       $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'YES') {
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched == 'YES') {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -219,7 +227,7 @@ function drush_provision_dunlock() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_patched == 'YES') {
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_core_patched == 'YES') {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();

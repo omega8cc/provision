@@ -131,12 +131,20 @@ function drush_provision_dlock() {
         $symfonyDir = d()->root . '/../vendor/symfony/';
       }
 
-      $is_patched = "YES";
+      $is_core_patched = "YES";
       $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
       $search_string = ': void';
       $file_content = file_get_contents($file_path);
       if (strpos($file_content, $search_string) !== false) {
-        $is_patched = "NO";
+        $is_core_patched = "NO";
+      }
+
+      $is_console_patched = "YES";
+      $file_path = $symfonyDir . 'console/Output/Output.php';
+      $search_string = ': void';
+      $file_content = file_get_contents($file_path);
+      if (strpos($file_content, $search_string) !== false) {
+        $is_console_patched = "NO";
       }
 
       if (drush_drupal_major_version() == 10) {
@@ -164,7 +172,7 @@ function drush_provision_dlock() {
       $commandCore = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_patched == 'NO') {
+      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched == 'NO') {
         drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -181,7 +189,7 @@ function drush_provision_dlock() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_patched == 'NO') {
+      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched == 'NO') {
         drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
