@@ -407,6 +407,37 @@ function provision_unlock_some_vnd() {
 }
 
 /**
+ * Unlock Site-Local Drush Only
+ * in the Aegir post-task procedure.
+ */
+function provision_unlock_drush_only() {
+
+  if (provision_file()->exists(d()->root)->status() &&
+      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+      !preg_match("/\/var\/aegir\//gi", d()->root)) {
+
+    drush_log(dt('Drupal root reported in provision_unlock_drush_only: !vendor', array('!vendor' => d()->root)), 'message');
+
+    // Fix ownership first
+    $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
+
+    $dru_vnd_drush_local = d()->root . '/vendor/drush';
+    $dru_vnd_drush_above = d()->root . '/../vendor/drush';
+
+    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
+      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
+      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+  }
+}
+
+/**
  * Lock Site-Local Drush And Symfony/Console etc
  * to avoid conflicts with Aegir own drush version.
  */
