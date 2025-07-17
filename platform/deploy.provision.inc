@@ -175,17 +175,6 @@ function drush_provision_drupal_provision_deploy() {
 }
 
 /**
- * Custom helper function findAppRoot
- */
-function findAppRoot($startDir) {
-  $dir = realpath($startDir);
-  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
-    $dir = dirname($dir);
-  }
-  return is_dir($dir . '/vendor') ? $dir : null;
-}
-
-/**
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
