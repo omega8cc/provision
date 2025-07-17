@@ -152,12 +152,10 @@ function drush_provision_drupal_provision_install() {
     elseif (drush_drupal_major_version() > 10) {
 
       if ($lock_unlock) {
-        // Unlock Site-Local Drush In The 11+ Platform if locked
-        provision_check_codebase_status();
-        if (d()->isConsolePatched || d()->isCorePatched) {
-          drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-          provision_unlock_drush_local_vnd();
-        }
+        // Unlock Site-Local Drush/Vendor In The 11+ Platform
+        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+        provision_unlock_drush_local_vnd();
+        sleep(5);
       }
 
       // Define The Initial Path And Drush Command
