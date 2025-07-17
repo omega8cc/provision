@@ -207,8 +207,8 @@ function drush_provision_drupal_provision_install() {
         if (!empty($options['client_email'])) {
           $command[] = '--account-mail=' . $options['client_email'];
         }
-        $command[] = '--yes';
         $command[] = '--db-url=' . $db_url;
+        $command[] = '--yes -vvv';
 
         // Display The Drush site-install Command
         drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
