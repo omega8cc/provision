@@ -194,7 +194,7 @@ function drush_provision_dunlock() {
 
       $webRoot = d()->root;
       $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
-      $commandConsole = sprintf('patch -d ' . $symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
+      $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
       if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched) {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
@@ -215,7 +215,7 @@ function drush_provision_dunlock() {
       }
 
       if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched) {
-        drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => $symfonyDir)), 'info');
+        drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
