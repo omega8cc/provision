@@ -144,12 +144,13 @@ function provision_check_codebase_status() {
   $vendor_location_same = d()->root . '/vendor/symfony/console/Input';
   $vendor_location_above = d()->root . '/../vendor/symfony/console/Input';
 
-  if (provision_file()->exists($vendor_location_same)->status()) {
+  if (is_file($vendor_location_same)) {
     $symfonyDir = d()->root . '/vendor/symfony/';
   }
-  elseif (provision_file()->exists($vendor_location_above)->status()) {
+  elseif (is_file($vendor_location_above)) {
     $symfonyDir = d()->root . '/../vendor/symfony/';
   }
+  drush_log(dt('CHECK/CODE/VENDOR @symfonyDir FOR @webRoot', array('@symfonyDir' => $symfonyDir, '@webRoot' => d()->root)), 'info');
 
   $is_core_patched = TRUE;
   $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
@@ -158,6 +159,7 @@ function provision_check_codebase_status() {
   if (strpos($core_file_content, $core_search_string) !== false) {
     $is_core_patched = FALSE;
   }
+  drush_log(dt('CHECK/CODE/CORE @is_core_patched FOR @webRoot', array('@is_core_patched' => $is_core_patched, '@webRoot' => d()->root)), 'info');
 
   $is_console_patched = TRUE;
   $console_file_path = $symfonyDir . 'console/Output/Output.php';
@@ -166,6 +168,7 @@ function provision_check_codebase_status() {
   if (strpos($console_file_content, $console_search_string) !== false) {
     $is_console_patched = FALSE;
   }
+  drush_log(dt('CHECK/CODE/CONSOLE @is_console_patched FOR @webRoot', array('@is_console_patched' => $is_console_patched, '@webRoot' => d()->root)), 'info');
 
   $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
   $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
