@@ -219,13 +219,11 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      if ($post_lock) {
-        // Lock Site-Local Drush if Unlocked
-        provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
-          drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
-        }
+      if ($lock_unlock) {
+        // Lock Site-Local Drush/Vendor
+        drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+        sleep(5);
       }
     }
 
