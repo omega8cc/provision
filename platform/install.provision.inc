@@ -162,7 +162,7 @@ function drush_provision_drupal_provision_install() {
 
       // Define The Initial Path And Drush Command
       $initialPath = d()->root;
-      $drushCommand = ['site-install'];
+      $drushCommand = 'site-install';
 
       // Find The App Root Directory
       $appRoot = findDrupalAppRoot($initialPath);
