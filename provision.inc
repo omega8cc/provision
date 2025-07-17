@@ -137,6 +137,70 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
+ * Custom helper function findAppRoot
+ */
+function findAppRoot($startDir) {
+  $dir = realpath($startDir);
+  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
+    $dir = dirname($dir);
+  }
+  return is_dir($dir . '/vendor') ? $dir : null;
+}
+
+/**
+ * Check codebase status for core/console patches
+ */
+function provision_check_codebase_status() {
+
+  // Add platform root auto-discovery to avoid confusing
+  // Composer based D8+ codebase root with Drupal real root.
+  //d()->root = provision_auto_fix_platform_root(d()->root);
+  d()->appRoot = findAppRoot(d()->root);
+
+  if (is_dir(d()->appRoot)) {
+    d()->symfonyDir = d()->appRoot . '/vendor/symfony/';
+  }
+
+  drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
+  drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
+
+  d()->isCorePatched = FALSE;
+  $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+  $core_search_string = ': void';
+  $core_file_content = file_get_contents($core_file_path);
+  if (strpos($core_file_content, $core_search_string) == false) {
+    d()->isCorePatched = TRUE;
+  }
+  drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
+
+  d()->isConsolePatched = FALSE;
+  $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
+  $console_search_string = ': void;';
+  $console_file_content = file_get_contents($console_file_path);
+  if (strpos($console_file_content, $console_search_string) == false) {
+    d()->isConsolePatched = TRUE;
+  }
+  drush_log(dt('CHECK/CODE/CONSOLE =@is_console_patched= FOR @webRoot', array('@is_console_patched' => d()->isConsolePatched, '@webRoot' => d()->root)), 'info');
+
+  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+
+  if (provision_file()->exists($drush_lock_ctrl)->status()) {
+    // Delete drush-locked flag file.
+    provision_file()->unlink($drush_lock_ctrl)
+     ->succeed('Removed Drush-Locked Flag File')
+     ->fail('Could not remove Drush-Locked Flag File');
+  }
+
+  if (provision_file()->exists($drush_unlock_ctrl)->status()) {
+    // Delete drush-unlocked flag file.
+    provision_file()->unlink($drush_unlock_ctrl)
+      ->succeed('Removed Drush-UnLocked Flag File')
+      ->fail('Could not remove Drush-UnLocked Flag File');
+  }
+}
+
+/**
  * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir tasks like updatedb.
  */
@@ -609,70 +673,6 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchConsoleFile);
       }
     }
-  }
-}
-
-/**
- * Custom helper function findAppRoot
- */
-function findAppRoot($startDir) {
-  $dir = realpath($startDir);
-  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
-    $dir = dirname($dir);
-  }
-  return is_dir($dir . '/vendor') ? $dir : null;
-}
-
-/**
- * Check codebase status for core/console patches
- */
-function provision_check_codebase_status() {
-
-  // Add platform root auto-discovery to avoid confusing
-  // Composer based D8+ codebase root with Drupal real root.
-  d()->root = provision_auto_fix_platform_root(d()->root);
-  d()->appRoot = findAppRoot(d()->root);
-
-  if (is_dir(d()->appRoot)) {
-    d()->symfonyDir = d()->appRoot . '/vendor/symfony/';
-  }
-
-  drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
-  drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
-
-  d()->isCorePatched = FALSE;
-  $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-  $core_search_string = ': void';
-  $core_file_content = file_get_contents($core_file_path);
-  if (strpos($core_file_content, $core_search_string) == false) {
-    d()->isCorePatched = TRUE;
-  }
-  drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
-
-  d()->isConsolePatched = FALSE;
-  $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
-  $console_search_string = ': void;';
-  $console_file_content = file_get_contents($console_file_path);
-  if (strpos($console_file_content, $console_search_string) == false) {
-    d()->isConsolePatched = TRUE;
-  }
-  drush_log(dt('CHECK/CODE/CONSOLE =@is_console_patched= FOR @webRoot', array('@is_console_patched' => d()->isConsolePatched, '@webRoot' => d()->root)), 'info');
-
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-
-  if (provision_file()->exists($drush_lock_ctrl)->status()) {
-    // Delete drush-locked flag file.
-    provision_file()->unlink($drush_lock_ctrl)
-     ->succeed('Removed Drush-Locked Flag File')
-     ->fail('Could not remove Drush-Locked Flag File');
-  }
-
-  if (provision_file()->exists($drush_unlock_ctrl)->status()) {
-    // Delete drush-unlocked flag file.
-    provision_file()->unlink($drush_unlock_ctrl)
-      ->succeed('Removed Drush-UnLocked Flag File')
-      ->fail('Could not remove Drush-UnLocked Flag File');
   }
 }
 
