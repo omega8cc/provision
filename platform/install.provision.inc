@@ -222,6 +222,14 @@ function drush_provision_drupal_provision_install() {
           drush_log($line, $line_status);
         }
 
+        // Validate the command items
+        foreach ($command as $i => $arg) {
+          if (!is_scalar($arg)) {
+            drush_log("D11/INSTALL Invalid command part at index $i: " . print_r($arg, TRUE), 'error');
+            return FALSE;
+          }
+        }
+
         // Call The Drush site-install Command with Site-Local Drush
         $cmd_string = implode(' ', array_map('escapeshellarg', $command));
         $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
