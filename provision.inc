@@ -142,7 +142,7 @@ function genRandStrUnlock($length = 12) {
  */
 function provision_unlock_drush_local_vnd() {
 
-  if (d()->type === 'platform') {
+  if (d()->type === 'platform' || d()->type === 'site') {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -335,9 +335,6 @@ function provision_unlock_drush_local_vnd() {
           drush_log($line, $line_status);
         }
       }
-      if (provision_file()->exists($patchCoreFile)->status()) {
-        provision_file()->unlink($patchCoreFile);
-      }
 
       if (provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched) {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
@@ -353,13 +350,10 @@ function provision_unlock_drush_local_vnd() {
           drush_log($line, $line_status);
         }
       }
-      if (provision_file()->exists($patchConsoleFile)->status()) {
-        provision_file()->unlink($patchConsoleFile);
-      }
     }
   }
   else {
-    drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because codebase is already unlocked in @path', array('@path' => d()->root)), 'info');
+    drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because unexpected type has been detected @type', array('@type' => d()->type)), 'info');
   }
 }
 
@@ -638,21 +632,21 @@ function provision_check_codebase_status() {
   drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
   drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
 
-  d()->isCorePatched = TRUE;
+  d()->isCorePatched = FALSE;
   $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
   $core_search_string = ': void';
   $core_file_content = file_get_contents($core_file_path);
-  if (strpos($core_file_content, $core_search_string) !== false) {
-    d()->isCorePatched = FALSE;
+  if (strpos($core_file_content, $core_search_string) == false) {
+    d()->isCorePatched = TRUE;
   }
   drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
 
-  d()->isConsolePatched = TRUE;
+  d()->isConsolePatched = FALSE;
   $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
   $console_search_string = ': void;';
   $console_file_content = file_get_contents($console_file_path);
-  if (strpos($console_file_content, $console_search_string) !== false) {
-    d()->isConsolePatched = FALSE;
+  if (strpos($console_file_content, $console_search_string) == false) {
+    d()->isConsolePatched = TRUE;
   }
   drush_log(dt('CHECK/CODE/CONSOLE =@is_console_patched= FOR @webRoot', array('@is_console_patched' => d()->isConsolePatched, '@webRoot' => d()->root)), 'info');
 

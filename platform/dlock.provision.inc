@@ -148,9 +148,6 @@ function drush_provision_dlock() {
         }
         drush_log($line, $line_status);
       }
-      if (provision_file()->exists($patchCoreFile)->status()) {
-        provision_file()->unlink($patchCoreFile);
-      }
 
       if (provision_file()->exists($patchConsoleTpl)->status() && !d()->isConsolePatched) {
         drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
@@ -165,9 +162,6 @@ function drush_provision_dlock() {
           }
           drush_log($line, $line_status);
         }
-      }
-      if (provision_file()->exists($patchConsoleFile)->status()) {
-        provision_file()->unlink($patchConsoleFile);
       }
     }
   }

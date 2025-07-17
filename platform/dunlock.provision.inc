@@ -10,7 +10,7 @@ function genRandStr($length = 12) {
 
 function drush_provision_dunlock() {
 
-  if (d()->type === 'platform') {
+  if (d()->type === 'platform' || d()->type === 'site') {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
