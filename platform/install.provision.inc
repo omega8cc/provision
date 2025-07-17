@@ -125,7 +125,7 @@ function drush_provision_drupal_provision_install() {
       // Lock Site-Local Drush if Unlocked
       provision_check_codebase_status();
       if (!$is_console_patched || !$is_core_patched) {
-        drush_log(dt('INSTALL/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        drush_log(dt('INSTALL1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
     }
@@ -155,7 +155,7 @@ function drush_provision_drupal_provision_install() {
         // Unlock Site-Local Drush In The 11+ Platform if locked
         provision_check_codebase_status();
         if ($is_console_patched || $is_core_patched) {
-          drush_log(dt('D11/INSTALL/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+          drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
       }
@@ -172,11 +172,11 @@ function drush_provision_drupal_provision_install() {
 
       // Check If The Local Drush Exists And Is Executable
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
-      drush_log(dt('D11/INSTALL/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+      drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
       if (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
-        drush_log(dt('D11/INSTALL/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
+        drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
         return FALSE;
       }
@@ -195,7 +195,7 @@ function drush_provision_drupal_provision_install() {
         $command[] = '--yes';
 
         // Display The Drush site-install Command
-        drush_log(dt('D11/INSTALL/LOCAL/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
+        drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
         foreach ($command as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
             $line_status = 'notice';
@@ -225,7 +225,7 @@ function drush_provision_drupal_provision_install() {
         // Lock Site-Local Drush if Unlocked
         provision_check_codebase_status();
         if (!$is_console_patched || !$is_core_patched) {
-          drush_log(dt('D11/INSTALL/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
       }

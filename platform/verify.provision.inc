@@ -12,12 +12,6 @@
  */
 function drush_provision_drupal_provision_verify_validate() {
   if (d()->type === 'site') {
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!$is_console_patched || !$is_core_patched) {
-      drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
-    }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
 
