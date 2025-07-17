@@ -7,7 +7,7 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
   // Lock Site-Local Drush if Unlocked
   provision_check_codebase_status();
   if (!$is_console_patched || !$is_core_patched) {
-    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+    drush_log(dt('RESTORE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
     provision_lock_drush_local_vnd();
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
