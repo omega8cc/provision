@@ -94,7 +94,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     // Load the newly created information, including re-loading the new db creds.
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
-    if (!$is_console_patched || !$is_core_patched) {
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
       drush_log(dt('DEPLOY1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }
@@ -232,7 +232,7 @@ function drush_provision_drupal_post_provision_deploy() {
 
         // Unlock Site-Local Drush In The New Platform
         provision_check_codebase_status();
-        if ($is_console_patched || $is_core_patched) {
+        if (d()->isConsolePatched || d()->isCorePatched) {
           drush_log(dt('DEPLOY2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
@@ -256,7 +256,7 @@ function drush_provision_drupal_post_provision_deploy() {
           drush_log(dt('DEPLOY4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // Lock Site-Local Drush if Unlocked
           provision_check_codebase_status();
-          if (!$is_console_patched || !$is_core_patched) {
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
             drush_log(dt('DEPLOY5/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
@@ -293,7 +293,7 @@ function drush_provision_drupal_post_provision_deploy() {
           }
           // Lock Site-Local Drush if Unlocked
           provision_check_codebase_status();
-          if (!$is_console_patched || !$is_core_patched) {
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
             drush_log(dt('DEPLOY10/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
@@ -309,7 +309,7 @@ function drush_provision_drupal_post_provision_deploy() {
       else {
         // Lock Site-Local Drush if Unlocked
         provision_check_codebase_status();
-        if (!$is_console_patched || !$is_core_patched) {
+        if (!d()->isConsolePatched || !d()->isCorePatched) {
           drush_log(dt('DEPLOY11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }

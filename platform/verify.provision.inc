@@ -496,7 +496,7 @@ function drush_provision_drupal_post_provision_verify() {
   if (d()->type === 'platform') {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
-    if (!$is_console_patched || !$is_core_patched) {
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
       drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }

@@ -17,7 +17,7 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   unlink(AEGIR_BACKUP_MODE_CTRL);
   // Lock Site-Local Drush if Unlocked
   provision_check_codebase_status();
-  if (!$is_console_patched || !$is_core_patched) {
+  if (!d()->isConsolePatched || !d()->isCorePatched) {
     drush_log(dt('CLONE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
     provision_lock_drush_local_vnd();
   }

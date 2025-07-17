@@ -36,7 +36,7 @@ function drush_provision_drupal_provision_delete() {
 
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
-    if (!$is_console_patched || !$is_core_patched) {
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
       drush_log(dt('DELETE1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }
@@ -69,7 +69,7 @@ function drush_provision_drupal_provision_delete() {
 
     // Unlock Site-Local Drush If Locked
     provision_check_codebase_status();
-    if ($is_console_patched || $is_core_patched) {
+    if (d()->isConsolePatched || d()->isCorePatched) {
       drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
       provision_unlock_some_vnd();
     }

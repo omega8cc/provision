@@ -10,15 +10,7 @@ function genRandStr($length = 12) {
 
 function drush_provision_dunlock() {
 
-  provision_check_codebase_status();
-  if ($is_console_patched || $is_core_patched) {
-    $is_patched = TRUE;
-  }
-  else {
-    $is_patched = FALSE;
-  }
-
-  if (d()->type === 'platform' && $is_patched) {
+  if (d()->type === 'platform') {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -192,12 +184,13 @@ function drush_provision_dunlock() {
       $patchCoreFile = d()->root . '/' . $core_patch_fname;
       $patchConsoleFile = d()->root . '/' . $console_patch_fname;
 
-      $webRoot = d()->root;
-      $commandCore = sprintf('patch -d ' . $webRoot . ' -R -p1 < ' . $patchCoreTpl);
+      provision_check_codebase_status();
+
+      $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (provision_file()->exists($patchCoreTpl)->status() && $is_core_patched) {
-        drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => $webRoot)), 'info');
+      if (provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched) {
+        drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
@@ -214,7 +207,7 @@ function drush_provision_dunlock() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && $is_console_patched) {
+      if (provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched) {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
