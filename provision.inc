@@ -639,7 +639,7 @@ function provision_lock_drush_local_vnd() {
 
       if (provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
         drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
-        $success = drush_shell_exec($command);
+        $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
           if (!$success) { // Log the entire error as a warning.
