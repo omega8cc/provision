@@ -179,6 +179,23 @@ function drush_provision_drupal_provision_install() {
         return FALSE;
       }
       else {
+        // Extract the DB URL from settings.php
+        $settings_path = $appRoot . '/web/sites/' . d()->uri . '/settings.php';
+        $db_url = NULL;
+
+        if (file_exists($settings_path)) {
+          $contents = file_get_contents($settings_path);
+          if (preg_match('/\$db_url\[\'default\'\]\s*=\s*"([^"]+)"/', $contents, $matches)) {
+        	$db_url = $matches[1];
+          } else {
+        	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
+        	return FALSE;
+          }
+        } else {
+          drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
+          return FALSE;
+        }
+
         $options = drush_get_merged_options();
         $command = [
           $drushPath,
@@ -191,6 +208,7 @@ function drush_provision_drupal_provision_install() {
           $command[] = '--account-mail=' . $options['client_email'];
         }
         $command[] = '--yes';
+        $command[] = '--db-url=' . $db_url;
 
         // Display The Drush site-install Command
         drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
