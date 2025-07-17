@@ -135,6 +135,9 @@ function drush_provision_dlock() {
       $commandCore = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
 
+      drush_log(dt('CORE/PATCH/IF2 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
+      drush_log(dt('CONSOLE/PATCH/IF2 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
+
       if (provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
         drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandCore);
