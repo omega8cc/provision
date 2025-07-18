@@ -307,7 +307,8 @@ function drush_provision_drupal_pre_provision_verify() {
       // Add symlink to BOA specific contrib in Drupal 10.
       // Check if static copy exists first
       if (provision_file()->exists($core9_version_id)->status() &&
-        !provision_file()->exists($core10_version_no)->status()) {
+        !provision_file()->exists($core10_version_no)->status() &&
+        !provision_file()->exists($core11_version_id)->status()) {
         if (is_dir($core10_contrib_symlink) && !is_link($core10_contrib_symlink)) {
           // Run cleanup of previous dot dir if exists
           // and current contrib is not a symlink again.
@@ -330,7 +331,8 @@ function drush_provision_drupal_pre_provision_verify() {
       // Add symlink to BOA specific contrib in Drupal 9.
       // Check if static copy exists first
       if (provision_file()->exists($core9_version_id)->status() &&
-        provision_file()->exists($core10_version_no)->status()) {
+        provision_file()->exists($core10_version_no)->status() &&
+        !provision_file()->exists($core11_version_id)->status()) {
         if (is_dir($core9_contrib_symlink) && !is_link($core9_contrib_symlink)) {
           // Run cleanup of previous dot dir if exists
           // and current contrib is not a symlink again.
