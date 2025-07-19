@@ -158,12 +158,11 @@ function drush_provision_drupal_provision_install() {
         sleep(5);
       }
 
-      // Define The Initial Path And Drush Command
-      $initialPath = d()->root;
+      // Define Drush Command
       $drushCommand = 'site-install';
 
       // Find The App Root Directory
-      $appRoot = findDrupalAppRoot($initialPath);
+      $appRoot = findDrupalAppRoot(d()->root);
 
       // Define Local Drush Path
       $drushPath = 'vendor/drush/drush/drush.php';
@@ -180,7 +179,7 @@ function drush_provision_drupal_provision_install() {
       }
       else {
         // Extract the DB URL from settings.php
-        $settings_path = $appRoot . '/web/sites/' . d()->uri . '/settings.php';
+        $settings_path = d()->root . '/sites/' . d()->uri . '/settings.php';
         $db_url = NULL;
 
         if (file_exists($settings_path)) {

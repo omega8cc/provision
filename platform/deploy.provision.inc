@@ -226,12 +226,11 @@ function drush_provision_drupal_post_provision_deploy() {
           provision_unlock_drush_local_vnd();
         }
 
-        // Define The Initial Path And Drush Command
-        $initialPath = d()->root;
+        // Define Drush Command
         $drushCommand = ['updb'];
 
         // Find The App Root Directory
-        $appRoot = findAppRoot($initialPath);
+        $appRoot = findAppRoot(d()->root);
 
         // Define Local Drush Path
         $drushPath = 'vendor/drush/drush/drush.php';
