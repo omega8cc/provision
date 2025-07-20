@@ -10,7 +10,9 @@ function genRandStr($length = 12) {
 
 function drush_provision_dunlock() {
 
-  if (d()->type === 'platform' || d()->type === 'site') {
+  if (provision_file()->exists(d()->root)->status() &&
+    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+    !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';

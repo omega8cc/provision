@@ -6,10 +6,9 @@
 
 function drush_provision_dlock() {
 
-  if (d()->type === 'platform' &&
-     provision_file()->exists(d()->root)->status() &&
-     !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-     !preg_match("/\/var\/aegir\//gi", d()->root)) {
+  if (provision_file()->exists(d()->root)->status() &&
+    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+    !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
