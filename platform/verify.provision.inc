@@ -143,6 +143,15 @@ function drush_provision_drupal_pre_provision_verify() {
     // Fix ownership early enough
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
 
+    // Lock Site-Local Drush and some Vendor Libs Early if Unlocked
+    if (drush_drupal_major_version() >= 8) {
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('EARLY/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
+    }
+
     provision_file()->writable(d()->root . '/sites')
       ->succeed('Drupal sites directory @path is writable by the provisioning script')
       ->fail('Drupal sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
