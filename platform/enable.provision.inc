@@ -8,11 +8,13 @@
 function drush_provision_drupal_provision_enable_validate() {
   if (d()->type == 'site') {
     d()->site_enabled = true;
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('ENABLE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
+    if (drush_drupal_major_version() >= 8) {
+      // Lock Site-Local Drush if Unlocked
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('ENABLE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
     }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
   }

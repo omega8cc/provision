@@ -161,42 +161,48 @@ function provision_check_codebase_status() {
     d()->symfonyDir = d()->appRoot . '/vendor/symfony/';
   }
 
-  drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
-  drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
+  if (is_dir(d()->symfonyDir)) {
 
-  d()->isCorePatched = FALSE;
-  $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-  $core_search_string = ': void';
-  $core_file_content = file_get_contents($core_file_path);
-  if (strpos($core_file_content, $core_search_string) == false) {
-    d()->isCorePatched = TRUE;
+    drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
+    drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
+
+    d()->isCorePatched = FALSE;
+    $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+    $core_search_string = ': void';
+    $core_file_content = file_get_contents($core_file_path);
+    if (strpos($core_file_content, $core_search_string) == false) {
+      d()->isCorePatched = TRUE;
+    }
+    drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
+
+    d()->isConsolePatched = FALSE;
+    $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
+    $console_search_string = ': void;';
+    $console_file_content = file_get_contents($console_file_path);
+    if (strpos($console_file_content, $console_search_string) == false) {
+      d()->isConsolePatched = TRUE;
+    }
+    drush_log(dt('CHECK/CODE/CONSOLE =@is_console_patched= FOR @webRoot', array('@is_console_patched' => d()->isConsolePatched, '@webRoot' => d()->root)), 'info');
+
+    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
+    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
+
+    if (provision_file()->exists($drush_lock_ctrl)->status()) {
+      // Delete drush-locked flag file.
+      provision_file()->unlink($drush_lock_ctrl)
+       ->succeed('Removed Drush-Locked Flag File')
+       ->fail('Could not remove Drush-Locked Flag File');
+    }
+
+    if (provision_file()->exists($drush_unlock_ctrl)->status()) {
+      // Delete drush-unlocked flag file.
+      provision_file()->unlink($drush_unlock_ctrl)
+        ->succeed('Removed Drush-UnLocked Flag File')
+        ->fail('Could not remove Drush-UnLocked Flag File');
+    }
   }
-  drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
-
-  d()->isConsolePatched = FALSE;
-  $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
-  $console_search_string = ': void;';
-  $console_file_content = file_get_contents($console_file_path);
-  if (strpos($console_file_content, $console_search_string) == false) {
-    d()->isConsolePatched = TRUE;
-  }
-  drush_log(dt('CHECK/CODE/CONSOLE =@is_console_patched= FOR @webRoot', array('@is_console_patched' => d()->isConsolePatched, '@webRoot' => d()->root)), 'info');
-
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-
-  if (provision_file()->exists($drush_lock_ctrl)->status()) {
-    // Delete drush-locked flag file.
-    provision_file()->unlink($drush_lock_ctrl)
-     ->succeed('Removed Drush-Locked Flag File')
-     ->fail('Could not remove Drush-Locked Flag File');
-  }
-
-  if (provision_file()->exists($drush_unlock_ctrl)->status()) {
-    // Delete drush-unlocked flag file.
-    provision_file()->unlink($drush_unlock_ctrl)
-      ->succeed('Removed Drush-UnLocked Flag File')
-      ->fail('Could not remove Drush-UnLocked Flag File');
+  else {
+    drush_log(dt('CHECK/CODE/VERSION =@coreVersion= FOR @webRoot', array('@coreVersion' => drush_drupal_major_version(), '@webRoot' => d()->root)), 'info');
   }
 }
 
@@ -450,8 +456,8 @@ function provision_unlock_drush_local_vnd() {
 function provision_unlock_some_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-      !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+    !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -507,8 +513,8 @@ function provision_unlock_some_vnd() {
 function provision_unlock_drush_only() {
 
   if (provision_file()->exists(d()->root)->status() &&
-      !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-      !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+    !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_drush_only: !vendor', array('!vendor' => d()->root)), 'message');
 

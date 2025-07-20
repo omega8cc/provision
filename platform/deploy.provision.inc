@@ -92,11 +92,13 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     provision_save_site_data();
 
     // Load the newly created information, including re-loading the new db creds.
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('DEPLOY1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
+    if (drush_drupal_major_version() >= 8) {
+      // Lock Site-Local Drush if Unlocked
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('DEPLOY1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
     }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     _provision_drupal_create_settings_file();
@@ -295,11 +297,13 @@ function drush_provision_drupal_post_provision_deploy() {
         }
       }
       else {
-        // Lock Site-Local Drush if Unlocked
-        provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
-          drush_log(dt('DEPLOY11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
+        if (drush_drupal_major_version() >= 8) {
+          // Lock Site-Local Drush if Unlocked
+          provision_check_codebase_status();
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
+            drush_log(dt('DEPLOY11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+            provision_lock_drush_local_vnd();
+          }
         }
         // Tell How-To Skip Drush updatedb
         drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');

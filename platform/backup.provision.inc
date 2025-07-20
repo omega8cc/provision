@@ -33,11 +33,13 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 
-  // Lock Site-Local Drush if Unlocked
-  provision_check_codebase_status();
-  if (!d()->isConsolePatched || !d()->isCorePatched) {
-    drush_log(dt('BACKUP/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-    provision_lock_drush_local_vnd();
+  if (drush_drupal_major_version() >= 8) {
+    // Lock Site-Local Drush if Unlocked
+    provision_check_codebase_status();
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
+      drush_log(dt('BACKUP/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
   }
 
   if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {

@@ -504,11 +504,11 @@ function drush_provision_drupal_post_provision_verify() {
       provision_file()->copy($iniTpl, $iniFile);
     }
   }
-  if (d()->type === 'platform') {
-    // Lock Site-Local Drush if Unlocked
+  // Lock Site-Local Drush and some Vendor Libs if Unlocked
+  if (drush_drupal_major_version() >= 8) {
     provision_check_codebase_status();
     if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      drush_log(dt('POST/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }
   }
