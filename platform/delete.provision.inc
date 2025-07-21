@@ -82,17 +82,18 @@ function drush_provision_drupal_provision_delete() {
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
+    if (drush_drupal_major_version() >= 8) {
+      // Unlock Site-Local Drush If Locked
+      drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
+      provision_unlock_some_vnd();
+    }
+
     if (!drush_get_option('force', FALSE) && drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT) && provision_drupal_find_sites()) {
       $local_delete_parent = FALSE;
       drush_set_error(dt('Existing sites were found on this platform. These sites will need to be deleted before this platform can be deleted.'));
     }
     else {
       drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
-      if (drush_drupal_major_version() >= 8) {
-        // Unlock Site-Local Drush If Locked
-        drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
-        provision_unlock_some_vnd();
-      }
       _provision_recursive_delete(d()->root);
       if ($local_delete_parent) {
         sleep(5);
