@@ -495,9 +495,15 @@ function provision_unlock_some_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_sty_loc)->status()) {
       _provision_recursive_delete($dru_vnd_symf_con_sty_loc);
+//       provision_file()->chmod($dru_vnd_symf_con_sty_loc, 0775)
+//       ->succeed('Changed permissions of <code>@path</code> to @perm')
+//       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_sty_abo)->status()) {
       _provision_recursive_delete($dru_vnd_symf_con_sty_abo);
+//       provision_file()->chmod($dru_vnd_symf_con_sty_abo, 0775)
+//       ->succeed('Changed permissions of <code>@path</code> to @perm')
+//       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
   }
 }
