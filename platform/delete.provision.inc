@@ -69,15 +69,6 @@ function drush_provision_drupal_provision_delete() {
     // Composer based D8+ codebase root with Drupal real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
-    if (drush_drupal_major_version() >= 8) {
-      // Unlock Site-Local Drush If Locked
-      provision_check_codebase_status();
-      if (d()->isConsolePatched || d()->isCorePatched) {
-        drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
-        provision_unlock_some_vnd();
-      }
-    }
-
     // Make sure if we are within parent codebase directory
     $test_parent = dirname(d()->root);
     $local_delete_parent = FALSE;
@@ -97,6 +88,11 @@ function drush_provision_drupal_provision_delete() {
     }
     else {
       drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
+      if (drush_drupal_major_version() >= 8) {
+        // Unlock Site-Local Drush If Locked
+        drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
+        provision_unlock_some_vnd();
+      }
       _provision_recursive_delete(d()->root);
       if ($local_delete_parent) {
         sleep(5);
