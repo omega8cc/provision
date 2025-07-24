@@ -177,7 +177,12 @@ function provision_check_codebase_status() {
 
     d()->isConsolePatched = FALSE;
     $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
-    $console_search_string = ': void;';
+    if (drush_drupal_major_version() > 10) {
+      $console_search_string = ': void;';
+    }
+    else {
+      $console_search_string = 'doWrite(string';
+    }
     $console_file_content = file_get_contents($console_file_path);
     if (strpos($console_file_content, $console_search_string) == false) {
       d()->isConsolePatched = TRUE;
