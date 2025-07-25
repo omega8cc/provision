@@ -258,14 +258,6 @@ map $request_uri $key_uri {
 }
 
 ###
-### Check for empty referer.
-###
-map $http_referer $is_empty_referer {
-  ""         1;
-  default    0;
-}
-
-###
 ### Deny crawlers.
 ###
 map $http_user_agent $is_crawler {

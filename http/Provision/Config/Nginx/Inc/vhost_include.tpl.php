@@ -191,19 +191,6 @@ if ($user_socket = '') {
 }
 
 ###
-### Deny direct hits on heavy search URLs without referer.
-###
-location ^~ /search/apachesolr_search {
-  location ~* ^/search/apachesolr_search/ {
-    if ($is_empty_referer) {
-      return 403;
-    }
-    # Normal processing
-    try_files $uri @drupal;
-  }
-}
-
-###
 ### HTTPRL standard support.
 ###
 location ^~ /httprl_async_function_callback {

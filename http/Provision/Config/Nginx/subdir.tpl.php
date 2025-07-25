@@ -240,19 +240,6 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
-  ### Deny direct hits on heavy search URLs without referer.
-  ###
-  location ^~ /<?php print $subdir; ?>/search/apachesolr_search {
-    location ~* ^/<?php print $subdir; ?>/search/apachesolr_search/ {
-      if ($is_empty_referer) {
-        return 403;
-      }
-      # Normal processing
-      try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
-    }
-  }
-
-  ###
   ### HTTPRL standard support.
   ###
   location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
