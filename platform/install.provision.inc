@@ -82,6 +82,18 @@ function drush_provision_drupal_pre_provision_install_rollback() {
 
 
 /**
+ * Custom helper function findDrupalAppRoot
+ */
+function findDrupalAppRoot($startDir) {
+  $dir = realpath($startDir);
+  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
+    $dir = dirname($dir);
+  }
+  return is_dir($dir . '/vendor') ? $dir : null;
+}
+
+
+/**
  * Install Drupal with the pre-configured settings, by calling an external script
  *
  * This is an external script so that php is running in it's own namespace, and
@@ -89,13 +101,36 @@ function drush_provision_drupal_pre_provision_install_rollback() {
  */
 function drush_provision_drupal_provision_install() {
   // Requires at least the database settings to complete.
-  // Lock Site-Local Drush if Unlocked
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-    provision_lock_drush_local_vnd();
+
+  // Determine if codebase locking/unlocking and patching is allowed (default)
+  $no_codebase_lock_unlock = '/data/conf/_no_codebase_lock_unlock.ctrl';
+  if (is_readable($no_codebase_lock_unlock)) {
+    $lock_unlock = FALSE;
   }
+  else {
+    $lock_unlock = TRUE;
+  }
+
+  // Determine if codebase post-locking is allowed (no by default)
+  $yes_codebase_post_lock = '/data/conf/_yes_codebase_post_lock.ctrl';
+  if (is_readable($yes_codebase_post_lock)) {
+    $post_lock = TRUE;
+  }
+  else {
+    $post_lock = FALSE;
+  }
+
+  if ($lock_unlock) {
+    if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
+      // Lock Site-Local Drush if Unlocked
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('INSTALL1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
+    }
+  }
+
   provision_prepare_environment();
   _provision_drupal_create_settings_file();
   provision_drupal_push_site($override_slave_authority = TRUE);
@@ -111,7 +146,115 @@ function drush_provision_drupal_provision_install() {
   if (d()->install_method == 'profile') {
 
     // call a backend task to do the actual installation.
-    $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    if (drush_drupal_major_version() > 5 && drush_drupal_major_version() < 11) {
+      $result = provision_backend_invoke(d()->name, "provision-install-backend", array(), array('client_email' => drush_get_option('client_email')));
+    }
+    elseif (drush_drupal_major_version() > 10) {
+
+      if ($lock_unlock) {
+        // Unlock Site-Local Drush/Vendor In The 11+ Platform
+        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+        provision_unlock_drush_local_vnd();
+        sleep(5);
+      }
+
+      // Define Drush Command
+      $drushCommand = 'site-install';
+
+      // Find The App Root Directory
+      $appRoot = findDrupalAppRoot(d()->root);
+
+      // Define Local Drush Path
+      $drushPath = 'vendor/drush/drush/drush.php';
+
+      // Check If The Local Drush Exists And Is Executable
+      $drushAbsolutePath = $appRoot . '/' . $drushPath;
+      drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+
+      if (!is_executable($drushAbsolutePath)) {
+        // Log The Useful Info
+        drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
+        drush_log(print_r(drush_get_error_log(), 1), 'error');
+        return FALSE;
+      }
+      else {
+        // Extract the DB URL from settings.php
+        $settings_path = d()->root . '/sites/' . d()->uri . '/settings.php';
+        $db_url = NULL;
+
+        if (file_exists($settings_path)) {
+          $contents = file_get_contents($settings_path);
+          if (preg_match('/\$db_url\[\'default\'\]\s*=\s*"([^"]+)"/', $contents, $matches)) {
+        	$db_url = $matches[1];
+          } else {
+        	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
+        	return FALSE;
+          }
+        } else {
+          drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
+          return FALSE;
+        }
+
+        $options = drush_get_merged_options();
+        $command = [
+          $drushPath,
+          $drushCommand,
+          d()->profile,
+          '--sites-subdir=' . d()->uri,
+          '--site-name=' . $options['#name'],
+        ];
+        if (!empty($options['client_email'])) {
+          $command[] = '--account-mail=' . $options['client_email'];
+        }
+        $command[] = '--db-url=' . $db_url;
+        $command[] = '--yes';
+        $command[] = '-vvv';
+
+        // Display The Drush site-install Command
+        drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
+        foreach ($command as $index => $line) {
+          if (!$success) { // Log the entire error as a notice.
+            $line_status = 'notice';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($output) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+
+        // Validate the command items
+        foreach ($command as $i => $arg) {
+          if (!is_scalar($arg)) {
+            drush_log("D11/INSTALL Invalid command part at index $i: " . print_r($arg, TRUE), 'error');
+            return FALSE;
+          }
+        }
+
+        // Call The Drush site-install Command with Site-Local Drush
+        $cmd_string = implode(' ', array_map('escapeshellarg', $command));
+        $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
+        $output = drush_shell_exec_output();
+        foreach ($output as $index => $line) {
+          if (!$success) { // Log the entire error as a notice.
+            $line_status = 'notice';
+          }
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($output) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
+      }
+
+      if ($lock_unlock) {
+        // Lock Site-Local Drush if Unlocked
+        provision_check_codebase_status();
+        if (!d()->isConsolePatched || !d()->isCorePatched) {
+          drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_lock_drush_local_vnd();
+        }
+        sleep(5);
+      }
+    }
 
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);

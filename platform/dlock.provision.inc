@@ -6,10 +6,9 @@
 
 function drush_provision_dlock() {
 
-  if (d()->type === 'platform' &&
-     provision_file()->exists(d()->root)->status() &&
-     !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-     !preg_match("/\/var\/aegir\//gi", d()->root)) {
+  if (provision_file()->exists(d()->root)->status() &&
+    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
+    !preg_match("/\/var\/aegir\//gi", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -18,13 +17,15 @@ function drush_provision_dlock() {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
-    $dru_vnd_symf_con_loc = d()->root . '/vendor/symfony/console/Input';
-    $dru_vnd_symf_con_abo = d()->root . '/../vendor/symfony/console/Input';
+    $dru_vnd_symf_con_inp_loc = d()->root . '/vendor/symfony/console/Input';
+    $dru_vnd_symf_con_inp_abo = d()->root . '/../vendor/symfony/console/Input';
+    $dru_vnd_symf_con_sty_loc = d()->root . '/vendor/symfony/console/Style';
+    $dru_vnd_symf_con_sty_abo = d()->root . '/../vendor/symfony/console/Style';
 
     $dru_dru_dru_php_local = d()->root . '/vendor/drush/drush/drush.php';
     $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
 
-    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
+    if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
         $approot = d()->root;
         $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
@@ -32,7 +33,7 @@ function drush_provision_dlock() {
         drush_log("DRUSH/DRUSH " . $output);
       }
     }
-    elseif (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
+    elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
         $approot = d()->root . "/../";
         $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
@@ -51,35 +52,27 @@ function drush_provision_dlock() {
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
-    if (provision_file()->exists($dru_vnd_symf_con_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_loc, 0400)
+
+    if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_inp_loc, 0400)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
-    if (provision_file()->exists($dru_vnd_symf_con_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_abo, 0400)
+    if (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_inp_abo, 0400)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-
-    if (!provision_file()->exists($drush_lock_ctrl)->status()) {
-      // Create drush-lock flag file.
-      $drush_lock_ctrl_info = "Drush-Lock Flag File \n";
-      $local_description = 'Drush-Lock Flag File';
-      provision_file()->file_put_contents($drush_lock_ctrl, $drush_lock_ctrl_info)
-        ->succeed('Generated ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
+    if (provision_file()->exists($dru_vnd_symf_con_sty_loc)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_sty_loc, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
-
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-
-    if (provision_file()->exists($drush_unlock_ctrl)->status()) {
-      // Delete drush-unlocked flag file.
-      provision_file()->unlink($drush_unlock_ctrl)
-        ->succeed('Removed Drush-UnLocked Flag File')
-        ->fail('Could not remove Drush-UnLocked Flag File');
+    if (provision_file()->exists($dru_vnd_symf_con_sty_abo)->status()) {
+      provision_file()->chmod($dru_vnd_symf_con_sty_abo, 0400)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (drush_drupal_major_version() >= 10) {
@@ -129,39 +122,61 @@ function drush_provision_dlock() {
         }
       }
 
-      $is_patched = "YES";
-      $file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-      $search_string = ': void';
-      $file_content = file_get_contents($file_path);
-      if (strpos($file_content, $search_string) !== false) {
-        $is_patched = "NO";
+      provision_check_codebase_status();
+
+      if (drush_drupal_major_version() == 10) {
+        $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+        $console_patch_fname = "drupal-ten-aegir-console-02.patch";
+      }
+      elseif (drush_drupal_major_version() == 11) {
+        $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
+        $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
       }
 
       if ($this_user == 'aegir' ) {
-        $patchTpl = '/var/aegir/patches/drupal-ten-aegir-01.patch';
+        $patchCoreTpl = '/var/aegir/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/var/aegir/patches/' . $console_patch_fname;
       }
       else {
-        $patchTpl = '/data/conf/patches/drupal-ten-aegir-01.patch';
+        $patchCoreTpl = '/data/conf/patches/' . $core_patch_fname;
+        $patchConsoleTpl = '/data/conf/patches/' . $console_patch_fname;
       }
-      $patchFile = d()->root . '/drupal-ten-aegir-01.patch';
-      $webRoot = d()->root;
-      $command = sprintf('patch -d ' . $webRoot . ' -p1 < ' . $patchTpl);
 
-      if (provision_file()->exists($patchTpl)->status() && $is_patched == 'NO') {
-        if (!provision_file()->exists($patchFile)->status()) {
-          drush_log(dt('CORE/PATCH/APPLY @patchTpl in @webRoot', array('@patchTpl' => $patchTpl, '@webRoot' => $webRoot)), 'info');
-          $success = drush_shell_exec($command);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            if (!$success) { // Log the entire error as a warning.
-              $line_status = 'warning';
-            }
-            else { // Only log the last line as success.
-              $line_status = $index+1 == count($result) ? 'success' : 'notice';
-            }
-            drush_log($line, $line_status);
+      $patchCoreFile = d()->root . '/' . $core_patch_fname;
+      $patchConsoleFile = d()->root . '/' . $console_patch_fname;
+
+      $commandCore = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
+      $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
+
+      drush_log(dt('CORE/PATCH/IF2 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
+      drush_log(dt('CONSOLE/PATCH/IF2 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
+
+      if (provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
+        drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
+        $success = drush_shell_exec($commandCore);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+        if (!$success) { // Log the entire error as a warning.
+          $line_status = 'warning';
+        }
+        else { // Only log the last line as success.
+          $line_status = $index+1 == count($result) ? 'success' : 'notice';
+        }
+        drush_log($line, $line_status);
+      }
+
+      if (provision_file()->exists($patchConsoleTpl)->status() && !d()->isConsolePatched) {
+        drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
+        $success = drush_shell_exec($commandConsole);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+            $line_status = 'warning';
           }
-          provision_file()->copy($patchTpl, $patchFile);
+          else { // Only log the last line as success.
+            $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
         }
       }
     }

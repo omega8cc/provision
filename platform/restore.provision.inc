@@ -4,12 +4,13 @@
  * Make sure we have a valid site being restored, and that the file being restored from exists
  */
 function drush_provision_drupal_provision_restore_validate($restore_file = null) {
-  // Lock Site-Local Drush if Unlocked
-  $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-  $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-  if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-    drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-    provision_lock_drush_local_vnd();
+  if (drush_drupal_major_version() >= 8) {
+    // Lock Site-Local Drush if Unlocked
+    provision_check_codebase_status();
+    if (!d()->isConsolePatched || !d()->isCorePatched) {
+      drush_log(dt('RESTORE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 

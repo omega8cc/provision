@@ -92,12 +92,13 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     provision_save_site_data();
 
     // Load the newly created information, including re-loading the new db creds.
-    // Lock Site-Local Drush if Unlocked
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-    if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-      drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
+    if (drush_drupal_major_version() >= 8) {
+      // Lock Site-Local Drush if Unlocked
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('DEPLOY1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
     }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     _provision_drupal_create_settings_file();
@@ -176,17 +177,6 @@ function drush_provision_drupal_provision_deploy() {
 }
 
 /**
- * Custom helper function findAppRoot
- */
-function findAppRoot($startDir) {
-  $dir = realpath($startDir);
-  while ($dir !== '/' && !is_dir($dir . '/vendor')) {
-    $dir = dirname($dir);
-  }
-  return is_dir($dir . '/vendor') ? $dir : null;
-}
-
-/**
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
@@ -232,34 +222,32 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
 
         // Unlock Site-Local Drush In The New Platform
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        if (provision_file()->exists($drush_lock_ctrl)->status()) {
-          drush_log(dt('LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+        provision_check_codebase_status();
+        if (d()->isConsolePatched || d()->isCorePatched) {
+          drush_log(dt('DEPLOY2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
           provision_unlock_drush_local_vnd();
         }
 
-        // Define The Initial Path And Drush Command
-        $initialPath = d()->root;
+        // Define Drush Command
         $drushCommand = ['updb'];
 
         // Find The App Root Directory
-        $appRoot = findAppRoot($initialPath);
+        $appRoot = findAppRoot(d()->root);
 
         // Define Local Drush Path
         $drushPath = 'vendor/drush/drush/drush.php';
 
         // Check If The Local Drush Exists And Is Executable
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
-        drush_log(dt('LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+        drush_log(dt('DEPLOY3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
         if (!is_executable($drushAbsolutePath)) {
           // Log The Useful Info
-          drush_log(dt('LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
+          drush_log(dt('DEPLOY4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // Lock Site-Local Drush if Unlocked
-          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-            drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_check_codebase_status();
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
+            drush_log(dt('DEPLOY5/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
           // Log The Useful Info
@@ -271,17 +259,17 @@ function drush_provision_drupal_post_provision_deploy() {
         }
         else {
           // Log The Useful Info
-          drush_log(dt('LOCAL/DRUSH/CMD vendor/drush/drush/drush.php --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          drush_log(dt('DEPLOY6/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
           // Check And Display Site-Local Drush Version
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php --version');
           $output = implode('', drush_shell_exec_output());
-          drush_log("LOCAL/DRUSH/VERSION " . $output);
+          drush_log("DEPLOY7/LOCAL/DRUSH/VERSION " . $output);
           // Tell How-To Skip Drush updatedb
-          drush_log(dt('LOCAL/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+          drush_log(dt('DEPLOY8/LOCAL/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
           // Figure Out The Drush 10+ Compatible Site Alias
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
           // Call The Drush updatedb Command with Site-Local Drush
-          drush_log(dt('LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+          drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . $dnameten . ' updatedb --yes --cache-clear=default');
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
@@ -293,11 +281,10 @@ function drush_provision_drupal_post_provision_deploy() {
             }
             drush_log($line, $line_status);
           }
-          // Lock Site-Local Drush Again If Unlocked
-          $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-          $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-          if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-            drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          // Lock Site-Local Drush if Unlocked
+          provision_check_codebase_status();
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
+            drush_log(dt('DEPLOY10/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
           // Lock Site-Local Drush In The Old Platform Again Too
@@ -310,12 +297,13 @@ function drush_provision_drupal_post_provision_deploy() {
         }
       }
       else {
-        // Lock Site-Local Drush if Unlocked
-        $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-        $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-        if (provision_file()->exists($drush_unlock_ctrl)->status() || !provision_file()->exists($drush_lock_ctrl)->status()) {
-          drush_log(dt('LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
+        if (drush_drupal_major_version() >= 8) {
+          // Lock Site-Local Drush if Unlocked
+          provision_check_codebase_status();
+          if (!d()->isConsolePatched || !d()->isCorePatched) {
+            drush_log(dt('DEPLOY11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+            provision_lock_drush_local_vnd();
+          }
         }
         // Tell How-To Skip Drush updatedb
         drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
