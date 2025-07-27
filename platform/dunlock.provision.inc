@@ -208,18 +208,6 @@ function drush_provision_dunlock() {
       $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (d()->isConsolePatched || d()->isCorePatched) {
-        drush_log(dt('WEB/INC/DRUSH/UNLOCK with chmod 0644'), 'info');
-        // Unlock all .drush.inc files under modules
-        $commandIncUnLock = 'find ' . d()->root . '/modules -type f -name "*.drush.inc" -print -exec chmod 0644 {} \;';
-        $success = drush_shell_exec($commandIncUnLock);
-        $result = drush_shell_exec_output();
-        foreach ($result as $index => $line) {
-          $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-          drush_log($line, $line_status);
-        }
-      }
-
       drush_log(dt('CORE/PATCH/IF3 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF3 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
 
