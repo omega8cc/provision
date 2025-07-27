@@ -415,18 +415,6 @@ function provision_unlock_drush_local_vnd() {
       $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
 
-      if (d()->isConsolePatched || d()->isCorePatched) {
-        drush_log(dt('WEB/INC/DRUSH/UNLOCK with chmod 0644'), 'info');
-        // Unlock all .drush.inc files under modules
-        $commandIncUnLock = 'find ' . d()->root . '/modules -type f -name "*.drush.inc" -print -exec chmod 0644 {} \;';
-        $success = drush_shell_exec($commandIncUnLock);
-        $result = drush_shell_exec_output();
-        foreach ($result as $index => $line) {
-          $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-          drush_log($line, $line_status);
-        }
-      }
-
       drush_log(dt('CORE/PATCH/IF4 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF4 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
 
@@ -705,10 +693,18 @@ function provision_lock_drush_local_vnd() {
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
 
       if (!d()->isConsolePatched || !d()->isCorePatched) {
-        drush_log(dt('WEB/INC/DRUSH/LOCK with chmod 0000'), 'info');
-        // Lock all .drush.inc files under modules
-        $commandIncLock = 'find ' . d()->root . '/modules -type f -name "*.drush.inc" -print -exec chmod 0000 {} \;';
-        $success = drush_shell_exec($commandIncLock);
+        drush_log(dt('WEB/DRUSH/INC/CLEAN within modules/contrib and sites/*/modules'), 'info');
+        // Removing all .drush.inc files under modules/contrib
+        $commandIncCleanOne = 'find ' . d()->root . '/modules/contrib -type f -name "*.drush.inc" -print -exec rm -f {} \;';
+        $success = drush_shell_exec($commandIncCleanOne);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
+          drush_log($line, $line_status);
+        }
+        // Removing all .drush.inc files under sites/*/modules
+        $commandIncCleanTwo = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
+        $success = drush_shell_exec($commandIncCleanTwo);
         $result = drush_shell_exec_output();
         foreach ($result as $index => $line) {
           $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
