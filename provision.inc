@@ -788,7 +788,7 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchConsoleFile);
       }
 
-      if (drush_drupal_major_version() == 11 && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
+      if (drush_drupal_major_version() == 11 && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/APPLY @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();
