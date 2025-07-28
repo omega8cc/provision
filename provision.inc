@@ -731,7 +731,8 @@ function provision_lock_drush_local_vnd() {
       if (!d()->isConsolePatched || !d()->isCorePatched) {
         $contribDirOne = d()->root . '/modules/contrib';
         $contribDirTwo = d()->root . '/sites/all/modules';
-        if (is_dir($contribDirOne)) {
+        $identifyCoreV = d()->root . '/core/modules/workspaces_ui';
+        if (is_dir($identifyCoreV) && is_dir($contribDirOne)) {
           drush_log(dt('WEB/DRUSH/INC/CLEAN1 within modules/contrib'), 'info');
           // Removing all .drush.inc files under modules/contrib
           $commandIncCleanOne = 'find ' . d()->root . '/modules/contrib -type f -name "*.drush.inc" -print -exec rm -f {} \;';
@@ -742,7 +743,7 @@ function provision_lock_drush_local_vnd() {
             drush_log($line, $line_status);
           }
         }
-        if (is_dir($contribDirTwo)) {
+        if (is_dir($identifyCoreV) && is_dir($contribDirTwo)) {
           drush_log(dt('WEB/DRUSH/INC/CLEAN1 within sites/*/modules'), 'info');
           // Removing all .drush.inc files under sites/*/modules
           $commandIncCleanTwo = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
