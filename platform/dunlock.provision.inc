@@ -189,27 +189,33 @@ function drush_provision_dunlock() {
       elseif (drush_drupal_major_version() == 11) {
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
         $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
+        $validator_patch_fname = "drupal-eleven-aegir-validator-03.patch";
       }
 
       if ($this_user == 'aegir' ) {
         $patchCoreTpl = '/var/aegir/patches/' . $core_patch_fname;
         $patchConsoleTpl = '/var/aegir/patches/' . $console_patch_fname;
+        $patchValidatorTpl = '/var/aegir/patches/' . $validator_patch_fname;
       }
       else {
         $patchCoreTpl = '/data/conf/patches/' . $core_patch_fname;
         $patchConsoleTpl = '/data/conf/patches/' . $console_patch_fname;
+        $patchValidatorTpl = '/data/conf/patches/' . $validator_patch_fname;
       }
 
       $patchCoreFile = d()->root . '/' . $core_patch_fname;
       $patchConsoleFile = d()->root . '/' . $console_patch_fname;
+      $patchValidatorFile = d()->root . '/' . $validator_patch_fname;
 
       provision_check_codebase_status();
 
       $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
+      $commandValidator = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchValidatorTpl);
 
       drush_log(dt('CORE/PATCH/IF3 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF3 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
+      drush_log(dt('VALIDATOR/PATCH/IF3 --@isValidatorPatched-- in @webRoot', array('@isValidatorPatched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
 
       if (provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched) {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
@@ -245,6 +251,21 @@ function drush_provision_dunlock() {
       }
       if (provision_file()->exists($patchConsoleFile)->status()) {
         provision_file()->unlink($patchConsoleFile);
+      }
+
+      if (provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
+        drush_log(dt('VALIDATOR/PATCH/REVERT @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
+        $success = drush_shell_exec($commandValidator);
+        $result = drush_shell_exec_output();
+        foreach ($result as $index => $line) {
+          if (!$success) { // Log the entire error as a warning.
+              $line_status = 'warning';
+          }
+          else { // Only log the last line as success.
+              $line_status = $index+1 == count($result) ? 'success' : 'notice';
+          }
+          drush_log($line, $line_status);
+        }
       }
     }
   }
