@@ -157,7 +157,7 @@ function drush_provision_dlock() {
         $contribDirOne = d()->root . '/modules/contrib';
         $contribDirTwo = d()->root . '/sites/all/modules';
         if (is_dir($contribDirOne)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN within modules/contrib'), 'info');
+          drush_log(dt('WEB/DRUSH/INC/CLEAN2 within modules/contrib'), 'info');
           // Removing all .drush.inc files under modules/contrib
           $commandIncCleanOne = 'find ' . d()->root . '/modules/contrib -type f -name "*.drush.inc" -print -exec rm -f {} \;';
           $success = drush_shell_exec($commandIncCleanOne);
@@ -168,7 +168,7 @@ function drush_provision_dlock() {
           }
         }
         if (is_dir($contribDirTwo)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN within sites/*/modules'), 'info');
+          drush_log(dt('WEB/DRUSH/INC/CLEAN2 within sites/*/modules'), 'info');
           // Removing all .drush.inc files under sites/*/modules
           $commandIncCleanTwo = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
           $success = drush_shell_exec($commandIncCleanTwo);
