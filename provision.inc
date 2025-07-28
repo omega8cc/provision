@@ -197,7 +197,7 @@ function provision_check_codebase_status() {
     if (strpos($validator_file_content, $validator_search_string) == true) {
       d()->isValidatorPatched = TRUE;
     }
-    drush_log(dt('CHECK/CODE/VALIDATOR =@is_validator_patched= FOR @webRoot', array('@is_validator_patched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
+    drush_log(dt('CHECK/CODE/VALIDATOR =@is_validator_patched= FOR @valFile', array('@is_validator_patched' => d()->isValidatorPatched, '@valFile' => $validator_file_path)), 'info');
 
     $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
     $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
