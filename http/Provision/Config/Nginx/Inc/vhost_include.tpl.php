@@ -317,6 +317,7 @@ location = /cron.php {
   allow 127.0.0.1;
   deny all;
   try_files $uri =404;
+  auth_basic off;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -335,6 +336,7 @@ location ^~ /cron/ {
   deny all;
   set $nocache_details "Skip";
   try_files $uri @drupal;
+  auth_basic off;
 }
 
 ###
@@ -567,7 +569,7 @@ location ~* (?:cgi-bin|vti-bin) {
 ###
 ### Deny bots on some weak modules uri.
 ###
-location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/) {
+location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary|flag\/flag) {
   if ( $is_bot ) {
     return 403;
   }
