@@ -344,6 +344,7 @@ location ^~ /<?php print $subdir; ?> {
     deny all;
 
     try_files /cron.php $uri =404;
+    auth_basic off;
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -363,6 +364,7 @@ location ^~ /<?php print $subdir; ?> {
     allow 127.0.0.1;
     deny all;
     try_files $uri @drupal_<?php print $subdir_loc; ?>;
+    auth_basic off;
   }
 
   ###
