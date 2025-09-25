@@ -316,8 +316,8 @@ location = /fpm-ping {
 location = /cron.php {
   allow 127.0.0.1;
   deny all;
-  try_files $uri =404;
   auth_basic off;
+  try_files $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -329,14 +329,36 @@ location = /cron.php {
 
 ###
 ### Allow local access to support wget method in Aegir settings
-### for running sites cron in Drupal 8+.
+### for running sites cron in Drupal 8+ with auth_basic disabled on the fly.
+### Note that this works only for auth_basic enabled in Aegir
+### on the Nginx level, not for modules on the PHP level.
 ###
 location ^~ /cron/ {
   allow 127.0.0.1;
   deny all;
-  set $nocache_details "Skip";
-  try_files $uri @drupal;
   auth_basic off;
+  try_files "" @modern_cron;
+}
+
+###
+### Cron-only PHP entrypoint for Drupal 8+ w/ auth_basic turned off
+###
+location @modern_cron {
+  auth_basic off;
+  include fastcgi_params;
+  fastcgi_index index.php;
+  fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+  fastcgi_param SCRIPT_NAME  /index.php;
+  fastcgi_param DOCUMENT_URI /index.php;
+  fastcgi_param QUERY_STRING $args;
+  limit_conn limreq 8;
+<?php if ($satellite_mode == 'boa'): ?>
+  fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+<?php elseif ($phpfpm_mode == 'port'): ?>
+  fastcgi_pass 127.0.0.1:9000;
+<?php else: ?>
+  fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
+<?php endif; ?>
 }
 
 ###
