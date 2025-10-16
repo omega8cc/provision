@@ -4,8 +4,8 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
 
   // Define static socket file locations for various PHP versions.
   // These are dynamic in PHP 7.
-  const SOCKET_PATH_PHP5 = '/var/run/php5-fpm.sock';
-  const SOCKET_PATH_PHP7_BASE = '/var/run/php';
+  const SOCKET_PATH_PHP5 = '/run/php5-fpm.sock';
+  const SOCKET_PATH_PHP7_BASE = '/run/php';
 
   protected $application_name = 'nginx';
   protected $has_restart_cmd = TRUE;

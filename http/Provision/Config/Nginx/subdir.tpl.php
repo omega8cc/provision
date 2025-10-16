@@ -346,7 +346,7 @@ location ^~ /<?php print $subdir; ?> {
     try_files /cron.php $uri =404;
     auth_basic off;
 <?php if ($satellite_mode == 'boa'): ?>
-    fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+    fastcgi_pass unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
@@ -814,7 +814,7 @@ location ^~ /<?php print $subdir; ?> {
     }
     try_files /$1 $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
-    fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+    fastcgi_pass unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
@@ -988,7 +988,7 @@ location ^~ /<?php print $subdir; ?> {
     log_not_found off;
     try_files /$1.php =404; ### check for existence of php file first
 <?php if ($satellite_mode == 'boa'): ?>
-    fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+    fastcgi_pass unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
@@ -1117,7 +1117,7 @@ location ^~ /<?php print $subdir; ?> {
     try_files /index.php =404; ### check for existence of php file first
 
 <?php if ($satellite_mode == 'boa'): ?>
-    fastcgi_pass  unix:/var/run/$user_socket.fpm.socket;
+    fastcgi_pass  unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
     fastcgi_pass  127.0.0.1:9000;
 <?php else: ?>
@@ -1250,7 +1250,7 @@ location @allowupdate_<?php print $subdir_loc; ?> {
   fastcgi_intercept_errors on;
 
 <?php if ($satellite_mode == 'boa'): ?>
-  fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+  fastcgi_pass unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
@@ -1290,7 +1290,7 @@ location @allowauthorize_<?php print $subdir_loc; ?> {
   fastcgi_intercept_errors on;
 
 <?php if ($satellite_mode == 'boa'): ?>
-  fastcgi_pass unix:/var/run/$user_socket.fpm.socket;
+  fastcgi_pass unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
   fastcgi_pass 127.0.0.1:9000;
 <?php else: ?>
