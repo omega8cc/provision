@@ -1103,7 +1103,6 @@ location ^~ /<?php print $subdir; ?> {
     ### Basic security/privacy headers.
     ###
     add_header Referrer-Policy "no-referrer-when-downgrade";
-    add_header Permissions-Policy "fullscreen=(self), autoplay=()";
 
     ###
     ### Add headers for debugging
