@@ -402,6 +402,7 @@ function provision_unlock_drush_local_vnd() {
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
+        $core_patch_leftover = "drupal-ten-aegir-01.patch";
       }
       elseif (drush_drupal_major_version() == 11) {
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
@@ -423,6 +424,11 @@ function provision_unlock_drush_local_vnd() {
       $patchCoreFile = d()->root . '/' . $core_patch_fname;
       $patchConsoleFile = d()->root . '/' . $console_patch_fname;
       $patchValidatorFile = d()->root . '/' . $validator_patch_fname;
+      $patchLeftoverFile = d()->root . '/' . $core_patch_leftover;
+
+      if (provision_file()->exists($patchLeftoverFile)->status()) {
+        provision_file()->unlink($patchLeftoverFile);
+      }
 
       provision_check_codebase_status();
 
@@ -700,6 +706,7 @@ function provision_lock_drush_local_vnd() {
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
+        $core_patch_leftover = "drupal-ten-aegir-01.patch";
       }
       elseif (drush_drupal_major_version() == 11) {
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
@@ -721,6 +728,11 @@ function provision_lock_drush_local_vnd() {
       $patchCoreFile = d()->root . '/' . $core_patch_fname;
       $patchConsoleFile = d()->root . '/' . $console_patch_fname;
       $patchValidatorFile = d()->root . '/' . $validator_patch_fname;
+      $patchLeftoverFile = d()->root . '/' . $core_patch_leftover;
+
+      if (provision_file()->exists($patchLeftoverFile)->status()) {
+        provision_file()->unlink($patchLeftoverFile);
+      }
 
       provision_check_codebase_status();
 
