@@ -10,7 +10,7 @@
  *   3. Do some diagnostics to make sure all the needed packages are available.
  *   4. Create a new database, belonging to the site's user, and import the database dump.
  *   5. Regenerate configuration files to show new db settings.
- *   6. Call the drush 'updatedb' command to update the database if neccesary.
+ *   6. Call the drush 'updatedb -y' command to update the database if neccesary.
  *   7. Update the file paths to the new sites directory.
  *   8. Rebuild the site's package manifest.
  *   9. Save the new drushrc.php with the newly generated settings.
@@ -194,7 +194,7 @@ function drush_provision_drupal_post_provision_deploy() {
   if (provision_is_hostmaster_site()) {
     // Always Call The Drush updatedb Command With Aegir Own Drush 8 In The Hostmaster Site
     drush_log(dt('AEGIR/DRUSH Invoking updatedb in drush_provision_drupal_post_provision_deploy'), 'info');
-    provision_backend_invoke(d()->name, 'updatedb');
+    provision_backend_invoke(d()->name, 'updatedb -y');
   }
   else {
     if (is_file($dis_auto_up_db_global)) {
@@ -255,7 +255,7 @@ function drush_provision_drupal_post_provision_deploy() {
           // Tell How-To Skip Drush updatedb
           drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
           // Call The Drush updatedb Command With Aegir Own Drush 8
-          provision_backend_invoke(d()->name, 'updatedb');
+          provision_backend_invoke(d()->name, 'updatedb -y');
         }
         else {
           // Log The Useful Info
@@ -309,7 +309,7 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
         // Call The Drush updatedb Command With Aegir Own Drush 8
         drush_log(dt('AEGIR/DRUSH Invoking updatedb with Drush 8 in drush_provision_drupal_post_provision_deploy'), 'info');
-        provision_backend_invoke(d()->name, 'updatedb');
+        provision_backend_invoke(d()->name, 'updatedb -y');
       }
     }
   }
