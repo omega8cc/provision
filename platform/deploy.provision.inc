@@ -270,7 +270,7 @@ function drush_provision_drupal_post_provision_deploy() {
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
           // Call The Drush updatedb Command with Site-Local Drush
           drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . $dnameten . ' updatedb --yes --cache-clear=default');
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . $dnameten . ' updatedb -y');
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
             if (!$success) { // Log the entire error as a notice.
