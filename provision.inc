@@ -408,7 +408,7 @@ function provision_unlock_drush_local_vnd() {
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
         $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
         $validator_patch_fname = "drupal-eleven-aegir-validator-03.patch";
-        $first_eleven_test = "/core/modules/language/tests/language_test/language_test.module"
+        $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
         $patchCoreTest = d()->root . '/' . $first_eleven_test;
         if (provision_file()->exists($patchCoreTest)->status()) {
           $core_patch_fname = "drupal-ten-aegir-core-01.patch";
@@ -717,7 +717,7 @@ function provision_lock_drush_local_vnd() {
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
         $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
         $validator_patch_fname = "drupal-eleven-aegir-validator-03.patch";
-        $first_eleven_test = "/core/modules/language/tests/language_test/language_test.module"
+        $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
         $patchCoreTest = d()->root . '/' . $first_eleven_test;
         if (provision_file()->exists($patchCoreTest)->status()) {
           $core_patch_fname = "drupal-ten-aegir-core-01.patch";
