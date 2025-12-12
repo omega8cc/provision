@@ -218,7 +218,10 @@ if ($nginx_has_gzip) {
   log_format        main '"$proxy_add_x_forwarded_for" $host [$time_local] '
                          '"$request" $status $body_bytes_sent '
                          '$request_length $bytes_sent "$http_referer" '
-                         '"$http_user_agent" $request_time "$gzip_ratio"';
+                         '"$http_user_agent" $request_time "$gzip_ratio" '
+                         'proto="$server_protocol" '
+                         'alpn="$ssl_alpn_protocol" '
+                         'http2="$http2"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
