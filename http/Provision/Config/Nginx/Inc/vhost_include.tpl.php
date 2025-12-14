@@ -97,6 +97,28 @@ if ($main_site_name = '') {
 }
 
 ###
+### Block “node-chain” URL mutation spam.
+### Examples:
+### /node/1771/pl/node/1771/es/node/1771/...
+### /pl/node/1771/es/node/1771/...
+###
+if ($is_node_chain) {
+  return 404;
+}
+
+###
+### Block “language-prefix chain” URL mutation spam.
+### Examples (4+ language-like prefixes in a row):
+### /pl/en/fr/de/office/city-benelux
+### /pt-br/es/it/nl/product/ai-driven-project-manager
+### /zh-hans/ja/ko/en/node/1771
+### /en/en/en/en/anything
+###
+if ($is_lang_chain) {
+  return 404;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
