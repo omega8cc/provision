@@ -131,6 +131,13 @@ if ($subdir_main_site_name = '') {
   set $subdir_main_site_name "$server_name";
 }
 
+###
+### Drop repeated /node/<id>/.../node/<id>/ patterns flood (botnet typical abuse)
+###
+if ($is_node_chain) {
+  return 404;
+}
+
 # Mitigation for https://www.drupal.org/SA-CORE-2018-002
 set $rce "ZZ";
 if ( $query_string ~* (23value|23default_value|element_parents=%23) ) {

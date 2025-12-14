@@ -235,6 +235,22 @@ if ($nginx_has_gzip) {
 #######################################################
 
 ###
+### Detect “node-chain” URL mutation spam.
+### Examples:
+### /node/1771/pl/node/1771/es/node/1771/...
+### /pl/node/1771/es/node/1771/...
+###
+map $uri $is_node_chain {
+  default 0;
+
+  # Lang optional, node/<id>, then at least one more /.../node/<id>
+  ~*^/(?:[a-z]{2}(?:-[a-z0-9]+)?/)?node/[0-9]+(?:/(?:[a-z]{2}(?:-[a-z0-9]+)?/)?node/[0-9]+)+  1;
+
+  # Fallback: node/<id> appears 2+ times anywhere
+  ~*(?:/node/[0-9]+).*?(?:/node/[0-9]+)  1;
+}
+
+###
 ### Support separate Speed Booster caches for various mobile devices.
 ###
 map $http_user_agent $device {

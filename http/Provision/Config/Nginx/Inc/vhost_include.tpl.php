@@ -97,6 +97,16 @@ if ($main_site_name = '') {
 }
 
 ###
+### Block “node-chain” URL mutation spam.
+### Examples:
+### /node/1771/pl/node/1771/es/node/1771/...
+### /pl/node/1771/es/node/1771/...
+###
+if ($is_node_chain) {
+  return 404;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
