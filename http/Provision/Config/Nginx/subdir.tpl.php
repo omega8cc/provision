@@ -138,6 +138,13 @@ if ($is_node_chain) {
   return 404;
 }
 
+###
+### Drop “too many language prefixes” (botnet typical abuse)
+###
+if ($is_lang_chain) {
+  return 404;
+}
+
 # Mitigation for https://www.drupal.org/SA-CORE-2018-002
 set $rce "ZZ";
 if ( $query_string ~* (23value|23default_value|element_parents=%23) ) {

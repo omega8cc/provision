@@ -251,6 +251,19 @@ map $uri $is_node_chain {
 }
 
 ###
+### Detect “language-prefix chain” URL mutation spam.
+### Examples (4+ language-like prefixes in a row):
+### /pl/en/fr/de/office/city-benelux
+### /pt-br/es/it/nl/product/ai-driven-project-manager
+### /zh-hans/ja/ko/en/node/1771
+### /en/en/en/en/anything
+###
+map $uri $is_lang_chain {
+  default 0;
+  ~*^/(?:[a-z]{2}(?:-[a-z0-9]+)?/){3,}  1;
+}
+
+###
 ### Support separate Speed Booster caches for various mobile devices.
 ###
 map $http_user_agent $device {
