@@ -243,16 +243,16 @@ if ($nginx_has_gzip) {
 map $uri $is_node_chain {
   default 0;
 
-  # Lang optional, node/<id>, then at least one more /.../node/<id>
-  ~*^/(?:[a-z]{2}(?:-[a-z0-9]+)?/)?node/[0-9]+(?:/(?:[a-z]{2}(?:-[a-z0-9]+)?/)?node/[0-9]+)+  1;
+  # optional lang prefix, then node/<id>, then at least one more ".../node/<id>"
+  ~*^/([a-z][a-z](-[a-z0-9]+)?/)?node/[0-9]+(/([a-z][a-z](-[a-z0-9]+)?/)?node/[0-9]+)+  1;
 
-  # Fallback: node/<id> appears 2+ times anywhere
-  ~*(?:/node/[0-9]+).*?(?:/node/[0-9]+)  1;
+  # fallback: node/<id> appears 2+ times anywhere
+  ~*/node/[0-9]+.*/node/[0-9]+  1;
 }
 
 ###
 ### Detect “language-prefix chain” URL mutation spam.
-### Examples (4+ language-like prefixes in a row):
+### Examples (3+ language-like prefixes in a row):
 ### /pl/en/fr/de/office/city-benelux
 ### /pt-br/es/it/nl/product/ai-driven-project-manager
 ### /zh-hans/ja/ko/en/node/1771
@@ -260,7 +260,9 @@ map $uri $is_node_chain {
 ###
 map $uri $is_lang_chain {
   default 0;
-  ~*^/(?:[a-z]{2}(?:-[a-z0-9]+)?/){3,}  1;
+
+  # 3+ leading language-like segments: /xx/ or /xx-xxxx/
+  ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
 }
 
 ###
