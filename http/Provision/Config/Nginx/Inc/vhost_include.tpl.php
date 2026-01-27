@@ -213,6 +213,18 @@ if ($user_socket = '') {
 }
 
 ###
+### Allow access to site-specific well-known/mta-sts.txt file.
+### Example:
+###   static/control/mta-sts-sitename.com.txt
+###   static/control/mta-sts-otherone.com.txt
+###
+location ^~ /.well-known/mta-sts.txt {
+  allow all;
+  alias <?php print $aegir_root; ?>/static/control/mta-sts-$main_site_name.txt;
+  try_files $uri 404;
+}
+
+###
 ### HTTPRL standard support.
 ###
 location ^~ /httprl_async_function_callback {
