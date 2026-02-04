@@ -67,6 +67,14 @@ if (!$nginx_has_http3 && $server->nginx_has_http3) {
   $nginx_has_http3 = $server->nginx_has_http3;
 }
 
+$nginx_has_ktls = d('@server_master')->nginx_has_ktls;
+if (!$nginx_has_ktls) {
+  $nginx_has_ktls = drush_get_option('nginx_has_ktls');
+}
+if (!$nginx_has_ktls && $server->nginx_has_ktls) {
+  $nginx_has_ktls = $server->nginx_has_ktls;
+}
+
 $nginx_has_gzip = d('@server_master')->nginx_has_gzip;
 if (!$nginx_has_gzip) {
   $nginx_has_gzip = drush_get_option('nginx_has_gzip');
@@ -186,7 +194,7 @@ add_header X-Frame-Options "SAMEORIGIN" always;
 ### Add recommended HTTP/3 headers
 ### https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Alt-Svc
 ###
-#add_header Alt-Svc 'h3=":443"; ma=86400';
+add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
 
 ###
@@ -1435,7 +1443,7 @@ location = /index.php {
   add_header X-Server-Name "$main_site_name";
 
 <?php if ($nginx_has_http3): ?>
-  #add_header Alt-Svc 'h3=":443"; ma=86400';
+  add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
 
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";

@@ -42,6 +42,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->setProperty('nginx_has_etag', FALSE);
     $this->server->setProperty('nginx_has_http2', FALSE);
     $this->server->setProperty('nginx_has_http3', FALSE);
+    $this->server->setProperty('nginx_has_ktls', FALSE);
     $this->server->setProperty('nginx_has_gzip', FALSE);
     $this->server->setProperty('provision_db_cloaking', FALSE);
     $this->server->setProperty('phpfpm_mode', 'port');
@@ -68,6 +69,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->nginx_has_etag = preg_match("/nginx\/1\.([12][0-9]|[3]\.([12][0-9]|[3-9]))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
+    $this->server->nginx_has_ktls = preg_match("/enable-ktls/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
@@ -115,6 +117,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->nginx_has_etag = preg_match("/nginx\/1\.([12][0-9]|[3]\.([12][0-9]|[3-9]))/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
+    $this->server->nginx_has_ktls = preg_match("/enable-ktls/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
