@@ -194,7 +194,7 @@ add_header X-Frame-Options "SAMEORIGIN" always;
 ### Add recommended HTTP/3 headers
 ### https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Alt-Svc
 ###
-#add_header Alt-Svc 'h3=":443"; ma=86400';
+add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
 
 ###
@@ -1443,7 +1443,7 @@ location = /index.php {
   add_header X-Server-Name "$main_site_name";
 
 <?php if ($nginx_has_http3): ?>
-  #add_header Alt-Svc 'h3=":443"; ma=86400';
+  add_header Alt-Svc 'h3=":443"; ma=86400';
 <?php endif; ?>
 
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
