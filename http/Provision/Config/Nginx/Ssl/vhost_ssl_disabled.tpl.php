@@ -29,7 +29,7 @@ $ssl_listen_ipv4 = "*";
 server {
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
-  listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>;
+  listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic reuseport"; ?>;
   http3 on;
   http3_hq on;
 <?php endif; ?>
