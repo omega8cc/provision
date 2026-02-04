@@ -69,6 +69,14 @@ if (!$nginx_has_http3 && $server->nginx_has_http3) {
   $nginx_has_http3 = $server->nginx_has_http3;
 }
 
+$nginx_has_ktls = d('@server_master')->nginx_has_ktls;
+if (!$nginx_has_ktls) {
+  $nginx_has_ktls = drush_get_option('nginx_has_ktls');
+}
+if (!$nginx_has_ktls && $server->nginx_has_ktls) {
+  $nginx_has_ktls = $server->nginx_has_ktls;
+}
+
 $nginx_has_gzip = d('@server_master')->nginx_has_gzip;
 if (!$nginx_has_gzip) {
   $nginx_has_gzip = drush_get_option('nginx_has_gzip');

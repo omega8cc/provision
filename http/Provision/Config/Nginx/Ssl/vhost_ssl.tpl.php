@@ -35,6 +35,14 @@ if (!$nginx_has_http3 && $server->nginx_has_http3) {
   $nginx_has_http3 = $server->nginx_has_http3;
 }
 
+$nginx_has_ktls = d('@server_master')->nginx_has_ktls;
+if (!$nginx_has_ktls) {
+  $nginx_has_ktls = drush_get_option('nginx_has_ktls');
+}
+if (!$nginx_has_ktls && $server->nginx_has_ktls) {
+  $nginx_has_ktls = $server->nginx_has_ktls;
+}
+
 $aegir_root = d('@server_master')->aegir_root;
 $ssl_args = "ssl";
 $ssl_listen_ipv4 = "*";
@@ -84,6 +92,9 @@ server {
   ssl_certificate     <?php print $ssl_chain_cert; ?>;
 <?php else: ?>
   ssl_certificate     <?php print $ssl_cert; ?>;
+<?php endif; ?>
+<?php if ($nginx_has_ktls): ?>
+  ssl_conf_command Options KTLS;
 <?php endif; ?>
 
   ###
@@ -188,6 +199,9 @@ server {
   ssl_certificate     <?php print $ssl_chain_cert; ?>;
 <?php else: ?>
   ssl_certificate     <?php print $ssl_cert; ?>;
+<?php endif; ?>
+<?php if ($nginx_has_ktls): ?>
+  ssl_conf_command Options KTLS;
 <?php endif; ?>
   <?php print $extra_config; ?>
   include  <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>*;
