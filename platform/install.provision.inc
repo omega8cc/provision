@@ -243,6 +243,7 @@ function drush_provision_drupal_provision_install() {
           }
           drush_log($line, $line_status);
         }
+
         // Enforce Aegir policy: never allow web UI tools to overwrite the codebase.
         // Drupal core Automatic Updates emits Status report errors on symlinked/linked codebases by design,
         // so we remove the module right after install if it is enabled.
@@ -277,7 +278,26 @@ function drush_provision_drupal_provision_install() {
           ];
           $uninstall_command[] = '-vvv';
           $uninstall_cmd_string = implode(' ', array_map('escapeshellarg', $uninstall_command));
-          drush_log(dt('D11/INSTALL/LOCAL5A/DRUSH/UNINSTALL automatic_updates in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/UNINSTALL automatic_updates in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          $uninstall_result = drush_shell_cd_and_exec($appRoot, $uninstall_cmd_string);
+          $uninstall_output = drush_shell_exec_output();
+          foreach ((array) $uninstall_output as $uninstall_line) {
+            drush_log($uninstall_line, 'notice');
+          }
+        }
+
+        if (!empty($enabled_modules['package_manager'])) {
+          $uninstall_command = [
+            $drushPath,
+            'pm:uninstall',
+            'package_manager',
+            '--yes',
+            '--no-interaction',
+            '--uri=' . d()->uri,
+          ];
+          $uninstall_command[] = '-vvv';
+          $uninstall_cmd_string = implode(' ', array_map('escapeshellarg', $uninstall_command));
+          drush_log(dt('D11/INSTALL/LOCAL7/DRUSH/UNINSTALL package_manager in @appRoot', array('@appRoot' => $appRoot)), 'info');
           $uninstall_result = drush_shell_cd_and_exec($appRoot, $uninstall_cmd_string);
           $uninstall_output = drush_shell_exec_output();
           foreach ((array) $uninstall_output as $uninstall_line) {
@@ -290,7 +310,7 @@ function drush_provision_drupal_provision_install() {
         // Lock Site-Local Drush if Unlocked
         provision_check_codebase_status();
         if (!d()->isConsolePatched || !d()->isCorePatched) {
-          drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
         sleep(5);
