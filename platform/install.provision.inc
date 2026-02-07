@@ -249,14 +249,13 @@ function drush_provision_drupal_provision_install() {
         $enabled_modules = [];
         $pml_command = [
           $drushPath,
-          'pml',
-          '--status=enabled',
+          '-r web pm:list',
           '--type=module',
-          '--field=name',
-          '--no-ansi',
-          '--no-interaction',
-          '--sites-subdir=' . d()->uri,
+          '--status=enabled',
+          '--format=list',
+          '--uri=' . d()->uri,
         ];
+        $pml_command[] = '-vvv';
         $pml_cmd_string = implode(' ', array_map('escapeshellarg', $pml_command));
         $pml_result = drush_shell_cd_and_exec($appRoot, $pml_cmd_string);
         $pml_output = drush_shell_exec_output();
@@ -273,10 +272,10 @@ function drush_provision_drupal_provision_install() {
             'pm:uninstall',
             'automatic_updates',
             '--yes',
-            '--no-ansi',
             '--no-interaction',
-            '--sites-subdir=' . d()->uri,
+            '--uri=' . d()->uri,
           ];
+          $uninstall_command[] = '-vvv';
           $uninstall_cmd_string = implode(' ', array_map('escapeshellarg', $uninstall_command));
           drush_log(dt('D11/INSTALL/LOCAL5A/DRUSH/UNINSTALL automatic_updates in @appRoot', array('@appRoot' => $appRoot)), 'info');
           $uninstall_result = drush_shell_cd_and_exec($appRoot, $uninstall_cmd_string);
