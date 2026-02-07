@@ -165,28 +165,16 @@ function drush_provision_dlock() {
       $commandValidator = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
 
       if (!d()->isConsolePatched || !d()->isCorePatched) {
-        $contribDirOne = d()->root . '/modules/contrib';
-        $contribDirTwo = d()->root . '/sites/all/modules';
+        $contribDirMnx = d()->root . '/modules/contrib';
+        $contribDirWld = d()->root . '/sites/all/modules';
+        $contribWebfrm = d()->root . '/modules/contrib/webform';
         $identifyCoreV = d()->root . '/core/modules/workspaces_ui';
-        $contribWfdrnc = d()->root . '/modules/contrib/webform/modules/webform_devel/webform_devel.drush.inc';
 
-        if (is_file($contribWfdrnc)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN1 within webform_devel'), 'info');
-          // Removing .drush.inc file under webform_devel
-          $commandIncCleanSingle = 'rm ' . $contribWfdrnc;
-          $success = drush_shell_exec($commandIncCleanSingle);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-            drush_log($line, $line_status);
-          }
-        }
-
-        if (is_dir($identifyCoreV) && is_dir($contribDirOne)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN2 within modules/contrib'), 'info');
+        if (is_dir($identifyCoreV) && is_dir($contribDirMnx)) {
+          drush_log(dt('WEB/DRUSH/INC/CLEAN1 within modules/contrib'), 'info');
           // Removing all .drush.inc files under modules/contrib
-          $commandIncCleanOne = 'find ' . d()->root . '/modules/contrib -type f -name "*.drush.inc" -print -exec rm -f {} \;';
-          $success = drush_shell_exec($commandIncCleanOne);
+          $commandIncClean = 'find ' . $contribDirMnx . ' -type f -name "*.drush.inc" -print -exec rm -f {} \;';
+          $success = drush_shell_exec($commandIncClean);
           $result = drush_shell_exec_output();
           foreach ($result as $index => $line) {
             $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
@@ -194,11 +182,23 @@ function drush_provision_dlock() {
           }
         }
 
-        if (is_dir($identifyCoreV) && is_dir($contribDirTwo)) {
+        if (is_dir($identifyCoreV) && is_dir($contribDirWld)) {
           drush_log(dt('WEB/DRUSH/INC/CLEAN2 within sites/*/modules'), 'info');
           // Removing all .drush.inc files under sites/*/modules
-          $commandIncCleanTwo = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
-          $success = drush_shell_exec($commandIncCleanTwo);
+          $commandIncClean = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
+          $success = drush_shell_exec($commandIncClean);
+          $result = drush_shell_exec_output();
+          foreach ($result as $index => $line) {
+            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
+            drush_log($line, $line_status);
+          }
+        }
+
+        if (is_dir($contribWebfrm)) {
+          drush_log(dt('WEB/DRUSH/INC/CLEAN3 within modules/contrib/webform'), 'info');
+          // Removing all .drush.inc files under modules/contrib/webform
+          $commandIncClean = 'find ' . $contribWebfrm . ' -type f -name "*.drush.inc" -print -exec rm -f {} \;';
+          $success = drush_shell_exec($commandIncClean);
           $result = drush_shell_exec_output();
           foreach ($result as $index => $line) {
             $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
