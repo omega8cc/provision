@@ -754,6 +754,20 @@ function provision_lock_drush_local_vnd() {
         $contribDirOne = d()->root . '/modules/contrib';
         $contribDirTwo = d()->root . '/sites/all/modules';
         $identifyCoreV = d()->root . '/core/modules/workspaces_ui';
+        $contribWfdrnc = d()->root . '/modules/contrib/webform/modules/webform_devel/webform_devel.drush.inc';
+
+        if (is_file($contribWfdrnc)) {
+          drush_log(dt('WEB/DRUSH/INC/CLEAN1 within webform_devel'), 'info');
+          // Removing .drush.inc file under webform_devel
+          $commandIncCleanSingle = 'rm ' . $contribWfdrnc;
+          $success = drush_shell_exec($commandIncCleanSingle);
+          $result = drush_shell_exec_output();
+          foreach ($result as $index => $line) {
+            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
+            drush_log($line, $line_status);
+          }
+        }
+
         if (is_dir($identifyCoreV) && is_dir($contribDirOne)) {
           drush_log(dt('WEB/DRUSH/INC/CLEAN1 within modules/contrib'), 'info');
           // Removing all .drush.inc files under modules/contrib
@@ -765,6 +779,7 @@ function provision_lock_drush_local_vnd() {
             drush_log($line, $line_status);
           }
         }
+
         if (is_dir($identifyCoreV) && is_dir($contribDirTwo)) {
           drush_log(dt('WEB/DRUSH/INC/CLEAN1 within sites/*/modules'), 'info');
           // Removing all .drush.inc files under sites/*/modules
