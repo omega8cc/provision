@@ -250,7 +250,7 @@ map $http_user_agent $is_crawler {
   ~*ClaudeBot|openai|perplexity|bytedance|TikTok|Amazon|Pinterest|DBot|Scrap|Semrush      is_crawler;
   ~*ImagesiftBot|Sogou|Barkrowler|PetalBot|Offline|Mireo|Aspiegel|SWEB|Nutch|PChomebot    is_crawler;
   ~*BrokenLinkCheck|externalagent|serpstatbot|Sistrix|HTMLParser|Riddler|Ahrefs|Automatic is_crawler;
-  ~*SiteBot|PECL|CCBot|BuzzTrack|SEOkicks|MJ12|Morfeus|GSLFbot|HiScan|HTTrack             is_crawler;
+  ~*SiteBot|PECL|CCBot|BuzzTrack|SEOkicks|MJ12|Morfeus|GSLFbot|HiScan|HTTrack|IbouBot     is_crawler;
 }
 
 ###
