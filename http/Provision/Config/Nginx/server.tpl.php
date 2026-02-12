@@ -243,6 +243,60 @@ if ($nginx_has_gzip) {
 #######################################################
 
 ###
+### Deny crawlers.
+###
+map $http_user_agent $is_crawler {
+  default  '';
+  ~*ClaudeBot|openai|perplexity|bytedance|TikTok|Amazon     is_crawler;
+  ~*Aspiegel|PetalBot|ImagesiftBot|Pinterest|Sogou          is_crawler;
+  ~*HTTrack|BrokenLinkCheck|externalagent|serpstatbot       is_crawler;
+  ~*SiteBot|PECL|Automatic|CCBot|BuzzTrack|Sistrix|Offline  is_crawler;
+  ~*SWEB|Morfeus|GSLFbot|HiScan|Riddler|DBot|SEOkicks|MJ12  is_crawler;
+  ~*PChomebot|Scrap|HTMLParser|Nutch|Mireo|Semrush|Ahrefs   is_crawler;
+}
+
+###
+### Block semalt botnet.
+###
+map $http_referer $is_botnet {
+  default  '';
+  ~*semalt\.com|kambasoft\.com|savetubevideo\.com|bottlenose\.com|yapoga\.com  is_botnet;
+  ~*descargar-musica-gratis\.net|baixar-musicas-gratis\.com                    is_botnet;
+}
+
+###
+### Deny all known bots/spiders on some URIs.
+###
+map $http_user_agent $is_bot {
+  default  '';
+  ~*crawl|bot|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  is_bot;
+}
+
+###
+### Deny almost all crawlers under high load.
+###
+map $http_user_agent $deny_on_high_load {
+  default  '';
+  ~*crawl|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  deny_on_high_load;
+}
+
+###
+### Deny listed requests for security reasons.
+###
+map $args $is_denied {
+  default  '';
+  ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\.\/ is_denied;
+}
+
+###
+### Live switch of $key_uri for Speed Booster cache depending on $args.
+###
+map $request_uri $key_uri {
+  default                                                                            $request_uri;
+  ~(?<no_args_uri>[[:graph:]]+)\?(.*)(utm_|__utm|_campaign|gclid|source=|adv=|req=)  $no_args_uri;
+}
+
+###
 ### Detect “node-chain” URL mutation spam.
 ### Examples:
 ### /node/1771/pl/node/1771/es/node/1771/...
@@ -289,59 +343,6 @@ map $http_user_agent $device {
 map $http_cookie $cache_uid {
   default  '';
   ~SESS[[:alnum:]]+=(?<session_id>[[:graph:]]+)  $session_id;
-}
-
-###
-### Live switch of $key_uri for Speed Booster cache depending on $args.
-###
-map $request_uri $key_uri {
-  default                                                                            $request_uri;
-  ~(?<no_args_uri>[[:graph:]]+)\?(.*)(utm_|__utm|_campaign|gclid|source=|adv=|req=)  $no_args_uri;
-}
-
-###
-### Deny crawlers.
-###
-map $http_user_agent $is_crawler {
-  default  '';
-  ~*HTTrack|BrokenLinkCheck|2009042316.*Firefox.*3\.0\.10   is_crawler;
-  ~*SiteBot|PECL|Automatic|CCBot|BuzzTrack|Sistrix|Offline  is_crawler;
-  ~*SWEB|Morfeus|GSLFbot|HiScan|Riddler|DBot|SEOkicks|MJ12  is_crawler;
-  ~*PChomebot|Scrap|HTMLParser|Nutch|Mireo|Semrush|Ahrefs   is_crawler;
-  ~*AspiegelBot|bytedance|PetalBot|ImagesiftBot|Pinterest   is_crawler;
-}
-
-###
-### Block semalt botnet.
-###
-map $http_referer $is_botnet {
-  default  '';
-  ~*semalt\.com|kambasoft\.com|savetubevideo\.com|bottlenose\.com|yapoga\.com  is_botnet;
-  ~*descargar-musica-gratis\.net|baixar-musicas-gratis\.com                    is_botnet;
-}
-
-###
-### Deny all known bots/spiders on some URIs.
-###
-map $http_user_agent $is_bot {
-  default  '';
-  ~*crawl|bot|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  is_bot;
-}
-
-###
-### Deny almost all crawlers under high load.
-###
-map $http_user_agent $deny_on_high_load {
-  default  '';
-  ~*crawl|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  deny_on_high_load;
-}
-
-###
-### Deny listed requests for security reasons.
-###
-map $args $is_denied {
-  default  '';
-  ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\.\/ is_denied;
 }
 
 #######################################################
