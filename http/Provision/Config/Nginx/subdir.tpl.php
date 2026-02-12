@@ -164,7 +164,7 @@ if ( $request_method = POST ) {
 }
 
 if ( $rce = "AB" ) {
-  return 403;
+  return 444;
 }
 
 ###
@@ -213,14 +213,14 @@ location ^~ /<?php print $subdir; ?> {
   ### Deny crawlers.
   ###
   if ($is_crawler) {
-    return 403;
+    return 444;
   }
 
   ###
   ### Block semalt botnet.
   ###
   if ($is_botnet) {
-    return 403;
+    return 444;
   }
 
   ###
@@ -251,14 +251,14 @@ location ^~ /<?php print $subdir; ?> {
   ### Deny not compatible request methods without 405 response.
   ###
   if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
-    return 403;
+    return 444;
   }
 
   ###
   ### Deny listed requests for security reasons.
   ###
   if ($is_denied) {
-    return 403;
+    return 444;
   }
 
   ###
@@ -396,7 +396,7 @@ location ^~ /<?php print $subdir; ?> {
   location ^~ /<?php print $subdir; ?>/search {
     location ~* ^/<?php print $subdir; ?>/search {
       if ( $is_bot ) {
-        return 403;
+        return 444;
       }
       try_files /search $uri @drupal_<?php print $subdir_loc; ?>;
     }
@@ -408,7 +408,7 @@ location ^~ /<?php print $subdir; ?> {
   location ^~ /<?php print $subdir; ?>/js/ {
     location ~* ^/<?php print $subdir; ?>/js/ {
       if ( $is_bot ) {
-        return 403;
+        return 444;
       }
       rewrite ^/<?php print $subdir; ?>/(.*)$ /js.php?q=$1 last;
     }
@@ -446,7 +446,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ^~ /<?php print $subdir; ?>/admin {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -480,7 +480,7 @@ location ^~ /<?php print $subdir; ?> {
   location ^~ /<?php print $subdir; ?>/audio/download {
     location ~* ^/<?php print $subdir; ?>/(audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg))$ {
       if ( $is_bot ) {
-        return 403;
+        return 444;
       }
       access_log off;
       log_not_found off;
@@ -668,7 +668,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(sites/.*/files/private/.*) {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -684,7 +684,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/sites/.*/private/ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -697,7 +697,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* /<?php print $subdir; ?>/files/private/ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -832,7 +832,7 @@ location ^~ /<?php print $subdir; ?> {
     access_log off;
     log_not_found off;
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     try_files /$1 $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
@@ -849,7 +849,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(.*(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*).*)$ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -862,7 +862,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/(sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckeditor|tinymce|flowplayer|jwplayer|videomanager)/.*\.(?:html?|xml))$ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -909,7 +909,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/((?:.*/)?(?:admin|user|cart|checkout|logout|comment/reply)) {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -922,7 +922,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/((?:.*/)?(?:node/[0-9]+/edit|node/add)) {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -935,10 +935,10 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location ~* ^/<?php print $subdir; ?>/((?:.*/)?(?:node/[0-9]+/delete|approve)) {
     if ($cache_uid = '') {
-      return 403;
+      return 444;
     }
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -968,7 +968,7 @@ location ^~ /<?php print $subdir; ?> {
   ###
   location /<?php print $subdir; ?>/ {
     if ( $http_user_agent ~* wget ) {
-      return 403;
+      return 444;
     }
     try_files /$1 $uri @cache_<?php print $subdir_loc; ?>;
   }
