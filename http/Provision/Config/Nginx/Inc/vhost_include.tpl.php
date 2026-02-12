@@ -137,7 +137,7 @@ if ( $request_method = POST ) {
   set $rce "${rce}B";
 }
 if ( $rce = "AB" ) {
-  return 403;
+  return 444;
 }
 
 set $nocache_details "Cache";
@@ -154,14 +154,14 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 ### Deny crawlers.
 ###
 if ($is_crawler) {
-  return 403;
+  return 444;
 }
 
 ###
 ### Block semalt botnet.
 ###
 if ($is_botnet) {
-  return 403;
+  return 444;
 }
 
 ###
@@ -173,14 +173,14 @@ include /data/conf/nginx_high_load.c*;
 ### Deny not compatible request methods without 405 response.
 ###
 if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
-  return 403;
+  return 444;
 }
 
 ###
 ### Deny listed requests for security reasons.
 ###
 if ($is_denied) {
-  return 403;
+  return 444;
 }
 
 ###
@@ -410,7 +410,7 @@ location @modern_cron {
 location ^~ /search {
   location ~* ^/search {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     try_files $uri @drupal;
   }
@@ -422,7 +422,7 @@ location ^~ /search {
 location ^~ /js/ {
   location ~* ^/js/ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     rewrite ^/(.*)$ /js.php?q=$1 last;
   }
@@ -435,10 +435,10 @@ location ^~ /js/ {
 ###
 location ^~ /hosting/c/server_master {
   if ($cache_uid = '') {
-    return 403;
+    return 444;
   }
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -452,10 +452,10 @@ location ^~ /hosting/c/server_master {
 ###
 location ^~ /hosting/c/server_localhost {
   if ($cache_uid = '') {
-    return 403;
+    return 444;
   }
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -467,7 +467,7 @@ location ^~ /hosting/c/server_localhost {
 ###
 location ^~ /hosting/sites {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -480,7 +480,7 @@ location ^~ /hosting/sites {
 ###
 location ^~ /hosting {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -520,7 +520,7 @@ location ^~ /admin/reports/redis {
 ###
 location ^~ /admin {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   set $nocache_details "Skip";
   try_files $uri @drupal;
@@ -552,7 +552,7 @@ location ~* ^/\w\w/civicrm {
 location ^~ /audio/download {
   location ~* ^/audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg)$ {
     if ( $is_bot ) {
-      return 403;
+      return 444;
     }
     access_log off;
     log_not_found off;
@@ -635,7 +635,7 @@ location ~* (?:cgi-bin|vti-bin) {
 ###
 location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary|flag\/flag) {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -747,7 +747,7 @@ include  <?php print $aegir_root; ?>/config/server_master/nginx/post.d/nginx_vho
 ###
 location ~* ^/sites/.*/files/private/ {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -763,7 +763,7 @@ location ~* ^/sites/.*/files/private/ {
 location ~* ^/sites/.*/private/ {
   internal;
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -776,7 +776,7 @@ location ~* ^/sites/.*/private/ {
 location ~* /files/private/ {
   internal;
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1087,7 +1087,7 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
   access_log off;
   log_not_found off;
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   try_files $uri =404;
 <?php if ($satellite_mode == 'boa'): ?>
@@ -1104,7 +1104,7 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
 ###
 location ~* /(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*) {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1117,7 +1117,7 @@ location ~* /(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*) {
 ###
 location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckeditor|tinymce|flowplayer|jwplayer|videomanager)/.*\.(?:html?|xml)$ {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1167,7 +1167,7 @@ location ~* \.xml$ {
 ###
 location ~* ^/(?:admin|user|cart|checkout|logout) {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1176,7 +1176,7 @@ location ~* ^/(?:admin|user|cart|checkout|logout) {
 }
 location ~* ^/\w\w/(?:admin|user|cart|checkout|logout) {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1189,7 +1189,7 @@ location ~* ^/\w\w/(?:admin|user|cart|checkout|logout) {
 ###
 location ~* ^/(?:.*/)?(?:node/[0-9]+/edit|node/add|comment/reply) {
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1202,10 +1202,10 @@ location ~* ^/(?:.*/)?(?:node/[0-9]+/edit|node/add|comment/reply) {
 ###
 location ~* ^/(?:.*/)?(?:node/[0-9]+/delete|approve) {
   if ($cache_uid = '') {
-    return 403;
+    return 444;
   }
   if ( $is_bot ) {
-    return 403;
+    return 444;
   }
   access_log off;
   log_not_found off;
@@ -1285,7 +1285,7 @@ error_page 405 = @drupal;
 ###
 location / {
   if ( $http_user_agent ~* wget ) {
-    return 403;
+    return 444;
   }
   try_files $uri @cache;
 }
