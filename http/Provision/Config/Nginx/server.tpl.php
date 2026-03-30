@@ -247,10 +247,9 @@ if ($nginx_has_gzip) {
 ###
 map $http_user_agent $is_crawler {
   default  '';
-  ~*ClaudeBot|openai|perplexity|bytedance|TikTok|Amazon|Pinterest|Semrush|Turnitin|HTTrack is_crawler;
-  ~*ImagesiftBot|Sogou|Barkrowler|PetalBot|Offline|Mireo|Aspiegel|SWEB|Nutch|Automatic     is_crawler;
-  ~*SiteBot|PECL|BuzzTrack|SEOkicks|MJ12|Morfeus|GSLFbot|HiScan|IbouBot|Ahrefs|PChomebot   is_crawler;
-  ~*BrokenLinkCheck|externalagent|serpstatbot|HTMLParser|DBot|Scrap|CCBot|Sistrix|Riddler  is_crawler;
+  ~*Ahrefs|Amazon|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|bytedance|CCBot|ClaudeBot|DBot|externalagent|TikTok  is_crawler;
+  ~*Go-http-client|GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|openai|PChomebot    is_crawler;
+  ~*PECL|perplexity|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|SWEB|Turnitin is_crawler;
 }
 
 ###
