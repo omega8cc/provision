@@ -409,11 +409,29 @@ location @modern_cron {
 ###
 location ^~ /search {
   location ~* ^/search {
+    if ( $block_search_no_referrer ) {
+      return 444;
+    }
     if ( $is_bot ) {
       return 444;
     }
     try_files $uri @drupal;
   }
+}
+
+###
+### DDoS protection: block full-text search without referrer
+### Deny bots on search uri.
+###
+location ~* ^/[a-z][a-z]/search {
+  if ( $block_search_no_referrer ) {
+    return 444;
+  }
+  if ( $is_bot ) {
+    return 444;
+  }
+  ### limit_req zone=search_limit burst=10 nodelay;
+  ### limit_req_status 429;
 }
 
 ###
