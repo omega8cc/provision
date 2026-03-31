@@ -95,6 +95,7 @@ if (!$satellite_mode && $server->satellite_mode) {
 
 if ($nginx_is_modern) {
   print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
+  print "  limit_req_zone  \$binary_remote_addr zone=search_limit:10m rate=3r/s;\n";
 }
 else {
   print "  limit_zone limreq \$binary_remote_addr 10m;\n";
@@ -146,7 +147,8 @@ if ($nginx_has_gzip) {
   server_names_hash_bucket_size  512;
   server_names_hash_max_size    8192;
   types_hash_bucket_size         512;
-  variables_hash_max_size       1024;
+  variables_hash_max_size       2048;
+  variables_hash_bucket_size     128;
 
  ## Timeouts
   client_body_timeout            180;
@@ -250,6 +252,34 @@ map $http_user_agent $is_crawler {
   ~*Ahrefs|Amazon|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|bytedance|CCBot|ClaudeBot|DBot|externalagent|TikTok  is_crawler;
   ~*Go-http-client|GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|openai|PChomebot    is_crawler;
   ~*PECL|perplexity|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|SWEB|Turnitin is_crawler;
+}
+
+###
+### DDoS protection: block full-text search without referrer
+### Pattern: search_api_views_fulltext param present + no referrer
+### Action: 444 (connection close, no response)
+###
+### Map 1: Detect search_api_views_fulltext in query string
+###
+map $query_string $has_fulltext_search {
+  default                         0;
+  "~*search_api_views_fulltext="  1;
+}
+###
+### Map 2: Detect empty/absent referrer
+###
+map $http_referer $has_no_referrer {
+  default  0;
+  ""       1;
+  "-"      1;
+}
+###
+### Map 3: Combine both signals → block decision
+### Only blocks when BOTH conditions are true
+###
+map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
+  default 0;
+  "11"    1;   # fulltext search=1 AND no referrer=1
 }
 
 ###
