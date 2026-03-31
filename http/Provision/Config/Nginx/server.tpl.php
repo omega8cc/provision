@@ -95,6 +95,7 @@ if (!$satellite_mode && $server->satellite_mode) {
 
 if ($nginx_is_modern) {
   print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
+  print "  limit_req_zone  \$binary_remote_addr zone=search_limit:10m rate=3r/s;\n";
 }
 else {
   print "  limit_zone limreq \$binary_remote_addr 10m;\n";
