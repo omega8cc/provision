@@ -146,7 +146,8 @@ if ($nginx_has_gzip) {
   server_names_hash_bucket_size  512;
   server_names_hash_max_size    8192;
   types_hash_bucket_size         512;
-  variables_hash_max_size       1024;
+  variables_hash_max_size       2048;
+  variables_hash_bucket_size     128;
 
  ## Timeouts
   client_body_timeout            180;
