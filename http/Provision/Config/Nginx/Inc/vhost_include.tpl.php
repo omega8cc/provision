@@ -151,10 +151,17 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 }
 
 ###
+### Deny AI crawlers.
+###
+if ($is_ai_crawler) {
+  return 410;
+}
+
+###
 ### Deny crawlers.
 ###
 if ($is_crawler) {
-  return 444;
+  return 410;
 }
 
 ###
