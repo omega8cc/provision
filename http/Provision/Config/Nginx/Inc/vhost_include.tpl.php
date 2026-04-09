@@ -151,10 +151,17 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 }
 
 ###
+### Deny AI crawlers.
+###
+if ($is_ai_crawler) {
+  return 410;
+}
+
+###
 ### Deny crawlers.
 ###
 if ($is_crawler) {
-  return 444;
+  return 410;
 }
 
 ###
@@ -296,6 +303,16 @@ location = /favicon.ico {
   log_not_found off;
   expires 30d;
   try_files /sites/$main_site_name/files/favicon.ico $uri =204;
+}
+
+###
+### Support for https://drupal.org/project/llms_txt module
+### and static file in the sites/domain/files directory.
+###
+location = /llms.txt {
+  ### access_log off; ### for now keep logging for debugging purposes by default
+  log_not_found off;
+  try_files /sites/$main_site_name/files/$host.llms.txt /sites/$main_site_name/files/llms.txt $uri @cache;
 }
 
 ###

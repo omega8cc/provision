@@ -245,7 +245,16 @@ if ($nginx_has_gzip) {
 #######################################################
 
 ###
-### Deny crawlers.
+### Identify AI crawlers.
+###
+map $http_user_agent $is_ai_crawler {
+  default  '';
+  ~*Ai2Bot|Amazon|Anthropic|Applebot-Extended|Bytespider|Claude|Cohere-AI|Deepseek|Gemini  is_ai_crawler;
+  ~*Google-Extended|GPT|HuggingFace|Meta-ExternalAgent|MistralAI|OAI|OpenAI|Perplexity|xAI is_ai_crawler;
+}
+
+###
+### Identify crawlers.
 ###
 map $http_user_agent $is_crawler {
   default  '';

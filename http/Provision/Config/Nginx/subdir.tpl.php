@@ -324,6 +324,16 @@ location ^~ /<?php print $subdir; ?> {
   }
 
   ###
+  ### Support for http://drupal.org/project/llms_txt module
+  ### and static file in the sites/domain/files directory.
+  ###
+  location = /<?php print $subdir; ?>/llms.txt {
+    ### access_log off; ### for now keep logging for debugging purposes by default
+    log_not_found off;
+    try_files /sites/$subdir_main_site_name/files/$host.llms.txt /sites/$subdir_main_site_name/files/llms.txt /sites/$host/files/llms.txt /llms.txt $uri @cache_<?php print $subdir_loc; ?>;
+  }
+
+  ###
   ### Support for http://drupal.org/project/robotstxt module
   ### and static file in the sites/domain/files directory.
   ###
