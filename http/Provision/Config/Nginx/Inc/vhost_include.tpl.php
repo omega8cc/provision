@@ -198,6 +198,13 @@ if ($ua_denied) {
 }
 
 ###
+### Detect TLS ClientHello sent to a plain HTTP port.
+###
+if ($tls_on_plain) {
+  return 400;
+}
+
+###
 ### Add recommended HTTP headers
 ###
 add_header X-Content-Type-Options "nosniff";

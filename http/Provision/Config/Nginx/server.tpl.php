@@ -356,6 +356,14 @@ map $http_user_agent $ua_denied {
 }
 
 ###
+### Detect TLS ClientHello sent to a plain HTTP port.
+###
+map $request $tls_on_plain {
+  default '';
+  ~*^\x16\x03 tls_on_plain;
+}
+
+###
 ### Live switch of $key_uri for Speed Booster cache depending on $args.
 ###
 map $request_uri $key_uri {
