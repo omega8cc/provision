@@ -193,7 +193,7 @@ if ($is_denied) {
 ###
 ### Deny false UA/bots trying known security patterns.
 ###
-if ($ua_is_denied) {
+if ($ua_denied) {
   return 444;
 }
 
