@@ -326,8 +326,8 @@ map $args $is_denied {
   ~*\.\./                                                   is_denied;
 
   # SQL injection timing/blind attacks
-  ~*waitfor[\s\+%2[bB]/\*]+delay                            is_denied;
-  ~*declare[\s\+%2[bB]/\*]+@                                is_denied;
+  ~*waitfor(%2f|%2a|[\s%2b/\*])+delay                       is_denied;
+  ~*declare(%2f|%2a|[\s%2b/\*])+@                           is_denied;
 
   # Comment-obfuscated injection (/**, used in UA and args)
   ~*/\*\*/                                                  is_denied;
