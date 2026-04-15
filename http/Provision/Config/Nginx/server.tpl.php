@@ -321,7 +321,7 @@ map $http_user_agent $deny_on_high_load {
 ###
 map $args $is_denied {
   default  '';
-  ~*delete.+from|insert.+into|select.+from|union.+select  is_denied;
+  ~*delete.+from|insert.+into|select.+from|union.+select    is_denied;
   ~*onload|\.php.+src|system\(.+|document\.cookie           is_denied;
   ~*\.\./                                                   is_denied;
 
