@@ -321,7 +321,46 @@ map $http_user_agent $deny_on_high_load {
 ###
 map $args $is_denied {
   default  '';
-  ~*delete.+from|insert.+into|select.+from|union.+select|onload|\.php.+src|system\(.+|document\.cookie|\;|\.\.\/ is_denied;
+  ~*delete.+from|insert.+into|select.+from|union.+select  is_denied;
+  ~*onload|\.php.+src|system\(.+|document\.cookie           is_denied;
+  ~*\.\./                                                   is_denied;
+
+  # SQL injection timing/blind attacks (the attack in your log)
+  ~*waitfor[\s\+%2[bB]/\*]+delay                            is_denied;
+  ~*declare[\s\+%2[bB]/\*]+@                                is_denied;
+  ~*;[\s\+%2[bB]/\*]*(waitfor|declare|set[\s\+%2[bB]/\*]+@) is_denied;
+  ~*%27[\s\+%2[bB]/\*]*\)[\s\+%2[bB]/\*]*\)                 is_denied;
+
+  # Comment-obfuscated injection (/**, used in UA and args)
+  ~*/\*\*/                                                  is_denied;
+
+  # Common blind SQLi patterns
+  ~*(benchmark|sleep|pg_sleep)\s*\(                         is_denied;
+  ~*0x[0-9a-fA-F]{4,}                                       is_denied;
+
+  # XSS
+  ~*<script|javascript:|vbscript:|data:text/html            is_denied;
+
+  # Path traversal (catches both raw and encoded)
+  ~*(\.\./|%2[eE]%2[eE]%2[fF]|%252[eE])                     is_denied;
+}
+
+###
+### Also check the UA string for injection patterns (attack may have
+### embedded the WAITFOR payload inside the User-Agent header itself).
+###
+map $http_user_agent $ua_is_denied {
+  default  '';
+  ~*/\*\*/                                                  ua_denied;
+  ~*waitfor[\s\+/\*]+delay                                  ua_denied;
+  ~*declare[\s\+/\*]+@                                      ua_denied;
+  ~*(benchmark|sleep)\s*\(                                  ua_denied;
+}
+
+# Combine args and UA denial signals
+map "${is_denied}${ua_is_denied}" $ua_is_denied {
+  default  0;
+  ~.+      1;
 }
 
 ###

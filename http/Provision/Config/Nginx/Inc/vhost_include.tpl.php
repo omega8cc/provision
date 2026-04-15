@@ -191,6 +191,13 @@ if ($is_denied) {
 }
 
 ###
+### Deny false UA/bots trying known security patterns.
+###
+if ($ua_is_denied) {
+  return 444;
+}
+
+###
 ### Add recommended HTTP headers
 ###
 add_header X-Content-Type-Options "nosniff";
