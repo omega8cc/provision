@@ -201,7 +201,7 @@ if ($ua_denied) {
 ### Detect TLS ClientHello sent to a plain HTTP port.
 ###
 if ($tls_on_plain) {
-  return 400;
+  return 444;
 }
 
 ###
