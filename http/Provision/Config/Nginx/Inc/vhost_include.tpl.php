@@ -461,6 +461,7 @@ location ~* ^/[a-z][a-z]/search {
   if ( $is_bot ) {
     return 444;
   }
+  try_files $uri @drupal;
   ### limit_req zone=search_limit burst=10 nodelay;
   ### limit_req_status 429;
 }
