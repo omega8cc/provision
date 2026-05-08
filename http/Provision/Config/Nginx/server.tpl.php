@@ -265,14 +265,15 @@ map $http_user_agent $is_crawler {
 
 ###
 ### DDoS protection: block full-text search without referrer
-### Pattern: search_api_views_fulltext param present + no referrer
+### Pattern: search_api_views_fulltext or search_api_fulltext param present + no referrer
 ### Action: 444 (connection close, no response)
 ###
-### Map 1: Detect search_api_views_fulltext in query string
+### Map 1: Detect search_api_views_fulltext and search_api_fulltext in query string
 ###
 map $query_string $has_fulltext_search {
   default                         0;
   "~*search_api_views_fulltext="  1;
+  "~*search_api_fulltext="        1;
 }
 ###
 ### Map 2: Detect empty/absent referrer
