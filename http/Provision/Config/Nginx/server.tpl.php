@@ -335,10 +335,10 @@ map $args $is_denied {
   ~*(?:benchmark|sleep|pg_sleep)\s*\(                                              is_denied;
 
   # Hex literals / require = or SQL keyword immediately before 0x within same value
-  ~*(?:^|&)[^=&]+=[^&]*(?:=|%3[dD]|char|cast|convert)(?:\s|%20|%2[bB])*0x[0-9a-fA-F]{4,} is_denied;
+  "~*(?:^|&)[^=&]+=[^&]*(?:=|%3[dD]|char|cast|convert)(?:\\s|%20|%2[bB])*0x[0-9a-fA-F]{4,}" is_denied;
 
   # Comment-obfuscated SQLi / keyword must appear before /**/ within same value
-  ~*(?:^|&)[^=&]+=[^&]*(?:union|select|where|from|and|or)[^&]{0,40}/\*\*/          is_denied;
+  "~*(?:^|&)[^=&]+=[^&]*(?:union|select|where|from|and|or)[^&]{0,40}/\\*\\*/"      is_denied;
 
   # XSS / raw and percent-encoded
   ~*<script                                                                        is_denied;
@@ -356,7 +356,7 @@ map $args $is_denied {
   ~*system(?:\s|%20|%2[bB])*(?:\(|%28)                                             is_denied;
 
   # Path traversal / raw and encoded, anchored to avoid base64 false positives
-  ~*(?:^|[^A-Za-z0-9])(?:\.\./|\.\.\\)                                             is_denied;
+  "~*(?:^|[^A-Za-z0-9])\\.\\.\/"                                                   is_denied;
   ~*%2[eE]%2[eE](?:%2[fF]|%5[cC]|/)                                                is_denied;
   ~*%252[eE]%252[eE](?:%252[fF]|%255[cC]|%2[fF]|/)                                 is_denied;
 }
