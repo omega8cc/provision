@@ -321,27 +321,44 @@ map $http_user_agent $deny_on_high_load {
 ### Deny listed requests for security reasons.
 ###
 map $args $is_denied {
-  default  '';
-  ~*delete.+from|insert.+into|select.+from|union.+select    is_denied;
-  ~*onload|\.php.+src|system\(.+|document\.cookie           is_denied;
-  ~*\.\./                                                   is_denied;
+  default '';
 
-  # SQL injection timing/blind attacks
-  ~*waitfor(%2f|%2a|[\s%2b/\*])+delay                       is_denied;
-  ~*declare(%2f|%2a|[\s%2b/\*])+@                           is_denied;
+  # SQL injection / value-scoped, whitespace variants without lazy quantifiers
+  ~*(?:^|&)[^=&]+=[^&]*(?:union(?:\s|%20|%2[bB]|/\*\*/)+select)                    is_denied;
+  ~*(?:^|&)[^=&]+=[^&]*(?:select(?:\s|%20|%2[bB]|/\*\*/)+[^&]+(?:from|where))      is_denied;
+  ~*(?:^|&)[^=&]+=[^&]*(?:insert(?:\s|%20|%2[bB]|/\*\*/)+into)                     is_denied;
+  ~*(?:^|&)[^=&]+=[^&]*(?:delete(?:\s|%20|%2[bB]|/\*\*/)+from)                     is_denied;
 
-  # Comment-obfuscated injection (/**, used in UA and args)
-  ~*/\*\*/                                                  is_denied;
+  # SQL timing/blind attacks
+  ~*waitfor(?:\s|%20|%2[bB]|/\*\*/)+delay                                          is_denied;
+  ~*declare(?:\s|%20|%2[bB]|/\*\*/)+@                                              is_denied;
+  ~*(?:benchmark|sleep|pg_sleep)\s*\(                                              is_denied;
 
-  # Common blind SQLi patterns
-  ~*(benchmark|sleep|pg_sleep)\s*\(                         is_denied;
-  "~*0x[0-9a-fA-F]{4,}"                                     is_denied;
+  # Hex literals / require = or SQL keyword immediately before 0x within same value
+  ~*(?:^|&)[^=&]+=[^&]*(?:=|%3[dD]|char|cast|convert)(?:\s|%20|%2[bB])*0x[0-9a-fA-F]{4,} is_denied;
 
-  # XSS
-  ~*<script|javascript:|vbscript:|data:text/html            is_denied;
+  # Comment-obfuscated SQLi / keyword must appear before /**/ within same value
+  ~*(?:^|&)[^=&]+=[^&]*(?:union|select|where|from|and|or)[^&]{0,40}/\*\*/          is_denied;
 
-  # Path traversal (catches both raw and encoded)
-  ~*(\.\./|%2[eE]%2[eE]%2[fF]|%252[eE])                     is_denied;
+  # XSS / raw and percent-encoded
+  ~*<script                                                                        is_denied;
+  ~*%3[cC]script                                                                   is_denied;
+  ~*javascript(?::|%3[aA])                                                         is_denied;
+  ~*vbscript(?::|%3[aA])                                                           is_denied;
+  ~*data:text/html                                                                 is_denied;
+  ~*onload(?:\s|%20)*(?:=|%3[dD])                                                  is_denied;
+  ~*document\.cookie                                                               is_denied;
+
+  # PHP source probes / scoped within single param value
+  ~*\.php[^&]*(?:src|source|highlight)                                             is_denied;
+
+  # Shell injection
+  ~*system(?:\s|%20|%2[bB])*(?:\(|%28)                                             is_denied;
+
+  # Path traversal / raw and encoded, anchored to avoid base64 false positives
+  ~*(?:^|[^A-Za-z0-9])(?:\.\./|\.\.\\)                                             is_denied;
+  ~*%2[eE]%2[eE](?:%2[fF]|%5[cC]|/)                                                is_denied;
+  ~*%252[eE]%252[eE](?:%252[fF]|%255[cC]|%2[fF]|/)                                 is_denied;
 }
 
 ###
@@ -350,10 +367,10 @@ map $args $is_denied {
 ###
 map $http_user_agent $ua_denied {
   default  '';
-  ~*/\*\*/                                                  ua_denied;
-  ~*waitfor([/\*]|\s\+)+delay                               ua_denied;
-  ~*declare([/\*]|\s\+)+@                                   ua_denied;
-  ~*(benchmark|sleep)\s*\(                                  ua_denied;
+  ~*/\*\*/                           ua_denied;
+  ~*waitfor([/\*]|\s\+)+delay        ua_denied;
+  ~*declare([/\*]|\s\+)+@            ua_denied;
+  ~*(benchmark|sleep|pg_sleep)\s*\(  ua_denied;
 }
 
 ###
