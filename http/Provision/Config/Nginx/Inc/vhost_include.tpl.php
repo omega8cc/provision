@@ -1318,7 +1318,7 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_pass_header X-Accel-Redirect;
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
-  fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
+  fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
   expires epoch;
 }
 
@@ -1529,7 +1529,7 @@ location = /index.php {
   fastcgi_pass_header X-Accel-Redirect;
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
-  fastcgi_cache_use_stale error http_500 http_503 invalid_header timeout updating;
+  fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
 }
 
 ###
