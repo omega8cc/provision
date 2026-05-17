@@ -439,11 +439,11 @@ location @modern_cron {
 ### Deny bots on search uri.
 ###
 ### Three guards (in order):
-###   1. $block_search_no_referrer - Tier 1: blocks bots with no referrer
+###   1. $block_search_no_referrer — Tier 1: blocks bots with no referrer
 ###      sending known fulltext/facet search params (see server_tpl maps 1-3).
-###   2. $has_excessive_facets - Tier 2: blocks bots that fake a self-referrer
+###   2. $has_excessive_facets    — Tier 2: blocks bots that fake a self-referrer
 ###      but still carry 6+ URL-encoded facet params (f[5]+).
-###   3. limit_req (two zones) - Tier 3: per-IP burst cap (search_limit) and
+###   3. limit_req (two zones)    — Tier 3: per-IP burst cap (search_limit) and
 ###      per-vhost global cap (search_flood) for distributed one-IP-per-request
 ###      floods that slip through Tiers 1 and 2.
 ###
@@ -479,6 +479,40 @@ location ~* ^/[a-z][a-z]/search {
     return 444;
   }
   limit_req zone=search_limit burst=5  nodelay;
+  limit_req zone=search_flood burst=40 nodelay;
+  limit_req_status 444;
+  try_files $uri @drupal;
+}
+
+###
+### Block search-destination abuse via Drupal's login redirect mechanism.
+###
+### Bots send /user/login?destination=search%2F...%3Ff%5BN%5D=im_taxonomy_vid...
+### to bypass all /search location guards (those guards are never evaluated when
+### the request path is /user/login).  The three tiers mirror /search exactly:
+###
+###   1. $block_login_search_destination — Map 5+2: search payload in destination
+###      param AND no referrer → definite bot (no-referer tier, Maps 5+2+6).
+###   2. $has_excessive_facets           — Map 4: 6+ facets encoded inside the
+###      destination value → self-referer bot tier.
+###   3. limit_req search_flood          — per-vhost global cap; catches the
+###      remaining self-referer / few-facet distributed bots by aggregate rate.
+###
+### Note: $is_bot check is intentionally omitted — bots probing /user/login
+### exclusively use modern, realistic UA strings.  The rate-limit zone provides
+### the equivalent protection for that tier.
+###
+### set $nocache_details "Skip" bypasses Speed Booster so the login form is
+### always rendered fresh (consistent with how /admin is handled).
+###
+location ^~ /user/login {
+  if ( $block_login_search_destination ) {
+    return 444;
+  }
+  if ( $has_excessive_facets ) {
+    return 444;
+  }
+  set $nocache_details "Skip";
   limit_req zone=search_flood burst=40 nodelay;
   limit_req_status 444;
   try_files $uri @drupal;
