@@ -278,7 +278,7 @@ map $http_user_agent $is_crawler {
 ###   Tier 2 (Map 4):    blocks bots that add a fake self-referrer to bypass
 ###                      Tier 1 but still carry bot-characteristic facet payloads.
 ###
-### Tier 1 - Map 1: Detect search_api / apachesolr facet params in query string
+### Tier 1 — Map 1: Detect search_api / apachesolr facet params in query string
 ###
 map $query_string $has_fulltext_search {
   default                         0;
@@ -287,7 +287,7 @@ map $query_string $has_fulltext_search {
   "~*im_taxonomy_vid"             1;
 }
 ###
-### Tier 1 - Map 2: Detect empty/absent referrer
+### Tier 1 — Map 2: Detect empty/absent referrer
 ###
 map $http_referer $has_no_referrer {
   default  0;
@@ -295,7 +295,7 @@ map $http_referer $has_no_referrer {
   "-"      1;
 }
 ###
-### Tier 1 - Map 3: Combine both signals → block when fulltext params AND no referrer
+### Tier 1 — Map 3: Combine both signals → block when fulltext params AND no referrer
 ###
 map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
   default 0;
@@ -303,7 +303,7 @@ map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
 }
 
 ###
-### Tier 2 - Map 4: Detect excessive facet count in the query string.
+### Tier 2 — Map 4: Detect excessive facet count in the query string.
 ###
 ### Bots sending a fake self-referrer (e.g. Referer: https://www.example.com)
 ### bypass the no-referrer check above, but still generate bot-characteristic
@@ -322,6 +322,34 @@ map $query_string $has_excessive_facets {
   default  0;
   ~*f%5[bB][5-9]%5[dD]       1;   # f[5]–f[9]   = 6–10 applied facets
   ~*f%5[bB][1-9][0-9]%5[dD]  1;   # f[10]–f[99] = 11+ applied facets
+}
+
+###
+### Tier 2 — Map 5: Detect search payload embedded in a /user/login destination.
+###
+### Bots use /user/login?destination=search%2F... to route around the location-
+### level /search protection — Nginx never evaluates the search guards because
+### the request path is /user/login, not /search.  The destination query param
+### contains a URL-encoded search URL whose components (apachesolr_search,
+### search_api, im_taxonomy_vid) appear verbatim in $query_string.
+###
+map $query_string $has_search_in_destination {
+  default  0;
+  ~*destination=.*apachesolr_search  1;
+  ~*destination=.*search_api         1;
+  ~*destination=.*im_taxonomy_vid    1;
+}
+
+###
+### Tier 2 — Map 6: Block login-destination abuse when no referrer is present.
+### Combines Map 5 with $has_no_referrer (Map 2).
+### Self-referer bots that clear this gate are caught downstream by
+### $has_excessive_facets and the search_flood rate-limit zone applied
+### in the /user/login location block.
+###
+map $has_search_in_destination$has_no_referrer $block_login_search_destination {
+  default  0;
+  "11"     1;   # search in destination + no referrer → automated bot
 }
 
 ###
