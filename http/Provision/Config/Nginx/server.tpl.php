@@ -96,6 +96,13 @@ if (!$satellite_mode && $server->satellite_mode) {
 if ($nginx_is_modern) {
   print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
   print "  limit_req_zone  \$binary_remote_addr zone=search_limit:10m rate=3r/s;\n";
+  # Per-vhost global search rate cap.
+  # Keyed on $host so the ceiling applies across ALL source IPs collectively.
+  # This is the primary defence against distributed one-request-per-IP search
+  # floods that never exceed per-IP limits but saturate backend Solr/PHP-FPM.
+  # 20 req/s with burst=40 allows normal interactive use while capping botnet
+  # throughput. Tune upward for high-traffic public search pages.
+  print "  limit_req_zone  \$host               zone=search_flood:1m  rate=20r/s;\n";
 }
 else {
   print "  limit_zone limreq \$binary_remote_addr 10m;\n";
@@ -264,11 +271,14 @@ map $http_user_agent $is_crawler {
 }
 
 ###
-### DDoS protection: block full-text search without referrer
-### Pattern: search_api_views_fulltext or search_api_fulltext or im_taxonomy_vid param present + no referrer
-### Action: 444 (connection close, no response)
+### DDoS protection: block full-text search without referrer.
 ###
-### Map 1: Detect search_api_views_fulltext and search_api_fulltext and im_taxonomy_vid in query string
+### Two-tier approach:
+###   Tier 1 (Maps 1-3): blocks bots that send no referrer at all.
+###   Tier 2 (Map 4):    blocks bots that add a fake self-referrer to bypass
+###                      Tier 1 but still carry bot-characteristic facet payloads.
+###
+### Tier 1 - Map 1: Detect search_api / apachesolr facet params in query string
 ###
 map $query_string $has_fulltext_search {
   default                         0;
@@ -277,7 +287,7 @@ map $query_string $has_fulltext_search {
   "~*im_taxonomy_vid"             1;
 }
 ###
-### Map 2: Detect empty/absent referrer
+### Tier 1 - Map 2: Detect empty/absent referrer
 ###
 map $http_referer $has_no_referrer {
   default  0;
@@ -285,12 +295,33 @@ map $http_referer $has_no_referrer {
   "-"      1;
 }
 ###
-### Map 3: Combine both signals → block decision
-### Only blocks when BOTH conditions are true
+### Tier 1 - Map 3: Combine both signals → block when fulltext params AND no referrer
 ###
 map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
   default 0;
   "11"    1;   # fulltext search=1 AND no referrer=1
+}
+
+###
+### Tier 2 - Map 4: Detect excessive facet count in the query string.
+###
+### Bots sending a fake self-referrer (e.g. Referer: https://www.example.com)
+### bypass the no-referrer check above, but still generate bot-characteristic
+### URL payloads with many applied facets. The query string uses URL-encoded
+### bracket notation: f%5BN%5D=value (decoded: f[N]=value).
+###
+### Threshold: f[5] or higher = 6th facet and above = almost certainly automated.
+### Real browser users navigating a faceted search UI rarely apply more than
+### 4-5 concurrent facets in a single URL. Bots systematically enumerate
+### combinations and routinely send 6-10+ facets per request.
+###
+### Tune upward (e.g. f[7]+) only if your site's own UI generates deep URLs
+### with 6+ pre-selected facets for legitimate share/bookmark links.
+###
+map $query_string $has_excessive_facets {
+  default  0;
+  ~*f%5[bB][5-9]%5[dD]       1;   # f[5]–f[9]   = 6–10 applied facets
+  ~*f%5[bB][1-9][0-9]%5[dD]  1;   # f[10]–f[99] = 11+ applied facets
 }
 
 ###

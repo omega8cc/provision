@@ -438,32 +438,50 @@ location @modern_cron {
 ### Send search to php-fpm early so searching for node.js will work.
 ### Deny bots on search uri.
 ###
+### Three guards (in order):
+###   1. $block_search_no_referrer - Tier 1: blocks bots with no referrer
+###      sending known fulltext/facet search params (see server_tpl maps 1-3).
+###   2. $has_excessive_facets - Tier 2: blocks bots that fake a self-referrer
+###      but still carry 6+ URL-encoded facet params (f[5]+).
+###   3. limit_req (two zones) - Tier 3: per-IP burst cap (search_limit) and
+###      per-vhost global cap (search_flood) for distributed one-IP-per-request
+###      floods that slip through Tiers 1 and 2.
+###
 location ^~ /search {
   location ~* ^/search {
     if ( $block_search_no_referrer ) {
       return 444;
     }
+    if ( $has_excessive_facets ) {
+      return 444;
+    }
     if ( $is_bot ) {
       return 444;
     }
+    limit_req zone=search_limit burst=5  nodelay;
+    limit_req zone=search_flood burst=40 nodelay;
+    limit_req_status 444;
     try_files $uri @drupal;
   }
 }
 
 ###
-### DDoS protection: block full-text search without referrer
-### Deny bots on search uri.
+### Same three-tier search protection for language-prefixed paths (/xx/search).
 ###
 location ~* ^/[a-z][a-z]/search {
   if ( $block_search_no_referrer ) {
     return 444;
   }
+  if ( $has_excessive_facets ) {
+    return 444;
+  }
   if ( $is_bot ) {
     return 444;
   }
+  limit_req zone=search_limit burst=5  nodelay;
+  limit_req zone=search_flood burst=40 nodelay;
+  limit_req_status 444;
   try_files $uri @drupal;
-  ### limit_req zone=search_limit burst=10 nodelay;
-  ### limit_req_status 429;
 }
 
 ###
