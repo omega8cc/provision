@@ -452,6 +452,9 @@ location ^~ /search {
     if ( $block_search_no_referrer ) {
       return 444;
     }
+    if ( $block_search_root_referer ) {
+      return 444;
+    }
     if ( $has_excessive_facets ) {
       return 444;
     }
@@ -470,6 +473,9 @@ location ^~ /search {
 ###
 location ~* ^/[a-z][a-z]/search {
   if ( $block_search_no_referrer ) {
+    return 444;
+  }
+  if ( $block_search_root_referer ) {
     return 444;
   }
   if ( $has_excessive_facets ) {
@@ -507,6 +513,9 @@ location ~* ^/[a-z][a-z]/search {
 ###
 location ^~ /user/login {
   if ( $block_login_search_destination ) {
+    return 444;
+  }
+  if ( $block_search_root_referer ) {
     return 444;
   }
   if ( $has_excessive_facets ) {

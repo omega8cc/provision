@@ -307,21 +307,50 @@ map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
 ###
 ### Bots sending a fake self-referrer (e.g. Referer: https://www.example.com)
 ### bypass the no-referrer check above, but still generate bot-characteristic
-### URL payloads with many applied facets. The query string uses URL-encoded
-### bracket notation: f%5BN%5D=value (decoded: f[N]=value).
+### URL payloads with many applied facets.
 ###
-### Threshold: f[5] or higher = 6th facet and above = almost certainly automated.
-### Real browser users navigating a faceted search UI rarely apply more than
-### 4-5 concurrent facets in a single URL. Bots systematically enumerate
-### combinations and routinely send 6-10+ facets per request.
+### Two encoding forms must both be matched:
+###   Encoded:   f%5BN%5D=value  (URL-encoded brackets, produced by most bots)
+###   Unencoded: f[N]=value      (literal brackets, valid per RFC 3986 §3.4,
+###                               produced by a distinct bot subgroup that
+###                               deliberately avoids the encoded-form regex)
 ###
-### Tune upward (e.g. f[7]+) only if your site's own UI generates deep URLs
-### with 6+ pre-selected facets for legitimate share/bookmark links.
+### Threshold: f[5]+ = 6th facet = highly likely automated. Real browser users
+### navigating a faceted search UI rarely exceed 4-5 concurrent facets.
 ###
 map $query_string $has_excessive_facets {
   default  0;
-  ~*f%5[bB][5-9]%5[dD]       1;   # f[5]–f[9]   = 6–10 applied facets
-  ~*f%5[bB][1-9][0-9]%5[dD]  1;   # f[10]–f[99] = 11+ applied facets
+  ~*f%5[bB][5-9]%5[dD]       1;   # encoded   f[5]–f[9]   (6–10 facets)
+  ~*f%5[bB][1-9][0-9]%5[dD]  1;   # encoded   f[10]–f[99] (11+ facets)
+  ~*f\[[5-9]\]                1;   # unencoded f[5]–f[9]   (6–10 facets)
+  ~*f\[[1-9][0-9]\]           1;   # unencoded f[10]–f[99] (11+ facets)
+}
+
+###
+### Tier 2 — Map 7: Detect a bare-root Referer (scheme + host, no path).
+###
+### A genuine user browsing a faceted search page arrives from a specific prior
+### page on the site, so their Referer carries a full path.  A bare root Referer
+### (https://www.example.com with no /path) combined with multi-facet search
+### params is a bot fingerprint: the bot hardcodes the site root as fake Referer
+### but does not simulate the actual navigation that would have produced it.
+###
+map $http_referer $has_root_only_referer {
+  default  0;
+  ~^https?://[^/]+/?$  1;
+}
+
+###
+### Tier 2 — Map 8: Block 5-facet threshold-calibration bots.
+###
+### A second bot sub-group deliberately sends exactly 5 facets (f[0]–f[4],
+### max index 4) to stay just under the f[5]+ threshold in Map 4, combined
+### with a bare-root Referer to pass the no-referrer gate in Map 3.
+### Blocking on: fulltext search params + root-only Referer.
+###
+map $has_fulltext_search$has_root_only_referer $block_search_root_referer {
+  default  0;
+  "11"     1;   # fulltext search params + bare-root Referer → bot
 }
 
 ###
