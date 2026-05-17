@@ -399,6 +399,38 @@ map $http_user_agent $is_bot {
 }
 
 ###
+### Detect stale Chrome UA in a search context.
+###
+### Chrome releases every ~4 weeks and auto-updates aggressively on all
+### platforms.  By May 2026, Chrome versions below ~124 are more than 12
+### months old; genuine consumer installations at those versions are extremely
+### rare.  Bots that fake a "moderately outdated but not obviously fake" Chrome
+### UA rely on this blind spot — they avoid the obviously-bogus Opera/8 or
+### MSIE/6 that trigger $is_bot, but their UA is still detectably stale.
+###
+### Regex covers Chrome/100–123 (major version 100 through 123):
+###   1([01][0-9]|2[0-3])  →  100–119 | 120–123
+###
+### Maintenance: review this threshold when the current Chrome major version
+### advances past ~148 (i.e. when Chrome/124 itself becomes > 12 months old).
+### Update the upper bound of the character class accordingly.
+###
+map $http_user_agent $is_stale_chrome {
+  default  0;
+  ~*Chrome/1([01][0-9]|2[0-3])\.  1;   # Chrome/100–123: > 12 months stale
+}
+
+###
+### Combined: stale Chrome UA + fulltext/facet search params = bot on search path.
+### Fires only in search location blocks where $has_fulltext_search is also 1,
+### avoiding any impact on non-search requests from the same UA class.
+###
+map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
+  default  0;
+  "11"     1;
+}
+
+###
 ### Deny almost all crawlers under high load.
 ###
 map $http_user_agent $deny_on_high_load {
