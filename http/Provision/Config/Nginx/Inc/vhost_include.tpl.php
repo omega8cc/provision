@@ -461,6 +461,9 @@ location ^~ /search {
     if ( $block_stale_chrome_search ) {
       return 444;
     }
+    if ( $is_catalina_stale_chrome ) {
+      return 444;
+    }
     if ( $is_bot ) {
       return 444;
     }
@@ -485,6 +488,9 @@ location ~* ^/[a-z][a-z]/search {
     return 444;
   }
   if ( $block_stale_chrome_search ) {
+    return 444;
+  }
+  if ( $is_catalina_stale_chrome ) {
     return 444;
   }
   if ( $is_bot ) {
