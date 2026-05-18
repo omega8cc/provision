@@ -417,7 +417,11 @@ map $http_user_agent $is_bot {
 ###
 map $http_user_agent $is_stale_chrome {
   default  0;
-  ~*Chrome/1([01][0-9]|2[0-3])\.  1;   # Chrome/100–123: > 12 months stale
+  ~*Chrome/1([0-2][0-9]|3[01])\.  1;   # Chrome/100–131: > 12 months stale
+  # [0-2][0-9] → 100–129 | 3[01] → 130–131
+  # Chrome/131 released Nov 2024; by May 2026 it is ~18 months old.
+  # Maintenance: when Chrome/132 exceeds 12 months (≈ Feb 2027),
+  # widen to 3[0-2] and update this comment.
 }
 
 ###
@@ -428,6 +432,20 @@ map $http_user_agent $is_stale_chrome {
 map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
   default  0;
   "11"     1;
+}
+
+###
+### Standalone: macOS Catalina (10.15.7, EOL Nov 2022) + stale Chrome.
+### All confirmed Solr search-amplification bots observed May 2026 use this exact
+### combination — no legitimate user in 2026 runs Catalina + Chrome ≤ 131.
+### Applied directly in the /search location blocks so no dependency on
+### $has_fulltext_search; the search location scope limits false-positive risk.
+###
+map $http_user_agent $is_catalina_stale_chrome {
+  default  0;
+  "~*Mac OS X 10_15_7.*Chrome/1([0-2][0-9]|3[01])\."  1;
+  # Regex: macOS 10.15.7 (Catalina) + Chrome/100–131
+  # Maintenance: widen Chrome range alongside $is_stale_chrome as versions age.
 }
 
 ###
