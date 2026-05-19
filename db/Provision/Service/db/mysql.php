@@ -179,10 +179,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $hosts_result = $this->query("SELECT host FROM mysql.user WHERE user = '%s'", $username);
 
     if (!$hosts_result) {
-      // User does not exist
-      //error_log("User `$username` does not exist.");
-      drush_log(dt("REVOKE/0: This user does not exist: @var", array('@var' => $username)), 'warning');
-      //return false;
+      // User does not exist, nothing to clean up.
+      drush_log(dt("REVOKE/0: User does not exist, skipping cleanup: @var", array('@var' => $username)), 'notice');
+      return $success;
     }
 
     $success = true;
@@ -284,6 +283,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     // Handle desired hosts separately if necessary
     foreach ($desired_hosts as $desired_host) {
+      // Check if user actually exists for this host before attempting REVOKE/DROP.
+      // If it doesn't exist (e.g. interrupted previous cleanup), skip silently to
+      // avoid spurious warnings that would mark the task as HOSTING_TASK_WARNING.
+      $user_exists_result = $this->query(
+        "SELECT 1 FROM mysql.user WHERE User = '%s' AND Host = '%s'",
+        $username,
+        $desired_host
+      );
+      if (!$user_exists_result || !$user_exists_result->fetch()) {
+        drush_log(dt("REVOKE/2: User @var not found for host @host, skipping.", array('@var' => $username, '@host' => $desired_host)), 'notice');
+        continue;
+      }
+
       // Optionally revoke undesired privileges
       $revoke_desired_query = sprintf(
         "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
@@ -293,7 +305,6 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       );
       $revoke_desired = $this->query($revoke_desired_query);
       if (!$revoke_desired) {
-        //error_log("Failed to revoke privileges for user `$username`@`$desired_host`.");
         drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
       }
       $success = $success && $revoke_desired;
