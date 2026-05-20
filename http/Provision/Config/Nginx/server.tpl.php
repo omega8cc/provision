@@ -331,13 +331,30 @@ map $query_string $has_excessive_facets {
 ###
 ### A genuine user browsing a faceted search page arrives from a specific prior
 ### page on the site, so their Referer carries a full path.  A bare root Referer
-### (https://www.example.com with no /path) combined with multi-facet search
-### params is a bot fingerprint: the bot hardcodes the site root as fake Referer
-### but does not simulate the actual navigation that would have produced it.
+### (https://www.example.com with no /path) combined with facet search params is
+### a bot fingerprint: the bot hardcodes the site root as fake Referer but does
+### not simulate the actual navigation that would have produced it.
 ###
 map $http_referer $has_root_only_referer {
   default  0;
   ~^https?://[^/]+/?$  1;
+}
+
+###
+### Tier 2 — Map 7b: Detect presence of any facet param (f[0]+).
+###
+### Required to distinguish bot payloads (facets + root Referer) from legitimate
+### homepage search form submissions (no facets, bare-root Referer).  Without
+### this guard, a user submitting the plain search form from the homepage sends
+### Referer: https://example.com/ which is indistinguishable from a bot Referer
+### at the Map 7 level alone.
+###
+map $query_string $has_any_facet {
+  default  0;
+  ~*f%5[bB][0-9]%5[dD]       1;   # encoded   f[0]–f[9]   (1–10 facets)
+  ~*f%5[bB][1-9][0-9]%5[dD]  1;   # encoded   f[10]–f[99] (11+ facets)
+  ~*f\[[0-9]\]                1;   # unencoded f[0]–f[9]
+  ~*f\[[1-9][0-9]\]           1;   # unencoded f[10]–f[99]
 }
 
 ###
@@ -346,11 +363,17 @@ map $http_referer $has_root_only_referer {
 ### A second bot sub-group deliberately sends exactly 5 facets (f[0]–f[4],
 ### max index 4) to stay just under the f[5]+ threshold in Map 4, combined
 ### with a bare-root Referer to pass the no-referrer gate in Map 3.
-### Blocking on: fulltext search params + root-only Referer.
 ###
-map $has_fulltext_search$has_root_only_referer $block_search_root_referer {
+### Requires all three signals: fulltext search params + bare-root Referer +
+### at least one facet param (Map 7b).  Without the facet requirement, legitimate
+### users submitting the plain search form from the homepage are falsely blocked
+### because their browser sends Referer: https://example.com/ (bare root), which
+### is valid same-site navigation but indistinguishable from a bot Referer at the
+### Map 7 level alone.
+###
+map $has_fulltext_search$has_root_only_referer$has_any_facet $block_search_root_referer {
   default  0;
-  "11"     1;   # fulltext search params + bare-root Referer → bot
+  "111"    1;   # fulltext + root Referer + facet present → bot
 }
 
 ###
