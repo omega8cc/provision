@@ -270,7 +270,12 @@ function drush_provision_drupal_post_provision_deploy() {
           $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
           // Call The Drush updatedb Command with Site-Local Drush
           drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . $dnameten . ' updatedb -y');
+          // SECURITY: $dnameten derives from d()->name (Drush alias name),
+          // which is not validated against shell-unsafe characters at the
+          // Hostmaster UI layer. Escape before shell interpolation.
+          // (string) cast guards against PHP 8.1+ null-to-escapeshellarg
+          // deprecation if preg_replace() ever returns null upstream.
+          $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' updatedb -y');
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
             if (!$success) { // Log the entire error as a notice.
