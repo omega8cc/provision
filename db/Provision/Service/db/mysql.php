@@ -194,20 +194,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         continue;
       }
 
-      // Revoke all privileges for the user@host
-      $revoke_query = sprintf(
-        "REVOKE ALL PRIVILEGES, GRANT OPTION FROM `%s`@`%s`",
-        $username,
-        $host
-      );
-      $revoke_success = $this->query($revoke_query);
-      if (!$revoke_success) {
-        //error_log("Failed to revoke privileges for user `$username`@`$host`.");
-        drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
-      }
-      $success = $success && $revoke_success;
-
-      // Check if any privileges remain
+      // Use SHOW GRANTS as the single source of truth for both the REVOKE and
+      // DROP decisions. MySQL 8.0+ returns ERROR 1141 when revoking from a user
+      // that has no privileges, so we must verify grants exist before REVOKE.
+      // This also eliminates the duplicate SHOW GRANTS call that was previously
+      // run after the REVOKE to decide whether to DROP.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
       $grant_found = false;
 
@@ -215,14 +206,32 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         while ($grant = $grants_result->fetch()) {
           $grant_statement = array_pop($grant);
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
-            // Real grant found; do not drop the user
             $grant_found = true;
             break;
           }
         }
       }
-      // Drop the user@host if no real grants are found
-      if (!$grant_found) {
+
+      // Only REVOKE if the user actually holds real grants.
+      // Track whether REVOKE succeeded so the DROP decision is correct.
+      $should_drop = !$grant_found;
+      if ($grant_found) {
+        $revoke_query = sprintf(
+          "REVOKE ALL PRIVILEGES, GRANT OPTION FROM `%s`@`%s`",
+          $username,
+          $host
+        );
+        $revoke_success = $this->query($revoke_query);
+        if (!$revoke_success) {
+          drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
+        }
+        $success = $success && $revoke_success;
+        // Drop only if REVOKE succeeded; user now holds only GRANT USAGE.
+        $should_drop = (bool) $revoke_success;
+      }
+
+      // Drop the user@host if no real grants remain.
+      if ($should_drop) {
         // Support for ProxySQL integration
         if ($name && $this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
@@ -296,33 +305,46 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         continue;
       }
 
-      // Optionally revoke undesired privileges
-      $revoke_desired_query = sprintf(
-        "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
-        $name,
-        $username,
-        $desired_host
-      );
-      $revoke_desired = $this->query($revoke_desired_query);
-      if (!$revoke_desired) {
-        drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
-      }
-      $success = $success && $revoke_desired;
-
-      // Optionally drop the user@desired_host if no grants are present
+      // Use SHOW GRANTS as the single source of truth for both the REVOKE guard
+      // and the DROP decision. mysql.db is not populated in MySQL/Percona 8.0+
+      // so querying it would always return empty, silently skipping REVOKE even
+      // when a grant exists. SHOW GRANTS works correctly on all supported versions.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
+      $grant_on_db = false;
       $grant_found = false;
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
           $grant_statement = array_pop($grant);
+          // Check for a grant on this specific database.
+          if (preg_match("/^GRANT .+ ON `" . preg_quote($name, '/') . "`\.\*/", $grant_statement)) {
+            $grant_on_db = true;
+          }
+          // Check for any real grant beyond GRANT USAGE (used for DROP decision).
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
             $grant_found = true;
-            break;
           }
         }
       }
 
+      // Only REVOKE if a grant on this specific database was confirmed above.
+      // Skipping silently avoids MySQL 1141 when the user exists globally but
+      // holds no grant on this database (e.g. during migrate cleanup).
+      if ($grant_on_db) {
+        $revoke_desired_query = sprintf(
+          "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
+          $name,
+          $username,
+          $desired_host
+        );
+        $revoke_desired = $this->query($revoke_desired_query);
+        if (!$revoke_desired) {
+          drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
+        }
+        $success = $success && $revoke_desired;
+      }
+
+      // Drop the user@desired_host if no real grants remain.
       if (!$grant_found) {
         $drop_desired_query = sprintf(
           "DROP USER `%s`@`%s`",
@@ -331,16 +353,17 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         );
         $drop_desired = $this->query($drop_desired_query);
         if (!$drop_desired) {
-          //error_log("Failed to drop user `$username`@`$desired_host`.");
           drush_log(dt("DROP/2: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
         $success = $success && $drop_desired;
       }
     }
 
-    // Optionally, flush privileges to ensure changes take effect immediately
-    $flush_success = $this->query("FLUSH PRIVILEGES");
-    $success = $success && $flush_success;
+    // FLUSH PRIVILEGES is a no-op in MySQL/Percona 8.0+ because DCL statements
+    // (GRANT, REVOKE, CREATE USER, DROP USER) automatically update the privilege
+    // cache. Retained for MySQL 5.7 compatibility. Not coupled to $success since
+    // a flush failure does not indicate a real privilege management problem.
+    $this->query("FLUSH PRIVILEGES");
 
     return $success;
   }
@@ -646,15 +669,27 @@ port=%s
     // webserver.
     umask(0077);
 
-    // If a database uses Global Transaction IDs (GTIDs), information about this is written to the dump
-    // file by default.  Trying to import such a dump during a clone or migrate will fail.  So use the
-    // '--set-gtid-purged=OFF' option to suppress the restoration of GTIDs.  GTIDs were added in MySQL version 5.6
+    // Determine whether to suppress GTID restore information in the dump.
+    // MySQL/Percona 8.0+ commonly runs with GTIDs enabled; importing a dump
+    // that contains GTID information will fail unless --set-gtid-purged=OFF
+    // is passed. Auto-detect from the server rather than relying on a manual
+    // drush option, while still allowing explicit override via that option.
     if (drush_get_option('provision_mysqldump_suppress_gtid_restore', FALSE)) {
+      // Explicit override set: always suppress GTID restore information.
       $gtid_option = '--set-gtid-purged=OFF';
-    } // if
+    }
     else {
+      // Auto-detect: query the server's gtid_mode and suppress if GTIDs are on.
       $gtid_option = '';
-    } // else
+      $gtid_result = $this->query("SHOW VARIABLES LIKE 'gtid_mode'");
+      if ($gtid_result) {
+        $gtid_row = $gtid_result->fetch();
+        if ($gtid_row && isset($gtid_row['Value']) && strtoupper($gtid_row['Value']) !== 'OFF') {
+          $gtid_option = '--set-gtid-purged=OFF';
+          drush_log(dt('GTID mode is @mode: adding --set-gtid-purged=OFF to mysqldump.', array('@mode' => $gtid_row['Value'])), 'info');
+        }
+      }
+    }
 
     if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
