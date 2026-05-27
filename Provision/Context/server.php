@@ -142,14 +142,30 @@ class Provision_Context_server extends Provision_Context {
   /**
    * Execute $command on this server, using SSH if necessary.
    *
+   * SECURITY: Callers MUST pre-escape any alias-context values via
+   * escapeshellarg() before building $command. This transit layer
+   * preserves command structure and applies escapeshellcmd() only as
+   * defence-in-depth — it cannot safely re-escape unescaped argument
+   * values after the fact. See DECISIONS.md Decision 002 of the
+   * aegir-shell-injection-audit project for the unsafe-character set.
+   *
+   * Newline, carriage-return and NUL bytes in $command are rejected:
+   * a legitimate shell command never contains them and their presence
+   * indicates an unescaped value broke out of its intended quoting.
+   *
    * @param $command
    *   Shell command to execute.
    *
    * @return
    *   Same as drush_shell_exec(). Use drush_shell_exec_output() for standard
-   *   out and error.
+   *   out and error. Returns FALSE without executing if $command contains
+   *   newline, carriage return, or NUL bytes.
    */
   function shell_exec($command) {
+    if (strpbrk((string) $command, "\n\r\0") !== FALSE) {
+      drush_log(dt('Refusing to execute shell command containing newline, carriage return, or NUL byte. This indicates an unescaped value broke out of intended quoting. Check escapeshellarg() coverage at the caller.'), 'error');
+      return FALSE;
+    }
     if (provision_is_local_host($this->remote_host)) {
       return drush_shell_exec(escapeshellcmd($command));
     }

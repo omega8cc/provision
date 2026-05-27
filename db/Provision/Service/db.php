@@ -292,7 +292,19 @@ class Provision_Service_db extends Provision_Service {
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        $command = sprintf($myloader_path . ' --database=' . $db_name . ' --host=' . $oct_db_host . ' --user=' . $oct_db_user . ' --password=' . $oct_db_pass . ' --port=' . $oct_db_port . ' --directory=' . $oct_db_dirx . ' --threads=' . $threads . ' --overwrite-tables --verbose=1');
+        // SECURITY: $db_name derives from alias context; $oct_db_* and
+        // $oct_db_dirx originate in BOA root control files but may contain
+        // shell-special characters in passwords. Escape every interpolated
+        // value before shell exec. See DECISIONS.md Decision 002.
+        $command = $myloader_path
+          . ' --database=' . escapeshellarg($db_name)
+          . ' --host=' . escapeshellarg($oct_db_host)
+          . ' --user=' . escapeshellarg($oct_db_user)
+          . ' --password=' . escapeshellarg($oct_db_pass)
+          . ' --port=' . escapeshellarg($oct_db_port)
+          . ' --directory=' . escapeshellarg($oct_db_dirx)
+          . ' --threads=' . escapeshellarg($threads)
+          . ' --overwrite-tables --verbose=1';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         }
