@@ -36,13 +36,17 @@ class Provision_Service_db_pdo extends Provision_Service_db {
   function connect() {
     $user = isset($this->creds['user']) ? $this->creds['user'] : '';
     $pass = isset($this->creds['pass']) ? $this->creds['pass'] : '';
-    $options = [
-      // Required for caching_sha2_password (default in MySQL/Percona 8.0+) when
-      // connecting over TCP rather than a Unix socket. Allows PDO to fetch the
-      // server's RSA public key for password exchange without requiring SSL.
-      // Safe to set unconditionally: ignored on 5.7 and on socket connections.
-      PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY => TRUE,
-    ];
+    $options = [];
+
+    // PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY is required for caching_sha2_password
+    // (default in MySQL/Percona 8.0+) when connecting over TCP rather than a Unix
+    // socket. Allows PDO to fetch the server's RSA public key for password exchange
+    // without requiring SSL. Guarded by defined() because the constant is only
+    // present when pdo_mysql is built against mysqlnd or libmysqlclient 8.0+;
+    // absent on older libmysqlclient builds even with recent PHP versions.
+    if (defined('PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY')) {
+      $options[PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY] = TRUE;
+    }
 
     drush_command_invoke_all_ref('provision_db_options_alter', $options, $this->dsn);
     try {
@@ -115,9 +119,10 @@ class Provision_Service_db_pdo extends Provision_Service_db {
 
   function database_exists($name) {
     $dsn = $this->dsn . ';dbname=' . $name;
-    $options = [
-      PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY => TRUE,
-    ];
+    $options = [];
+    if (defined('PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY')) {
+      $options[PDO::MYSQL_ATTR_GET_SERVER_PUBLIC_KEY] = TRUE;
+    }
     drush_command_invoke_all_ref('provision_db_options_alter', $options, $dsn);
     $user = isset($this->creds['user']) ? $this->creds['user'] : '';
     $pass = isset($this->creds['pass']) ? $this->creds['pass'] : '';
