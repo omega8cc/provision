@@ -19,12 +19,12 @@ function drush_provision_drupal_provision_verify_validate() {
     provision_drupal_push_site();
 
     drush_errors_on();
-    if (drush_drupal_major_version() <= 7) {
+    if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-      drush_log("Skipping FULL bootstrap for drupal 8+ in drush_provision_drupal_provision_verify_validate");
+      drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_provision_verify_validate");
     }
   }
 }

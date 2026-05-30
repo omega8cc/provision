@@ -326,7 +326,7 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
   }
-  if (drush_drupal_major_version() <= 7) {
+  if (drush_drupal_major_version() < 12) {
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
       drush_include_engine('drupal', 'deploy');
@@ -350,7 +350,7 @@ function drush_provision_drupal_post_provision_deploy() {
   }
   else {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-    drush_log("Skipping FULL bootstrap for drupal 8+ in drush_provision_drupal_post_provision_deploy");
+    drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_post_provision_deploy");
   }
 
   // Remove the restore directory.
