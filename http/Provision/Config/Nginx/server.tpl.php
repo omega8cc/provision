@@ -322,8 +322,8 @@ map $query_string $has_excessive_facets {
   default  0;
   ~*f%5[bB][5-9]%5[dD]       1;   # encoded   f[5]–f[9]   (6–10 facets)
   ~*f%5[bB][1-9][0-9]%5[dD]  1;   # encoded   f[10]–f[99] (11+ facets)
-  ~*f\[[5-9]\]                1;   # unencoded f[5]–f[9]   (6–10 facets)
-  ~*f\[[1-9][0-9]\]           1;   # unencoded f[10]–f[99] (11+ facets)
+  ~*f\[[5-9]\]               1;   # unencoded f[5]–f[9]   (6–10 facets)
+  ~*f\[[1-9][0-9]\]          1;   # unencoded f[10]–f[99] (11+ facets)
 }
 
 ###
@@ -353,8 +353,8 @@ map $query_string $has_any_facet {
   default  0;
   ~*f%5[bB][0-9]%5[dD]       1;   # encoded   f[0]–f[9]   (1–10 facets)
   ~*f%5[bB][1-9][0-9]%5[dD]  1;   # encoded   f[10]–f[99] (11+ facets)
-  ~*f\[[0-9]\]                1;   # unencoded f[0]–f[9]
-  ~*f\[[1-9][0-9]\]           1;   # unencoded f[10]–f[99]
+  ~*f\[[0-9]\]               1;   # unencoded f[0]–f[9]
+  ~*f\[[1-9][0-9]\]          1;   # unencoded f[10]–f[99]
 }
 
 ###
