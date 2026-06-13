@@ -331,7 +331,7 @@ location = /favicon.ico {
 ### and static file in the sites/domain/files directory.
 ###
 location = /llms.txt {
-  ### access_log off; ### for now keep logging for debugging purposes by default
+  access_log off;
   log_not_found off;
   try_files /sites/$main_site_name/files/$host.llms.txt /sites/$main_site_name/files/llms.txt $uri @cache;
 }
