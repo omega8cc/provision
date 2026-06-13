@@ -272,6 +272,9 @@ location ^~ /httprl_async_function_callback {
 ### HTTPRL test mode support.
 ###
 location ^~ /admin/httprl-test {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -595,6 +598,9 @@ location ^~ /hosting/c/server_localhost {
 ### Fix for #2005116
 ###
 location ^~ /hosting/sites {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -608,6 +614,9 @@ location ^~ /hosting/sites {
 ### Fix for Aegir & .info .pl domain extensions.
 ###
 location ^~ /hosting {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -621,6 +630,9 @@ location ^~ /hosting {
 ### Deny cache details display.
 ###
 location ^~ /admin/settings/performance/cache-backend {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -631,6 +643,9 @@ location ^~ /admin/settings/performance/cache-backend {
 ### Deny cache details display.
 ###
 location ^~ /admin/config/development/performance/redis {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -641,6 +656,9 @@ location ^~ /admin/config/development/performance/redis {
 ### Deny cache details display.
 ###
 location ^~ /admin/reports/redis {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -651,6 +669,9 @@ location ^~ /admin/reports/redis {
 ### Support for backup_migrate module download/restore/delete actions.
 ###
 location ^~ /admin {
+  if ($cache_uid = '') {
+    return 403;
+  }
   if ( $is_bot ) {
     return 444;
   }
