@@ -568,7 +568,7 @@ location ^~ /js/ {
 ###
 location ^~ /hosting/c/server_master {
   if ($cache_uid = '') {
-    return 444;
+    return 403;
   }
   if ( $is_bot ) {
     return 444;
@@ -583,7 +583,7 @@ location ^~ /hosting/c/server_master {
 ###
 location ^~ /hosting/c/server_localhost {
   if ($cache_uid = '') {
-    return 444;
+    return 403;
   }
   if ( $is_bot ) {
     return 444;
@@ -1422,7 +1422,7 @@ location ~* ^/(?:.*/)?(?:node/[0-9]+/edit|node/add|comment/reply) {
 ###
 location ~* ^/(?:.*/)?(?:node/[0-9]+/delete|approve) {
   if ($cache_uid = '') {
-    return 444;
+    return 403;
   }
   if ( $is_bot ) {
     return 444;
