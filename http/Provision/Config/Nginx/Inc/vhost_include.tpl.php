@@ -276,8 +276,6 @@ location ^~ /admin/httprl-test {
     return 444;
   }
   location ~* ^/admin/httprl-test {
-    access_log off;
-    log_not_found off;
     set $nocache_details "Skip";
     try_files $uri @drupal;
   }
@@ -575,8 +573,6 @@ location ^~ /hosting/c/server_master {
   if ( $is_bot ) {
     return 444;
   }
-  access_log off;
-  log_not_found off;
   return 301 $scheme://$host/hosting/sites;
 }
 
@@ -592,8 +588,6 @@ location ^~ /hosting/c/server_localhost {
   if ( $is_bot ) {
     return 444;
   }
-  access_log off;
-  log_not_found off;
   return 301 $scheme://$host/hosting/sites;
 }
 
@@ -627,8 +621,6 @@ location ^~ /hosting {
 ### Deny cache details display.
 ###
 location ^~ /admin/settings/performance/cache-backend {
-  access_log off;
-  log_not_found off;
   if ( $is_bot ) {
     return 444;
   }
@@ -639,8 +631,6 @@ location ^~ /admin/settings/performance/cache-backend {
 ### Deny cache details display.
 ###
 location ^~ /admin/config/development/performance/redis {
-  access_log off;
-  log_not_found off;
   if ( $is_bot ) {
     return 444;
   }
@@ -651,8 +641,6 @@ location ^~ /admin/config/development/performance/redis {
 ### Deny cache details display.
 ###
 location ^~ /admin/reports/redis {
-  access_log off;
-  log_not_found off;
   if ( $is_bot ) {
     return 444;
   }
