@@ -688,10 +688,10 @@ location ~* ^/\w\w/civicrm {
 ### Support for audio module.
 ###
 location ^~ /audio/download {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^/audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg)$ {
-    if ( $is_bot ) {
-      return 444;
-    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
