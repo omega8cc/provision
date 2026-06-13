@@ -257,6 +257,9 @@ location ^~ /.well-known/mta-sts.txt {
 ### HTTPRL standard support.
 ###
 location ^~ /httprl_async_function_callback {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^/httprl_async_function_callback {
     access_log off;
     log_not_found off;
@@ -269,6 +272,9 @@ location ^~ /httprl_async_function_callback {
 ### HTTPRL test mode support.
 ###
 location ^~ /admin/httprl-test {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^/admin/httprl-test {
     access_log off;
     log_not_found off;
@@ -281,6 +287,9 @@ location ^~ /admin/httprl-test {
 ### CDN Far Future expiration support.
 ###
 location ^~ /cdn/farfuture/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
 <?php if ($nginx_has_etag): ?>
@@ -524,6 +533,9 @@ location ~* ^/[a-z][a-z]/search {
 ### always rendered fresh (consistent with how /admin is handled).
 ###
 location ^~ /user/login {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $block_login_search_destination ) {
     return 444;
   }
@@ -543,10 +555,10 @@ location ^~ /user/login {
 ### Support for https://drupal.org/project/js module.
 ###
 location ^~ /js/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^/js/ {
-    if ( $is_bot ) {
-      return 444;
-    }
     rewrite ^/(.*)$ /js.php?q=$1 last;
   }
 }
@@ -617,6 +629,9 @@ location ^~ /hosting {
 location ^~ /admin/settings/performance/cache-backend {
   access_log off;
   log_not_found off;
+  if ( $is_bot ) {
+    return 444;
+  }
   return 301 $scheme://$host/admin/settings/performance;
 }
 
@@ -626,6 +641,9 @@ location ^~ /admin/settings/performance/cache-backend {
 location ^~ /admin/config/development/performance/redis {
   access_log off;
   log_not_found off;
+  if ( $is_bot ) {
+    return 444;
+  }
   return 301 $scheme://$host/admin/config/development/performance;
 }
 
@@ -635,6 +653,9 @@ location ^~ /admin/config/development/performance/redis {
 location ^~ /admin/reports/redis {
   access_log off;
   log_not_found off;
+  if ( $is_bot ) {
+    return 444;
+  }
   return 301 $scheme://$host/admin/reports;
 }
 
@@ -653,6 +674,9 @@ location ^~ /admin {
 ### Don't log and avoid caching /civicrm* requests.
 ###
 location ^~ /civicrm {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   set $nocache_details "Skip";
@@ -663,6 +687,9 @@ location ^~ /civicrm {
 ### Avoid caching /civicrm* requests
 ###
 location ~* ^/\w\w/civicrm {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   set $nocache_details "Skip";
@@ -717,6 +744,9 @@ location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) 
 ### The files uploaded should be available only via SFTP.
 ###
 location ~* ^/sites/.*/files/webform/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires 99s;
@@ -726,6 +756,9 @@ location ~* ^/sites/.*/files/webform/ {
   ### return 404;
 }
 location ~* ^/files/webform/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires 99s;
@@ -770,6 +803,9 @@ location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary|fla
 ### https://drupal.org/project/responsive_images
 ###
 location ~* \.r\.(?:jpe?g|png|gif) {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $http_cookie ~* "rwdimgsize=large" ) {
     rewrite ^/(.*)/mobile/(.*)\.r(\.(?:jpe?g|png|gif))$ /$1/desktop/$2$3 last;
   }
@@ -785,6 +821,9 @@ location ~* \.r\.(?:jpe?g|png|gif) {
 ### https://drupal.org/project/ais
 ###
 location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $http_cookie ~* "ais=(?<ais_cookie>[a-z0-9-_]+)" ) {
     rewrite ^/(.+)/files/(css|js|styles)/adaptive/(.+)$ /$1/files/$2/$ais_cookie/$3 last;
   }
@@ -798,6 +837,9 @@ location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
 ### The files/styles support.
 ###
 location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -809,6 +851,9 @@ location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
 ### The s3/files/styles (s3fs) support.
 ###
 location ~* /s3/files/(css|js|styles)/(.*)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -820,6 +865,9 @@ location ~* /s3/files/(css|js|styles)/(.*)$ {
 ### The files/imagecache support.
 ###
 location ~* /sites/.*/files/imagecache/(.*)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -834,6 +882,9 @@ location ~* /sites/.*/files/imagecache/(.*)$ {
 ### Send requests with /external/ and /system/ URI keywords to @drupal.
 ###
 location ~* /(?:external|system)/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
@@ -845,6 +896,9 @@ location ~* /(?:external|system)/ {
 ### Deny direct access to backups.
 ###
 location ~* ^/sites/.*/files/backup_migrate/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   deny all;
@@ -854,6 +908,9 @@ location ~* ^/sites/.*/files/backup_migrate/ {
 ### Deny direct access to config files in Drupal 8+.
 ###
 location ~* ^/sites/.*/files/config_.* {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   deny all;
@@ -909,6 +966,9 @@ location ~* /files/private/ {
 ### Wysiwyg Fields support.
 ###
 location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   try_files $uri @drupal;
@@ -918,6 +978,9 @@ location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
 ### Advagg_css and Advagg_js support.
 ###
 location ~* files/advagg_(?:css|js)/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   expires max;
   access_log off;
   log_not_found off;
@@ -937,6 +1000,9 @@ location ~* files/advagg_(?:css|js)/ {
 ### Make css files compatible with boost caching.
 ###
 location ~* \.css$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $request_method = POST ) {
     return 405;
   }
@@ -954,6 +1020,9 @@ location ~* \.css$ {
 ### Support for dynamic /sw.js requests. See #2982073 on drupal.org
 ###
 location = /sw.js {
+  if ( $is_bot ) {
+    return 444;
+  }
   try_files $uri @drupal;
 }
 
@@ -961,6 +1030,9 @@ location = /sw.js {
 ### Make js files compatible with boost caching.
 ###
 location ~* \.(?:js|htc)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $request_method = POST ) {
     return 405;
   }
@@ -997,6 +1069,9 @@ location = /CHANGELOG.txt {
 ### Support for dynamic .json requests.
 ###
 location ~* \.json$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   try_files $uri @drupal;
 }
 
@@ -1004,6 +1079,9 @@ location ~* \.json$ {
 ### Support for static .json files with fast 404 +Boost compatibility.
 ###
 location ~* ^/sites/.*/files/.*\.json$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   if ( $cache_uid ) {
     return 405;
   }
@@ -1018,6 +1096,9 @@ location ~* ^/sites/.*/files/.*\.json$ {
 ### Helper location to bypass boost static files cache for logged in users.
 ###
 location @uncached {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires max; # max if using aggregator, otherwise sane expire time
@@ -1027,6 +1108,10 @@ location @uncached {
 ### Map /files/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /files/ {
+
+  if ( $is_bot ) {
+    return 444;
+  }
 
   ###
   ### Sub-location to support Flash Video (FLV) files with short URIs.
@@ -1120,6 +1205,9 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires 30d;
     access_log off;
@@ -1135,6 +1223,9 @@ location ^~ /downloads/ {
 ### without all standard drupal rewrites, php-fpm etc.
 ###
 location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   expires 30d;
   access_log off;
   log_not_found off;
@@ -1148,6 +1239,9 @@ location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tif
 ### without all standard drupal rewrites, php-fpm etc.
 ###
 location ~* ^.+\.(?:avi|mpe?g|mov|wmv|ogg|ogv|webm|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   expires 30d;
   access_log off;
   log_not_found off;
@@ -1162,6 +1256,9 @@ location ~* ^.+\.(?:avi|mpe?g|mov|wmv|ogg|ogv|webm|zip|tar|t?gz|rar|dmg|exe|apk|
 ### legacy URLs with asp/aspx extension.
 ###
 location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   expires 30d;
   access_log off;
   log_not_found off;
@@ -1172,6 +1269,9 @@ location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
 ### Pseudo-streaming server-side support for Flash Video (FLV) files.
 ###
 location ~* ^.+\.flv$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   flv;
   expires 30d;
   access_log off;
@@ -1183,6 +1283,9 @@ location ~* ^.+\.flv$ {
 ### Pseudo-streaming server-side support for H.264/AAC files.
 ###
 location ~* ^.+\.(?:mp4|m4a)$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   mp4;
   mp4_buffer_size 1m;
   mp4_max_buffer_size 5m;
@@ -1252,6 +1355,9 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
 ### Serve & no-log any not specified above static files directly.
 ###
 location ~* ^/sites/.*/files/ {
+  if ( $is_bot ) {
+    return 444;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
@@ -1262,6 +1368,9 @@ location ~* ^/sites/.*/files/ {
 ### Make feeds compatible with boost caching and set correct mime type.
 ###
 location ~* \.xml$ {
+  if ( $is_bot ) {
+    return 444;
+  }
   location ~* ^/autodiscover/autodiscover\.xml {
     access_log off;
     log_not_found off;
