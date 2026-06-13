@@ -1389,8 +1389,6 @@ location ~* ^/(?:admin|user|cart|checkout|logout) {
   if ( $is_bot ) {
     return 444;
   }
-  access_log off;
-  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
@@ -1398,8 +1396,6 @@ location ~* ^/\w\w/(?:admin|user|cart|checkout|logout) {
   if ( $is_bot ) {
     return 444;
   }
-  access_log off;
-  log_not_found off;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
