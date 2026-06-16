@@ -143,6 +143,15 @@ if ( $rce = "AB" ) {
 set $nocache_details "Cache";
 
 ###
+### Drop security-banned client IPs (populated by the BOA monitor/firewall
+### layer).  Keyed on $remote_addr, which Cloudflare realip resolves to the
+### real client, so the ban bites CF-proxied traffic, not only direct.
+###
+if ($is_banned) {
+  return 444;
+}
+
+###
 ### Return 404 on special PHP URLs to avoid revealing version used,
 ### even indirectly. See also: https://drupal.org/node/2116387
 ###

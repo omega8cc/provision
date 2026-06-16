@@ -376,6 +376,19 @@ map $uri $is_secret_path {
 }
 
 ###
+### Security-banned client IPs, populated by the BOA monitor/firewall layer
+### (scan_nginx/fire write offending real-client IPs here).  Keyed on
+### $remote_addr, which Cloudflare realip resolves to the real client, so the
+### deny bites CF-proxied attackers at the origin's nginx — where an origin
+### CSF/iptables ban on a CF-fronted IP would not.  Wildcard include: an
+### absent or empty file is safe (no entries → $is_banned stays 0).
+###
+geo $remote_addr $is_banned {
+  default 0;
+  include /data/conf/nginx_banned_ips.c*;
+}
+
+###
 ### Identify bad crawlers, SEO scrapers and abusive bots — hard-blocked.
 ### AI vendor traffic is classified separately by the $is_ai_* maps above; do
 ### NOT add AI tokens here or they would bypass the per-class AI policy.  The
