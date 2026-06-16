@@ -151,9 +151,25 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 }
 
 ###
-### Deny AI crawlers.
+### Deny probes for secret/config paths (never valid on a hosted site, any UA).
 ###
-if ($is_ai_crawler) {
+if ($is_secret_path) {
+  return 444;
+}
+
+###
+### Deny forged AI user-agents.  Google-Extended / Applebot-Extended are
+### robots.txt-only tokens a real client never sends — proof of forgery.
+###
+if ($is_ai_forged) {
+  return 444;
+}
+
+###
+### Deny AI training / bulk-collection crawlers by default.
+### A BOA per-site opt-in (Stage 2) can allow specific sites.
+###
+if ($is_ai_training) {
   return 444;
 }
 
@@ -1524,6 +1540,16 @@ location / {
   if ( $http_user_agent ~* wget ) {
     return 444;
   }
+  ###
+  ### Allow but rate-limit AI search/index, user-triggered and utility bots on
+  ### the main content surface.  Empty-key maps mean only these AI classes are
+  ### counted; all other traffic is unaffected.  Keyed on the real client IP
+  ### (Cloudflare realip).  Training and forged AI are already 444'd above.
+  ###
+  limit_req zone=ai_search  burst=20 nodelay;
+  limit_req zone=ai_user    burst=20 nodelay;
+  limit_req zone=ai_utility burst=10 nodelay;
+  limit_req_status 444;
   try_files $uri @cache;
 }
 
