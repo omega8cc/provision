@@ -250,13 +250,18 @@ if ($nginx_has_gzip) {
   index         index.php index.html;
 
  ## Log Format
-  log_format        main '"$proxy_add_x_forwarded_for" $host [$time_local] '
+  # Host field is the realip-resolved client ($remote_addr), so GoAccess's
+  # "~h{, }" (which takes the FIRST token) and scan_nginx both report the real
+  # visitor, not the spoofable X-Forwarded-For head. The full chain is preserved
+  # as a trailing xff= field, ignored by GoAccess just like proto=/alpn=/http2=.
+  log_format        main '"$remote_addr" $host [$time_local] '
                          '"$request" $status $body_bytes_sent '
                          '$request_length $bytes_sent "$http_referer" '
                          '"$http_user_agent" $request_time "$gzip_ratio" '
                          'proto="$server_protocol" '
                          'alpn="$ssl_alpn_protocol" '
-                         'http2="$http2"';
+                         'http2="$http2" '
+                         'xff="$proxy_add_x_forwarded_for"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
