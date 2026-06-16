@@ -175,10 +175,18 @@ if ($is_ai_forged) {
 }
 
 ###
-### Deny AI training / bulk-collection crawlers by default.
-### A BOA per-site opt-in (Stage 2) can allow specific sites.
+### Deny AI training / bulk-collection crawlers by default.  A per-site BOA
+### opt-in (the ai_policy fragment) sets $ai_train_allow 1 to exempt a site;
+### $ai_train_allow is defaulted to 0 before the ai_policy include in the vhost
+### template, so without a fragment training stays blocked.  ($is_ai_search /
+### $is_ai_user / $is_ai_utility per-site BLOCK is carried directly by the
+### fragment as `if ($is_ai_*) { return 444; }`, so no global guard for them.)
 ###
-if ($is_ai_training) {
+set $ai_train_block $is_ai_training;
+if ($ai_train_allow) {
+  set $ai_train_block '';
+}
+if ($ai_train_block) {
   return 444;
 }
 
