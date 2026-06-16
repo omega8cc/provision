@@ -141,7 +141,10 @@ if ($nginx_has_gzip) {
   fastcgi_param  SERVER_PROTOCOL     $server_protocol;
   fastcgi_param  GATEWAY_INTERFACE   CGI/1.1;
   fastcgi_param  SERVER_SOFTWARE     ApacheSolarisNginx/$nginx_version;
-  fastcgi_param  REMOTE_ADDR         $remote_addr;
+  # $realip_remote_addr = the original TCP peer (CF edge): keeps PHP global.inc's
+  # own real-client resolution correct, while nginx $remote_addr is realip-
+  # rewritten to the real client for rate-limit keys, logs and deny.
+  fastcgi_param  REMOTE_ADDR         $realip_remote_addr;
   fastcgi_param  REMOTE_PORT         $remote_port;
   fastcgi_param  SERVER_ADDR         $server_addr;
   fastcgi_param  SERVER_PORT         $server_port;
