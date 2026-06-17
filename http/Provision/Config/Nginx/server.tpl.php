@@ -292,6 +292,23 @@ if ($nginx_has_gzip) {
 ###
 
 ###
+### Backward-compatibility shim — DO NOT REMOVE.  $is_ai_crawler was the old single
+### broad AI map.  It is kept DEFINED (original broad match) because a barracuda
+### upgrade re-renders this master http config BEFORE the Octopus instance vhosts:
+### an instance vhost rendered by the previous Provision still references
+### $is_ai_crawler, and an http config that no longer defines it makes `nginx -t`
+### fail with `unknown "is_ai_crawler" variable`, taking EVERY instance down until
+### each is individually re-rendered.  Shared http-block map variables must remain a
+### superset across versions — never remove/rename one a deployed vhost may use.
+### Retire only once no rendered vhost references it anywhere.
+###
+map $http_user_agent $is_ai_crawler {
+  default  '';
+  ~*Ai2Bot|Amazon|Anthropic|Applebot-Extended|Bytespider|Claude|Cohere-AI|Deepseek|Gemini  is_ai_crawler;
+  ~*Google-Extended|GPT|HuggingFace|Meta-ExternalAgent|MistralAI|OAI|OpenAI|Perplexity|xAI is_ai_crawler;
+}
+
+###
 ### AI training / bulk-collection crawlers — blocked globally by default.
 ###
 map $http_user_agent $is_ai_training {
