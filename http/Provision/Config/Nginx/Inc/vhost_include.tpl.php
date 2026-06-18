@@ -143,6 +143,15 @@ if ( $rce = "AB" ) {
 set $nocache_details "Cache";
 
 ###
+### Drop security-banned client IPs (populated by the BOA monitor/firewall
+### layer).  Keyed on $remote_addr, which Cloudflare realip resolves to the
+### real client, so the ban bites CF-proxied traffic, not only direct.
+###
+if ($is_banned) {
+  return 444;
+}
+
+###
 ### Return 404 on special PHP URLs to avoid revealing version used,
 ### even indirectly. See also: https://drupal.org/node/2116387
 ###
@@ -151,9 +160,33 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 }
 
 ###
-### Deny AI crawlers.
+### Deny probes for secret/config paths (never valid on a hosted site, any UA).
 ###
-if ($is_ai_crawler) {
+if ($is_secret_path) {
+  return 444;
+}
+
+###
+### Deny forged AI user-agents.  Google-Extended / Applebot-Extended are
+### robots.txt-only tokens a real client never sends — proof of forgery.
+###
+if ($is_ai_forged) {
+  return 444;
+}
+
+###
+### Deny AI training / bulk-collection crawlers by default.  A per-site BOA
+### opt-in (the ai_policy fragment) sets $ai_train_allow 1 to exempt a site;
+### $ai_train_allow is defaulted to 0 before the ai_policy include in the vhost
+### template, so without a fragment training stays blocked.  ($is_ai_search /
+### $is_ai_user / $is_ai_utility per-site BLOCK is carried directly by the
+### fragment as `if ($is_ai_*) { return 444; }`, so no global guard for them.)
+###
+set $ai_train_block $is_ai_training;
+if ($ai_train_allow) {
+  set $ai_train_block '';
+}
+if ($ai_train_block) {
   return 444;
 }
 
@@ -1524,6 +1557,16 @@ location / {
   if ( $http_user_agent ~* wget ) {
     return 444;
   }
+  ###
+  ### Allow but rate-limit AI search/index, user-triggered and utility bots on
+  ### the main content surface.  Empty-key maps mean only these AI classes are
+  ### counted; all other traffic is unaffected.  Keyed on the real client IP
+  ### (Cloudflare realip).  Training and forged AI are already 444'd above.
+  ###
+  limit_req zone=ai_search  burst=20 nodelay;
+  limit_req zone=ai_user    burst=20 nodelay;
+  limit_req zone=ai_utility burst=10 nodelay;
+  limit_req_status 444;
   try_files $uri @cache;
 }
 

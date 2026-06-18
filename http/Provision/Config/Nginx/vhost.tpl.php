@@ -100,6 +100,8 @@ if ($this->redirection || !$this->redirection) {
       print "  server_name  {$alias_url};\n";
       print "  root  {$this->root};\n";
       print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+      print "  set \$ai_train_allow 0;\n";
+      print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";
       print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
       print "}\n";
     }
@@ -190,11 +192,15 @@ if ($this->redirection || $ssl_redirection) {
   }
   elseif (!$ssl_redirection && $this->redirection) {
     print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+    print "  set \$ai_train_allow 0;\n";
+    print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";
     print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
   }
 }
 else {
   print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+  print "  set \$ai_train_allow 0;\n";
+  print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";
   print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
 }
 $if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
