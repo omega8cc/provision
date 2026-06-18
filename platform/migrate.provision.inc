@@ -116,12 +116,13 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   }
 
   if (!is_null($new_name) && ($new_name != d()->name)) {
-    // XXX: right now we just drop SSL configuration when migrating, because
-    // we do not check if the site name change is compatible with the
-    // certificate. This can be removed when we a) check for wildcard
-    // certs and b) allow the user to change the cert from the UI.
+    // Auto-disable Encryption on rename. The SSL key/cert is bound to the old
+    // machine-name and is invalid for the new name; it must be re-created only
+    // after the operator re-enables encryption for the new domain. The
+    // front-end (hosting_migrate) persists this as the operator-visible state.
     $options['ssl_enabled'] = 0;
     unset($options['ssl_key']);
+    drush_log(dt('[migrate] Encryption disabled for renamed site @name before final verify', array('@name' => $new_name)), 'info');
 
     $options['uri'] = ltrim($new_name, '@');
     $hash_name = drush_get_option('#name') ? '#name' : 'name';
