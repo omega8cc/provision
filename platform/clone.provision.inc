@@ -85,12 +85,12 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   $options['aliases'] = array();
   $options['redirection'] = 0;
 
-  // XXX: right now we just drop SSL configuration when cloning, because
-  // we do not check if the site name change is compatible with the
-  // certificate. This can be removed when we a) check for wildcard
-  // certs and b) allow the user to change the cert from the UI.
+  // Auto-disable Encryption on the clone. SSL keys/certs are bound to the
+  // source machine-name and must not be reused by the new site name. The
+  // front-end (hosting_clone) also persists this as the operator-visible state.
   $options['ssl_enabled'] = 0;
   unset($options['ssl_key']);
+  drush_log(dt('[clone] Encryption disabled for new site @name before final verify', array('@name' => $new_name)), 'info');
 
   // Do not copy CDN aliases to the cloned site --CDN vhost
   $options['cdn'] = 0;
