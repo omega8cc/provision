@@ -328,11 +328,28 @@ map $http_user_agent $is_ai_search {
 
 ###
 ### User-triggered AI fetchers (a real user asked an assistant to read a page)
-### — allowed (rate-limited).
+### — HONEST members only: allowed, under the per-vendor aggregate rate-limit
+### below.  They identify truthfully and do not evade a block; some (ChatGPT-User,
+### Meta-ExternalFetcher) fan a single user prompt out across many source IPs,
+### which is exactly why the limit is a per-vendor AGGREGATE, not per-IP.
+### Evasive user-fetchers (Perplexity-User) are split into $is_ai_evasive below.
 ###
 map $http_user_agent $is_ai_user {
   default  '';
-  ~*ChatGPT-User|Claude-User|Perplexity-User|MistralAI-User|Meta-ExternalFetcher  is_ai_user;
+  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher  is_ai_user;
+}
+
+###
+### Evasive AI user-fetchers.  User-triggered, but they IGNORE robots.txt by
+### stated policy and, when blocked, DROP their declared UA and rotate IPs/ASNs
+### (Cloudflare de-listed Perplexity as a verified bot for this).  Blocked by
+### default; a per-site opt-in clears it (see $ai_evasive_allow in the vhost
+### guard chain).  A UA block is best-effort here — the IDS/csf layer is the
+### real backstop against the undeclared/rotating traffic.
+###
+map $http_user_agent $is_ai_evasive {
+  default  '';
+  ~*Perplexity-User  is_ai_evasive;
 }
 
 ###
@@ -357,22 +374,39 @@ map $http_user_agent $is_ai_forged {
 ###
 ### AI bot rate-limit keys.  An empty key is not counted by its zone, so each
 ### zone counts only its own AI class and all other traffic is untouched.
-### Keyed on $binary_remote_addr — the real client IP once Cloudflare realip is
-### active — so one busy bot on one vhost cannot exhaust the shared allowance.
+### Keyed PER VENDOR (a constant per UA token), NOT per client IP: a single
+### assistant prompt fans out across many source IPs, so a per-IP cap never
+### bites the aggregate — each IP stays under the limit and nothing throttles.
+### One shared key per vendor makes the zone cap that vendor's TOTAL rate across
+### every IP and vhost, and gives each vendor its own bucket so no one vendor
+### can starve another's allowance.  Each roster below MUST track the matching
+### $is_ai_* class map above: a token in one but not the other is silently
+### un-rate-limited or (for the class map) un-blockable.
 ###
-map $is_ai_search $ai_search_limit_key {
-  default       '';
-  is_ai_search  $binary_remote_addr;
+map $http_user_agent $ai_search_limit_key {
+  default                  '';
+  ~*OAI-SearchBot          oai_searchbot;
+  ~*Claude-SearchBot       claude_searchbot;
+  ~*PerplexityBot          perplexitybot;
+  ~*MistralAI-Index        mistralai_index;
+  ~*YouBot                 youbot;
+  ~*Google-CloudVertexBot  google_vertexbot;
 }
 
-map $is_ai_user $ai_user_limit_key {
-  default     '';
-  is_ai_user  $binary_remote_addr;
+map $http_user_agent $ai_user_limit_key {
+  default                 '';
+  ~*ChatGPT-User          chatgpt_user;
+  ~*Claude-User           claude_user;
+  ~*MistralAI-User        mistralai_user;
+  ~*Meta-ExternalFetcher  meta_fetcher;
 }
 
-map $is_ai_utility $ai_utility_limit_key {
-  default        '';
-  is_ai_utility  $binary_remote_addr;
+map $http_user_agent $ai_utility_limit_key {
+  default              '';
+  ~*OAI-AdsBot         oai_adsbot;
+  ~*DuckAssistBot      duckassistbot;
+  ~*Google-Read-Aloud  google_readaloud;
+  ~*Google-NotebookLM  google_notebooklm;
 }
 
 ###
