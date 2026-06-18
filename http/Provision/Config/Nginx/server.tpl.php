@@ -336,7 +336,7 @@ map $http_user_agent $is_ai_search {
 ###
 map $http_user_agent $is_ai_user {
   default  '';
-  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher  is_ai_user;
+  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher|Google-?Agent  is_ai_user;
 }
 
 ###
@@ -399,6 +399,7 @@ map $http_user_agent $ai_user_limit_key {
   ~*Claude-User           claude_user;
   ~*MistralAI-User        mistralai_user;
   ~*Meta-ExternalFetcher  meta_fetcher;
+  ~*Google-?Agent         google_agent;
 }
 
 map $http_user_agent $ai_utility_limit_key {
