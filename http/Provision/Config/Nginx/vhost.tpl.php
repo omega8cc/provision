@@ -60,6 +60,7 @@ if ($this->redirection || !$this->redirection) {
       print "  listen  *:{$http_port};\n";
       print "  include fastcgi_params;\n";
       print "  fastcgi_param HTTP_PROXY \"\";\n";
+      print "  fastcgi_param HTTP_HOST \$host;\n";
       print "  fastcgi_param MAIN_SITE_NAME {$this->uri};\n";
       print "  set \$main_site_name {$this->uri};\n";
       print "  fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;\n";
@@ -114,6 +115,7 @@ server {
   include fastcgi_params;
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
+  fastcgi_param HTTP_HOST $host;
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
   set $main_site_name "<?php print $this->uri; ?>";
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
