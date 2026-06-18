@@ -191,6 +191,22 @@ if ($ai_train_block) {
 }
 
 ###
+### Deny EVASIVE AI user-fetchers (Perplexity-User) by default.  Same shape as
+### training: they identify as user-triggered but ignore robots.txt and, when
+### blocked, drop their UA and rotate IPs/ASNs, so this UA block is best-effort
+### and the IDS/csf layer is the real backstop.  A per-site opt-in sets
+### $ai_evasive_allow 1 (defaulted to 0 before the ai_policy include in the
+### vhost template) to exempt a site.
+###
+set $ai_evasive_block $is_ai_evasive;
+if ($ai_evasive_allow) {
+  set $ai_evasive_block '';
+}
+if ($ai_evasive_block) {
+  return 444;
+}
+
+###
 ### Deny crawlers.
 ###
 if ($is_crawler) {
