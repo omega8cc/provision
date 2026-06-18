@@ -103,10 +103,25 @@ if ($nginx_is_modern) {
   # 20 req/s with burst=40 allows normal interactive use while capping botnet
   # throughput. Tune upward for high-traffic public search pages.
   print "  limit_req_zone  \$host               zone=search_flood:1m  rate=20r/s;\n";
+  # AI bot soft limits — allow but throttle these classes; tune after reviewing
+  # logs.  The empty-key maps ($ai_*_limit_key) count only the matching AI
+  # class, so no other traffic is ever rate-limited by these zones.
+  print "  limit_req_zone  \$ai_search_limit_key  zone=ai_search:10m  rate=1r/s;\n";
+  print "  limit_req_zone  \$ai_user_limit_key    zone=ai_user:10m    rate=2r/s;\n";
+  print "  limit_req_zone  \$ai_utility_limit_key zone=ai_utility:5m  rate=1r/s;\n";
 }
 else {
   print "  limit_zone limreq \$binary_remote_addr 10m;\n";
 }
+
+# Resolve the real client IP on Cloudflare-fronted vhosts so rate-limit keys,
+# REMOTE_ADDR and access logs reflect the visitor and not the CF edge.  Trusted
+# CF source ranges are supplied by a BOA-managed wildcard include, so a missing
+# file never breaks `nginx -t`; with no trusted ranges the CF-Connecting-IP
+# header is ignored and $remote_addr is left unchanged (no spoofing risk).
+print "  real_ip_header    CF-Connecting-IP;\n";
+print "  real_ip_recursive on;\n";
+print "  include /data/conf/nginx_cloudflare_real_ip.c*;\n";
 
 if ($nginx_has_gzip) {
   print "  gzip_static       on;\n";
@@ -126,7 +141,10 @@ if ($nginx_has_gzip) {
   fastcgi_param  SERVER_PROTOCOL     $server_protocol;
   fastcgi_param  GATEWAY_INTERFACE   CGI/1.1;
   fastcgi_param  SERVER_SOFTWARE     ApacheSolarisNginx/$nginx_version;
-  fastcgi_param  REMOTE_ADDR         $remote_addr;
+  # $realip_remote_addr = the original TCP peer (CF edge): keeps PHP global.inc's
+  # own real-client resolution correct, while nginx $remote_addr is realip-
+  # rewritten to the real client for rate-limit keys, logs and deny.
+  fastcgi_param  REMOTE_ADDR         $realip_remote_addr;
   fastcgi_param  REMOTE_PORT         $remote_port;
   fastcgi_param  SERVER_ADDR         $server_addr;
   fastcgi_param  SERVER_PORT         $server_port;
@@ -232,13 +250,18 @@ if ($nginx_has_gzip) {
   index         index.php index.html;
 
  ## Log Format
-  log_format        main '"$proxy_add_x_forwarded_for" $host [$time_local] '
+  # Host field is the realip-resolved client ($remote_addr), so GoAccess's
+  # "~h{, }" (which takes the FIRST token) and scan_nginx both report the real
+  # visitor, not the spoofable X-Forwarded-For head. The full chain is preserved
+  # as a trailing xff= field, ignored by GoAccess just like proto=/alpn=/http2=.
+  log_format        main '"$remote_addr" $host [$time_local] '
                          '"$request" $status $body_bytes_sent '
                          '$request_length $bytes_sent "$http_referer" '
                          '"$http_user_agent" $request_time "$gzip_ratio" '
                          'proto="$server_protocol" '
                          'alpn="$ssl_alpn_protocol" '
-                         'http2="$http2"';
+                         'http2="$http2" '
+                         'xff="$proxy_add_x_forwarded_for"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
@@ -252,7 +275,32 @@ if ($nginx_has_gzip) {
 #######################################################
 
 ###
-### Identify AI crawlers.
+### AI traffic is split into mutually-exclusive classes instead of one broad
+### "AI crawler" map.  The old single map collapsed training scrapers, AI search
+### crawlers and user-triggered fetchers into one deny, which made hosted sites
+### invisible to AI search and AI-assisted browsing.  Each class below matches
+### FULL distinctive tokens only — never bare vendor names — so GPTBot is not
+### ChatGPT-User, ClaudeBot is not Claude-User/Claude-SearchBot, Perplexitybot
+### is not Perplexity-User, Googlebot is not Google-Extended, etc.
+###
+### Default policy (Stage 1, global):
+###   training -> blocked      (per-site opt-in to allow,  BOA Stage 2)
+###   search   -> allow + rl   (per-site opt-in to block,  BOA Stage 2)
+###   user     -> allow + rl   (per-site opt-in to block,  BOA Stage 2)
+###   utility  -> allow + rl   (per-site opt-in to block,  BOA Stage 2)
+###   forged   -> blocked      (universal, zero false positive)
+###
+
+###
+### Backward-compatibility shim — DO NOT REMOVE.  $is_ai_crawler was the old single
+### broad AI map.  It is kept DEFINED (original broad match) because a barracuda
+### upgrade re-renders this master http config BEFORE the Octopus instance vhosts:
+### an instance vhost rendered by the previous Provision still references
+### $is_ai_crawler, and an http config that no longer defines it makes `nginx -t`
+### fail with `unknown "is_ai_crawler" variable`, taking EVERY instance down until
+### each is individually re-rendered.  Shared http-block map variables must remain a
+### superset across versions — never remove/rename one a deployed vhost may use.
+### Retire only once no rendered vhost references it anywhere.
 ###
 map $http_user_agent $is_ai_crawler {
   default  '';
@@ -261,13 +309,116 @@ map $http_user_agent $is_ai_crawler {
 }
 
 ###
-### Identify crawlers.
+### AI training / bulk-collection crawlers — blocked globally by default.
+###
+map $http_user_agent $is_ai_training {
+  default  '';
+  ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
+  ~*Meta-ExternalAgent|cohere-ai|omgili                                                  is_ai_training;
+}
+
+###
+### AI search / citation-index crawlers — allowed (rate-limited); these drive
+### visibility in AI search answers.
+###
+map $http_user_agent $is_ai_search {
+  default  '';
+  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot  is_ai_search;
+}
+
+###
+### User-triggered AI fetchers (a real user asked an assistant to read a page)
+### — allowed (rate-limited).
+###
+map $http_user_agent $is_ai_user {
+  default  '';
+  ~*ChatGPT-User|Claude-User|Perplexity-User|MistralAI-User|Meta-ExternalFetcher  is_ai_user;
+}
+
+###
+### AI utility bots (ads validation, text-to-speech, assistant retrieval)
+### — allowed (rate-limited).
+###
+map $http_user_agent $is_ai_utility {
+  default  '';
+  ~*OAI-AdsBot|DuckAssistBot|Google-Read-Aloud|Google-NotebookLM  is_ai_utility;
+}
+
+###
+### Forged AI user-agents.  Google-Extended and Applebot-Extended are
+### robots.txt-only opt-out tokens that real crawlers NEVER send in a UA, so
+### their presence proves forgery.  Hard-blocked globally (zero false positive).
+###
+map $http_user_agent $is_ai_forged {
+  default  '';
+  ~*Google-Extended|Applebot-Extended  is_ai_forged;
+}
+
+###
+### AI bot rate-limit keys.  An empty key is not counted by its zone, so each
+### zone counts only its own AI class and all other traffic is untouched.
+### Keyed on $binary_remote_addr — the real client IP once Cloudflare realip is
+### active — so one busy bot on one vhost cannot exhaust the shared allowance.
+###
+map $is_ai_search $ai_search_limit_key {
+  default       '';
+  is_ai_search  $binary_remote_addr;
+}
+
+map $is_ai_user $ai_user_limit_key {
+  default     '';
+  is_ai_user  $binary_remote_addr;
+}
+
+map $is_ai_utility $ai_utility_limit_key {
+  default        '';
+  is_ai_utility  $binary_remote_addr;
+}
+
+###
+### Probes for secret / config paths.  These never exist on a hosted
+### Drupal/Aegir site, so they are hard-blocked globally regardless of UA.
+### Matched on $uri (decoded, normalised) and anchored to path segments so a
+### literal ".env" cannot match an arbitrary substring.  $uri normalisation
+### also defends against percent-encoded evasion (e.g. /%2eenv -> /.env).
+###
+map $uri $is_secret_path {
+  default  '';
+  ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
+  ~*(?:^|/)(?:secrets|key|google-services|config|loadable-stats)\.json(?:$|/)    is_secret_path;
+  ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
+  ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
+  ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
+  ~*(?:^|/)\.next/required-server-files\.json(?:$|/)                             is_secret_path;
+}
+
+###
+### Security-banned client IPs, populated by the BOA monitor/firewall layer
+### (scan_nginx/fire write offending real-client IPs here).  Keyed on
+### $remote_addr, which Cloudflare realip resolves to the real client, so the
+### deny bites CF-proxied attackers at the origin's nginx — where an origin
+### CSF/iptables ban on a CF-fronted IP would not.  Wildcard include: an
+### absent or empty file is safe (no entries → $is_banned stays 0).
+###
+geo $remote_addr $is_banned {
+  default 0;
+  include /data/conf/nginx_banned_ips.c*;
+}
+
+###
+### Identify bad crawlers, SEO scrapers and abusive bots — hard-blocked.
+### AI vendor traffic is classified separately by the $is_ai_* maps above; do
+### NOT add AI tokens here or they would bypass the per-class AI policy.  The
+### former AI substrings (Amazon, bytedance, CCBot, externalagent, openai,
+### perplexity) were moved out: bare "openai"/"perplexity" matched the
+### openai.com / perplexity.ai vendor URLs in OAI-SearchBot / ChatGPT-User /
+### PerplexityBot / Perplexity-User UAs and wrongly blocked allowed AI traffic.
 ###
 map $http_user_agent $is_crawler {
   default  '';
-  ~*Ahrefs|Amazon|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|bytedance|CCBot|DBot|externalagent|TikTok|openai is_crawler;
+  ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot|TikTok  is_crawler;
   ~*Go-http-client|GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
-  ~*PECL|perplexity|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|Turnitin  is_crawler;
+  ~*PECL|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|Turnitin  is_crawler;
 }
 
 ###
