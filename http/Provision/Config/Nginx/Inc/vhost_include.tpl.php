@@ -127,6 +127,17 @@ if ($is_lang_chain) {
 }
 
 ###
+### Block static-asset “chain” URL mutation spam (see the $is_static_chain map
+### in server.tpl.php).  444 here, before the /(?:external|system)/ asset router
+### (~942) routes the absent file to @drupal -> /index.php -> php-fpm.  Uses 444
+### (drop, no response) to match the hostile-traffic family and feed the per-IP
+### 444 counter, vs the 404 used by the node/lang-chain siblings above.
+###
+if ($is_static_chain) {
+  return 444;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";

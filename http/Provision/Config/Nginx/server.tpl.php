@@ -769,6 +769,35 @@ map $uri $is_lang_chain {
 }
 
 ###
+### Detect static-asset “chain” URL mutation spam (broken relative-URL
+### resolution: a distributed botnet appends root-relative-without-leading-
+### slash Drupal asset refs onto a deep content URL).  Legitimate Drupal asset
+### URLs are root-anchored; these bury an asset-dir marker (or a canonical core
+### asset file) under a content path, or repeat the marker.  Matched here so the
+### vhost can 444 them before the /(?:external|system)/ asset router reaches
+### @drupal -> /index.php -> php-fpm.  Validated against 44k real flood requests:
+### 0 false positives on root-anchored assets, aggregated files, image styles
+### and /system/files private files.  Examples:
+### /about-council/meetings/day/2017-12-11/system/sites/all/modules/colorbox/js/modules/node/node.css
+### /a-z-services/modules/system/about-council/.../sites/all/modules/menu_minipanels/js/x.callbacks.js
+### /about-council/meetings/day/2021-02-24/system/system.base.css
+###
+map $uri $is_static_chain {
+  default 0;
+
+  # buried sites/all|default asset-dir (or ui/external) marker, ending in an asset
+  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:sites/(?:all|default)/(?:modules|themes|libraries)|ui/external)/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+
+  # same Drupal asset-dir token repeated (relative-URL concatenation); asset-
+  # anchored so it cannot match a legitimate content path with no static file
+  "~*^/[^?]*/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+
+  # a canonical Drupal core asset file buried under a content path (these core
+  # filenames only ever occur legitimately at a root-anchored path)
+  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:system\.(?:base|menus|messages|theme)\.css|(?:node|user|field|search|filter|comment|book|forum|poll|taxonomy|dblog)\.css|drupal\.js|jquery\.once\.js|ajax\.js|batch\.js|tabledrag\.js|tableselect\.js|states\.js|progress\.js|form\.js|collapse\.js|autocomplete\.js|machine-name\.js|textarea\.js|vertical-tabs\.js)$"  1;
+}
+
+###
 ### Support separate Speed Booster caches for various mobile devices.
 ###
 map $http_user_agent $device {
