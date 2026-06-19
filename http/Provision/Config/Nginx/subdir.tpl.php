@@ -153,9 +153,10 @@ if ($is_lang_chain) {
   return 404;
 }
 
-# $is_static_chain is intentionally NOT guarded on subdir vhosts: a subdir site
-# legitimately serves /<subdir>/sites/all/... assets, which the map matches as
-# buried-under-content.  The guard applies on full-domain vhosts only.
+# $is_static_chain / $is_content_chain are intentionally NOT guarded on subdir
+# vhosts: a subdir site legitimately serves /<subdir>/sites/all/... assets, which
+# $is_static_chain matches as buried-under-content.  Both guards apply on
+# full-domain vhosts only.
 
 # Mitigation for https://www.drupal.org/SA-CORE-2018-002
 set $rce "ZZ";

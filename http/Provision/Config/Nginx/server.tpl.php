@@ -798,6 +798,28 @@ map $uri $is_static_chain {
 }
 
 ###
+### Detect the content-path twin of the static-asset chain flood: the same
+### broken relative-URL resolution, but the mutated URL ends in a content
+### segment (no static asset), so it falls through to Drupal and renders a full
+### themed page (200) instead of being 444’d by $is_static_chain.  Matched only
+### when BOTH signals hold: a Drupal code-dir marker appears as a path segment
+### (sites/all/modules, modules/system, ui/external … never occur in a legitimate
+### content alias) AND some path segment repeats 3+ times (the relative-URL
+### accumulation signature).  The marker is a leading lookahead so normal,
+### markerless traffic fails fast and never touches the back-reference.  This is
+### deliberately conservative (covers the clear majority of the variant, not the
+### 2x-repeat tail) — the complete cure is a source-side <base href>/theme fix
+### that stops the site emitting root-relative-without-leading-slash links.
+### Examples:
+### /a-z-services/modules/system/about-council/modules/node/about-council/modules/node/about-council/meetings
+### /a-z-services/about-council/sites/all/modules/jquery_update/replace/ui/external/about-council/sites/all/modules/x/about-council/meetings
+###
+map $uri $is_content_chain {
+  default 0;
+  "~*^(?=[^?]*/(?:sites/(?:all|default)/(?:modules|themes|libraries)|modules/(?:system|field|user|node|filter|search)|ui/external)/)[^?]*/([a-z0-9][a-z0-9_-]{2,})/(?:[^/]+/)*?\1/(?:[^/]+/)*?\1(?:/|$)"  1;
+}
+
+###
 ### Support separate Speed Booster caches for various mobile devices.
 ###
 map $http_user_agent $device {

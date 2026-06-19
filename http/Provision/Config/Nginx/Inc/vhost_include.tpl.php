@@ -138,6 +138,17 @@ if ($is_static_chain) {
 }
 
 ###
+### Block the content-path twin of the static-asset chain flood (see the
+### $is_content_chain composed map in server.tpl.php).  404 (cheap, no php-fpm)
+### matching the node/lang-chain content-shape siblings rather than 444 — these
+### are content URLs, so a recoverable 404 keeps the false-positive blast radius
+### small.  Converts the served-200 variant into a no-bootstrap 404.
+###
+if ($is_content_chain) {
+  return 404;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
