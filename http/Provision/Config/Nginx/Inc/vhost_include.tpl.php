@@ -149,6 +149,17 @@ if ($is_content_chain) {
 }
 
 ###
+### Block the Referer-less /print* flood (see $is_print_path /
+### $block_print_no_referer in server.tpl.php).  444 to match the no-referrer
+### hostile-traffic family ($block_search_no_referrer); a legitimate print or
+### email-this-page click carries a Referer and passes straight through.  Works
+### regardless of whether any print module is enabled, on D7 and D10+.
+###
+if ($block_print_no_referer) {
+  return 444;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
