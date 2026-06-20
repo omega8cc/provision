@@ -127,6 +127,39 @@ if ($is_lang_chain) {
 }
 
 ###
+### Block static-asset “chain” URL mutation spam (see the $is_static_chain map
+### in server.tpl.php).  444 here, before the /(?:external|system)/ asset router
+### (~942) routes the absent file to @drupal -> /index.php -> php-fpm.  Uses 444
+### (drop, no response) to match the hostile-traffic family and feed the per-IP
+### 444 counter, vs the 404 used by the node/lang-chain siblings above.
+###
+if ($is_static_chain) {
+  return 444;
+}
+
+###
+### Block the content-path twin of the static-asset chain flood (see the
+### $is_content_chain composed map in server.tpl.php).  404 (cheap, no php-fpm)
+### matching the node/lang-chain content-shape siblings rather than 444 — these
+### are content URLs, so a recoverable 404 keeps the false-positive blast radius
+### small.  Converts the served-200 variant into a no-bootstrap 404.
+###
+if ($is_content_chain) {
+  return 404;
+}
+
+###
+### Block the Referer-less /print* flood (see $is_print_path /
+### $block_print_no_referer in server.tpl.php).  444 to match the no-referrer
+### hostile-traffic family ($block_search_no_referrer); a legitimate print or
+### email-this-page click carries a Referer and passes straight through.  Works
+### regardless of whether any print module is enabled, on D7 and D10+.
+###
+if ($block_print_no_referer) {
+  return 444;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";

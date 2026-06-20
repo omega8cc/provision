@@ -489,6 +489,25 @@ map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
 }
 
 ###
+### Block the /print* email/printer-friendly flood without assuming module state.
+### A printer-friendly or email-this-page request is always a click FROM a page,
+### so it carries a Referer; a Referer-less hit to a /print*/ path is the
+### distributed botnet (100% of the observed flood had no Referer).  Covers D7
+### print/print_mail/print_pdf/printer_and_pdf, D10+ entity_print + printable,
+### and Backdrop — anchored on a numeric node id or an export-format segment so
+### content slugs (/printing-services, /print/about-us, /printable-maps) never
+### match.  No module/version detection; mirrors $block_search_no_referrer.
+###
+map $uri $is_print_path {
+  default 0;
+  "~*^/(?:[a-z]{2}/)?(?:printmail/[0-9]|printpdf/[0-9]|printer/[0-9]|print/(?:[0-9]|pdf/|epub/|png/|html/|word_docx/)|printable/(?:print|pdf)/)"  1;
+}
+map $is_print_path$has_no_referrer $block_print_no_referer {
+  default 0;
+  "11"  1;   # print-module path AND no referrer → botnet
+}
+
+###
 ### Tier 2 — Map 4: Detect excessive facet count in the query string.
 ###
 ### Bots sending a fake self-referrer (e.g. Referer: https://www.example.com)
@@ -766,6 +785,57 @@ map $uri $is_lang_chain {
 
   # 3+ leading language-like segments: /xx/ or /xx-xxxx/
   ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
+}
+
+###
+### Detect static-asset “chain” URL mutation spam (broken relative-URL
+### resolution: a distributed botnet appends root-relative-without-leading-
+### slash Drupal asset refs onto a deep content URL).  Legitimate Drupal asset
+### URLs are root-anchored; these bury an asset-dir marker (or a canonical core
+### asset file) under a content path, or repeat the marker.  Matched here so the
+### vhost can 444 them before the /(?:external|system)/ asset router reaches
+### @drupal -> /index.php -> php-fpm.  Validated against 44k real flood requests:
+### 0 false positives on root-anchored assets, aggregated files, image styles
+### and /system/files private files.  Examples:
+### /about-council/meetings/day/2017-12-11/system/sites/all/modules/colorbox/js/modules/node/node.css
+### /a-z-services/modules/system/about-council/.../sites/all/modules/menu_minipanels/js/x.callbacks.js
+### /about-council/meetings/day/2021-02-24/system/system.base.css
+###
+map $uri $is_static_chain {
+  default 0;
+
+  # buried sites/all|default asset-dir (or ui/external) marker, ending in an asset
+  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:sites/(?:all|default)/(?:modules|themes|libraries)|ui/external)/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+
+  # same Drupal asset-dir token repeated (relative-URL concatenation); asset-
+  # anchored so it cannot match a legitimate content path with no static file
+  "~*^/[^?]*/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+
+  # a canonical Drupal core asset file buried under a content path (these core
+  # filenames only ever occur legitimately at a root-anchored path)
+  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:system\.(?:base|menus|messages|theme)\.css|(?:node|user|field|search|filter|comment|book|forum|poll|taxonomy|dblog)\.css|drupal\.js|jquery\.once\.js|ajax\.js|batch\.js|tabledrag\.js|tableselect\.js|states\.js|progress\.js|form\.js|collapse\.js|autocomplete\.js|machine-name\.js|textarea\.js|vertical-tabs\.js)$"  1;
+}
+
+###
+### Detect the content-path twin of the static-asset chain flood: the same
+### broken relative-URL resolution, but the mutated URL ends in a content
+### segment (no static asset), so it falls through to Drupal and renders a full
+### themed page (200) instead of being 444’d by $is_static_chain.  Matched only
+### when BOTH signals hold: a Drupal code-dir marker appears as a path segment
+### (sites/all/modules, modules/system, ui/external … never occur in a legitimate
+### content alias) AND some path segment repeats 3+ times (the relative-URL
+### accumulation signature).  The marker is a leading lookahead so normal,
+### markerless traffic fails fast and never touches the back-reference.  This is
+### deliberately conservative (covers the clear majority of the variant, not the
+### 2x-repeat tail) — the complete cure is a source-side <base href>/theme fix
+### that stops the site emitting root-relative-without-leading-slash links.
+### Examples:
+### /a-z-services/modules/system/about-council/modules/node/about-council/modules/node/about-council/meetings
+### /a-z-services/about-council/sites/all/modules/jquery_update/replace/ui/external/about-council/sites/all/modules/x/about-council/meetings
+###
+map $uri $is_content_chain {
+  default 0;
+  "~*^(?=[^?]*/(?:sites/(?:all|default)/(?:modules|themes|libraries)|modules/(?:system|field|user|node|filter|search)|ui/external)/)[^?]*/([a-z0-9][a-z0-9_-]{2,})/(?:[^/]+/)*?\1/(?:[^/]+/)*?\1(?:/|$)"  1;
 }
 
 ###
