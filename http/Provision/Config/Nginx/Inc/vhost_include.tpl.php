@@ -1725,6 +1725,30 @@ location = /index.php {
   limit_conn limreq 88;
 
   ###
+  ### Tier-A distributed-i18n-flood guardrail.  Every dynamic request — including
+  ### localized clean URLs after the internal rewrite to /index.php — funnels
+  ### through this location, so it is the single chokepoint where the anonymous
+  ### localized request class can be capped before it reaches php-fpm.  The
+  ### $boa_i18n_anon_key (http{} maps in server.tpl.php) is non-empty only for an
+  ### anonymous request to a localized path on an opted-in vhost, so English,
+  ### authenticated and non-opted-in traffic is never counted.  Bounding the
+  ### IN-FLIGHT count of this class per vhost bounds the share of the shared
+  ### per-account FPM pool a distributed translation-path flood can ever hold.
+  ### Default 24 (~1/8 of a 192-worker pool); tune via the nginx_i18n_anon_conn
+  ### option.  444 (set below) sheds excess instantly, at ~no cost.  Static files
+  ### under /xx/ never reach here (served by their own locations), so they are
+  ### correctly excluded.
+  ###
+<?php
+  $i18n_anon_conn = (int) drush_get_option('nginx_i18n_anon_conn', 24);
+  if ($i18n_anon_conn < 1) {
+    $i18n_anon_conn = 24;
+  }
+?>
+  limit_conn boa_i18n_anon <?php print $i18n_anon_conn; ?>;
+  limit_conn_status 444;
+
+  ###
   ### Detect supported no-cache exceptions
   ###
   if ( $request_method = POST ) {
