@@ -19,12 +19,16 @@ function drush_provision_drupal_provision_verify_validate() {
     provision_drupal_push_site();
 
     drush_errors_on();
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() < 10) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
+      // D10+ cannot be FULL-bootstrapped by Aegir's own Drush 8; take the
+      // CONFIGURATION bootstrap like D12+ already did, instead of attempting a
+      // FULL bootstrap that always fails and logs "could not bootstrap". The
+      // D10+ container/cache rebuild runs via site-local Drush in the post hook.
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-      drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_provision_verify_validate");
+      drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_provision_verify_validate");
     }
   }
 }
@@ -489,7 +493,14 @@ function drush_provision_drupal_post_provision_verify() {
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() >= 10) {
+      // D10+: working container + cache rebuild via the site-local Drush. The
+      // in-process _provision_drupal_rebuild_caches() depends on an Aegir Drush 8
+      // FULL bootstrap that cannot load a D10+ site, so it no-ops there. The
+      // helper self-manages the vendor/drush lock window. Non-fatal.
+      _provision_drupal_rebuild_d8plus();
+    }
+    elseif (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('installed', TRUE, 'site');

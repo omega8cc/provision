@@ -553,6 +553,92 @@ function _provision_drupal_rebuild_caches() {
   }
 }
 
+/**
+ * Rebuild the Drupal 8+ service container and flush all caches.
+ *
+ * The D8+ analog of the D<8 'registry-rebuild' + cache-clear that the deploy,
+ * verify and install paths run for older sites. 'drush cr' (cache:rebuild, a
+ * stable alias across Drush 8..13) calls drupal_rebuild(), which recompiles the
+ * service container and flushes every cache bin.
+ *
+ * D10+ MUST be driven by the SITE-LOCAL Drush: Aegir's own Drush 8 cannot
+ * bootstrap a D10/D11 site, so provision_backend_invoke(..., 'cache-rebuild')
+ * silently no-ops there — the historical gap this closes. The in-process
+ * drupal_flush_all_caches() in _provision_drupal_rebuild_caches() has the same
+ * problem, as it depends on a FULL bootstrap that fails on D10+. Site-local
+ * 'cr' also works on D12+, where the Aegir-Drush-8 paths are skipped entirely.
+ * D8/D9 can still be driven by Aegir Drush 8, so they use 'cache-rebuild'.
+ *
+ * Locking: on D10+ the rebuild needs vendor/drush executable. BOA keeps the
+ * site-local Drush locked (chmod 0400) on some paths and unlocked on others, so
+ * this snapshots the current state, unlocks only if it was locked, runs 'cr',
+ * then restores the exact prior lock state — never changing the at-rest posture
+ * (so it is safe to call from deploy's already-unlocked window, from verify,
+ * install, or a front-end task). A genuinely degraded codebase (vendor missing)
+ * still skips, logging only; no @alias / Aegir Drush 8 fallback on D10+, per
+ * platform policy.
+ *
+ * Non-fatal by design: logs and continues, never drush_set_error() — a cache
+ * rebuild must not fail a deploy/verify/install/task.
+ */
+function _provision_drupal_rebuild_d8plus() {
+  // D7 and hostmaster have no D8+ container; nothing to rebuild here.
+  if (provision_is_hostmaster_site() || drush_drupal_major_version() < 8) {
+    return;
+  }
+
+  if (drush_drupal_major_version() >= 10) {
+    // D10+: site-local Drush only. Never @alias / Aegir Drush 8 on D10+.
+    $appRoot = findAppRoot(d()->root);
+    $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
+
+    // Force a known-good window without changing the at-rest lock posture:
+    // unlock only if currently locked, and relock afterwards to match.
+    $was_executable = is_executable($drushAbsolutePath);
+    if (!$was_executable) {
+      drush_log(dt('REBUILD/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd for cr'), 'info');
+      provision_unlock_drush_local_vnd();
+    }
+
+    if (is_executable($drushAbsolutePath)) {
+      $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
+      // SECURITY: $dnameten derives from d()->name (Drush alias name), which is
+      // not validated against shell-unsafe characters at the Hostmaster UI
+      // layer. Escape before shell interpolation. 'cr' is a fixed literal. No
+      // extra args are passed to drush_shell_cd_and_exec(), so the command is
+      // NOT run through sprintf() (no '%' hazard). (string) cast guards the PHP
+      // 8.1+ null-to-escapeshellarg deprecation if preg_replace() returns null.
+      drush_log(dt('REBUILD/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten cr in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+      drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' cr');
+      foreach (drush_shell_exec_output() as $line) {
+        drush_log($line, 'notice');
+      }
+    }
+    else {
+      // Degraded codebase (no site-local Drush). Do not fall back to @alias /
+      // Aegir Drush 8 on D10+, per platform policy; log and skip. The container
+      // is then rebuilt lazily on the next request.
+      drush_log(dt('REBUILD/LOCAL/DRUSH/SKIP site-local Drush not executable at @path; container/cache rebuild left to the next request', array('@path' => $drushAbsolutePath)), 'warning');
+    }
+
+    if (!$was_executable) {
+      drush_log(dt('REBUILD/LOCAL/DRUSH/RELOCK with provision_lock_drush_local_vnd'), 'info');
+      provision_lock_drush_local_vnd();
+    }
+  }
+  else {
+    // D8/D9: Aegir Drush 8 can bootstrap the site, so 'cache-rebuild' works.
+    // provision_backend_invoke runs with integrate => TRUE, which replays a
+    // child error into the parent's drush_get_error(); snapshot and restore the
+    // error code so a cosmetic rebuild failure can never fail the caller (e.g.
+    // the deploy's restore-dir / old-DB cleanup gated on !drush_get_error()).
+    drush_log(dt('REBUILD/AEGIR/DRUSH Invoking cache-rebuild with Drush 8'), 'info');
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    provision_backend_invoke(d()->name, 'cache-rebuild');
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+  }
+}
+
 function provision_drupal_find_sites() {
   $sites = array();
   if ($dir = opendir("./sites")) {

@@ -168,9 +168,16 @@ function drush_provision_tests_new_run() {
   drush_provision_tests_install_platform('drupal8dev');
   drush_provision_tests_install_site('drupal8dev', 'drupal8-dev-minimal', 'standard');
 
-  // Migrate a D8 site from the current release to the latest commit.
+  // Migrate a D8 site from the current release to the latest commit, and verify
+  // the post-deploy update_fetch_task clear (drupal.org #2920285): seed an
+  // orphaned tracker row, migrate (which runs provision-deploy), then assert the
+  // row is gone. Exercises the D8/D9 Aegir-Drush-8 clear path; the D10+ site-
+  // local path is covered by the manual verification in the brief (no D10+
+  // platform in this suite).
   drush_provision_tests_install_site('drupal8', 'drupal8-upgrade-d8', 'standard');
+  drush_provision_tests_seed_update_fetch_task('drupal8-upgrade-d8');
   drush_provision_tests_migrate_site('drupal8-upgrade-d8', 'drupal8dev');
+  drush_provision_tests_assert_update_fetch_task_cleared('drupal8-upgrade-d8');
 
   // Cleanup.
   drush_provision_tests_remove_site('drupal8-upgrade-d8');
@@ -382,6 +389,56 @@ function drush_provision_tests_migrate_site($site, $target) {
   // Import and verify the site.
   provision_backend_invoke('@hostmaster', 'hosting-import', array("@$site.aegir.example.com"));
   provision_backend_invoke('@hostmaster', 'hosting-task', array("@$site.aegir.example.com", 'verify'), array('force' => TRUE));
+  drush_provision_tests_run_remaining_tasks();
+}
+
+/**
+ * Seed a fake {key_value} 'update_fetch_task' row on a D8+ site.
+ *
+ * Reproduces the orphaned Update-module tracker rows that wedge D8+ sites on
+ * "No available releases found" after a DB import (drupal.org #2920285). A
+ * following migrate/clone runs provision-deploy, whose post-hook should clear
+ * the row via _provision_drupal_clear_update_fetch_tasks(). D8+ only: the eval
+ * uses \Drupal, which fatals on D6/D7 — never call this from a legacy flow.
+ */
+function drush_provision_tests_seed_update_fetch_task($site) {
+  drush_log(dt('Seeding update_fetch_task row on site: @site.', array('@site' => "$site.aegir.example.com")), 'ok');
+  $php = "\\Drupal::keyValue('update_fetch_task')->set('drupal', array('name' => 'drupal'));";
+  provision_backend_invoke("@$site.aegir.example.com", 'ev', array($php));
+  // Confirm the seed actually landed: a silently no-op seed would leave the
+  // collection empty and make the post-migrate cleared-assert false-pass (a
+  // count of 0 is indistinguishable from a successful clear). Read it back with
+  // the same sentinel/regex and fail if fewer than one row is present.
+  $php = "print 'UPDFETCH_SEEDED=' . count(\\Drupal::keyValue('update_fetch_task')->getAll());";
+  $result = provision_backend_invoke("@$site.aegir.example.com", 'ev', array($php));
+  $output = isset($result['output']) ? $result['output'] : '';
+  if (!preg_match('/UPDFETCH_SEEDED=(\d+)/', $output, $matches) || (int) $matches[1] < 1) {
+    drush_set_error('PROVISION_TESTS_UPDATE_FETCH_TASK', dt('Failed to seed update_fetch_task on @site (ev output: @out); the cleared-assert would be meaningless.', array('@site' => $site, '@out' => $output)));
+  }
+  drush_provision_tests_run_remaining_tasks();
+}
+
+/**
+ * Assert the D8+ {key_value} 'update_fetch_task' collection is empty.
+ *
+ * Run AFTER a migrate/clone so the post-deploy clear has executed. Prints a
+ * sentinel-tagged count via 'ev' and fails the suite on any remaining row (or
+ * if the count cannot be read). Sentinel + regex keeps the parse robust against
+ * any surrounding backend framing. 'output' is the integrate-mode backend key
+ * carrying remote stdout (Drush 8 backend.inc); the seed read-back exercises
+ * the same key first, so a wrong key would fail loudly at seed time.
+ */
+function drush_provision_tests_assert_update_fetch_task_cleared($site) {
+  drush_log(dt('Asserting update_fetch_task cleared on site: @site.', array('@site' => "$site.aegir.example.com")), 'ok');
+  $php = "print 'UPDFETCH_REMAINING=' . count(\\Drupal::keyValue('update_fetch_task')->getAll());";
+  $result = provision_backend_invoke("@$site.aegir.example.com", 'ev', array($php));
+  $output = isset($result['output']) ? $result['output'] : '';
+  if (!preg_match('/UPDFETCH_REMAINING=(\d+)/', $output, $matches)) {
+    drush_set_error('PROVISION_TESTS_UPDATE_FETCH_TASK', dt('Could not read update_fetch_task count on @site; ev output: @out', array('@site' => $site, '@out' => $output)));
+  }
+  elseif ((int) $matches[1] !== 0) {
+    drush_set_error('PROVISION_TESTS_UPDATE_FETCH_TASK', dt('update_fetch_task NOT cleared on @site (count=@n).', array('@site' => $site, '@n' => $matches[1])));
+  }
   drush_provision_tests_run_remaining_tasks();
 }
 
