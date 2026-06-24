@@ -110,7 +110,7 @@ if ($nginx_is_modern) {
   print "  limit_req_zone  \$ai_user_limit_key    zone=ai_user:10m    rate=2r/s;\n";
   print "  limit_req_zone  \$ai_utility_limit_key zone=ai_utility:5m  rate=1r/s;\n";
   # Tier-A distributed-i18n-flood guardrail.  Bounds the IN-FLIGHT count of
-  # anonymous localized (i18n) requests per opted-in vhost (see the
+  # anonymous localized (i18n) requests per vhost (on by default; see the
   # $boa_i18n_anon_key maps below).  Keyed on a constant per vhost ($host), NOT
   # the client IP: a localized-page scraper spreads across thousands of IPs at
   # one or two requests each, so per-IP limits never trip; only an aggregate
@@ -876,20 +876,27 @@ map $http_cookie $cache_uid {
 ### requests each), so per-IP limits never trip.
 ###
 ### These maps build a CONSTANT per-vhost key ($host) that is non-empty only
-### for an anonymous request to a localized path on a vhost that has OPTED IN.
-### The key feeds limit_conn zone=boa_i18n_anon (declared in the http{} block
-### above), which bounds the IN-FLIGHT count of that request class per vhost
-### regardless of source IP.  An empty key is not counted, so English, static,
-### authenticated and non-opted-in traffic is never touched; excess returns 444
-### before it reaches php-fpm.  Opt a vhost in by adding a   "host" 1;   line to
-### /data/conf/boa_i18n_guard.map (wildcard include below; an absent file keeps
-### the guardrail off across the whole fleet).
+### for an anonymous request to a localized path on a guarded vhost.  The key
+### feeds limit_conn zone=boa_i18n_anon (declared in the http{} block above),
+### which bounds the IN-FLIGHT count of that request class per vhost regardless
+### of source IP.  An empty key is not counted, so English, static, authenticated
+### and opted-out traffic is never touched; excess returns 444 before it reaches
+### php-fpm.  The guardrail is ON by default for every vhost: a leading two-letter
+### path prefix is Drupal's URL language-negotiation convention, never a content
+### subdirectory, so the class match is safe across Drupal/Backdrop sites (the
+### existing /[a-z][a-z]/search and /[a-z][a-z]/civicrm locations rely on the same
+### convention).  Opt a vhost OUT by adding a   "host" 0;   line to
+### /data/conf/boa_i18n_guard.map (wildcard include below; an absent file leaves
+### the guardrail ON fleet-wide).
 ###
 
-### Per-vhost opt-in switch.  Default 0 (off).  A BOA-managed wildcard include
-### turns it on for selected multilingual vhosts; absent/empty file is safe.
+### Per-vhost on/off switch.  Default 1 (ON) — see the note above on why a
+### two-letter prefix is a safe fleet-wide language signal.  A BOA-managed
+### wildcard include can set specific hosts to 0 to opt them out (e.g. a
+### non-Drupal app, or a single-language site that uses a two-letter path for a
+### region rather than a language); an absent/empty file leaves every host ON.
 map $host $boa_i18n_guard {
-  default 0;
+  default 1;
   include /data/conf/boa_i18n_guard.map*;
 }
 

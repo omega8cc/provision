@@ -1730,8 +1730,9 @@ location = /index.php {
   ### through this location, so it is the single chokepoint where the anonymous
   ### localized request class can be capped before it reaches php-fpm.  The
   ### $boa_i18n_anon_key (http{} maps in server.tpl.php) is non-empty only for an
-  ### anonymous request to a localized path on an opted-in vhost, so English,
-  ### authenticated and non-opted-in traffic is never counted.  Bounding the
+  ### anonymous request to a localized path on a guarded vhost (guarding is on by
+  ### default; a host can be opted out), so English, authenticated and opted-out
+  ### traffic is never counted.  Bounding the
   ### IN-FLIGHT count of this class per vhost bounds the share of the shared
   ### per-account FPM pool a distributed translation-path flood can ever hold.
   ### Default 24 (~1/8 of a 192-worker pool); tune via the nginx_i18n_anon_conn
