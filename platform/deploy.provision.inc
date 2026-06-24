@@ -251,12 +251,14 @@ function drush_provision_drupal_post_provision_deploy() {
             drush_log(dt('DEPLOY5/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
             provision_lock_drush_local_vnd();
           }
-          // Log The Useful Info
-          drush_log(dt('AEGIR/DRUSH Invoking updatedb with Drush 8 in drush_provision_drupal_post_provision_deploy'), 'info');
-          // Tell How-To Skip Drush updatedb
-          drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
-          // Call The Drush updatedb Command With Aegir Own Drush 8
-          provision_backend_invoke(d()->name, 'updatedb -y');
+          // D10+ with no executable site-local Drush. Do NOT fall back to Aegir
+          // Drush 8: it cannot bootstrap a D10/D11 site, so 'updatedb' would only
+          // fail noisily ("could not bootstrap") without applying anything. Skip
+          // with a warning; the schema update must be applied manually (Unlock
+          // Local Drush, then 'vdrush @alias updb') or by repairing the site-local
+          // Drush. (D6/D7/D8/D9 keep using Aegir Drush 8 in the branch below — it
+          // is the version-matched Drush for them and bootstraps them fine.)
+          drush_log(dt('DEPLOY4b/LOCAL/DRUSH/SKIP updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 cannot bootstrap D10+; apply the DB update manually', array('@drush_path' => $drushAbsolutePath)), 'warning');
           // Break the Update-module fetch-task deadlock introduced by the DB
           // import (clone/migrate/restore). On this degraded D10+ path the
           // site-local Drush is not executable, so the helper logs and skips
@@ -284,6 +286,10 @@ function drush_provision_drupal_post_provision_deploy() {
           // (string) cast guards against PHP 8.1+ null-to-escapeshellarg
           // deprecation if preg_replace() ever returns null upstream.
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' updatedb -y');
+          // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line
+          // log status from it ($success was previously used here but never set,
+          // so every line was logged as 'notice', never 'success').
+          $success = $result;
           $output = drush_shell_exec_output();
           foreach ($output as $index => $line) {
             if (!$success) { // Log the entire error as a notice.
