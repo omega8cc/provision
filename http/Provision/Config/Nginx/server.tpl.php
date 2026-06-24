@@ -109,6 +109,15 @@ if ($nginx_is_modern) {
   print "  limit_req_zone  \$ai_search_limit_key  zone=ai_search:10m  rate=1r/s;\n";
   print "  limit_req_zone  \$ai_user_limit_key    zone=ai_user:10m    rate=2r/s;\n";
   print "  limit_req_zone  \$ai_utility_limit_key zone=ai_utility:5m  rate=1r/s;\n";
+  # Tier-A distributed-i18n-flood guardrail.  Bounds the IN-FLIGHT count of
+  # anonymous localized (i18n) requests per vhost (on by default; see the
+  # $boa_i18n_anon_key maps below).  Keyed on a constant per vhost ($host), NOT
+  # the client IP: a localized-page scraper spreads across thousands of IPs at
+  # one or two requests each, so per-IP limits never trip; only an aggregate
+  # per-vhost cap bounds the expensive translation class's share of the shared
+  # per-account FPM pool.  Empty key (the common case) is not counted, so all
+  # other traffic is unaffected.
+  print "  limit_conn_zone \$boa_i18n_anon_key    zone=boa_i18n_anon:10m;\n";
 }
 else {
   print "  limit_zone limreq \$binary_remote_addr 10m;\n";
@@ -854,6 +863,69 @@ map $http_user_agent $device {
 map $http_cookie $cache_uid {
   default  '';
   ~SESS[[:alnum:]]+=(?<session_id>[[:graph:]]+)  $session_id;
+}
+
+###
+### Tier-A distributed-i18n-flood guardrail (BOA abuse-guard).
+###
+### A distributed scraper crawling localized pages drives each uncached page
+### through an expensive synchronous backend (on-the-fly translation), holding
+### a PHP-FPM worker for tens of seconds.  FPM pools are shared per account, so
+### enough concurrent localized requests saturate the whole pool and collapse
+### every site on it; the source is spread over thousands of IPs (one or two
+### requests each), so per-IP limits never trip.
+###
+### These maps build a CONSTANT per-vhost key ($host) that is non-empty only
+### for an anonymous request to a localized path on a guarded vhost.  The key
+### feeds limit_conn zone=boa_i18n_anon (declared in the http{} block above),
+### which bounds the IN-FLIGHT count of that request class per vhost regardless
+### of source IP.  An empty key is not counted, so English, static, authenticated
+### and opted-out traffic is never touched; excess returns 444 before it reaches
+### php-fpm.  The guardrail is ON by default for every vhost: a leading two-letter
+### path prefix is Drupal's URL language-negotiation convention, never a content
+### subdirectory, so the class match is safe across Drupal/Backdrop sites (the
+### existing /[a-z][a-z]/search and /[a-z][a-z]/civicrm locations rely on the same
+### convention).  Opt a vhost OUT by adding a   "host" 0;   line to
+### /data/conf/boa_i18n_guard.map (wildcard include below; an absent file leaves
+### the guardrail ON fleet-wide).
+###
+
+### Per-vhost on/off switch.  Default 1 (ON) — see the note above on why a
+### two-letter prefix is a safe fleet-wide language signal.  A BOA-managed
+### wildcard include can set specific hosts to 0 to opt them out (e.g. a
+### non-Drupal app, or a single-language site that uses a two-letter path for a
+### region rather than a language); an absent/empty file leaves every host ON.
+map $host $boa_i18n_guard {
+  default 1;
+  include /data/conf/boa_i18n_guard.map*;
+}
+
+### Localized request class: 1 when the ORIGINAL request URI targets a path
+### under a two-letter language prefix, optionally with a script/region suffix
+### (e.g. /pt-br/ or /zh-hans/).  Keyed on $request_uri, NOT $uri, because BOA
+### internally rewrites clean URLs to /index.php before this is evaluated.  The
+### second pattern closes the D7 ?q=<lang>/... bypass (an explicit /index.php?q=
+### request keeps the language in the query, not the path); it cannot match
+### ordinary q=node/ , q=user/ or q=desktop values, which are never exactly two
+### letters followed by '/'.
+map $request_uri $boa_i18n_path {
+  default 0;
+  ~*^/[a-z][a-z](-[a-z]+)?/        1;
+  ~*[?&]q=/?[a-z][a-z](-[a-z]+)?/  1;
+}
+
+### Anonymous predicate: 1 when there is no Drupal session cookie (reuses the
+### authoritative $cache_uid map above; empty $cache_uid = anonymous = limited).
+map $cache_uid $boa_is_anon {
+  default 0;
+  ""      1;
+}
+
+### Final key: $host only when the vhost is opted in AND the request is
+### localized AND anonymous; otherwise empty, so limit_conn ignores it.
+map "$boa_i18n_guard$boa_i18n_path$boa_is_anon" $boa_i18n_anon_key {
+  default "";
+  "111"   $host;
 }
 
 #######################################################
