@@ -489,7 +489,14 @@ function drush_provision_drupal_post_provision_verify() {
   d()->root = provision_auto_fix_platform_root(d()->root);
 
   if (d()->type === 'site') {
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() >= 10) {
+      // D10+: working container + cache rebuild via the site-local Drush. The
+      // in-process _provision_drupal_rebuild_caches() depends on an Aegir Drush 8
+      // FULL bootstrap that cannot load a D10+ site, so it no-ops there. The
+      // helper self-manages the vendor/drush lock window. Non-fatal.
+      _provision_drupal_rebuild_d8plus();
+    }
+    elseif (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('installed', TRUE, 'site');

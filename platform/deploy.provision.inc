@@ -300,6 +300,13 @@ function drush_provision_drupal_post_provision_deploy() {
           // See _provision_drupal_clear_update_fetch_tasks() and
           // https://www.drupal.org/project/drupal/issues/2920285
           _provision_drupal_clear_update_fetch_tasks();
+          // Rebuild the D8+ service container and flush all caches via the
+          // site-local Drush, the analog of the D<8 registry-rebuild above.
+          // Runs here, in the same unlocked window as updatedb and before the
+          // re-lock below, so it works on D10+ where Aegir Drush 8 cannot
+          // bootstrap the site (the FULL-bootstrap rebuild in the deploy tail
+          // no-ops there). Non-fatal.
+          _provision_drupal_rebuild_d8plus();
           // Lock Site-Local Drush if Unlocked
           provision_check_codebase_status();
           if (!d()->isConsolePatched || !d()->isCorePatched) {
@@ -345,7 +352,12 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
   }
-  if (drush_drupal_major_version() < 12) {
+  // D6-D9 finish the rebuild in-process under a FULL bootstrap that Aegir's own
+  // Drush 8 can still drive. D10+ are already rebuilt above via the site-local
+  // 'cr' in _provision_drupal_rebuild_d8plus() (Aegir Drush 8 cannot bootstrap
+  // them, so this block only ever logged "could not bootstrap" for D10/D11);
+  // they take the CONFIGURATION-only branch below, like D12+ already did.
+  if (drush_drupal_major_version() < 10) {
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
       drush_include_engine('drupal', 'deploy');
@@ -369,7 +381,7 @@ function drush_provision_drupal_post_provision_deploy() {
   }
   else {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-    drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_post_provision_deploy");
+    drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_post_provision_deploy");
   }
 
   // Remove the restore directory.
