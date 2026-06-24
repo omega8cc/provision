@@ -256,6 +256,13 @@ function drush_provision_drupal_post_provision_deploy() {
           drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
           // Call The Drush updatedb Command With Aegir Own Drush 8
           provision_backend_invoke(d()->name, 'updatedb -y');
+          // Break the Update-module fetch-task deadlock introduced by the DB
+          // import (clone/migrate/restore). On this degraded D10+ path the
+          // site-local Drush is not executable, so the helper logs and skips
+          // (no Aegir Drush 8 fallback on D10+); the manual SQL workaround
+          // still applies. See
+          // https://www.drupal.org/project/drupal/issues/2920285
+          _provision_drupal_clear_update_fetch_tasks();
         }
         else {
           // Log The Useful Info
@@ -286,6 +293,13 @@ function drush_provision_drupal_post_provision_deploy() {
             }
             drush_log($line, $line_status);
           }
+          // Break the Update-module fetch-task deadlock introduced by the DB
+          // import (clone/migrate/restore), while the site-local Drush is still
+          // unlocked. provision_lock_drush_local_vnd() below chmods vendor/drush
+          // to 0400, after which the helper's is_executable() gate would fail.
+          // See _provision_drupal_clear_update_fetch_tasks() and
+          // https://www.drupal.org/project/drupal/issues/2920285
+          _provision_drupal_clear_update_fetch_tasks();
           // Lock Site-Local Drush if Unlocked
           provision_check_codebase_status();
           if (!d()->isConsolePatched || !d()->isCorePatched) {
@@ -315,6 +329,11 @@ function drush_provision_drupal_post_provision_deploy() {
         // Call The Drush updatedb Command With Aegir Own Drush 8
         drush_log(dt('AEGIR/DRUSH Invoking updatedb with Drush 8 in drush_provision_drupal_post_provision_deploy'), 'info');
         provision_backend_invoke(d()->name, 'updatedb -y');
+        // Break the Update-module fetch-task deadlock introduced by the DB
+        // import (clone/migrate/restore). D8/D9 runs the clear with Aegir's own
+        // Drush 8, same as the updatedb above. See
+        // https://www.drupal.org/project/drupal/issues/2920285
+        _provision_drupal_clear_update_fetch_tasks();
       }
     }
   }
@@ -368,5 +387,89 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log(dt('Dropped the old database (@old_database).', array('@old_database' => $old_database)), 'info');
       }
     }
+  }
+}
+
+/**
+ * Clear the Update module's stale fetch-task tracker after a DB import.
+ *
+ * Drupal 8+ tracks "a release-history fetch is already queued for project X"
+ * in the non-expirable {key_value} collection 'update_fetch_task'. The row is
+ * only ever cleared by UpdateProcessor::processFetchTask(), which runs solely
+ * when the matching 'update_fetch_tasks' queue item is processed. A clone or
+ * migrate restores the durable {key_value} rows but does not preserve the
+ * transient queue in lockstep, leaving tracker rows with no queue item.
+ * Because UpdateProcessor::createFetchTask() refuses to enqueue when a row
+ * exists, the site is then permanently stuck on "No available releases found",
+ * with no recovery via cron or the manual check (refreshUpdateData() deletes
+ * the available-releases data but never touches this collection).
+ *
+ * Upstream (still open): https://www.drupal.org/project/drupal/issues/2920285
+ *
+ * Drupal 7 kept the same tracker in the {cache_update} cache bin, which our
+ * deploy already wipes, so this only affects D8+ sites.
+ *
+ * This is the Drupal-native equivalent of the documented workaround
+ * (DELETE FROM key_value WHERE collection = 'update_fetch_task') and is safe
+ * to run on every deploy: the next update-status check simply re-fetches.
+ *
+ * Callers must invoke this from each updatedb branch, right after updatedb and
+ * BEFORE the site-local Drush is re-locked: provision_lock_drush_local_vnd()
+ * chmods vendor/drush to 0400, after which the is_executable() gate below would
+ * fail and the D10+ clear would silently skip. Failure is non-fatal by design
+ * (logging only, never drush_set_error) — a cosmetic update-status reset must
+ * never fail a deploy.
+ */
+function _provision_drupal_clear_update_fetch_tasks() {
+  // D7 and hostmaster have no {key_value} table; nothing to clear. A
+  // non-hostmaster D7 site reaches the callers below, so this guard is required.
+  if (provision_is_hostmaster_site() || drush_drupal_major_version() < 8) {
+    return;
+  }
+
+  // Drupal-native equivalent of the SQL workaround. Double-quoted so "\\Drupal"
+  // collapses to the literal "\Drupal"; the single quotes around the collection
+  // name are safe inside a double-quoted PHP string.
+  $php = "\\Drupal::keyValue('update_fetch_task')->deleteAll();";
+
+  if (drush_drupal_major_version() >= 10) {
+    // D10+: site-local Drush only. Never use Aegir Drush 8 / @alias on D10+.
+    // Aliases were already converted in the updatedb branch (site:alias-convert)
+    // before this helper is called, so the site-local alias resolves.
+    $appRoot = findAppRoot(d()->root);
+    $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
+    if (is_executable($drushAbsolutePath)) {
+      $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
+      // SECURITY: $dnameten derives from d()->name and is not validated against
+      // shell-unsafe characters at the Hostmaster UI layer; escape it. $php is
+      // a fixed literal but is escaped for symmetry. No extra args are passed to
+      // drush_shell_cd_and_exec(), so the command is NOT run through sprintf()
+      // (no '%' hazard). (string) cast guards the PHP 8.1+ null-to-escapeshellarg
+      // deprecation if preg_replace() ever returns null.
+      drush_log(dt('UPDFETCH/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten ev (clear update_fetch_task) in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+      drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' ev ' . escapeshellarg($php));
+      foreach (drush_shell_exec_output() as $line) {
+        drush_log($line, 'notice');
+      }
+    }
+    else {
+      // Degraded codebase (no site-local Drush). Do not fall back to @alias /
+      // Aegir Drush 8 on D10+, per platform policy; log and skip. The documented
+      // manual SQL workaround still applies.
+      drush_log(dt('UPDFETCH/LOCAL/DRUSH/SKIP site-local Drush not executable at @path; update_fetch_task left untouched', array('@path' => $drushAbsolutePath)), 'warning');
+    }
+  }
+  else {
+    // D8/D9: Aegir Drush 8 is acceptable. provision_backend_invoke passes the
+    // eval string as a command argument via the Drush backend, so no manual
+    // shell escaping is required here. That invoke runs with integrate => TRUE,
+    // which replays a child error into the parent's drush_get_error(); the
+    // deploy's restore-dir/old-DB cleanup is gated on !drush_get_error(), so a
+    // failed cosmetic clear could otherwise fail the deploy and leak the old
+    // database. Snapshot and restore the error code so this can never happen.
+    drush_log(dt('UPDFETCH/AEGIR/DRUSH Invoking ev (clear update_fetch_task) with Drush 8'), 'info');
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    provision_backend_invoke(d()->name, 'ev', array($php));
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
   }
 }
