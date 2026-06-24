@@ -209,7 +209,8 @@ function drush_provision_drupal_post_provision_deploy() {
         // Unlock Site-Local Drush In The Old Platform Too
         // Otherwise Site-Local Drush In The New Platform Would Complain
         if (!drush_get_option('deploy_replace_site', FALSE)) {
-          if (drush_get_option('old_platform', FALSE)) {
+          $old_platform = drush_get_option('old_platform', FALSE);
+          if ($old_platform) {
             provision_backend_invoke($old_platform, 'provision-unlock');
             sleep(5);
           }
@@ -315,7 +316,8 @@ function drush_provision_drupal_post_provision_deploy() {
           }
           // Lock Site-Local Drush In The Old Platform Again Too
           if (!drush_get_option('deploy_replace_site', FALSE)) {
-            if (drush_get_option('old_platform', FALSE)) {
+            $old_platform = drush_get_option('old_platform', FALSE);
+            if ($old_platform) {
               provision_backend_invoke($old_platform, 'provision-verify');
               sleep(5);
             }
