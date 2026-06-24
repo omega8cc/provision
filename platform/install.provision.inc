@@ -320,12 +320,15 @@ function drush_provision_drupal_provision_install() {
     // pass the login link back to the front end.
     drush_set_option('login_link', $result['context']['login_link']);
 
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() < 10) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
+      // D10+ cannot be FULL-bootstrapped by Aegir's own Drush 8; take the
+      // CONFIGURATION bootstrap like D12+ already did. The D10+ container/cache
+      // rebuild runs via site-local Drush in the post-install hook.
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-      drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_provision_install");
+      drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_provision_install");
     }
 
     drush_set_option('profile_installed', TRUE, 'site');
@@ -348,7 +351,14 @@ function drush_provision_drupal_post_provision_install() {
 
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() >= 10) {
+      // D10+: working container + cache rebuild via the site-local Drush; the
+      // in-process _provision_drupal_rebuild_caches() no-ops on D10+ (it needs an
+      // Aegir Drush 8 FULL bootstrap the site cannot satisfy). The helper
+      // self-manages the vendor/drush lock window. Non-fatal.
+      _provision_drupal_rebuild_d8plus();
+    }
+    elseif (drush_drupal_major_version() < 12) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
