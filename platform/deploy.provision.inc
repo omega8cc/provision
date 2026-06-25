@@ -360,12 +360,22 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
   }
-  // D6-D9 finish the rebuild in-process under a FULL bootstrap that Aegir's own
-  // Drush 8 can still drive. D10+ are already rebuilt above via the site-local
-  // 'cr' in _provision_drupal_rebuild_d8plus() (Aegir Drush 8 cannot bootstrap
-  // them, so this block only ever logged "could not bootstrap" for D10/D11);
-  // they take the CONFIGURATION-only branch below, like D12+ already did.
-  if (drush_drupal_major_version() < 10) {
+  // D6-D11 finish the rebuild in-process under a FULL bootstrap. Aegir's own
+  // Drush 8 CAN read-only FULL-bootstrap D10/D11 here, exactly as it does at
+  // install/verify VALIDATE time (the install/verify gates were restored to
+  // < 12 in f9466d37 because that in-process container is what the unconditional
+  // post-hook system_map() needs); this gate now mirrors them (install:323,
+  // verify:22). The in-process pass regenerates the site 'packages' map so the
+  // Hostmaster module/theme inventory stays current after a clone/migrate/
+  // restore, runs the deploy_11 URL-rename engine (system.site name on a
+  // clone-to-new-URL), and rebuilds node access. D10/D11 are ALSO rebuilt above
+  // via the site-local 'cr' in _provision_drupal_rebuild_d8plus() (harmless, and
+  // it pre-warms the container this bootstrap then reads). D12+ alone skip the
+  // FULL bootstrap (Aegir Drush 8 cannot load them) and take the
+  // CONFIGURATION-only branch below, relying on that site-local 'cr'. If the
+  // bootstrap genuinely fails on D10/D11 it logs "could not bootstrap" and the
+  // 'packages' map is left untouched (no regression over the prior skip).
+  if (drush_drupal_major_version() < 12) {
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
       drush_include_engine('drupal', 'deploy');
@@ -389,7 +399,7 @@ function drush_provision_drupal_post_provision_deploy() {
   }
   else {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-    drush_log("Skipping FULL bootstrap for drupal 10+ in drush_provision_drupal_post_provision_deploy");
+    drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_post_provision_deploy");
   }
 
   // Remove the restore directory.
