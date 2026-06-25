@@ -193,7 +193,7 @@ function provision_drush_command() {
     'examples' => array(
       'drush @platform provision-dlock' => 'Lock the platform local Drush as defined by the platform Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-dunlock'] = array(
@@ -201,7 +201,7 @@ function provision_drush_command() {
     'examples' => array(
       'drush @platform provision-dunlock' => 'Unlock the platform local Drush as defined by the platform Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-verify'] = array(
