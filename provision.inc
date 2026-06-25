@@ -161,6 +161,13 @@ function provision_check_codebase_status() {
     d()->symfonyDir = d()->appRoot . '/vendor/symfony/';
   }
 
+  // Initialise patch-state flags before the symfonyDir gate so callers (the
+  // idempotency predicate, the verify auto-lock guard) never read an unset
+  // property on a not-yet-built or pre-D10 platform.
+  d()->isCorePatched = FALSE;
+  d()->isConsolePatched = FALSE;
+  d()->isValidatorPatched = FALSE;
+
   if (is_dir(d()->symfonyDir)) {
 
     drush_log(dt('CHECK/CODE/APP =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
@@ -198,27 +205,92 @@ function provision_check_codebase_status() {
       d()->isValidatorPatched = TRUE;
     }
     drush_log(dt('CHECK/CODE/VALIDATOR =@is_validator_patched= FOR @valFile', array('@is_validator_patched' => d()->isValidatorPatched, '@valFile' => $validator_file_path)), 'info');
-
-    $drush_lock_ctrl = d()->root . '/local_drush_locked.pid';
-    $drush_unlock_ctrl = d()->root . '/local_drush_unlocked.pid';
-
-    if (provision_file()->exists($drush_lock_ctrl)->status()) {
-      // Delete drush-locked flag file.
-      provision_file()->unlink($drush_lock_ctrl)
-       ->succeed('Removed Drush-Locked Flag File')
-       ->fail('Could not remove Drush-Locked Flag File');
-    }
-
-    if (provision_file()->exists($drush_unlock_ctrl)->status()) {
-      // Delete drush-unlocked flag file.
-      provision_file()->unlink($drush_unlock_ctrl)
-        ->succeed('Removed Drush-UnLocked Flag File')
-        ->fail('Could not remove Drush-UnLocked Flag File');
-    }
   }
   else {
     drush_log(dt('CHECK/CODE/VERSION =@coreVersion= FOR @webRoot', array('@coreVersion' => drush_drupal_major_version(), '@webRoot' => d()->root)), 'info');
   }
+}
+
+/**
+ * Return the first existing path from a candidate list, or '' if none exist.
+ *
+ * Used to resolve the site-local-vs-above vendor layout the same way the
+ * lock/unlock bodies do (d()->root/vendor/... vs d()->root/../vendor/...).
+ */
+function _provision_first_existing($paths) {
+  foreach ($paths as $p) {
+    if (file_exists($p)) {
+      return $p;
+    }
+  }
+  return '';
+}
+
+/**
+ * Derive the site-local Drush lock state purely from on-disk reality.
+ *
+ * No marker/pid files: state is read from the patch sentinels (set by
+ * provision_check_codebase_status, which MUST have run first) and the actual
+ * permission bits the lock (0400) / unlock (0775) apply to vendor/drush and the
+ * Symfony console Input/Style dirs. Patch-state is authoritative where patch
+ * templates exist (D10/D11); for pre-D10 and D12+ the lock is the chmod alone,
+ * so perm-bits are the only signal. Any patch-vs-perm disagreement (the
+ * interrupted-run signature) returns 'partial' so the caller runs the body,
+ * whose per-step guards converge only the still-needed work.
+ *
+ * @return string  'locked' | 'unlocked' | 'partial' | 'unknown'
+ */
+function provision_drush_local_lock_state() {
+  $drush = _provision_first_existing(array(
+    d()->root . '/vendor/drush',
+    d()->root . '/../vendor/drush',
+  ));
+  $inp = _provision_first_existing(array(
+    d()->root . '/vendor/symfony/console/Input',
+    d()->root . '/../vendor/symfony/console/Input',
+  ));
+  $sty = _provision_first_existing(array(
+    d()->root . '/vendor/symfony/console/Style',
+    d()->root . '/../vendor/symfony/console/Style',
+  ));
+
+  // Cannot resolve the lock targets -> unknown; the caller runs the body whose
+  // exists() guards no-op safely.
+  if (empty($drush) || empty($inp) || empty($sty)) {
+    return 'unknown';
+  }
+
+  $bits_locked = ((fileperms($drush) & 0777) === 0400)
+    && ((fileperms($inp) & 0777) === 0400)
+    && ((fileperms($sty) & 0777) === 0400);
+  $bits_unlocked = ((fileperms($drush) & 0777) === 0775)
+    && ((fileperms($inp) & 0777) === 0775)
+    && ((fileperms($sty) & 0777) === 0775);
+
+  $version = drush_drupal_major_version();
+
+  if ($version == 10 || $version == 11) {
+    // Built-state gate: trust the patch flags only on a demonstrably built tree.
+    if (!is_dir(d()->symfonyDir)) {
+      return 'unknown';
+    }
+    if (d()->isCorePatched && d()->isConsolePatched && $bits_locked) {
+      return 'locked';
+    }
+    if (!d()->isCorePatched && !d()->isConsolePatched && $bits_unlocked) {
+      return 'unlocked';
+    }
+    return 'partial';
+  }
+
+  // Pre-D10 and D12+: no patch templates; the lock is the chmod alone.
+  if ($bits_locked) {
+    return 'locked';
+  }
+  if ($bits_unlocked) {
+    return 'unlocked';
+  }
+  return 'partial';
 }
 
 /**
@@ -440,12 +512,18 @@ function provision_unlock_drush_local_vnd() {
       $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
       $commandValidator = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchValidatorTpl);
+      $commandCoreDry = sprintf('patch --dry-run -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
+      $commandConsoleDry = sprintf('patch --dry-run -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
+      $commandValidatorDry = sprintf('patch --dry-run -d ' . d()->root . ' -R -p1 < ' . $patchValidatorTpl);
 
       drush_log(dt('CORE/PATCH/IF4 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF4 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
       drush_log(dt('VALIDATOR/PATCH/IF4 --@isValidatorPatched-- in @webRoot', array('@isValidatorPatched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
 
-      if (provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched) {
+      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched && !drush_shell_exec($commandCoreDry)) {
+        drush_set_error('PROVISION_CORE_PATCH_REVERT_DRYRUN_FAILED', dt('Core patch would not revert cleanly in @webRoot; skipping to avoid a partial revert.', array('@webRoot' => d()->root)));
+      }
+      elseif (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched) {
         drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -460,7 +538,10 @@ function provision_unlock_drush_local_vnd() {
         }
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched) {
+      if (isset($console_patch_fname) && provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched && !drush_shell_exec($commandConsoleDry)) {
+        drush_set_error('PROVISION_CONSOLE_PATCH_REVERT_DRYRUN_FAILED', dt('Console patch would not revert cleanly in @symfonyDir; skipping to avoid a partial revert.', array('@symfonyDir' => d()->symfonyDir)));
+      }
+      elseif (isset($console_patch_fname) && provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched) {
         drush_log(dt('CONSOLE/PATCH/REVERT @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
@@ -475,7 +556,10 @@ function provision_unlock_drush_local_vnd() {
         }
       }
 
-      if (drush_drupal_major_version() == 11 && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
+      if (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
+        drush_set_error('PROVISION_VALIDATOR_PATCH_REVERT_DRYRUN_FAILED', dt('Validator patch would not revert cleanly in @webRoot; skipping to avoid a partial revert.', array('@webRoot' => d()->root)));
+      }
+      elseif (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/REVERT @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();
@@ -749,6 +833,9 @@ function provision_lock_drush_local_vnd() {
       $commandCore = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
       $commandValidator = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
+      $commandCoreDry = sprintf('patch --dry-run -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
+      $commandConsoleDry = sprintf('patch --dry-run -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
+      $commandValidatorDry = sprintf('patch --dry-run -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
 
       if (!d()->isConsolePatched || !d()->isCorePatched) {
         $contribDirMnx = d()->root . '/modules/contrib';
@@ -797,7 +884,10 @@ function provision_lock_drush_local_vnd() {
       drush_log(dt('CONSOLE/PATCH/IF1 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
       drush_log(dt('VALIDATOR/PATCH/IF1 --@isValidatorPatched-- in @webRoot', array('@isValidatorPatched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
 
-      if (provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
+      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched && !drush_shell_exec($commandCoreDry)) {
+        drush_set_error('PROVISION_CORE_PATCH_DRYRUN_FAILED', dt('Core patch would not apply cleanly in @webRoot; skipping to avoid a partial patch.', array('@webRoot' => d()->root)));
+      }
+      elseif (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
         drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandCore);
         $result = drush_shell_exec_output();
@@ -815,7 +905,10 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchCoreFile);
       }
 
-      if (provision_file()->exists($patchConsoleTpl)->status() && !d()->isConsolePatched) {
+      if (isset($console_patch_fname) && provision_file()->exists($patchConsoleTpl)->status() && !d()->isConsolePatched && !drush_shell_exec($commandConsoleDry)) {
+        drush_set_error('PROVISION_CONSOLE_PATCH_DRYRUN_FAILED', dt('Console patch would not apply cleanly in @symfonyDir; skipping to avoid a partial patch.', array('@symfonyDir' => d()->symfonyDir)));
+      }
+      elseif (isset($console_patch_fname) && provision_file()->exists($patchConsoleTpl)->status() && !d()->isConsolePatched) {
         drush_log(dt('CONSOLE/PATCH/APPLY @patchConsoleTpl in @symfonyDir', array('@patchConsoleTpl' => $patchConsoleTpl, '@symfonyDir' => d()->symfonyDir)), 'info');
         $success = drush_shell_exec($commandConsole);
         $result = drush_shell_exec_output();
@@ -833,7 +926,10 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchConsoleFile);
       }
 
-      if (drush_drupal_major_version() == 11 && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
+      if (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
+        drush_set_error('PROVISION_VALIDATOR_PATCH_DRYRUN_FAILED', dt('Validator patch would not apply cleanly in @webRoot; skipping to avoid a partial patch.', array('@webRoot' => d()->root)));
+      }
+      elseif (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/APPLY @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();
