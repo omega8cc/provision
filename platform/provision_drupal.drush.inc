@@ -451,13 +451,6 @@ function _provision_drupal_create_directories($url = NULL) {
   drush_command_invoke_all_ref('provision_drupal_chgrp_not_recursive_alter', $chgrp_not_recursive, $url);
   drush_command_invoke_all_ref('provision_drupal_chmod_not_recursive_alter', $chmod_not_recursive, $url);
 
-  // Native files/private symlinking: make the site's files and private dirs
-  // symlinks into the per-account static store BEFORE the mkdir walk, so the
-  // walk creates each per-subdir entry through the symlink into the store. This
-  // is a no-op for platforms, intentionally shared sites, when a kill-switch
-  // control file is present, or when a real non-empty dir already exists.
-  _provision_drupal_symlink_files_dirs($url);
-
   foreach ($mkdir as $path => $perm) {
     if (!is_dir($path)) {
       provision_file()->mkdir($path)
@@ -483,127 +476,83 @@ function _provision_drupal_create_directories($url = NULL) {
 }
 
 /**
- * Native files/private symlinking for a single site.
+ * Native files/private symlinking for a single site, delegated to the BOA
+ * autosymlink tool running as root via its hardened sudo wrapper.
  *
- * Points sites/<url>/files and sites/<url>/private at the per-account static
- * store (<aegir_root>/static/files/<url>/{files,private}), matching the layout
- * the BOA autosymlink tool maintains. Called from
- * _provision_drupal_create_directories() after the *_alter hooks and before the
- * mkdir walk, so the symlink pre-exists and the walk creates the per-subdir
- * entries through it.
- *
- * Default-on but deliberately create-only and fail-open:
- *  - no-op for platforms ($url == 'all'), a box-wide or per-account kill-switch
- *    control file, or an intentional file-sharing control file;
- *  - scoped to Octopus accounts (/data/disk/<oNNN>), matching autosymlink, so
- *    native creation and the nightly self-heal / orphan report stay consistent;
- *  - an existing real (non-symlink) non-empty dir is left untouched (bulk
- *    conversion of legacy real dirs is the gated nightly autosymlink batch);
- *  - the static target is created and verified FIRST and only then the symlink,
- *    so a failure never leaves a dangling link; on any failure the normal real
- *    dir creation by the mkdir walk takes over. No ->fail() error code is
- *    attached here, so a benign condition can never abort the task.
+ * Provision runs unprivileged (the Octopus account user), and the per-account
+ * static store (<account>/static/files) is root-managed (the backup subsystem
+ * owns it), so the move-and-symlink MUST run privileged -- doing it in
+ * unprivileged PHP fails with EACCES creating the store dir. The wrapper
+ * validates its arguments and invokes only the narrow single-site autosymlink,
+ * which MOVES the site's existing files/private dirs into the store and replaces
+ * them with symlinks (it does NOT create empty store dirs). Warn-not-fail: any
+ * failure is logged and the site keeps plain dirs. No-op for platforms, the
+ * box-wide / per-account kill-switch, or a missing wrapper.
  *
  * @param $url
- *   The site URL (d()->uri); 'all' for platforms.
+ *   The site URL.
+ * @param $force_unshare
+ *   TRUE on clone (break an inherited cross-account share; a fresh clone never
+ *   opted into sharing); FALSE on a fresh install.
+ * @param $account
+ *   Optional Octopus account dir name (e.g. o8). Pass it from the install hook,
+ *   which runs BEFORE the site's first verify writes the nginx vhost (autosymlink
+ *   then trusts the Drush alias alone). Omit on the clone path (post-verify),
+ *   where autosymlink resolves the account from the vhost+alias pair.
  */
-function _provision_drupal_symlink_files_dirs($url) {
+function _provision_drupal_native_symlink($url, $force_unshare = FALSE, $account = NULL) {
   if (empty($url) || $url == 'all') {
     return;
   }
 
   $aegir_root = d('@server_master')->aegir_root;
-  if (empty($aegir_root)) {
+  // Scope to Octopus-hosted accounts; the master hostmaster account is left as
+  // plain dirs.
+  if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
     return;
   }
 
-  // Scope to Octopus-hosted accounts, matching the autosymlink tool. The master
-  // hostmaster account (/var/aegir) is intentionally left with plain dirs.
-  if (strpos($aegir_root, '/data/disk/') !== 0) {
+  // Kill-switch: disable native symlinking without a code change, box-wide
+  // (/data/conf) or per-account (static/control).
+  if (is_file('/data/conf/disable_native_files_symlink.cnf')
+      || is_file($aegir_root . '/static/control/no_native_files_symlink.info')) {
     return;
   }
 
-  // Fail-closed token validation before the value is used in a filesystem path.
+  // The privileged entry point; absent on non-BOA Aegir or early bootstrap.
+  if (!is_file('/usr/local/bin/fix-drupal-site-symlinks.sh')) {
+    return;
+  }
+
+  // Fail-closed token validation before the values reach a root-level tool.
   if (!preg_match('/^[a-z0-9][a-z0-9._-]*$/i', $url) || strpos($url, '..') !== FALSE) {
     drush_log(dt('[native-symlink] Skipped: unexpected site token @url', array('@url' => $url)), 'warning');
     return;
   }
 
-  $control_dir = $aegir_root . '/static/control';
-
-  // Kill-switch: disable native symlinking without a code change, box-wide
-  // (/data/conf) or per-account (static/control).
-  if (is_file('/data/conf/disable_native_files_symlink.cnf')
-      || is_file($control_dir . '/no_native_files_symlink.info')) {
-    return;
+  // Build the wrapper command. drush_shell_exec sprintf-escapes each %s arg via
+  // drush_escapeshellarg, returns a bool, and never throws -- inherently
+  // warn-not-fail. The wrapper itself re-validates and runs ONLY the narrow
+  // single-site apply (it cannot reach autosymlink's global modes).
+  $cmd = 'sudo --non-interactive /usr/local/bin/fix-drupal-site-symlinks.sh --site=%s';
+  $args = array($url);
+  if (!empty($account)) {
+    $cmd .= ' --account=%s';
+    $args[] = $account;
   }
-
-  // Intentional file-sharing opt-out: leave the default behaviour (plain dirs /
-  // extracted-as-is copy) in place for sites that deliberately share files.
-  if (is_file($control_dir . '/share.files.' . $url . '.info')) {
-    drush_log(dt('[native-symlink] Skipped @url: intentional file-sharing control file present', array('@url' => $url)), 'notice');
-    return;
+  if ($force_unshare) {
+    $cmd .= ' --force-unshare';
   }
+  array_unshift($args, $cmd);
+  $ok = call_user_func_array('drush_shell_exec', $args);
 
-  $web_group = d('@server_master')->web_group;
-  $store_base = $aegir_root . '/static/files/' . $url;
-
-  // The symlinks live inside sites/<url>, which the mkdir walk creates later;
-  // ensure it exists now so the links can be placed.
-  if (!is_dir('sites/' . $url)) {
-    provision_file()->mkdir('sites/' . $url);
+  if ($ok) {
+    drush_log(dt('[native-symlink] @url: files/private moved into the per-account store and symlinked', array('@url' => $url)), 'success');
   }
-
-  $types = array('files', 'private');
-  foreach ($types as $type) {
-    $in_site = 'sites/' . $url . '/' . $type;
-    $target = $store_base . '/' . $type;
-
-    // Already a symlink: idempotent no-op.
-    if (is_link($in_site)) {
-      continue;
-    }
-
-    // An existing real dir: convert only if empty (no data to move). A populated
-    // dir is left for the gated nightly autosymlink batch; never move data here.
-    if (is_dir($in_site)) {
-      $entries = @scandir($in_site);
-      if ($entries === FALSE || count($entries) > 2) {
-        drush_log(dt('[native-symlink] Left existing real @type dir for @url to the nightly batch', array('@type' => $type, '@url' => $url)), 'notice');
-        continue;
-      }
-      @rmdir($in_site);
-      if (is_dir($in_site)) {
-        // Could not remove it: leave the real dir in place.
-        continue;
-      }
-    }
-
-    // Create and verify the static target FIRST, so the symlink is never left
-    // dangling for the !is_dir()-gated mkdir walk to trip on.
-    $have_target = provision_file()->exists($target)->status();
-    if (!$have_target) {
-      $have_target = provision_file()->mkdir($target)->status();
-    }
-    if (!$have_target) {
-      drush_log(dt('[native-symlink] Could not create store target @target; leaving plain dir for @url', array('@target' => $target, '@url' => $url)), 'warning');
-      continue;
-    }
-
-    // Group-own the store target for web writability (chgrp skips the symlink
-    // itself, so it must be applied to the real target here).
-    if (!empty($web_group)) {
-      provision_file()->chgrp($target, $web_group);
-    }
-
-    // No ->fail() error code: a benign failure must fall through to plain dir
-    // creation by the walk, never abort the task.
-    $linked = provision_file()->symlink($target, $in_site)->status();
-    if (!$linked) {
-      drush_log(dt('[native-symlink] Could not symlink @path -> @target; leaving plain dir', array('@path' => $in_site, '@target' => $target)), 'warning');
-      continue;
-    }
-    drush_log(dt('[native-symlink] @url: @type -> @target', array('@url' => $url, '@type' => $type, '@target' => $target)), 'notice');
+  else {
+    // Non-fatal, but operator-actionable: the site keeps plain dirs (or, on a
+    // clone, may still share the source store). The install/clone succeeded.
+    drush_log(dt('[native-symlink] @url: could not move files into the store (non-fatal); left as plain dirs - manual review if symlinking was expected', array('@url' => $url)), 'warning');
   }
 }
 
