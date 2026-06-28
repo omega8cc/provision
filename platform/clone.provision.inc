@@ -121,6 +121,27 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     // Verify the newly cloned site.
     provision_backend_invoke($new_name, 'provision-verify');
 
+    // Native files symlinking for the clone: give the new site its OWN copy of
+    // the files/private dirs. A clone inherits a symlink into the SOURCE store
+    // (default backups preserve symlinks), so --force-unshare breaks that
+    // inherited link and copies the data into the new site's own store. The
+    // work is delegated to the BOA autosymlink tool via its hardened sudo
+    // wrapper (Provision is unprivileged and must not invoke autosymlink, nor
+    // updatesymlinks, directly). It is warn-not-fail: low disk, a missing tool,
+    // or any non-zero result is logged and the clone still succeeds. Skipped
+    // when native symlinking is disabled box-wide.
+    $clone_uri = $options['uri'];
+    if (!is_file('/data/conf/disable_native_files_symlink.cnf')
+        && is_file('/usr/local/bin/fix-drupal-site-symlinks.sh')) {
+      $linked = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-site-symlinks.sh --site=%s --force-unshare", $clone_uri);
+      if ($linked) {
+        drush_log(dt('[native-symlink] Clone @uri: files/private symlinked into its own store', array('@uri' => $clone_uri)), 'success');
+      }
+      else {
+        drush_log(dt('[native-symlink] Clone @uri: symlink conversion skipped or failed (non-fatal); files left usable', array('@uri' => $clone_uri)), 'warning');
+      }
+    }
+
     $aegir_root = d('@server_master')->aegir_root;
     $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
 
