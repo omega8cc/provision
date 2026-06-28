@@ -138,7 +138,10 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
         drush_log(dt('[native-symlink] Clone @uri: files/private symlinked into its own store', array('@uri' => $clone_uri)), 'success');
       }
       else {
-        drush_log(dt('[native-symlink] Clone @uri: symlink conversion skipped or failed (non-fatal); files left usable', array('@uri' => $clone_uri)), 'warning');
+        // Non-fatal, but operator-actionable: the new site may still share the
+        // source's files store (low disk, or the inherited share could not be
+        // broken). The clone itself succeeded.
+        drush_log(dt('[native-symlink] Clone @uri: could not give the site its OWN files copy; it may still share files with the source - manual review recommended (the clone itself succeeded)', array('@uri' => $clone_uri)), 'warning');
       }
     }
 
