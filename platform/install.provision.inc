@@ -366,4 +366,12 @@ function drush_provision_drupal_post_provision_install() {
   else {
     _provision_client_create_symlink();
   }
+
+  // Native files symlinking for the freshly installed site: move its
+  // files/private dirs into the per-account static store and symlink them back,
+  // via the root autosymlink tool (the store is root-managed, so Provision -- as
+  // the unprivileged account user -- must delegate). The nginx vhost is not
+  // written until the post-install verify, so pass the account explicitly
+  // (autosymlink trusts the Drush alias). Warn-not-fail.
+  _provision_drupal_native_symlink(d()->uri, FALSE, basename(d('@server_master')->aegir_root));
 }
