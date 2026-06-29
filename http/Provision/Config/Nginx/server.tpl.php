@@ -437,6 +437,32 @@ map $uri $is_secret_path {
 }
 
 ###
+### Deny probes for foreign-CMS admin paths (WordPress / Joomla / phpMyAdmin
+### tokens that can never exist on a Drupal / Backdrop / Aegir-Hostmaster
+### docroot, regardless of UA).  Without this the extensionless variant of such
+### a probe (e.g. /cms/wp-admin, /ru/administrator) misses every static
+### location, falls through try_files -> @drupal -> /index.php -> php-fpm, and
+### costs a full Drupal bootstrap just to render a 404 — the exact sink that
+### let a distributed auth-probe flood saturate a small VM's FPM pool.  444
+### (drop, no bootstrap) instead, which also feeds the per-IP 444 counter in the
+### scan_nginx IDS (status 444 is scored; 301/extensionless-404 routing is not).
+###
+### Tokens are matched only as whole path segments (followed by / . ? or end),
+### so a legitimate alias such as /wp-content-strategy or /site-administrator
+### does NOT match.  Generic auth words (login, signin, admin, user, account)
+### are deliberately NOT matched here — they collide with real customer URL
+### namespaces and with Drupal's own /admin, /user; the distributed tail that
+### uses them is handled in aggregate by the scan_nginx UA-burst detector, not
+### at this shared edge.  "adminer" is intentionally absent: BOA ships Adminer.
+###
+map $uri $is_cms_probe {
+  default  '';
+  ~*(?:^|/)wp-(?:admin|login|content|includes|json|config|cron|signup|mail|register|links-opml|trackback|comments-post)(?:[./?]|$)  is_cms_probe;
+  ~*(?:^|/)administrator(?:/|$)                                                                                                     is_cms_probe;
+  ~*(?:^|/)phpmyadmin(?:[./?]|$)                                                                                                    is_cms_probe;
+}
+
+###
 ### Security-banned client IPs, populated by the BOA monitor/firewall layer
 ### (scan_nginx/fire write offending real-client IPs here).  Keyed on
 ### $remote_addr, which Cloudflare realip resolves to the real client, so the
