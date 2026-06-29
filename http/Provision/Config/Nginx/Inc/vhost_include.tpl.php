@@ -200,6 +200,18 @@ if ($is_secret_path) {
 }
 
 ###
+### Deny foreign-CMS admin probes (WordPress/Joomla/phpMyAdmin path tokens that
+### cannot exist on a Drupal/Backdrop/Hostmaster docroot — see $is_cms_probe in
+### server.tpl.php).  444 drops them before the extensionless variant routes to
+### @drupal -> /index.php -> php-fpm, removing the bootstrap-per-probe FPM sink
+### and feeding the scan_nginx 444 counter.  Whole-segment match only; generic
+### auth words are left to the IDS aggregate detector, not blocked here.
+###
+if ($is_cms_probe) {
+  return 444;
+}
+
+###
 ### Deny forged AI user-agents.  Google-Extended / Applebot-Extended are
 ### robots.txt-only tokens a real client never sends — proof of forgery.
 ###
