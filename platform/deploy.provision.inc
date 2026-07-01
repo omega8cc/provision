@@ -222,16 +222,6 @@ function drush_provision_drupal_post_provision_deploy() {
         $output = implode('', drush_shell_exec_output());
         drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
 
-        // Unlock Site-Local Drush In The New Platform
-        provision_check_codebase_status();
-        if (d()->isConsolePatched || d()->isCorePatched) {
-          drush_log(dt('DEPLOY2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-          provision_unlock_drush_local_vnd();
-        }
-
-        // Define Drush Command
-        $drushCommand = ['updb'];
-
         // Find The App Root Directory
         $appRoot = findAppRoot(d()->root);
 
@@ -242,15 +232,29 @@ function drush_provision_drupal_post_provision_deploy() {
         $drushAbsolutePath = $appRoot . '/' . $drushPath;
         drush_log(dt('DEPLOY3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
+        // Open a chmod-only executable window WITHOUT reverting the Aegir
+        // core/console/validator/psr-log patches. updatedb runs a FULL bootstrap
+        // and recompiles the D8+ service container; compiling it in the patch-
+        // REVERTED (stock) state -- what the old provision_unlock_drush_local_vnd()
+        // dance did here -- bakes the site-local modern Drush's tagged
+        // 'logger.drupaltodrush' (Drush\Log\DrushLog) into the persisted
+        // container, which the patched web then fatals resolving (circular
+        // reference on D11, "Class Drush\Log\DrushLog not found" on D10 where
+        // vendor/drush is relocked 0400). The site serves in the PATCHED state, so
+        // updatedb must compile in that same state: flipping only the exec bits
+        // keeps the patches applied and never poisons the container -- the analog
+        // of the site-local 'cr' fix in _provision_drupal_rebuild_d8plus(). The
+        // at-rest 0400 posture is restored by the chmod-only relock below, only if
+        // we opened the window here.
+        $was_executable = is_executable($drushAbsolutePath);
+        if (!$was_executable) {
+          drush_log(dt('DEPLOY2/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for updatedb'), 'info');
+          _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
+        }
+
         if (!is_executable($drushAbsolutePath)) {
           // Log The Useful Info
           drush_log(dt('DEPLOY4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
-          // Lock Site-Local Drush if Unlocked
-          provision_check_codebase_status();
-          if (!d()->isConsolePatched || !d()->isCorePatched) {
-            drush_log(dt('DEPLOY5/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-            provision_lock_drush_local_vnd();
-          }
           // D10+ with no executable site-local Drush. Do NOT fall back to Aegir
           // Drush 8: it cannot bootstrap a D10/D11 site, so 'updatedb' would only
           // fail noisily ("could not bootstrap") without applying anything. Skip
@@ -266,6 +270,13 @@ function drush_provision_drupal_post_provision_deploy() {
           // still applies. See
           // https://www.drupal.org/project/drupal/issues/2920285
           _provision_drupal_clear_update_fetch_tasks();
+          // Relock the chmod-only window if we opened it (patches untouched). In
+          // this branch drush.php was not made executable (genuinely missing), so
+          // this only restores the 0400 at-rest posture.
+          if (!$was_executable) {
+            drush_log(dt('DEPLOY5/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          }
         }
         else {
           // Log The Useful Info
@@ -302,23 +313,26 @@ function drush_provision_drupal_post_provision_deploy() {
           }
           // Break the Update-module fetch-task deadlock introduced by the DB
           // import (clone/migrate/restore), while the site-local Drush is still
-          // unlocked. provision_lock_drush_local_vnd() below chmods vendor/drush
-          // to 0400, after which the helper's is_executable() gate would fail.
+          // executable. The chmod-only relock below returns vendor/drush to 0400,
+          // after which the helper's is_executable() gate would fail.
           // See _provision_drupal_clear_update_fetch_tasks() and
           // https://www.drupal.org/project/drupal/issues/2920285
           _provision_drupal_clear_update_fetch_tasks();
           // Rebuild the D8+ service container and flush all caches via the
           // site-local Drush, the analog of the D<8 registry-rebuild above.
-          // Runs here, in the same unlocked window as updatedb and before the
-          // re-lock below, so it works on D10+ where Aegir Drush 8 cannot
-          // bootstrap the site (the FULL-bootstrap rebuild in the deploy tail
-          // no-ops there). Non-fatal.
+          // Runs here, in the same exec window as updatedb and before the
+          // chmod-only relock below, so it works on D10+ where Aegir Drush 8
+          // cannot bootstrap the site (the FULL-bootstrap rebuild in the deploy
+          // tail no-ops there). With the window already open it reuses it (its own
+          // is_executable() gate no-ops), compiling in the patched state. Non-fatal.
           _provision_drupal_rebuild_d8plus();
-          // Lock Site-Local Drush if Unlocked
-          provision_check_codebase_status();
-          if (!d()->isConsolePatched || !d()->isCorePatched) {
-            drush_log(dt('DEPLOY10/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-            provision_lock_drush_local_vnd();
+          // Relock the chmod-only window if we opened it, leaving the patches
+          // untouched (never a patch re-apply here). Restores the at-rest 0400
+          // posture, minus the patch/psr-log/ownership work already correct at
+          // rest. Runs before the old-platform re-verify, matching the prior order.
+          if (!$was_executable) {
+            drush_log(dt('DEPLOY10/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
           }
           // Lock Site-Local Drush In The Old Platform Again Too
           if (!drush_get_option('deploy_replace_site', FALSE)) {
