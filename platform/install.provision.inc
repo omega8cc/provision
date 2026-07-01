@@ -151,13 +151,6 @@ function drush_provision_drupal_provision_install() {
     }
     elseif (drush_drupal_major_version() > 10) {
 
-      if ($lock_unlock) {
-        // Unlock Site-Local Drush/Vendor In The 11+ Platform
-        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-        provision_unlock_drush_local_vnd();
-        sleep(5);
-      }
-
       // Define Drush Command
       $drushCommand = 'site-install';
 
@@ -171,10 +164,38 @@ function drush_provision_drupal_provision_install() {
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
       drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
+      // Open a chmod-only executable window WITHOUT reverting the Aegir
+      // core/console/validator/psr-log patches. Those patches exist to make a
+      // D10/D11 site loadable by Aegir's OWN Drush 8 (old psr/log v1, logger
+      // signatures without ": void"); the site-local MODERN Drush used for
+      // site-install does not need them reverted. Reverting them here -- the old
+      // provision_unlock_drush_local_vnd() dance -- makes site-install compile the
+      // D8+ service container in the stock state, baking the site-local Drush's
+      // tagged logger.drupaltodrush (Drush\Log\DrushLog) into the persisted
+      // (Valkey) container, which the patched web then fatals resolving (circular
+      // reference on D11, "Class Drush\Log\DrushLog not found" on D10). Flipping
+      // only the exec bits keeps the patches applied, so site-install compiles in
+      // the same state the web serves and never poisons the container -- the
+      // analog of the cr fix (_provision_drupal_rebuild_d8plus()) and the deploy
+      // updatedb fix. Honour _no_codebase_lock_unlock.ctrl ($lock_unlock) and
+      // preserve the at-rest 0400 posture (relock chmod-only below, only if we
+      // opened the window).
+      $was_executable = is_executable($drushAbsolutePath);
+      if ($lock_unlock && !$was_executable) {
+        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for site-install'), 'info');
+        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
+      }
+
       if (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
         drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
+        // Relock the chmod-only window if we opened it, so a degraded/aborted
+        // install never leaves the platform vendor writable (patches untouched).
+        if ($lock_unlock && !$was_executable) {
+          drush_log(dt('D11/INSTALL4b/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+          _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        }
         return FALSE;
       }
       else {
@@ -188,10 +209,18 @@ function drush_provision_drupal_provision_install() {
         	$db_url = $matches[1];
           } else {
         	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
+        	if ($lock_unlock && !$was_executable) {
+        	  _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        	}
         	return FALSE;
           }
         } else {
           drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
+          // Relock the chmod-only window if we opened it, so this early abort
+          // never leaves the platform vendor writable (patches untouched).
+          if ($lock_unlock && !$was_executable) {
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          }
           return FALSE;
         }
 
@@ -226,6 +255,10 @@ function drush_provision_drupal_provision_install() {
         foreach ($command as $i => $arg) {
           if (!is_scalar($arg)) {
             drush_log("D11/INSTALL Invalid command part at index $i: " . print_r($arg, TRUE), 'error');
+            // Relock the chmod-only window if we opened it (patches untouched).
+            if ($lock_unlock && !$was_executable) {
+              _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+            }
             return FALSE;
           }
         }
@@ -233,6 +266,10 @@ function drush_provision_drupal_provision_install() {
         // Call The Drush site-install Command with Site-Local Drush
         $cmd_string = implode(' ', array_map('escapeshellarg', $command));
         $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
+        // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line log
+        // status from it (mirrors the deploy updatedb fix: $success was read below
+        // but never set, so every output line was logged 'notice', never 'success').
+        $success = $result;
         $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
@@ -306,14 +343,14 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      if ($lock_unlock) {
-        // Lock Site-Local Drush if Unlocked
-        provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
-          drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
-        }
-        sleep(5);
+      // Relock the chmod-only window if we opened it, leaving the patches
+      // untouched (they were never reverted). Restores the at-rest 0400 posture.
+      // The post-install hook's _provision_drupal_rebuild_d8plus() then rebuilds
+      // the container patched (its own chmod-only window), and D<12 also gets the
+      // Aegir Drush 8 FULL bootstrap tail in the caller.
+      if ($lock_unlock && !$was_executable) {
+        drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
       }
     }
 
