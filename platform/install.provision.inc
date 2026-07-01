@@ -263,6 +263,24 @@ function drush_provision_drupal_provision_install() {
           drush_log($line, $line_status);
         }
 
+        // Detect a failed site-install. drush_shell_cd_and_exec() returns FALSE on
+        // a non-zero exit; without this the D11+ path reported a broken install as
+        // success (Aegir then marked the site installed and skipped rollback). The
+        // subprocess output was already logged as notices above. Relock the
+        // chmod-only exec window first if we opened it (patches untouched, like the
+        // early-return guards above -- never provision_(un)lock_drush_local_vnd(),
+        // which reverts the Aegir patches and poisons the Valkey container), then
+        // register the canonical install error and abort before the login-link
+        // derivation and the pm:list cleanup run against a broken site.
+        if (!$result) {
+          drush_log(dt('D11/INSTALL/ERR site-install failed (non-zero exit) in @appRoot', array('@appRoot' => $appRoot)), 'error');
+          if ($lock_unlock && !$was_executable) {
+            drush_log(dt('D11/INSTALL/RELOCK chmod-only 0400 after failed site-install (patches untouched)'), 'info');
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          }
+          return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal site-install failed for @uri', array('@uri' => d()->uri)));
+        }
+
         // Generate the one-time admin login link with the site-local modern
         // Drush, inside the still-open chmod-only exec window. On the D6-D10
         // path login_link comes from the provision-install-backend context
