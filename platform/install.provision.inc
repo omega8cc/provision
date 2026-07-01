@@ -331,7 +331,8 @@ function drush_provision_drupal_provision_install() {
         $enabled_modules = [];
         $pml_command = [
           $drushPath,
-          '-r web pm:list',
+          'pm:list',
+          '--root=' . d()->root,
           '--type=module',
           '--status=enabled',
           '--format=list',
@@ -353,6 +354,7 @@ function drush_provision_drupal_provision_install() {
             $drushPath,
             'pm:uninstall',
             'automatic_updates',
+            '--root=' . d()->root,
             '--yes',
             '--no-interaction',
             '--uri=' . d()->uri,
@@ -372,6 +374,7 @@ function drush_provision_drupal_provision_install() {
             $drushPath,
             'pm:uninstall',
             'package_manager',
+            '--root=' . d()->root,
             '--yes',
             '--no-interaction',
             '--uri=' . d()->uri,
