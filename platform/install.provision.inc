@@ -111,15 +111,6 @@ function drush_provision_drupal_provision_install() {
     $lock_unlock = TRUE;
   }
 
-  // Determine if codebase post-locking is allowed (no by default)
-  $yes_codebase_post_lock = '/data/conf/_yes_codebase_post_lock.ctrl';
-  if (is_readable($yes_codebase_post_lock)) {
-    $post_lock = TRUE;
-  }
-  else {
-    $post_lock = FALSE;
-  }
-
   if ($lock_unlock) {
     if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
       // Lock Site-Local Drush if Unlocked
@@ -241,15 +232,6 @@ function drush_provision_drupal_provision_install() {
 
         // Display The Drush site-install Command
         drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
-        foreach ($command as $index => $line) {
-          if (!$success) { // Log the entire error as a notice.
-            $line_status = 'notice';
-          }
-          else { // Only log the last line as success.
-            $line_status = $index+1 == count($output) ? 'success' : 'notice';
-          }
-          drush_log($line, $line_status);
-        }
 
         // Validate the command items
         foreach ($command as $i => $arg) {
