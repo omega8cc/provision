@@ -248,6 +248,20 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     drush_set_option('provision_save_config', FALSE);
     provision_backend_invoke($target, 'provision-verify');
 
+    // Native files symlinking for the migrated/renamed site: give it its OWN
+    // copy of files/private in its own store and re-symlink -- mirroring the
+    // clone path (clone.provision.inc). A migrate deploys from a backup that
+    // preserves the source symlink, so the target lands pointing its files/private
+    // at the SOURCE (old-name) store; --force-unshare breaks that inherited
+    // cross-name link, copies the data into the target's own static/files/<uri>
+    // store, and repoints the in-site symlinks (a pre-existing store at the target
+    // name is moved aside first). Without this the renamed site keeps plain dirs on
+    // the platform partition and its store link is lost. The old-name store then
+    // becomes a normal reported orphan (operator prunes; never auto-deleted).
+    // Delegated to the root autosymlink tool via its sudo wrapper; the verify above
+    // wrote the vhost so the account auto-resolves. Warn-not-fail.
+    _provision_drupal_native_symlink($options['uri'], TRUE);
+
     $aegir_root = d('@server_master')->aegir_root;
     $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
 
