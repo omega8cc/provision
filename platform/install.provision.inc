@@ -111,15 +111,6 @@ function drush_provision_drupal_provision_install() {
     $lock_unlock = TRUE;
   }
 
-  // Determine if codebase post-locking is allowed (no by default)
-  $yes_codebase_post_lock = '/data/conf/_yes_codebase_post_lock.ctrl';
-  if (is_readable($yes_codebase_post_lock)) {
-    $post_lock = TRUE;
-  }
-  else {
-    $post_lock = FALSE;
-  }
-
   if ($lock_unlock) {
     if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
       // Lock Site-Local Drush if Unlocked
@@ -151,13 +142,6 @@ function drush_provision_drupal_provision_install() {
     }
     elseif (drush_drupal_major_version() > 10) {
 
-      if ($lock_unlock) {
-        // Unlock Site-Local Drush/Vendor In The 11+ Platform
-        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-        provision_unlock_drush_local_vnd();
-        sleep(5);
-      }
-
       // Define Drush Command
       $drushCommand = 'site-install';
 
@@ -171,10 +155,38 @@ function drush_provision_drupal_provision_install() {
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
       drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
+      // Open a chmod-only executable window WITHOUT reverting the Aegir
+      // core/console/validator/psr-log patches. Those patches exist to make a
+      // D10/D11 site loadable by Aegir's OWN Drush 8 (old psr/log v1, logger
+      // signatures without ": void"); the site-local MODERN Drush used for
+      // site-install does not need them reverted. Reverting them here -- the old
+      // provision_unlock_drush_local_vnd() dance -- makes site-install compile the
+      // D8+ service container in the stock state, baking the site-local Drush's
+      // tagged logger.drupaltodrush (Drush\Log\DrushLog) into the persisted
+      // (Valkey) container, which the patched web then fatals resolving (circular
+      // reference on D11, "Class Drush\Log\DrushLog not found" on D10). Flipping
+      // only the exec bits keeps the patches applied, so site-install compiles in
+      // the same state the web serves and never poisons the container -- the
+      // analog of the cr fix (_provision_drupal_rebuild_d8plus()) and the deploy
+      // updatedb fix. Honour _no_codebase_lock_unlock.ctrl ($lock_unlock) and
+      // preserve the at-rest 0400 posture (relock chmod-only below, only if we
+      // opened the window).
+      $was_executable = is_executable($drushAbsolutePath);
+      if ($lock_unlock && !$was_executable) {
+        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for site-install'), 'info');
+        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
+      }
+
       if (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
         drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
+        // Relock the chmod-only window if we opened it, so a degraded/aborted
+        // install never leaves the platform vendor writable (patches untouched).
+        if ($lock_unlock && !$was_executable) {
+          drush_log(dt('D11/INSTALL4b/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+          _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        }
         return FALSE;
       }
       else {
@@ -188,10 +200,18 @@ function drush_provision_drupal_provision_install() {
         	$db_url = $matches[1];
           } else {
         	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
+        	if ($lock_unlock && !$was_executable) {
+        	  _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        	}
         	return FALSE;
           }
         } else {
           drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
+          // Relock the chmod-only window if we opened it, so this early abort
+          // never leaves the platform vendor writable (patches untouched).
+          if ($lock_unlock && !$was_executable) {
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          }
           return FALSE;
         }
 
@@ -212,20 +232,15 @@ function drush_provision_drupal_provision_install() {
 
         // Display The Drush site-install Command
         drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
-        foreach ($command as $index => $line) {
-          if (!$success) { // Log the entire error as a notice.
-            $line_status = 'notice';
-          }
-          else { // Only log the last line as success.
-            $line_status = $index+1 == count($output) ? 'success' : 'notice';
-          }
-          drush_log($line, $line_status);
-        }
 
         // Validate the command items
         foreach ($command as $i => $arg) {
           if (!is_scalar($arg)) {
             drush_log("D11/INSTALL Invalid command part at index $i: " . print_r($arg, TRUE), 'error');
+            // Relock the chmod-only window if we opened it (patches untouched).
+            if ($lock_unlock && !$was_executable) {
+              _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+            }
             return FALSE;
           }
         }
@@ -233,6 +248,10 @@ function drush_provision_drupal_provision_install() {
         // Call The Drush site-install Command with Site-Local Drush
         $cmd_string = implode(' ', array_map('escapeshellarg', $command));
         $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
+        // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line log
+        // status from it (mirrors the deploy updatedb fix: $success was read below
+        // but never set, so every output line was logged 'notice', never 'success').
+        $success = $result;
         $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
@@ -244,13 +263,76 @@ function drush_provision_drupal_provision_install() {
           drush_log($line, $line_status);
         }
 
+        // Detect a failed site-install. drush_shell_cd_and_exec() returns FALSE on
+        // a non-zero exit; without this the D11+ path reported a broken install as
+        // success (Aegir then marked the site installed and skipped rollback). The
+        // subprocess output was already logged as notices above. Relock the
+        // chmod-only exec window first if we opened it (patches untouched, like the
+        // early-return guards above -- never provision_(un)lock_drush_local_vnd(),
+        // which reverts the Aegir patches and poisons the Valkey container), then
+        // register the canonical install error and abort before the login-link
+        // derivation and the pm:list cleanup run against a broken site.
+        if (!$result) {
+          drush_log(dt('D11/INSTALL/ERR site-install failed (non-zero exit) in @appRoot', array('@appRoot' => $appRoot)), 'error');
+          if ($lock_unlock && !$was_executable) {
+            drush_log(dt('D11/INSTALL/RELOCK chmod-only 0400 after failed site-install (patches untouched)'), 'info');
+            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          }
+          return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal site-install failed for @uri', array('@uri' => d()->uri)));
+        }
+
+        // Generate the one-time admin login link with the site-local modern
+        // Drush, inside the still-open chmod-only exec window. On the D6-D10
+        // path login_link comes from the provision-install-backend context
+        // array (set after this block); on D11+ $result is the
+        // drush_shell_cd_and_exec() bool, so we must derive the link here via
+        // "user:login" -- indexing the bool below would store null and emit a
+        // PHP 8 "array offset on value of type bool" warning. Bootstrap the
+        // freshly installed site with an explicit absolute --root (d()->root is
+        // the docroot: it carries sites/<uri>/settings.php, checked above) plus
+        // --uri. No -vvv: the command prints just the URL, which we parse (the
+        // line containing "/user/reset/"). Non-fatal -- if no link is derived,
+        // login_link is left unset, which the front end already tolerates (it
+        // guards on a truthy login_link).
+        if ($success) {
+          $uli_command = array(
+            $drushPath,
+            'user:login',
+            '--root=' . d()->root,
+            '--uri=' . d()->uri,
+          );
+          $uli_cmd_string = implode(' ', array_map('escapeshellarg', $uli_command));
+          drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI generate one-time login link via user:login in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          $uli_result = drush_shell_cd_and_exec($appRoot, $uli_cmd_string);
+          $uli_output = drush_shell_exec_output();
+          $login_link = '';
+          foreach ((array) $uli_output as $uli_line) {
+            $uli_line = trim((string) $uli_line);
+            if ($uli_line !== '' && strpos($uli_line, '/user/reset/') !== FALSE) {
+              $login_link = $uli_line;
+              break;
+            }
+          }
+          if ($login_link !== '') {
+            drush_set_option('login_link', $login_link);
+            drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI login link: !onetime', array('!onetime' => $login_link)), 'success');
+          }
+          else {
+            drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI could not derive a one-time login link from user:login output'), 'warning');
+            foreach ((array) $uli_output as $uli_line) {
+              drush_log($uli_line, 'notice');
+            }
+          }
+        }
+
         // Enforce Aegir policy: never allow web UI tools to overwrite the codebase.
         // Drupal core Automatic Updates emits Status report errors on symlinked/linked codebases by design,
         // so we remove the module right after install if it is enabled.
         $enabled_modules = [];
         $pml_command = [
           $drushPath,
-          '-r web pm:list',
+          'pm:list',
+          '--root=' . d()->root,
           '--type=module',
           '--status=enabled',
           '--format=list',
@@ -272,6 +354,7 @@ function drush_provision_drupal_provision_install() {
             $drushPath,
             'pm:uninstall',
             'automatic_updates',
+            '--root=' . d()->root,
             '--yes',
             '--no-interaction',
             '--uri=' . d()->uri,
@@ -291,6 +374,7 @@ function drush_provision_drupal_provision_install() {
             $drushPath,
             'pm:uninstall',
             'package_manager',
+            '--root=' . d()->root,
             '--yes',
             '--no-interaction',
             '--uri=' . d()->uri,
@@ -306,19 +390,25 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      if ($lock_unlock) {
-        // Lock Site-Local Drush if Unlocked
-        provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
-          drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
-        }
-        sleep(5);
+      // Relock the chmod-only window if we opened it, leaving the patches
+      // untouched (they were never reverted). Restores the at-rest 0400 posture.
+      // The post-install hook's _provision_drupal_rebuild_d8plus() then rebuilds
+      // the container patched (its own chmod-only window), and D<12 also gets the
+      // Aegir Drush 8 FULL bootstrap tail in the caller.
+      if ($lock_unlock && !$was_executable) {
+        drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
       }
     }
 
-    // pass the login link back to the front end.
-    drush_set_option('login_link', $result['context']['login_link']);
+    // Pass the login link back to the front end. Only the D6-D10 path sets
+    // $result to a provision-install-backend context array; on D11+ $result is
+    // the drush_shell_cd_and_exec() bool and login_link was already set from the
+    // site-local Drush user:login above. Indexing the bool here would store null
+    // and emit a PHP 8 "array offset on value of type bool" warning.
+    if (drush_drupal_major_version() > 5 && drush_drupal_major_version() < 11) {
+      drush_set_option('login_link', $result['context']['login_link']);
+    }
 
     if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
