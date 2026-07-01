@@ -263,6 +263,50 @@ function drush_provision_drupal_provision_install() {
           drush_log($line, $line_status);
         }
 
+        // Generate the one-time admin login link with the site-local modern
+        // Drush, inside the still-open chmod-only exec window. On the D6-D10
+        // path login_link comes from the provision-install-backend context
+        // array (set after this block); on D11+ $result is the
+        // drush_shell_cd_and_exec() bool, so we must derive the link here via
+        // "user:login" -- indexing the bool below would store null and emit a
+        // PHP 8 "array offset on value of type bool" warning. Bootstrap the
+        // freshly installed site with an explicit absolute --root (d()->root is
+        // the docroot: it carries sites/<uri>/settings.php, checked above) plus
+        // --uri. No -vvv: the command prints just the URL, which we parse (the
+        // line containing "/user/reset/"). Non-fatal -- if no link is derived,
+        // login_link is left unset, which the front end already tolerates (it
+        // guards on a truthy login_link).
+        if ($success) {
+          $uli_command = array(
+            $drushPath,
+            'user:login',
+            '--root=' . d()->root,
+            '--uri=' . d()->uri,
+          );
+          $uli_cmd_string = implode(' ', array_map('escapeshellarg', $uli_command));
+          drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI generate one-time login link via user:login in @appRoot', array('@appRoot' => $appRoot)), 'info');
+          $uli_result = drush_shell_cd_and_exec($appRoot, $uli_cmd_string);
+          $uli_output = drush_shell_exec_output();
+          $login_link = '';
+          foreach ((array) $uli_output as $uli_line) {
+            $uli_line = trim((string) $uli_line);
+            if ($uli_line !== '' && strpos($uli_line, '/user/reset/') !== FALSE) {
+              $login_link = $uli_line;
+              break;
+            }
+          }
+          if ($login_link !== '') {
+            drush_set_option('login_link', $login_link);
+            drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI login link: !onetime', array('!onetime' => $login_link)), 'success');
+          }
+          else {
+            drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI could not derive a one-time login link from user:login output'), 'warning');
+            foreach ((array) $uli_output as $uli_line) {
+              drush_log($uli_line, 'notice');
+            }
+          }
+        }
+
         // Enforce Aegir policy: never allow web UI tools to overwrite the codebase.
         // Drupal core Automatic Updates emits Status report errors on symlinked/linked codebases by design,
         // so we remove the module right after install if it is enabled.
@@ -336,8 +380,14 @@ function drush_provision_drupal_provision_install() {
       }
     }
 
-    // pass the login link back to the front end.
-    drush_set_option('login_link', $result['context']['login_link']);
+    // Pass the login link back to the front end. Only the D6-D10 path sets
+    // $result to a provision-install-backend context array; on D11+ $result is
+    // the drush_shell_cd_and_exec() bool and login_link was already set from the
+    // site-local Drush user:login above. Indexing the bool here would store null
+    // and emit a PHP 8 "array offset on value of type bool" warning.
+    if (drush_drupal_major_version() > 5 && drush_drupal_major_version() < 11) {
+      drush_set_option('login_link', $result['context']['login_link']);
+    }
 
     if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
