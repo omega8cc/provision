@@ -677,8 +677,20 @@ function _provision_drupal_rebuild_d8plus() {
     // unlock only if currently locked, and relock afterwards to match.
     $was_executable = is_executable($drushAbsolutePath);
     if (!$was_executable) {
-      drush_log(dt('REBUILD/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd for cr'), 'info');
-      provision_unlock_drush_local_vnd();
+      // Make the site-local Drush runnable WITHOUT reverting the Aegir
+      // core/console/validator/psr-log patches (which is what
+      // provision_unlock_drush_local_vnd() does for the other Aegir tasks). The
+      // web serves in the PATCHED state, so the container must be compiled in
+      // that same state: reverting the patches first makes this 'cr' compile
+      // against stock Drupal, where Drush's tagged 'logger.drupaltodrush'
+      // (Drush\Log\DrushLog) becomes a valid logger and is baked into the
+      // persisted service container -- the patched web then fatals resolving it
+      // (a circular reference through logger.factory, or "Class
+      // Drush\Log\DrushLog not found" once vendor/drush is relocked 0400).
+      // Flipping only the exec bits keeps the patches applied and never poisons
+      // the container.
+      drush_log(dt('REBUILD/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for cr'), 'info');
+      _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
     }
 
     if (is_executable($drushAbsolutePath)) {
@@ -703,8 +715,8 @@ function _provision_drupal_rebuild_d8plus() {
     }
 
     if (!$was_executable) {
-      drush_log(dt('REBUILD/LOCAL/DRUSH/RELOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
+      drush_log(dt('REBUILD/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
+      _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
     }
   }
   else {
@@ -717,6 +729,56 @@ function _provision_drupal_rebuild_d8plus() {
     $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
     provision_backend_invoke(d()->name, 'cache-rebuild');
     drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+  }
+}
+
+/**
+ * Open (or close) a chmod-only executable window on the site-local Drush.
+ *
+ * Companion to _provision_drupal_rebuild_d8plus(): it flips ONLY the
+ * exec/traverse bits on vendor/drush and the two Symfony Console dirs the lock
+ * guards, deliberately NOT reverting the Aegir core/console/validator/psr-log
+ * patches the way provision_unlock_drush_local_vnd() does. The site-local 'cr'
+ * must compile the D8+ service container in the SAME patched state the web
+ * serves in; compiling it against stock (reverted) Drupal makes Drush's tagged
+ * 'logger.drupaltodrush' (Drush\Log\DrushLog) a valid logger that gets baked
+ * into the persisted container, which then fatals the web. Keeping the patches
+ * applied avoids poisoning the container in the first place.
+ *
+ * $appRoot is the Composer root from findAppRoot(), so the '/../' variants that
+ * provision_(un)lock_drush_local_vnd() carry are not needed here.
+ *
+ * @param string $appRoot         Composer root (findAppRoot(d()->root)).
+ * @param bool   $make_executable TRUE opens the window (0775), FALSE relocks (0400).
+ */
+function _provision_drupal_chmod_drush_vnd_for_cr($appRoot, $make_executable) {
+  $dirs = array(
+    $appRoot . '/vendor/drush',
+    $appRoot . '/vendor/symfony/console/Input',
+    $appRoot . '/vendor/symfony/console/Style',
+  );
+  $perm = $make_executable ? 0775 : 0400;
+  foreach ($dirs as $path) {
+    if (provision_file()->exists($path)->status()) {
+      provision_file()->chmod($path, $perm)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+  }
+  // The Drush entrypoints need the exec bit only while the window is open;
+  // relocking the parent dir to 0400 above already makes them unreachable.
+  if ($make_executable) {
+    $bins = array(
+      $appRoot . '/vendor/drush/drush/drush.php',
+      $appRoot . '/vendor/drush/drush/drush',
+    );
+    foreach ($bins as $path) {
+      if (provision_file()->exists($path)->status()) {
+        provision_file()->chmod($path, 0775)
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
+    }
   }
 }
 
