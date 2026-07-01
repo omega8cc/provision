@@ -402,22 +402,6 @@ function drush_provision_drupal_post_provision_deploy() {
     drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_post_provision_deploy");
   }
 
-  // The <12 tail above ran drupal_flush_all_caches() in-process UNDER the Aegir
-  // Drush 8 FULL bootstrap (that bootstrap is needed for system_map), which
-  // recompiles and persists a cache_container carrying Drush-8-only service
-  // refs the web PHP-FPM worker cannot autoload -- the next web request then
-  // fatals (e.g. "Class Drush\Log\DrushLog not found"). On D10/D11 the
-  // site-local Drush is the version-matched Drush, so run its 'cr' LAST here to
-  // re-dump a clean container. This does NOT re-cap the <12 FULL-bootstrap gate
-  // (system_map still got its in-process container above); it only re-cleans
-  // afterwards. D12+ skipped that FULL bootstrap and already ended on the
-  // site-local 'cr' run earlier in this hook. Non-fatal; the helper
-  // self-manages the vendor/drush lock window (unlock-if-locked, cr, relock).
-  if (drush_drupal_major_version() >= 10 && drush_drupal_major_version() < 12) {
-    drush_log(dt('DEPLOY12/LOCAL/DRUSH/CR final container re-clean after the Aegir Drush 8 FULL bootstrap tail'), 'info');
-    _provision_drupal_rebuild_d8plus();
-  }
-
   // Remove the restore directory.
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
     _provision_recursive_delete(drush_get_option('extract_path'));
