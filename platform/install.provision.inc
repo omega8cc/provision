@@ -142,6 +142,28 @@ function drush_provision_drupal_provision_install() {
     }
     elseif (drush_drupal_major_version() > 10) {
 
+      // The site-local MODERN Drush cannot run site-install against the Aegir
+      // patched codebase: the D10/D11 core/console/validator/psr-log patches
+      // downgrade the site to Aegir's OWN Drush 8 world (old psr/log v1, logger
+      // signatures with the ": void" return types stripped) so Aegir Drush 8 and
+      // the patched web can load it -- but a fresh MODERN Drupal 11 installer
+      // bootstrap fatals against that de-typed psr/log/Console. The fatal lands on
+      // stderr, which drush_shell_exec does not capture, so the site-install
+      // subprocess exits non-zero with no captured output (the observed break).
+      // So revert the patches to modern stock for the install (this also chmods
+      // the site-local Drush executable), then re-apply them at the end. The
+      // post-install hook's _provision_drupal_rebuild_d8plus() rebuilds the D8+
+      // container in the re-patched state as the last write, so the stock
+      // install-time container never reaches the web. This is why the deploy
+      // updatedb / cr chmod-only window (which operate on an already-installed
+      // site) is NOT a valid precedent for a fresh install. Honour
+      // _no_codebase_lock_unlock.ctrl ($lock_unlock).
+      if ($lock_unlock) {
+        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
+        provision_unlock_drush_local_vnd();
+        sleep(5);
+      }
+
       // Define Drush Command
       $drushCommand = 'site-install';
 
@@ -155,37 +177,16 @@ function drush_provision_drupal_provision_install() {
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
       drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
-      // Open a chmod-only executable window WITHOUT reverting the Aegir
-      // core/console/validator/psr-log patches. Those patches exist to make a
-      // D10/D11 site loadable by Aegir's OWN Drush 8 (old psr/log v1, logger
-      // signatures without ": void"); the site-local MODERN Drush used for
-      // site-install does not need them reverted. Reverting them here -- the old
-      // provision_unlock_drush_local_vnd() dance -- makes site-install compile the
-      // D8+ service container in the stock state, baking the site-local Drush's
-      // tagged logger.drupaltodrush (Drush\Log\DrushLog) into the persisted
-      // (Valkey) container, which the patched web then fatals resolving (circular
-      // reference on D11, "Class Drush\Log\DrushLog not found" on D10). Flipping
-      // only the exec bits keeps the patches applied, so site-install compiles in
-      // the same state the web serves and never poisons the container -- the
-      // analog of the cr fix (_provision_drupal_rebuild_d8plus()) and the deploy
-      // updatedb fix. Honour _no_codebase_lock_unlock.ctrl ($lock_unlock) and
-      // preserve the at-rest 0400 posture (relock chmod-only below, only if we
-      // opened the window).
-      $was_executable = is_executable($drushAbsolutePath);
-      if ($lock_unlock && !$was_executable) {
-        drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for site-install'), 'info');
-        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
-      }
-
       if (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
         drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
-        // Relock the chmod-only window if we opened it, so a degraded/aborted
-        // install never leaves the platform vendor writable (patches untouched).
-        if ($lock_unlock && !$was_executable) {
-          drush_log(dt('D11/INSTALL4b/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
-          _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        // Re-apply the Aegir patches (restore the at-rest posture) so a
+        // degraded/aborted install never leaves the shared platform vendor in the
+        // reverted/unlocked state the patched web cannot serve.
+        if ($lock_unlock) {
+          drush_log(dt('D11/INSTALL4b/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_lock_drush_local_vnd();
         }
         return FALSE;
       }
@@ -200,17 +201,17 @@ function drush_provision_drupal_provision_install() {
         	$db_url = $matches[1];
           } else {
         	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
-        	if ($lock_unlock && !$was_executable) {
-        	  _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+        	if ($lock_unlock) {
+        	  provision_lock_drush_local_vnd();
         	}
         	return FALSE;
           }
         } else {
           drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
-          // Relock the chmod-only window if we opened it, so this early abort
-          // never leaves the platform vendor writable (patches untouched).
-          if ($lock_unlock && !$was_executable) {
-            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          // Re-apply the Aegir patches so this early abort never leaves the shared
+          // platform vendor in the reverted/unlocked state.
+          if ($lock_unlock) {
+            provision_lock_drush_local_vnd();
           }
           return FALSE;
         }
@@ -237,9 +238,9 @@ function drush_provision_drupal_provision_install() {
         foreach ($command as $i => $arg) {
           if (!is_scalar($arg)) {
             drush_log("D11/INSTALL Invalid command part at index $i: " . print_r($arg, TRUE), 'error');
-            // Relock the chmod-only window if we opened it (patches untouched).
-            if ($lock_unlock && !$was_executable) {
-              _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+            // Re-apply the Aegir patches so this early abort restores the at-rest posture.
+            if ($lock_unlock) {
+              provision_lock_drush_local_vnd();
             }
             return FALSE;
           }
@@ -266,17 +267,15 @@ function drush_provision_drupal_provision_install() {
         // Detect a failed site-install. drush_shell_cd_and_exec() returns FALSE on
         // a non-zero exit; without this the D11+ path reported a broken install as
         // success (Aegir then marked the site installed and skipped rollback). The
-        // subprocess output was already logged as notices above. Relock the
-        // chmod-only exec window first if we opened it (patches untouched, like the
-        // early-return guards above -- never provision_(un)lock_drush_local_vnd(),
-        // which reverts the Aegir patches and poisons the Valkey container), then
+        // subprocess output was already logged as notices above. Re-apply the Aegir
+        // patches (restore the at-rest posture the patched web serves in), then
         // register the canonical install error and abort before the login-link
         // derivation and the pm:list cleanup run against a broken site.
         if (!$result) {
           drush_log(dt('D11/INSTALL/ERR site-install failed (non-zero exit) in @appRoot', array('@appRoot' => $appRoot)), 'error');
-          if ($lock_unlock && !$was_executable) {
-            drush_log(dt('D11/INSTALL/RELOCK chmod-only 0400 after failed site-install (patches untouched)'), 'info');
-            _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+          if ($lock_unlock) {
+            drush_log(dt('D11/INSTALL/LOCK re-apply Aegir patches after failed site-install'), 'info');
+            provision_lock_drush_local_vnd();
           }
           return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal site-install failed for @uri', array('@uri' => d()->uri)));
         }
@@ -390,14 +389,20 @@ function drush_provision_drupal_provision_install() {
         }
       }
 
-      // Relock the chmod-only window if we opened it, leaving the patches
-      // untouched (they were never reverted). Restores the at-rest 0400 posture.
-      // The post-install hook's _provision_drupal_rebuild_d8plus() then rebuilds
-      // the container patched (its own chmod-only window), and D<12 also gets the
-      // Aegir Drush 8 FULL bootstrap tail in the caller.
-      if ($lock_unlock && !$was_executable) {
-        drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
-        _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+      // Re-apply the Aegir core/console/validator/psr-log patches (restore the
+      // at-rest posture the patched web serves in) now that the modern site-local
+      // Drush has finished the install. The post-install hook's
+      // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container in this
+      // re-patched state as the last container write, so the stock install-time
+      // container never reaches the web; D<12 also gets the Aegir Drush 8 FULL
+      // bootstrap tail in the caller.
+      if ($lock_unlock) {
+        provision_check_codebase_status();
+        if (!d()->isConsolePatched || !d()->isCorePatched) {
+          drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+          provision_lock_drush_local_vnd();
+        }
+        sleep(5);
       }
     }
 
