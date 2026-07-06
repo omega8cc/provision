@@ -309,9 +309,26 @@ class Provision_FileSystem extends Provision_ChainedState {
 
         drush_log(dt('Running: %command in %target', array('%command' => sprintf($command, $path), '%target' => $target)), 'info');
         $result = drush_shell_exec($command, $path);
+        $extract_output = drush_shell_exec_output();
         chdir($oldcwd);
 
         if ($result && is_writeable(dirname($target)) && is_readable(dirname($target)) && is_dir($target)) {
+          $this->last_status = TRUE;
+        }
+        elseif (!$result && is_writeable(dirname($target)) && is_readable(dirname($target)) && is_dir($target) && is_file($target . '/settings.php') && $this->_extract_only_mknod_errors($extract_output)) {
+          // tar could not recreate a device/block special MEMBER because mknod()
+          // needs CAP_MKNOD, which the unprivileged Octopus/Aegir user lacks.
+          // Every regular member (including settings.php) extracted fine, and a
+          // special file has no place in a Drupal site dir, so treat this exact,
+          // fully-diagnosed case as non-fatal instead of rolling back the whole
+          // deploy. Any OTHER tar error still fails hard in the else below. This
+          // also stops the poison propagating: the special member is dropped, so
+          // the freshly extracted platform copy is clean.
+          foreach ($extract_output as $extract_line) {
+            if (trim($extract_line) !== '') {
+              drush_log(dt('Extraction skipped an un-creatable special file member (harmless; not valid Drupal content): @l', array('@l' => $extract_line)), 'warning');
+            }
+          }
           $this->last_status = TRUE;
         }
         else {
@@ -330,6 +347,38 @@ class Provision_FileSystem extends Provision_ChainedState {
     }
 
     return $this;
+  }
+
+  /**
+   * TRUE only when every non-empty line of a FAILED tar extraction is a
+   * 'Cannot mknod' notice (a device/block special member the unprivileged
+   * Octopus/Aegir user cannot recreate). Lets extract() tolerate that one
+   * harmless case while any genuine extraction error still fails hard.
+   * Fail-closed: an empty/non-array output (e.g. a build that does not capture
+   * stderr) returns FALSE, preserving the existing hard-fail behaviour.
+   */
+  function _extract_only_mknod_errors($output) {
+    if (empty($output) || !is_array($output)) {
+      return FALSE;
+    }
+    $saw_mknod = FALSE;
+    foreach ($output as $line) {
+      $line = trim($line);
+      if ($line === '') {
+        continue;
+      }
+      // tar's trailing summary line is not itself an error to weigh.
+      if (strpos($line, 'Exiting with failure status') !== FALSE) {
+        continue;
+      }
+      if (strpos($line, 'Cannot mknod') !== FALSE) {
+        $saw_mknod = TRUE;
+        continue;
+      }
+      // Any other non-empty line is an unexpected error -> not tolerable.
+      return FALSE;
+    }
+    return $saw_mknod;
   }
 
   /**
