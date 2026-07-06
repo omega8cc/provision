@@ -222,6 +222,25 @@ function drush_provision_drupal_provision_backup() {
   }
   drush_shell_exec($exclude_tag);
 
+  // A Drupal site dir must never contain device/block/fifo/socket special files.
+  // A stray one (e.g. a /dev node copied into the site root by an out-of-band
+  // operation) is archived by tar as a special member; a later non-root
+  // `tar -pxf` on deploy/migrate/clone/restore then cannot recreate it (mknod
+  // needs CAP_MKNOD) and aborts the whole extraction, rolling back the task.
+  // Strip any such node here, at the source, so no poisoned archive is ever
+  // produced. cwd is the site dir (chdir above); -xdev stays on the site's own
+  // filesystem and, with no -L, never follows the files/private symlinks into
+  // the per-account store.
+  $strip_specials = 'find . -xdev \( -type b -o -type c -o -type p -o -type s \) -print -delete 2>/dev/null';
+  if (drush_shell_exec($strip_specials)) {
+    $stripped_specials = drush_shell_exec_output();
+    if (!empty($stripped_specials)) {
+      foreach ($stripped_specials as $stray_special) {
+        drush_log(dt("BACKUP/STRIP removed stray special file from site dir before archiving: @f", array('@f' => $stray_special)), 'warning');
+      }
+    }
+  }
+
   // If mounted filesystem for files then use tar pipelines
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
