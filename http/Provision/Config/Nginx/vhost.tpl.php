@@ -1,6 +1,11 @@
 <?php $this->root = provision_auto_fix_platform_root($this->root); ?>
 
 <?php
+// Per-site /user + /admin IP restriction (user_admin_access.sh).  http-scope
+// geo/map fragment, emitted once at the file head so it is visible to every
+// server block below (including the earlier :443 block of an SSL vhost, which
+// nginx resolves as a forward reference).  No-op glob when the site is unlisted.
+print "include  " . $server->include_path . "/user_admin_access_map/{$this->uri}.conf*;\n";
 $script_user = d('@server_master')->script_user;
 if (!$script_user) {
   $script_user = drush_get_option('script_user');
@@ -101,6 +106,7 @@ if ($this->redirection || !$this->redirection) {
       print "  server_name  {$alias_url};\n";
       print "  root  {$this->root};\n";
       print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+      print "  include  " . $server->include_path . "/user_admin_access/{$this->uri}.conf*;\n";
       print "  set \$ai_train_allow 0;\n";
       print "  set \$ai_evasive_allow 0;\n";
       print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";
@@ -195,6 +201,7 @@ if ($this->redirection || $ssl_redirection) {
   }
   elseif (!$ssl_redirection && $this->redirection) {
     print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+    print "  include  " . $server->include_path . "/user_admin_access/{$this->uri}.conf*;\n";
     print "  set \$ai_train_allow 0;\n";
     print "  set \$ai_evasive_allow 0;\n";
     print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";
@@ -203,6 +210,7 @@ if ($this->redirection || $ssl_redirection) {
 }
 else {
   print "  include  " . $server->include_path . "/ip_access/{$this->uri}*;\n";
+  print "  include  " . $server->include_path . "/user_admin_access/{$this->uri}.conf*;\n";
   print "  set \$ai_train_allow 0;\n";
   print "  set \$ai_evasive_allow 0;\n";
   print "  include  " . $server->include_path . "/ai_policy/{$this->uri}*;\n";

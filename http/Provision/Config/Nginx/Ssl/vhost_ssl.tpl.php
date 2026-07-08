@@ -206,6 +206,7 @@ server {
 <?php endif; ?>
   <?php print $extra_config; ?>
   include  <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>*;
+  include  <?php print $server->include_path; ?>/user_admin_access/<?php print $this->uri; ?>.conf*;
   set $ai_train_allow 0;
   set $ai_evasive_allow 0;
   include  <?php print $server->include_path; ?>/ai_policy/<?php print $this->uri; ?>*;
