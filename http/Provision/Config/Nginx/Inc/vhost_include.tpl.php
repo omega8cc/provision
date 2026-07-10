@@ -539,6 +539,25 @@ location @modern_cron {
 }
 
 ###
+### Allow local access to support wget method in Aegir settings
+### for running sites cron on Backdrop (served by core/cron.php,
+### with the key validated in the query string).
+###
+location = /core/cron.php {
+  allow 127.0.0.1;
+  deny all;
+  auth_basic off;
+  try_files $uri =404;
+<?php if ($satellite_mode == 'boa'): ?>
+  fastcgi_pass unix:/run/$user_socket.fpm.socket;
+<?php elseif ($phpfpm_mode == 'port'): ?>
+  fastcgi_pass 127.0.0.1:9000;
+<?php else: ?>
+  fastcgi_pass unix:<?php print $phpfpm_socket_path; ?>;
+<?php endif; ?>
+}
+
+###
 ### Send search to php-fpm early so searching for node.js will work.
 ### Deny bots on search uri.
 ###
@@ -1873,6 +1892,17 @@ location ~* ^/(?:core/)?(?:boost_stats|rtoc|js)\.php$ {
 ### Allow access to /update.php only for logged in admin user.
 ###
 location ~ ^/update.php {
+  error_page 418 = @allowupdate;
+  if ( $cache_uid ) {
+    return 418;
+  }
+  return 404;
+}
+
+###
+### Allow access to Backdrop /core/update.php only for logged in admin user.
+###
+location ~ ^/core/update.php {
   error_page 418 = @allowupdate;
   if ( $cache_uid ) {
     return 418;
