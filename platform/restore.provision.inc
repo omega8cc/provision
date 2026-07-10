@@ -4,6 +4,9 @@
  * Make sure we have a valid site being restored, and that the file being restored from exists
  */
 function drush_provision_drupal_provision_restore_validate($restore_file = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
@@ -27,6 +30,9 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
  * Make a backup before making any changes, and add extract the file we are restoring from
  */
 function drush_provision_drupal_pre_provision_restore($restore_file) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
   _provision_drupal_create_settings_file();
@@ -44,6 +50,9 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
 }
 
 function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused migration site package')
     ->fail('Could not remove unused migration site package');
@@ -53,6 +62,9 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
  * Switch the restore directories around now that we have the new db installed
  */
 function drush_provision_drupal_provision_restore($restore_file) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   // Build an options array to pass to the deploy task. This allows injection
   // of data into the deploy task. See: https://www.drupal.org/node/2471805
   $deploy_options = array(

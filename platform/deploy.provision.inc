@@ -22,6 +22,9 @@
  * Implementation of drush_hook_COMMAND_validate().
  */
 function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $exists = provision_file()->exists($backup_file)
     ->succeed('Deploying site from @path')
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
@@ -51,6 +54,9 @@ function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
  * Implements drush_hook_pre_COMMAND().
  */
 function drush_provision_drupal_pre_provision_deploy($backup_file) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $extracted = provision_file()->extract($backup_file, drush_get_option('extract_path'))
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
@@ -147,6 +153,9 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
  * Implementation of drush_hook_pre_COMMAND_rollback().
  */
 function drush_provision_drupal_pre_provision_deploy_rollback() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (drush_get_option('deploy_replace_site', FALSE)) {
     if (drush_get_option('site_dirs_swapped', FALSE)) {
 
@@ -172,6 +181,9 @@ function drush_provision_drupal_pre_provision_deploy_rollback() {
  * Implements drush_hook_COMMAND().
  */
 function drush_provision_drupal_provision_deploy() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   _provision_drupal_maintain_aliases();
   _provision_drupal_create_directories();
 }
@@ -180,6 +192,9 @@ function drush_provision_drupal_provision_deploy() {
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   // Run registry-rebuild without cache-clear, if available.
   if (function_exists('drush_registry_rebuild')) {
     if (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {

@@ -4,6 +4,9 @@
  * Before starting to delete the site, make a backup
  */
 function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (d()->type === 'site') {
     drush_set_option('force', true, 'process');
     if (!empty($backup_file) && !strpos($backup_file, '/')) {
@@ -23,6 +26,9 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
  * This can't be rolled back. so won't even try.
  */
 function drush_provision_drupal_provision_delete() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (d()->type === 'site') {
 
     // Add platform root auto-discovery to avoid confusing

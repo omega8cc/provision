@@ -32,6 +32,9 @@ const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.
  */
 function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
 
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
@@ -152,6 +155,9 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
  * Implentation of hook_provision_backup()
  */
 function drush_provision_drupal_provision_backup() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $backup_file = drush_get_option('backup_file');
   // Adds the site directory into the backup file
   drush_log(dt("Adding sites directory to !backup_file", array('!backup_file' => $backup_file)), 'backup');
@@ -350,6 +356,9 @@ function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
 }
 
 function drush_provision_drupal_post_provision_backup() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
 
   $backup_path = d('@server_master')->backup_path;
@@ -426,6 +435,9 @@ function drush_provision_drupal_post_provision_backup() {
  * Remove the backup file if something went wrong
  */
 function drush_provision_drupal_provision_backup_rollback() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $backup_file = drush_get_option('backup_file');
   if (is_readable($backup_file) && is_file($backup_file)) {
     provision_file()->unlink($backup_file)

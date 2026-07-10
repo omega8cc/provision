@@ -13,6 +13,9 @@
  * Make sure we have a valid site being cloned, and that the file being cloned from exists
  */
 function drush_provision_drupal_provision_clone_validate($new_name = null, $platform = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   // Backup mode ctrl file cleanup
   unlink(AEGIR_BACKUP_MODE_CTRL);
   if (drush_drupal_major_version() >= 8) {
@@ -30,6 +33,9 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
  * Make a backup before making any changes, and add extract the file we are restoring from
  */
 function drush_provision_drupal_pre_provision_clone($new_name, $platform = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
@@ -47,6 +53,9 @@ function drush_provision_drupal_pre_provision_clone($new_name, $platform = null)
  * Remove the extracted site directory
  */
 function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platform = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused clone site package')
     ->fail('Could not remove unused clone site package');
@@ -56,6 +65,9 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
  * Switch the clone directories around now that we have the new db installed
  */
 function drush_provision_drupal_provision_clone($new_name, $platform = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   drush_set_option('old_platform', d()->platform->name);
 
   $aegir_root = d('@server_master')->aegir_root;

@@ -14,6 +14,9 @@
  *   A comma-separated list of backup filenames.
  */
 function drush_provision_drupal_provision_backup_delete($backup) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $backups = explode(',', $backup);
   foreach ($backups as $filename) {
     $success = provision_file()->unlink($filename)
@@ -35,6 +38,9 @@ function drush_provision_drupal_provision_backup_delete($backup) {
  *   A comma-separated list of backup filenames.
  */
 function drush_provision_drupal_post_provision_backup_delete($backup) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (d()->client_name) {
     $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
     $backups = explode(',', $backup);
