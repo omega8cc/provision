@@ -114,6 +114,13 @@ function drush_provision_backdrop_provision_install() {
   if (d()->install_method == 'profile') {
     // Drive core/scripts/install.sh and capture the one-time login link.
     drush_include_engine('backdrop', 'install');
+    // install.sh ran in its own subprocess, so this (parent) process is still
+    // only at DRUPAL_ROOT. Escalate it to a full bootstrap of the freshly
+    // installed site: post_provision_install rebuilds caches and reads the
+    // package map IN-PROCESS (backdrop_flush_all_caches(), the {system} query),
+    // which fatal without a full Backdrop bootstrap. BackdropBoot maps the
+    // Drupal bootstrap phases, so the Drupal FULL constant drives it.
+    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     drush_set_option('profile_installed', TRUE, 'site');
   }
   // If install_method is 'manual', do nothing but point at the installer.
