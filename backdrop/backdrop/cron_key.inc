@@ -27,10 +27,14 @@ if (!empty($db_name) && preg_match('/^[A-Za-z0-9_]+$/', $db_name)) {
 }
 
 if (!empty($cron_key)) {
-  // Into the 'site' context (not the process default) so it rides the backend
-  // context back to Hostmaster and persists with the rest of the site data --
-  // that is what the front end reads to build core/cron.php?cron_key=<key>.
-  drush_set_option('cron_key', $cron_key, 'site');
+  // Into the default 'process' context, exactly like the D7-D11 engines
+  // (platform/drupal/cron_key_*.inc). The backend packet returns
+  // drush_get_merged_options(), where 'process' outranks everything; a
+  // 'site'-context write would be masked by the site ALIAS record, which
+  // always carries cron_key => '' (context priority: process > cli > stdin >
+  // specific > alias > custom > site), so the front end would read '' and
+  // never store the key on the site node.
+  drush_set_option('cron_key', $cron_key);
   drush_log(dt('Resolved Backdrop cron_key from {state}.'), 'ok');
 }
 else {
