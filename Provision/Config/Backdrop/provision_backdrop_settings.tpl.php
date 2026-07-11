@@ -190,8 +190,10 @@ if (isset($_SERVER['db_name'])) {
   /**
    * Note: Backdrop's maintenance mode is stored in state
    * (state_set('maintenance_mode', ...)), not in settings.php -- there is no
-   * settings-level offline flag to write here. The enable/disable engines
-   * toggle it via state.
+   * settings-level offline flag to write here. Aegir takes a disabled site
+   * offline at the nginx layer (the http service renders the disabled vhost
+   * when site_enabled is false), so the in-CMS maintenance flag is not toggled
+   * by the enable/disable engines.
    */
 
   /**

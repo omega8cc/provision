@@ -3,9 +3,14 @@
 /**
  * Provision disable command (Backdrop layer).
  *
- * Disable an enabled and installed site. Fork of platform/disable.provision.inc;
- * the maintenance/offline state is emitted by the Backdrop settings template
- * (state maintenance_mode) from d()->site_enabled on the next settings render.
+ * Disable an enabled and installed site. Fork of platform/disable.provision.inc.
+ * Taking the site offline is CMS-agnostic and handled by the http service:
+ * with site_enabled = false, Provision_Config_Http_Site renders the disabled
+ * vhost (vhost_disabled.tpl.php) on the next verify, so the site is unreachable
+ * at the nginx layer. Backdrop's in-CMS maintenance_mode (state) is deliberately
+ * NOT toggled here -- it would need a full bootstrap + DB write and is redundant
+ * once the vhost is disabled (the Drupal fork's $conf['site_offline'] is likewise
+ * only a secondary measure).
  */
 
 /**
