@@ -173,7 +173,7 @@ function drush_provision_backdrop_provision_deploy() {
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  _provision_drupal_maintain_aliases();
+  _provision_backdrop_maintain_aliases();
   _provision_backdrop_create_directories();
 }
 

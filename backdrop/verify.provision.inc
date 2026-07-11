@@ -209,7 +209,7 @@ function drush_provision_backdrop_pre_provision_verify() {
     drush_set_option('packages', _scrub_object(provision_backdrop_system_map()), 'site');
     // This is the actual Backdrop provisioning requirements.
     _provision_backdrop_create_directories();
-    _provision_drupal_maintain_aliases();
+    _provision_backdrop_maintain_aliases();
     _provision_backdrop_ensure_htaccess_update();
     // Requires at least the database settings to complete.
 

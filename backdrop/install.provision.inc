@@ -130,7 +130,7 @@ function drush_provision_backdrop_provision_install() {
   }
 
   drush_set_option('installed', TRUE, 'site');
-  _provision_drupal_maintain_aliases();
+  _provision_backdrop_maintain_aliases();
 }
 
 /**

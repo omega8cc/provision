@@ -291,6 +291,77 @@ function _provision_backdrop_site_db_name() {
 }
 
 /**
+ * Remove any pre-D7-style alias symlinks left in sites/ for this site.
+ *
+ * Cleanup for platforms verified while the major-version landmine routed
+ * Backdrop through the symlink fallback (see _provision_backdrop_maintain_aliases).
+ * Only unlinks real symlinks whose name matches one of the site's aliases --
+ * never a real site directory.
+ */
+function _provision_backdrop_unlink_alias_symlinks() {
+  foreach ((array) d()->aliases as $alias) {
+    $alias = trim($alias);
+    if ($alias === '') {
+      continue;
+    }
+    $link = d()->root . '/sites/' . str_replace('/', '.', $alias);
+    if (is_link($link)) {
+      provision_file()->unlink($link)
+        ->succeed('Removed stale pre-D7 alias symlink <code>@path</code>')
+        ->fail('Could not remove stale alias symlink <code>@path</code>');
+      d()->service('http')->sync($link);
+    }
+  }
+}
+
+/**
+ * Maintain the site's host aliases the D7 way: map them in sites.php.
+ *
+ * The reused _provision_drupal_maintain_aliases() gates its sites.php-map path
+ * behind drush_drupal_major_version() >= 7; Backdrop reports major 1, so it
+ * falls into the pre-D7 branch that creates www./alias SYMLINKS under sites/
+ * instead. Backdrop is D7-shaped multisite -- its aliases (the www. variant,
+ * redirect aliases) belong in sites.php and need no symlinks. Write the proper
+ * map via the shared Alias_Store (CMS-agnostic: filesystem + var_export) and
+ * sweep any stale symlink the fallback left behind.
+ *
+ * NB overriding drush_drupal_major_version() to 7 globally was rejected: it
+ * feeds 75+ version gates in provision alone, many doing D7-EXACT things
+ * (registry, update.php, field/module APIs) that Backdrop has diverged from --
+ * a per-function fork is the precise, safe fix (D-002).
+ */
+function _provision_backdrop_maintain_aliases() {
+  d()->root = provision_auto_fix_platform_root(d()->root);
+  if (d()->type !== 'site') {
+    return;
+  }
+  _provision_backdrop_unlink_alias_symlinks();
+  $config = new Provision_Config_Drupal_Alias_Store(d()->name);
+  $config->maintain();
+  $config->write();
+  d()->service('http')->sync($config->filename());
+}
+
+/**
+ * Delete the site's host aliases from sites.php (the D7 way).
+ *
+ * Backdrop analog of the >= 7 branch of _provision_drupal_delete_aliases(); the
+ * reused helper would take the pre-D7 symlink-removal path for major 1. Remove
+ * the sites.php records via the Alias_Store and sweep any stale alias symlink.
+ */
+function _provision_backdrop_delete_aliases() {
+  d()->root = provision_auto_fix_platform_root(d()->root);
+  if (d()->type !== 'site') {
+    return;
+  }
+  _provision_backdrop_unlink_alias_symlinks();
+  $config = new Provision_Config_Drupal_Alias_Store(d()->name);
+  $config->delete();
+  $config->write();
+  d()->service('http')->sync($config->filename());
+}
+
+/**
  * Rebuild the Backdrop caches after install/verify.
  *
  * Backdrop equivalent of _provision_drupal_rebuild_caches(): loads the versionless
