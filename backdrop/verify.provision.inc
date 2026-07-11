@@ -120,6 +120,20 @@ function drush_provision_backdrop_pre_provision_verify() {
       ->succeed('Backdrop sites directory @path is writable by the provisioning script')
       ->fail('Backdrop sites directory @path is not writable by the provisioning script', 'PROVISION_SITES_DIR_NOT_WRITABLE');
 
+    // Aegir expects sites/example.sites.php on every platform; Backdrop ships
+    // that multisite-template content as sites/sites.php but not under the
+    // example.sites.php name, so produce it if missing. Without it Aegir does
+    // not set the platform up correctly and a site's config resolves against
+    // the platform root instead of its own sites/<uri>/ directory.
+    $backdrop_example_sites = d()->root . '/sites/example.sites.php';
+    $backdrop_sites_tpl = d()->root . '/sites/sites.php';
+    if (!provision_file()->exists($backdrop_example_sites)->status()
+      && provision_file()->exists($backdrop_sites_tpl)->status()) {
+      provision_file()->copy($backdrop_sites_tpl, $backdrop_example_sites)
+        ->succeed('Created sites/example.sites.php from sites/sites.php')
+        ->fail('Could not create sites/example.sites.php');
+    }
+
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
     drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'Backdrop', '@version' => _provision_backdrop_get_version())), 'info');
     drush_set_option('packages', _scrub_object(provision_backdrop_find_packages()), 'drupal');
