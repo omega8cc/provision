@@ -56,36 +56,69 @@ $root    = d()->root;
 $uri     = d()->uri;
 $profile = d()->profile ? d()->profile : 'standard';
 $mail    = install_validate_client_email(drush_get_option('client_email', FALSE));
-$db_url  = _provision_backdrop_db_url();
 $langcode = d()->language ? d()->language : 'en';
 
+// Drive the install with bee, the native Backdrop CLI (mirrors the D10/D11
+// site-local shell-out): install.sh run directly via drush's chdir + shell exec
+// silently installs nothing, while bee -- which shells out to install.sh with an
+// inline `cd $root && ...` -- installs correctly and writes config to the pinned
+// dirs. bee bootstraps for command discovery off the pre-written settings.php.
+$bee = '/opt/tools/bee/bee.php';
+if (!file_exists($bee)) {
+  return drush_set_error('PROVISION_BACKDROP_BEE_MISSING',
+    dt('bee not found at @bee; Backdrop install needs it (enable _BACKDROP_SUPPORT).', array('@bee' => $bee)));
+}
+
+// bee resolves the install --url from sites/sites.php; make sure the site is
+// mapped there before the install so the codebase resolves to sites/<uri>/ and
+// its pinned config dirs, not the platform root.
+$sites_php = $root . '/sites/sites.php';
+$sites_line = '$sites[\'' . $uri . '\'] = \'' . $uri . '\';';
+$sites_body = @file_get_contents($sites_php);
+if ($sites_body === FALSE) {
+  $sites_body = "<?php\n";
+}
+if (strpos($sites_body, $sites_line) === FALSE) {
+  @file_put_contents($sites_php, rtrim($sites_body, "\n") . "\n" . $sites_line . "\n");
+}
+
+$db_user = urldecode(drush_get_option('db_user', '', 'site'));
+$db_pass = urldecode(drush_get_option('db_passwd', '', 'site'));
+$db_host = drush_get_option('db_host', 'localhost', 'site');
+$db_name = drush_get_option('db_name', '', 'site');
+
 $args = array(
+  '--root='      . escapeshellarg($root),
+  '--site='      . escapeshellarg($uri),
+  'install',
   escapeshellarg($profile),
-  '--root='         . escapeshellarg($root),
-  '--url='          . escapeshellarg($uri),
-  '--db-url='       . escapeshellarg($db_url),
-  '--account-name=' . escapeshellarg(drush_get_option('admin_user', PROVISION_DEFAULT_ADMIN_USER)),
-  '--account-pass=' . escapeshellarg(provision_password()),
-  '--account-mail=' . escapeshellarg($mail),
-  '--site-name='    . escapeshellarg($uri),
-  '--site-mail='    . escapeshellarg($mail),
-  '--langcode='     . escapeshellarg($langcode),
-  '--clean-url='    . escapeshellarg(drush_get_option('clean_url', 1)),
+  '--db-name='   . escapeshellarg($db_name),
+  '--db-user='   . escapeshellarg($db_user),
+  '--db-pass='   . escapeshellarg($db_pass),
+  '--db-host='   . escapeshellarg($db_host),
+  '--username='  . escapeshellarg(drush_get_option('admin_user', PROVISION_DEFAULT_ADMIN_USER)),
+  '--password='  . escapeshellarg(provision_password()),
+  '--email='     . escapeshellarg($mail),
+  '--site-name=' . escapeshellarg($uri),
+  '--site-mail=' . escapeshellarg($mail),
+  '--langcode='  . escapeshellarg($langcode),
+  '--auto',
 );
 
-// install.sh is not shipped +x, so run php as the program (matches bee); cwd
-// must be the Backdrop root so its BACKDROP_ROOT = getcwd() resolves.
-$cmd = escapeshellarg($php_bin) . ' ./core/scripts/install.sh ' . implode(' ', $args);
-drush_log(dt('BACKDROP/INSTALL/CMD @cmd in @root', array('@cmd' => $cmd, '@root' => $root)), 'info');
+$cmd = escapeshellarg($php_bin) . ' ' . escapeshellarg($bee) . ' ' . implode(' ', $args) . ' 2>&1';
+drush_log(dt('BACKDROP/INSTALL/CMD @cmd', array('@cmd' => $cmd)), 'info');
 $result = drush_shell_cd_and_exec($root, $cmd);
 $output = drush_shell_exec_output();
-foreach ($output as $index => $line) {
-  $line_status = ($result && ($index + 1 == count($output))) ? 'success' : 'notice';
-  drush_log($line, $line_status);
+$installed = FALSE;
+foreach ($output as $line) {
+  drush_log(strip_tags($line), 'notice');
+  if (strpos($line, 'successfully') !== FALSE) {
+    $installed = TRUE;
+  }
 }
-if (!$result) {
+if (!$installed) {
   return drush_set_error('PROVISION_BACKDROP_INSTALL_FAILED',
-    dt('Backdrop install.sh failed for @uri', array('@uri' => $uri)));
+    dt('Backdrop install via bee failed for @uri', array('@uri' => $uri)));
 }
 
 // Capture the one-time admin login link (mirror install_7.inc / the D11 shape).
