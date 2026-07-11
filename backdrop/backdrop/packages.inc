@@ -321,7 +321,19 @@ function _provision_find_profiles() {
  */
 function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
   $searchpaths = array();
+  // BackdropBoot's DRUPAL_ROOT bootstrap does not populate the DRUSH_DRUPAL_ROOT
+  // context, so drush_get_context() returns its array() default -- which would
+  // make every search path "Array/core/modules" and register ZERO module/theme
+  // packages (only the profile, found CWD-relative, shows up). That breaks the
+  // front-end package map the migrate/clone tasks diff between platforms. Fall
+  // back to the explicitly-set selected root, then the context root.
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
+  if (!is_string($drupal_root) || $drupal_root === '') {
+    $drupal_root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
+  }
+  if (!is_string($drupal_root) || $drupal_root === '') {
+    $drupal_root = d()->root;
+  }
   switch ($scope) {
     case 'base' :
       $searchpaths[] = sprintf("%s/core/%s", $drupal_root, $type);
