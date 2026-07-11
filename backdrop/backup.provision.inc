@@ -17,12 +17,13 @@ function drush_provision_backdrop_provision_backup_validate($backup_file = NULL)
     return;
   }
 
-  if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
-    if (drush_get_option('force', false)) {
-      drush_log("clearing error");
-      drush_set_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
-    }
-  }
+  // NO bootstrap here (the Drupal engine's configuration-phase attempt is
+  // dropped): under BackdropBoot an in-process bootstrap can die with a hard
+  // PHP fatal that no @/if() guard can catch -- a cloned site's pre-delete
+  // backup died exactly there. Nothing in the backup needs it: the tarball is
+  // filesystem work, the sqldump runs on the provision DB service, and the
+  // installedness check below reads the persisted site drushrc.
+  //
   // drush's bootstrap does not reload the Backdrop site drushrc into the context,
   // so the persisted 'installed' flag is absent on a bare `drush @site backup`
   // (as invoked by the clone pre-hook) -- restore it before the guard below, or
