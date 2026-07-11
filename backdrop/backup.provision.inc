@@ -23,6 +23,11 @@ function drush_provision_backdrop_provision_backup_validate($backup_file = NULL)
       drush_set_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
     }
   }
+  // drush's bootstrap does not reload the Backdrop site drushrc into the context,
+  // so the persisted 'installed' flag is absent on a bare `drush @site backup`
+  // (as invoked by the clone pre-hook) -- restore it before the guard below, or
+  // an installed site is wrongly rejected as PROVISION_DRUPAL_SITE_NOT_FOUND.
+  _provision_backdrop_ensure_db_creds_loaded();
   if (!drush_get_option('installed') && !drush_get_option('force', false)) {
      drush_set_error('PROVISION_DRUPAL_SITE_NOT_FOUND');
   }

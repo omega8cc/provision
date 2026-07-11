@@ -209,7 +209,7 @@ function _provision_backdrop_db_url() {
 }
 
 /**
- * Reload the site db credentials into the 'site' option context.
+ * Reload the persisted site options (db credentials + installed flag).
  *
  * The db creds enter the 'site' context only at install (the db service's
  * generate_site_credentials() sets them). At verify nothing regenerates them,
@@ -245,6 +245,15 @@ function _provision_backdrop_ensure_db_creds_loaded() {
     if (preg_match('/\\$options\\s*\\[\\s*[\'"]' . $key . '[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
       drush_set_option($key, $m[1], 'site');
     }
+  }
+  // The persisted 'installed' flag has the same problem: it is written to the
+  // site drushrc at install/verify but is not reloaded into the context on a
+  // later `drush @site <cmd>` (backup/clone/migrate...), so those commands see
+  // the site as never installed and abort with PROVISION_DRUPAL_SITE_NOT_FOUND.
+  // Restore it from the same persisted drushrc (unquoted TRUE/true/1 value).
+  if (!drush_get_option('installed')
+    && preg_match('/\\$options\\s*\\[\\s*[\'"]installed[\'"]\\s*\\]\\s*=\\s*(TRUE|true|1)\\s*;/', $body)) {
+    drush_set_option('installed', TRUE, 'site');
   }
 }
 
