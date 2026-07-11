@@ -18,6 +18,15 @@
  * the identically-named Drupal engine is never co-loaded in the same process.
  */
 
+// provision_parse_info_file() (a reused Drupal helper, always loaded) defaults
+// the .info 'php' key to DRUPAL_MINIMUM_PHP, a constant Drupal core defines only
+// on bootstrap. A Backdrop platform never bootstraps Drupal, so provide a
+// fallback (Backdrop's own PHP floor) to keep the reused parser working. This
+// engine is loaded before any provision_parse_info_file() call in the chain.
+if (!defined('DRUPAL_MINIMUM_PHP')) {
+  define('DRUPAL_MINIMUM_PHP', '7.1.0');
+}
+
 
 /**
  * Find themes in a certain scope.

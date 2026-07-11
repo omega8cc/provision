@@ -57,6 +57,18 @@ function provision_backdrop_drush_help($section) {
  * back to the versionless <engine>.inc, so the poisoned major version 1 never
  * selects a wrong file.
  */
+/**
+ * Implements hook_drush_engine_type_info().
+ *
+ * Register 'backdrop' as an engine type so drush_include_engine('backdrop', ...)
+ * resolves. Drush core registers the 'drupal' type the same way
+ * (core_drush_engine_type_info()); without this our engines are "Unknown engine
+ * type backdrop" and the reused package helpers never load.
+ */
+function provision_backdrop_drush_engine_type_info() {
+  return array('backdrop' => array());
+}
+
 function provision_backdrop_drush_engine_backdrop() {
   $engines = array();
   $engines['clear'] = array();
