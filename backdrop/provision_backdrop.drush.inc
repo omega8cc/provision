@@ -209,6 +209,79 @@ function _provision_backdrop_db_url() {
 }
 
 /**
+ * Reload the site db credentials into the 'site' option context.
+ *
+ * The db creds enter the 'site' context only at install (the db service's
+ * generate_site_credentials() sets them). At verify nothing regenerates them,
+ * and drush's DRUPAL_SITE bootstrap does not reload the Backdrop site's
+ * drushrc.php creds into the context for us -- so the context comes up empty and
+ * the settings.php + drushrc re-render blanks the whole DB connection (empty
+ * $database => dead site: anonymous pages still serve from the page cache while
+ * every DB-touching request 500s). Reload any missing db_* option straight from
+ * the persisted site drushrc.php (regex, no include, so the file's $_SERVER side
+ * effects never run) BEFORE any re-render, keeping every write credential-
+ * complete. No-op at install (creds already present) and idempotent.
+ */
+function _provision_backdrop_ensure_db_creds_loaded() {
+  if (d()->type !== 'site') {
+    return;
+  }
+  // Both a name and a password present => already loaded, nothing to do.
+  if (drush_get_option('db_name', '', 'site') && drush_get_option('db_passwd', '', 'site')) {
+    return;
+  }
+  $drushrc = d()->site_path . '/drushrc.php';
+  if (!is_readable($drushrc)) {
+    return;
+  }
+  $body = file_get_contents($drushrc);
+  if ($body === FALSE) {
+    return;
+  }
+  foreach (array('db_type', 'db_user', 'db_passwd', 'db_host', 'db_name', 'db_port') as $key) {
+    if (drush_get_option($key, '', 'site')) {
+      continue;
+    }
+    if (preg_match('/\\$options\\s*\\[\\s*[\'"]' . $key . '[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+      drush_set_option($key, $m[1], 'site');
+    }
+  }
+}
+
+/**
+ * Resolve the site's database name without a CMS bootstrap.
+ *
+ * The bootstrap-free package-map and cron-key reads (backdrop/packages.inc,
+ * backdrop/cron_key.inc) need the site db name, but where it lives depends on
+ * the task phase: at install the db service has just written it into the 'site'
+ * option context (generate_site_credentials()); at verify nothing repopulates
+ * that context and the value instead comes from the site's saved drushrc.php,
+ * which drush merges into the general option stack (not the 'site'-restricted
+ * one). Try the 'site' context, then the merged stack, then parse the saved
+ * drushrc.php directly, so resolution works in every phase.
+ *
+ * @return
+ *   The db name, or '' if it cannot be resolved.
+ */
+function _provision_backdrop_site_db_name() {
+  $db_name = drush_get_option('db_name', '', 'site');
+  if (empty($db_name)) {
+    $db_name = drush_get_option('db_name', '');
+  }
+  if (empty($db_name) && d()->type === 'site') {
+    $drushrc = d()->site_path . '/drushrc.php';
+    if (is_readable($drushrc)) {
+      // Regex-parse (no include) to avoid the file's $_SERVER side effects.
+      $body = file_get_contents($drushrc);
+      if (preg_match('/\\$options\\s*\\[\\s*[\'"]db_name[\'"]\\s*\\]\\s*=\\s*[\'"]([A-Za-z0-9_]+)[\'"]/', $body, $m)) {
+        $db_name = $m[1];
+      }
+    }
+  }
+  return is_string($db_name) ? $db_name : '';
+}
+
+/**
  * Rebuild the Backdrop caches after install/verify.
  *
  * Backdrop equivalent of _provision_drupal_rebuild_caches(): loads the versionless

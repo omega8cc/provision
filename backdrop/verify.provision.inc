@@ -25,13 +25,23 @@ function drush_provision_backdrop_provision_verify_validate() {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
 
+    // Reload db creds from the persisted drushrc BEFORE re-rendering settings,
+    // or the connection gets blanked (see _provision_backdrop_ensure_db_creds_loaded).
+    _provision_backdrop_ensure_db_creds_loaded();
     _provision_backdrop_create_settings_file();
     provision_drupal_push_site();
 
     drush_errors_on();
-    // Backdrop is major 1 (< 12), so it always gets the FULL bootstrap Aegir
-    // Drush 8 provides via BackdropBoot.
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
+    // Deliberately NO in-process FULL bootstrap (mirrors the Drupal layer's
+    // D12+ skip branch). BackdropBoot's configuration phase copies Drush's
+    // $GLOBALS['databases'] into the 'databases' option, but Aegir renders
+    // Backdrop's settings.php with the scalar $database (singular) form, so
+    // $databases is empty and a FULL/DATABASE bootstrap here fatals with
+    // "Could not find a value for the database name setting" and a socket
+    // PDOException -- rolling the whole verify back even though the site is
+    // fine. Every Backdrop verify step is bootstrap-free instead: the package
+    // map and cron key are read straight from the site DB through the provision
+    // DB service, and caches are flushed via a fresh bee subprocess.
   }
 }
 
@@ -192,6 +202,10 @@ function drush_provision_backdrop_pre_provision_verify() {
     // Re-set the ROOT PATH for Drush.
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
+    // Reload db creds from the persisted drushrc before the package map (which
+    // needs db_name) and the settings re-render below, so neither runs against
+    // an empty 'site' context (see _provision_backdrop_ensure_db_creds_loaded).
+    _provision_backdrop_ensure_db_creds_loaded();
     drush_set_option('packages', _scrub_object(provision_backdrop_system_map()), 'site');
     // This is the actual Backdrop provisioning requirements.
     _provision_backdrop_create_directories();

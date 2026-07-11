@@ -112,15 +112,16 @@ function drush_provision_backdrop_provision_install() {
 
   // Run Backdrop installation if option was specified.
   if (d()->install_method == 'profile') {
-    // Drive core/scripts/install.sh and capture the one-time login link.
+    // Drive the install via bee (its own subprocess) and capture the one-time
+    // login link. Deliberately NO in-process drush_bootstrap(DRUPAL_FULL) here:
+    // an in-process BackdropBoot FULL bootstrap layered onto this parent process
+    // reuses a stale DB handle and fatals with "Base table or view not found",
+    // rolling the whole install back even though the freshly installed site is
+    // fine (it serves and bootstraps cleanly in any fresh process). Instead
+    // post_provision_install flushes caches via a fresh bee subprocess and reads
+    // the {system}/{state} maps straight from the DB through the provision DB
+    // service -- no CMS bootstrap in this process at all.
     drush_include_engine('backdrop', 'install');
-    // install.sh ran in its own subprocess, so this (parent) process is still
-    // only at DRUPAL_ROOT. Escalate it to a full bootstrap of the freshly
-    // installed site: post_provision_install rebuilds caches and reads the
-    // package map IN-PROCESS (backdrop_flush_all_caches(), the {system} query),
-    // which fatal without a full Backdrop bootstrap. BackdropBoot maps the
-    // Drupal bootstrap phases, so the Drupal FULL constant drives it.
-    drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     drush_set_option('profile_installed', TRUE, 'site');
   }
   // If install_method is 'manual', do nothing but point at the installer.

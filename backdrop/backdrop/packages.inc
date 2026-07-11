@@ -144,9 +144,25 @@ function _provision_drupal_parse_info_file($filename) {
  */
 function _provision_system_query($type) {
   $entries = array();
-  $result = db_query("SELECT * FROM {system} WHERE type=:type", array(':type' => $type));
-  foreach ($result as $entry) {
-    $entries[] = $entry;
+  $db_name = _provision_backdrop_site_db_name();
+  if (empty($db_name) || !preg_match('/^[A-Za-z0-9_]+$/', $db_name)) {
+    drush_log(dt('Backdrop system map: unsafe or empty db_name (@n); skipping.', array('@n' => $db_name)), 'warning');
+    return $entries;
+  }
+  // Read the site {system} table straight through the provision DB service (its
+  // own PDO handle, connected as the master admin with no default schema
+  // selected) so the package map needs no in-process Backdrop bootstrap -- the
+  // parent process never gets a complete one (see backdrop/install.inc).
+  // Fully-qualify and backtick the table: `system` is a reserved word in
+  // MySQL 8, and no default schema is selected on this connection. The type
+  // value goes through the service's quoted %s placeholder; db_name is
+  // identifier-validated above.
+  $result = d()->service('db')->query("SELECT * FROM `" . $db_name . "`.`system` WHERE type = '%s'", $type);
+  if ($result) {
+    $result->setFetchMode(PDO::FETCH_OBJ);
+    foreach ($result as $entry) {
+      $entries[] = $entry;
+    }
   }
   return $entries;
 }
@@ -197,7 +213,7 @@ function _provision_drupal_system_map() {
     $module->version = $module->info['version'];
   }
 
-  drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
+  drush_log(dt("Found !count modules", array('!count' => count(isset($packages['modules']) ? $packages['modules'] : array()))), 'info');
 
   // XXX: mostly a copy-paste from above
   foreach (_provision_system_query("theme") as $theme) {
@@ -217,7 +233,7 @@ function _provision_drupal_system_map() {
     $packages['themes'][$theme->name] = $theme;
     $theme->version = $theme->info['version'];
   }
-  drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))), 'info');
+  drush_log(dt("Found !count themes", array('!count' => count(isset($packages['themes']) ? $packages['themes'] : array()))), 'info');
   return $packages;
 }
 
