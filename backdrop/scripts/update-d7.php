@@ -109,6 +109,20 @@ require_once BACKDROP_ROOT . '/core/includes/common.inc';
 require_once BACKDROP_ROOT . '/core/includes/file.inc';
 require_once BACKDROP_ROOT . '/core/includes/unicode.inc';
 
+// core/includes/update.inc calls update_extra_requirements() (the store the
+// requirements gate records into, update.inc:144) but the function is defined
+// in core/update.php, the web front controller — every headless driver must
+// supply it (the drush extension port does the same, includes/update.inc:32).
+if (!function_exists('update_extra_requirements')) {
+  function update_extra_requirements($requirements = NULL) {
+    static $extra_requirements = array();
+    if (isset($requirements)) {
+      $extra_requirements += $requirements;
+    }
+    return $extra_requirements;
+  }
+}
+
 try {
   // The D7-tolerant pre-bootstrap: config dirs, {state} table, role/langcode
   // schema surgery — and the REQUIRED_D7_SCHEMA_VERSION requirement.
