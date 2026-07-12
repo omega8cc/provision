@@ -110,7 +110,17 @@ function drush_provision_backdrop_pre_provision_deploy($backup_file) {
       }
     }
 
-    if (isset($site_packages['modules']) && is_array($site_packages['modules'])) {
+    if (drush_get_option('backdrop_d7_upgrade', FALSE)) {
+      // D7 -> Backdrop upgrade deploy: the imported dump still carries Drupal 7
+      // schema versions (system 7xxx and friends) while the Backdrop platform
+      // reports renumbered 1xxx schemas, so the namesake comparison below would
+      // abort every upgrade with PROVISION_SCHEMA_UPGRADE_FAILURE. The only
+      // gate that matters here (REQUIRED_D7_SCHEMA_VERSION) is enforced by
+      // provision-backdrop-upgrade's validate and re-checked by the standalone
+      // updater before converting.
+      drush_log(dt('BACKDROP/UPGRADE Skipping the module schema version check on a D7 -> Backdrop upgrade deploy.'), 'info');
+    }
+    elseif (isset($site_packages['modules']) && is_array($site_packages['modules'])) {
       foreach ($site_packages['modules'] as $name => $module) {
         if ($module['status'] == 1) {
           if (isset($module['platform']) && $module['platform'] != '-1') {
@@ -194,7 +204,15 @@ function drush_provision_backdrop_post_provision_deploy() {
     provision_backend_invoke(d()->name, 'updatedb -y');
   }
   else {
-    if (is_file($dis_auto_up_db_global)) {
+    if (drush_get_option('backdrop_d7_upgrade', FALSE)) {
+      // D7 -> Backdrop upgrade deploy: the copy database still holds Drupal 7
+      // schema at this point. backdrop-updatedb declares a dispatch-time FULL
+      // bootstrap, which cannot succeed on an unconverted D7 database — the
+      // conversion is performed instead by the standalone updater that
+      // provision-backdrop-upgrade shells out to after this deploy.
+      drush_log(dt('BACKDROP/UPGRADE Skipping backdrop-updatedb on a D7 -> Backdrop upgrade deploy; the standalone updater performs the conversion.'), 'info');
+    }
+    elseif (is_file($dis_auto_up_db_global)) {
       drush_log(dt('DRUSH/CTRL/UPDATEDB skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
     }
     elseif (is_file($dis_auto_up_db_site)) {
@@ -213,7 +231,14 @@ function drush_provision_backdrop_post_provision_deploy() {
   // Finish the rebuild in-process under a FULL bootstrap: regenerate the site
   // 'packages' map, run the URL-rename deploy engine (system.core:site_name on a
   // clone-to-new-URL) and rebuild node access.
-  if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
+  if (drush_get_option('backdrop_d7_upgrade', FALSE)) {
+    // D7 -> Backdrop upgrade deploy: bootstrapping the still-unconverted copy
+    // database here would fail; the standalone updater performs the conversion,
+    // cache rebuild and node access rebuild in its own php process, and the
+    // final provision-verify regenerates the packages map.
+    drush_log(dt('BACKDROP/UPGRADE Skipping the in-process post-deploy rebuild on a D7 -> Backdrop upgrade deploy.'), 'info');
+  }
+  elseif (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
     drush_include_engine('backdrop', 'deploy');
     drush_set_option('packages', _scrub_object(provision_backdrop_system_map()), 'site');
     _provision_backdrop_rebuild_caches();
