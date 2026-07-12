@@ -58,6 +58,37 @@ function provision_backdrop_drush_help($section) {
  * selects a wrong file.
  */
 /**
+ * Implements hook_drush_command().
+ *
+ * The D7 -> Backdrop upgrade command. Registered here (the owned Backdrop
+ * layer), not in provision.drush.inc, so the whole feature stays additive.
+ * Hook functions live in upgrade.backdrop.provision.inc (the reversed-dotted
+ * command include name Drush resolves for provision-backdrop-upgrade); note
+ * Drush collapses the commandfile prefix out of the validate/command/rollback
+ * hook names because the command name starts with it (command.inc:405).
+ */
+function provision_backdrop_drush_command() {
+  $items = array();
+  $items['provision-backdrop-upgrade'] = array(
+    'description' => 'Upgrade a Drupal 7 site to Backdrop as a NEW site on a Backdrop platform (clone-preserving: the D7 source keeps serving untouched).',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the new Backdrop site (as saved by provision-save; a new, unused uri).'),
+      '@platform_name' => dt('The Drush alias of the target Backdrop platform.'),
+    ),
+    'options' => array(
+      'profile' => dt('The Backdrop install profile to record for the new site (default: standard).'),
+      'new_db_server' => dt('Optional db server alias for the new site.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @d7site provision-backdrop-upgrade @newsite @platform_backdrop' => 'Copy the D7 site onto the Backdrop platform under the new uri and convert the copy.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  return $items;
+}
+
+/**
  * Implements hook_drush_engine_type_info().
  *
  * Register 'backdrop' as an engine type so drush_include_engine('backdrop', ...)
