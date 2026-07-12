@@ -136,6 +136,16 @@ if (!function_exists('update_extra_requirements')) {
   }
 }
 
+/**
+ * Build the re-exec command line for the next phase (fresh process).
+ */
+function _update_d7_phase_cmd($script_path, $phase) {
+  return escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script_path)
+    . ' --root=' . escapeshellarg(BACKDROP_ROOT)
+    . ' --url=' . escapeshellarg($_SERVER['HTTP_HOST'])
+    . ' --phase=' . escapeshellarg($phase) . ' 2>&1';
+}
+
 try {
   // Both phases share the staged, D7-tolerant bootstrap; every step in it is
   // idempotent (schema surgery is guarded, requirement fixes re-apply clean).
@@ -162,11 +172,22 @@ try {
   // Disable extensions whose .info lacks backdrop = 1.x (D7 leftovers).
   update_fix_compatibility();
 
-  if ($options['phase'] !== 'batch') {
-    // ---- PHASE 1: compatibility + D7 dependency enables. ----
+  if ($options['phase'] === '') {
+    // ---- PHASE compat: nothing beyond the shared update_fix_compatibility()
+    // above. On a fresh copy the FULL bootstrap of THIS process loaded the
+    // still-enabled D7 contrib; any further machinery (dependency enables,
+    // cache flushes) would fire their hooks against not-yet-converted data
+    // (VM-caught: a D7 hook reached filter_default_format() -> TypeError on
+    // the missing format config). Persist the disables, then hand over to a
+    // fresh process that bootstraps the corrected module world.
+    print "Phase compat complete; continuing in a fresh process.\n";
+    passthru(_update_d7_phase_cmd($script_path, 'enable'), $exit_code);
+    exit($exit_code);
+  }
 
-    // D7 upgrade bookkeeping: sets the update_d7_upgrade state and reports
-    // which Backdrop modules the enabled set depends on.
+  if ($options['phase'] === 'enable') {
+    // ---- PHASE enable: D7 dependency report + enables, on a clean bootstrap
+    // (the D7 leftovers are disabled now, so they are not loaded here). ----
     $dependency_report = update_upgrade_check_dependencies();
     if ($dependency_report) {
       print trim(strip_tags($dependency_report)) . "\n";
@@ -175,7 +196,8 @@ try {
     // Pre-include the module files about to be enabled: enabling can trigger
     // cache/menu rebuilds in THIS process, and an already-loaded module
     // (dashboard, via the still-enabled D7 row) may call into the module
-    // being enabled (layout) before any fresh bootstrap would load it.
+    // being enabled (layout) before any fresh bootstrap would load it
+    // (VM-caught: dashboard_menu() -> layout_load_multiple_by_path()).
     if (backdrop_get_installed_schema_version('system') > 7000) {
       $modules_to_enable = update_upgrade_modules_to_enable();
       if (!empty($modules_to_enable)) {
@@ -190,19 +212,14 @@ try {
     }
     update_upgrade_enable_dependencies();
 
-    // ---- Re-exec PHASE 2 in a fresh process (the web flow's next request):
-    // the batch must run with the module world bootstrapped from the NOW
-    // corrected {system} statuses, not this process's stale one.
-    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script_path)
-      . ' --root=' . escapeshellarg(BACKDROP_ROOT)
-      . ' --url=' . escapeshellarg($_SERVER['HTTP_HOST'])
-      . ' --phase=batch 2>&1';
-    print "Phase 1 complete; running the update batch in a fresh process.\n";
-    passthru($cmd, $exit_code);
+    // The batch runs with the module world bootstrapped from the NOW
+    // corrected + extended {system} statuses — the web flow's next request.
+    print "Phase enable complete; running the update batch in a fresh process.\n";
+    passthru(_update_d7_phase_cmd($script_path, 'batch'), $exit_code);
     exit($exit_code);
   }
 
-  // ---- PHASE 2: requirements gate + the update batch. ----
+  // ---- PHASE batch: requirements gate + the update batch. ----
 
   // CLI form of update_check_requirements(): the web version prints an HTML
   // page and exit()s. REQUIREMENT_ERROR here includes the < 7069 schema gate
@@ -301,5 +318,6 @@ try {
 catch (Throwable $e) {
   print "Conversion failed:\n";
   print get_class($e) . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() . "\n";
+  print $e->getTraceAsString() . "\n";
   exit(1);
 }
