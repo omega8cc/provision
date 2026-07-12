@@ -6,27 +6,39 @@
  *
  * Provision-shipped driver for the D7 -> Backdrop conversion step of
  * provision-backdrop-upgrade. It runs as a SEPARATE process under a modern
- * PHP CLI (Backdrop floor is 7.1; BOA invokes /opt/php84/bin/php), so the
+ * PHP CLI (Backdrop floor is 7.1; BOA invokes the backend PHP_BINARY), so the
  * provision-side PHP 5.6 floor and the bootstrap-free backend doctrine do not
  * apply here: this process bootstraps Backdrop with core's own
  * backdrop_bootstrap(), never through drush/BackdropBoot.
  *
- * It reproduces core/update.php's staged sequence faithfully (update.php
- * cannot be driven headlessly: it is a token- and session-guarded web batch):
- * update_prepare_bootstrap() -> SESSION -> LANGUAGE -> update_fix_requirements()
- * -> FULL -> backdrop_load_updates() -> update_fix_compatibility() ->
- * requirements gate -> D7 dependency enable -> non-progressive update_batch().
- * The LANGUAGE-before-update_fix_requirements order is core's, and core marks
- * it deliberate — keep it (core/update.php:566-576).
+ * It reproduces core/update.php's staged sequence (update.php cannot be
+ * driven headlessly: it is a token- and session-guarded web batch), in TWO
+ * processes because the web flow is one request per step and a single process
+ * goes stale twice (both VM-caught): (a) module_invoke_all()/system data read
+ * through the module world bootstrapped BEFORE update_fix_compatibility()
+ * disabled the D7 leftovers, so the requirements gate errors on modules that
+ * are already disabled on disk; (b) update_upgrade_enable_dependencies() can
+ * enable a Backdrop-original module (layout, required by dashboard) whose
+ * functions are not loaded in-process, and the next menu rebuild fatals
+ * (dashboard_menu() -> layout_load_multiple_by_path()).
+ *
+ * Phase 1 (default): update_prepare_bootstrap() -> SESSION -> LANGUAGE ->
+ * update_fix_requirements() -> FULL -> backdrop_load_updates() ->
+ * update_fix_compatibility() -> D7 dependency report + enables (pre-including
+ * each module file it enables) -> re-exec phase 2.
+ * Phase 2 (--phase=batch, fresh process, clean statuses): same staged
+ * bootstrap (all idempotent) -> requirements gate -> non-progressive
+ * update_batch() -> hard success checks -> node access rebuild.
  *
  * Usage (cwd anywhere):
- *   /opt/php84/bin/php update-d7.php --root=/path/to/backdrop/platform --url=site.example.com
+ *   php update-d7.php --root=/path/to/backdrop/platform --url=site.example.com
  *
  * Exit codes: 0 = converted (or nothing pending on an already-converted DB);
  * 1 = failed, with the reason on stdout. The caller treats non-zero as a
  * conversion failure and discards the copy database.
  */
 
+$script_path = $_SERVER['argv'][0];
 $script = basename(array_shift($_SERVER['argv']));
 
 if (in_array('--help', $_SERVER['argv']) || empty($_SERVER['argv'])) {
@@ -59,6 +71,7 @@ $_SERVER['HTTP_USER_AGENT'] = 'console';
 $options = array(
   'root' => '',
   'url' => '',
+  'phase' => '',
 );
 while ($param = array_shift($_SERVER['argv'])) {
   if (strpos($param, '--') === 0) {
@@ -124,8 +137,8 @@ if (!function_exists('update_extra_requirements')) {
 }
 
 try {
-  // The D7-tolerant pre-bootstrap: config dirs, {state} table, role/langcode
-  // schema surgery — and the REQUIRED_D7_SCHEMA_VERSION requirement.
+  // Both phases share the staged, D7-tolerant bootstrap; every step in it is
+  // idempotent (schema surgery is guarded, requirement fixes re-apply clean).
   update_prepare_bootstrap();
 
   backdrop_bootstrap(BACKDROP_BOOTSTRAP_SESSION);
@@ -149,6 +162,48 @@ try {
   // Disable extensions whose .info lacks backdrop = 1.x (D7 leftovers).
   update_fix_compatibility();
 
+  if ($options['phase'] !== 'batch') {
+    // ---- PHASE 1: compatibility + D7 dependency enables. ----
+
+    // D7 upgrade bookkeeping: sets the update_d7_upgrade state and reports
+    // which Backdrop modules the enabled set depends on.
+    $dependency_report = update_upgrade_check_dependencies();
+    if ($dependency_report) {
+      print trim(strip_tags($dependency_report)) . "\n";
+    }
+
+    // Pre-include the module files about to be enabled: enabling can trigger
+    // cache/menu rebuilds in THIS process, and an already-loaded module
+    // (dashboard, via the still-enabled D7 row) may call into the module
+    // being enabled (layout) before any fresh bootstrap would load it.
+    if (backdrop_get_installed_schema_version('system') > 7000) {
+      $modules_to_enable = update_upgrade_modules_to_enable();
+      if (!empty($modules_to_enable)) {
+        $files = system_rebuild_module_data();
+        foreach (array_keys($modules_to_enable) as $module_to_enable) {
+          if (isset($files[$module_to_enable]->uri) && is_file(BACKDROP_ROOT . '/' . $files[$module_to_enable]->uri)) {
+            include_once BACKDROP_ROOT . '/' . $files[$module_to_enable]->uri;
+            print "Pre-loaded $module_to_enable for in-process enable.\n";
+          }
+        }
+      }
+    }
+    update_upgrade_enable_dependencies();
+
+    // ---- Re-exec PHASE 2 in a fresh process (the web flow's next request):
+    // the batch must run with the module world bootstrapped from the NOW
+    // corrected {system} statuses, not this process's stale one.
+    $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script_path)
+      . ' --root=' . escapeshellarg(BACKDROP_ROOT)
+      . ' --url=' . escapeshellarg($_SERVER['HTTP_HOST'])
+      . ' --phase=batch 2>&1';
+    print "Phase 1 complete; running the update batch in a fresh process.\n";
+    passthru($cmd, $exit_code);
+    exit($exit_code);
+  }
+
+  // ---- PHASE 2: requirements gate + the update batch. ----
+
   // CLI form of update_check_requirements(): the web version prints an HTML
   // page and exit()s. REQUIREMENT_ERROR here includes the < 7069 schema gate
   // recorded by update_prepare_bootstrap() via update_extra_requirements().
@@ -167,15 +222,6 @@ try {
     }
     exit(1);
   }
-
-  // D7 upgrade bookkeeping: sets the update_d7_upgrade state and reports,
-  // then enables the Backdrop modules the enabled set depends on (e.g. the
-  // core namesakes of absorbed D7 contrib) — core runs both before the batch.
-  $dependency_report = update_upgrade_check_dependencies();
-  if ($dependency_report) {
-    print trim(strip_tags($dependency_report)) . "\n";
-  }
-  update_upgrade_enable_dependencies();
 
   // Build the per-module start map, as bee's update-db does.
   $pending = update_get_update_list();
