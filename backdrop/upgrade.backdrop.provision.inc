@@ -295,7 +295,9 @@ function drush_provision_backdrop_upgrade($new_name = NULL, $platform = NULL) {
       $output = drush_shell_exec_output();
       if (is_array($output)) {
         foreach ($output as $line) {
-          drush_log('BACKDROP/UPGRADE ' . $line, $converted ? 'info' : 'warning');
+          // 'ok' so the conversion record (phase markers, schema from->to)
+          // is visible in a normal task log, not only under --verbose.
+          drush_log('BACKDROP/UPGRADE ' . $line, $converted ? 'ok' : 'warning');
         }
       }
       if (!$converted) {
