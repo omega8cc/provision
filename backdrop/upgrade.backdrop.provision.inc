@@ -268,6 +268,18 @@ function drush_provision_backdrop_upgrade($new_name = NULL, $platform = NULL) {
     // every write from here on lands in the copy's store, never the source's.
     _provision_drupal_native_symlink($options['uri'], TRUE);
 
+    // Quarantine site-local D7 modules that Backdrop absorbed into core
+    // (disposition core/superseded in the map). Their {system} rows are still
+    // enabled, so the updater's FULL bootstrap would load them and fatal on
+    // duplicate function definitions against the core namesakes (VM-caught:
+    // date_api's date_type_format() vs core/includes/date.inc). Moving the
+    // FILES aside — never touching the rows — is the mechanical form of the
+    // official "remove moved-to-core contrib first" step: the module rescan
+    // then remaps the enabled rows to the core copies and the data conversion
+    // runs under core's code. The dirs are kept in a sibling holding dir
+    // (reversible, rides backups, not on any module scan path).
+    _provision_backdrop_upgrade_quarantine_core_dupes($options['root'], $options['uri']);
+
     // Convert the copy: standalone updater, separate modern-PHP process.
     $script = dirname(__FILE__) . '/scripts/update-d7.php';
     if (!is_file($script)) {
@@ -312,6 +324,81 @@ function drush_provision_backdrop_upgrade($new_name = NULL, $platform = NULL) {
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
+}
+
+/**
+ * Move site-local modules absorbed into Backdrop core out of the scan path.
+ *
+ * Walks sites/<uri>/modules for .info files; every module whose map
+ * disposition is core or superseded has its directory moved (parents first,
+ * so a project dir like date/ goes in one move) into
+ * sites/<uri>/modules-preupgrade-quarantine — kept, not deleted.
+ */
+function _provision_backdrop_upgrade_quarantine_core_dupes($root, $uri) {
+  $modules_dir = $root . '/sites/' . $uri . '/modules';
+  if (!is_dir($modules_dir)) {
+    return;
+  }
+  $map_file = dirname(__FILE__) . '/data/d7_module_map.json';
+  $map = array();
+  if (is_readable($map_file)) {
+    $decoded = json_decode(file_get_contents($map_file), TRUE);
+    if (is_array($decoded) && isset($decoded['modules']) && is_array($decoded['modules'])) {
+      $map = $decoded['modules'];
+    }
+  }
+  if (empty($map)) {
+    drush_log(dt('Module map unreadable; skipping the core-duplicate quarantine (the conversion may fatal on duplicate definitions).'), 'warning');
+    return;
+  }
+
+  // Collect every module dir whose .info name maps to core/superseded.
+  $to_move = array();
+  $iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($modules_dir, FilesystemIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+  );
+  foreach ($iterator as $item) {
+    if (!$item->isFile() || substr($item->getFilename(), -5) !== '.info') {
+      continue;
+    }
+    $module = substr($item->getFilename(), 0, -5);
+    if (isset($map[$module]['disposition'])
+      && ($map[$module]['disposition'] === 'core' || $map[$module]['disposition'] === 'superseded')) {
+      $to_move[dirname($item->getPathname())] = $module;
+    }
+  }
+  if (empty($to_move)) {
+    return;
+  }
+
+  $holding = $root . '/sites/' . $uri . '/modules-preupgrade-quarantine';
+  if (!is_dir($holding) && !mkdir($holding, 0755)) {
+    drush_log(dt('Could not create @dir; skipping the quarantine.', array('@dir' => $holding)), 'warning');
+    return;
+  }
+
+  // Parents first: moving a project root (date/) takes its sub-modules along.
+  $dirs = array_keys($to_move);
+  usort($dirs, 'strcmp');
+  foreach ($dirs as $dir) {
+    if (!is_dir($dir)) {
+      // Already moved with its parent project dir.
+      continue;
+    }
+    $dest = $holding . '/' . basename($dir);
+    $suffix = 1;
+    while (file_exists($dest)) {
+      $dest = $holding . '/' . basename($dir) . '-' . $suffix++;
+    }
+    if (rename($dir, $dest)) {
+      drush_log(dt('UPGRADE/QUARANTINE moved @dir (module @module maps to Backdrop core) to @dest.',
+        array('@dir' => $dir, '@module' => $to_move[$dir], '@dest' => $dest)), 'ok');
+    }
+    else {
+      drush_log(dt('UPGRADE/QUARANTINE could not move @dir; the conversion may fatal on duplicate definitions.', array('@dir' => $dir)), 'warning');
+    }
+  }
 }
 
 /**
