@@ -44,6 +44,8 @@ function provision_backdrop_drush_help($section) {
       return dt('Could not complete Backdrop installation.');
     case 'error:PROVISION_BACKDROP_PHP_TOO_OLD' :
       return dt('The instance PHP CLI is older than the Backdrop 7.1 floor.');
+    case 'error:PROVISION_BACKDROP_D6_UPGRADE_CONTENT_MIGRATE' :
+      return dt('The CCK field-data migration did not complete; the copy must be discarded.');
   }
 }
 
@@ -82,6 +84,22 @@ function provision_backdrop_drush_command() {
     'allow-additional-options' => TRUE,
     'examples' => array(
       'drush @d7site provision-backdrop-upgrade @newsite @platform_backdrop' => 'Copy the D7 site onto the Backdrop platform under the new uri and convert the copy.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-backdrop-d6-upgrade'] = array(
+    'description' => 'Upgrade a Drupal 6 site to Drupal 7 as a NEW site on a Drupal 7 platform (hop 1 of the D6 -> Backdrop chain; clone-preserving: the D6 source keeps serving untouched). Upgrade the produced intermediate to Backdrop with provision-backdrop-upgrade.',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the new Drupal 7 site (as saved by provision-save; a new, unused uri).'),
+      '@platform_name' => dt('The Drush alias of the target Drupal 7 platform.'),
+    ),
+    'options' => array(
+      'profile' => dt('The profile to record for the new site (default: standard — the D6->D7 upgrade renames default to standard).'),
+      'new_db_server' => dt('Optional db server alias for the new site.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @d6site provision-backdrop-d6-upgrade @newsite @platform_dl7' => 'Copy the D6 site onto the Drupal 7 platform under the new uri and convert the copy, including the CCK field data.',
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
   );
