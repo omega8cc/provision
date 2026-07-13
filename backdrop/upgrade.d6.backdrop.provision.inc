@@ -107,14 +107,24 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
       dt('sites/@uri already exists on the target platform.', array('@uri' => $new_uri)));
   }
 
-  // The recorded profile must exist on the D7 target. The D6 -> D7 core
-  // upgrade renames the DB install_profile default -> standard, so the D6
-  // default profile maps to standard automatically; a custom D6 profile must
-  // be present on the target under the same name (pass --profile).
-  $profile = drush_get_option('profile', 'standard');
+  // The recorded profile must exist on the D7 target. A custom D6 profile
+  // must be present on the target under the same name (pass --profile).
+  $profile = _provision_backdrop_d6_upgrade_profile();
   if (!is_dir($target_root . '/profiles/' . $profile)) {
     return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_TARGET',
       dt('The @profile profile does not exist on the target platform.', array('@profile' => $profile)));
+  }
+
+  // The deploy's own updatedb IS the D6 -> D7 core conversion; a DisAutoUpDb
+  // control file would skip it, leaving a still-D6 copy that wedges the rest
+  // of the deploy into a confusing rollback. Refuse up front instead.
+  $aegir_root = d('@server_master')->aegir_root;
+  $dis_auto_up_db_global = $aegir_root . '/static/control/DisAutoUpDb.info';
+  $dis_auto_up_db_site = $aegir_root . '/static/control/' . $new_uri . '_DisAutoUpDb.info';
+  if (is_file($dis_auto_up_db_global) || is_file($dis_auto_up_db_site)) {
+    return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_TARGET',
+      dt('A DisAutoUpDb control file is present (@global / @site); it would skip the updatedb this upgrade depends on. Remove it and retry.',
+      array('@global' => $dis_auto_up_db_global, '@site' => $dis_auto_up_db_site)));
   }
 
   // The source schema must be Drupal 6 (a 6xxx system schema). Bootstrap-free
@@ -155,6 +165,25 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
   // conversion (data kept) — a warning, never a gate. The CCK field-data
   // gate is content_migrate's, enforced hard in the command phase.
   _provision_backdrop_d6_upgrade_kit_report($db, $db_name);
+}
+
+/**
+ * The profile to record for the new D7 site.
+ *
+ * The --profile option falls through to the SOURCE alias options (the
+ * backend runs in the D6 site context, so the site's persisted profile
+ * rides drush_get_option), and the stock D6 profile is literally named
+ * 'default' — which no D7 platform ships, so the raw value would fail both
+ * the validate is_dir check and, saved onto the alias, the later hop-2
+ * validate. The D6 -> D7 core upgrade renames the DB install_profile
+ * default -> standard; map the context the same way.
+ */
+function _provision_backdrop_d6_upgrade_profile() {
+  $profile = drush_get_option('profile', 'standard');
+  if (!is_string($profile) || $profile === '' || $profile === 'default') {
+    $profile = 'standard';
+  }
+  return $profile;
 }
 
 /**
@@ -232,8 +261,16 @@ function _provision_backdrop_d6_upgrade_kit_report($db, $db_name) {
   }
   $covered = 0;
   $core = 0;
+  $native = 0;
   $unmapped = array();
   foreach ($modules as $name) {
+    // Modules shipping in the source's own core modules/ dir (D6 core and
+    // Pressflow additions) are converted or retired by the D7 core upgrade
+    // natively — warning about them is pure noise.
+    if (is_dir(d()->root . '/modules/' . $name)) {
+      $native++;
+      continue;
+    }
     if (!isset($map['modules'][$name])) {
       $unmapped[] = $name;
       continue;
@@ -249,8 +286,8 @@ function _provision_backdrop_d6_upgrade_kit_report($db, $db_name) {
   foreach ($unmapped as $name) {
     drush_log(dt('D6-UPGRADE/KIT @name has no D6->D7 kit mapping; the conversion will park it disabled at its D6 schema (data tables are kept).', array('@name' => $name)), 'warning');
   }
-  drush_log(dt('D6-UPGRADE/KIT coverage: @covered kit-mapped, @core core-mapped, @unmapped unmapped of @total enabled modules.',
-    array('@covered' => $covered, '@core' => $core, '@unmapped' => count($unmapped), '@total' => count($modules))), 'ok');
+  drush_log(dt('D6-UPGRADE/KIT coverage: @covered kit-mapped, @core core-mapped, @native handled by the core upgrade natively, @unmapped unmapped of @total enabled modules.',
+    array('@covered' => $covered, '@core' => $core, '@native' => $native, '@unmapped' => count($unmapped), '@total' => count($modules))), 'ok');
 }
 
 /**
@@ -363,8 +400,9 @@ function drush_provision_backdrop_d6_upgrade($new_name = NULL, $platform = NULL)
 
   // The D6 -> D7 core upgrade renames the DB install_profile default ->
   // standard; record the matching (validated) profile on the alias so the
-  // context and the converted database agree.
-  $options['profile'] = drush_get_option('profile', 'standard');
+  // context and the converted database agree. Never the raw option: the
+  // source alias's 'default' leaks through drush_get_option.
+  $options['profile'] = _provision_backdrop_d6_upgrade_profile();
 
   if ($db_server = drush_get_option('new_db_server', FALSE)) {
     $options['db_server'] = $db_server;
@@ -395,6 +433,14 @@ function drush_provision_backdrop_d6_upgrade($new_name = NULL, $platform = NULL)
     // on-box cache (Octopus fetched it from the mirror; provision never
     // downloads).
     _provision_backdrop_d6_upgrade_stage_kit($options['root'], $options['uri'], array_keys($kit_projects));
+  }
+
+  if (!drush_get_error()) {
+    // Every module to enable must already ship on the copy: in backend mode
+    // pm-enable auto-answers YES, and an unknown name would trigger a
+    // drupal.org download attempt at task time (provision never downloads).
+    // A miss here means the kit map drifted from the kit — fail closed.
+    _provision_backdrop_d6_upgrade_assert_enable_targets($options['root'], $options['uri'], array_keys($enable));
   }
 
   if (!drush_get_error()) {
@@ -483,6 +529,49 @@ function _provision_backdrop_d6_upgrade_stage_kit($root, $uri, $kit_projects) {
         dt('Could not copy kit project @project into @dest.', array('@project' => $project, '@dest' => $dest)));
     }
   }
+}
+
+/**
+ * Assert every module to enable ships on the copy before pm-enable runs.
+ *
+ * Scans the copy's module roots (core modules/, sites/all/modules,
+ * sites/<uri>/modules) for <name>.info files and fails closed on anything
+ * unresolved, so pm-enable can never be asked for a module it would try to
+ * download.
+ */
+function _provision_backdrop_d6_upgrade_assert_enable_targets($root, $uri, $enable) {
+  $available = array();
+  $scan_roots = array(
+    $root . '/modules',
+    $root . '/sites/all/modules',
+    $root . '/sites/' . $uri . '/modules',
+  );
+  foreach ($scan_roots as $scan_root) {
+    if (!is_dir($scan_root)) {
+      continue;
+    }
+    $iterator = new RecursiveIteratorIterator(
+      new RecursiveDirectoryIterator($scan_root, FilesystemIterator::SKIP_DOTS),
+      RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($iterator as $item) {
+      if ($item->isFile() && substr($item->getFilename(), -5) === '.info') {
+        $available[substr($item->getFilename(), 0, -5)] = TRUE;
+      }
+    }
+  }
+  $missing = array();
+  foreach ($enable as $name) {
+    if (!isset($available[$name])) {
+      $missing[] = $name;
+    }
+  }
+  if (!empty($missing)) {
+    return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_NO_KIT',
+      dt('Modules to enable are not present on the copy: @missing. The kit map names something the staged kit (or Drupal 7 core) does not ship; aborting before pm-enable could try to download it.',
+      array('@missing' => implode(', ', $missing))));
+  }
+  return TRUE;
 }
 
 /**
