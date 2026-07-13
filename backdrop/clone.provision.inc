@@ -1,46 +1,38 @@
 <?php
 
 /**
- * Clone command implementation
+ * Clone command implementation (Backdrop layer).
  *
- * This command when called will
- *   1. Make a backup of the current site, before modifications are made.
- *   2. Execute 'provision deploy' to build the new site using the backup of the old site.
- *
+ * Fork of platform/clone.provision.inc: CMS-agnostic (backup then deploy the
+ * new site from that backup). The D8+ site-local Drush lock in validate is
+ * dropped. The deploy/verify/backup subprocesses it invokes are handled by the
+ * Backdrop layer for a Backdrop site.
  */
 
 /**
- * Make sure we have a valid site being cloned, and that the file being cloned from exists
+ * Make sure we have a valid site being cloned, and that the file being cloned from exists.
  */
-function drush_provision_drupal_provision_clone_validate($new_name = null, $platform = null) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_clone_validate($new_name = null, $platform = null) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   // Backup mode ctrl file cleanup
   unlink(AEGIR_BACKUP_MODE_CTRL);
-  if (drush_drupal_major_version() >= 8) {
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('CLONE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
-    }
-  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
 /**
- * Make a backup before making any changes, and add extract the file we are restoring from
+ * Make a backup before making any changes, and extract the file we are restoring from.
  */
-function drush_provision_drupal_pre_provision_clone($new_name, $platform = null) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_pre_provision_clone($new_name, $platform = null) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_clone'));
+  drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
   $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_clone';
+  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_clone';
   if (!provision_file()->exists($internal_backup_flag)->status()) {
     provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
       ->succeed('Generated blank ' . $local_description)
@@ -50,10 +42,10 @@ function drush_provision_drupal_pre_provision_clone($new_name, $platform = null)
 }
 
 /**
- * Remove the extracted site directory
+ * Remove the extracted site directory.
  */
-function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platform = null) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_pre_provision_clone_rollback($new_name, $platform = null) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
@@ -62,10 +54,10 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
 }
 
 /**
- * Switch the clone directories around now that we have the new db installed
+ * Switch the clone directories around now that we have the new db installed.
  */
-function drush_provision_drupal_provision_clone($new_name, $platform = null) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   drush_set_option('old_platform', d()->platform->name);
@@ -98,8 +90,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   $options['redirection'] = 0;
 
   // Auto-disable Encryption on the clone. SSL keys/certs are bound to the
-  // source machine-name and must not be reused by the new site name. The
-  // front-end (hosting_clone) also persists this as the operator-visible state.
+  // source machine-name and must not be reused by the new site name.
   $options['ssl_enabled'] = 0;
   unset($options['ssl_key']);
   drush_log(dt('[clone] Encryption disabled for new site @name before final verify', array('@name' => $new_name)), 'info');
@@ -119,8 +110,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   # note that we reset the aliases so they don't conflict with the original site
 
-  // Build an options array to pass to the deploy task. This allows injection
-  // of data into the deploy task. See: https://www.drupal.org/node/2471805
+  // Build an options array to pass to the deploy task.
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
@@ -134,13 +124,7 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     provision_backend_invoke($new_name, 'provision-verify');
 
     // Native files symlinking for the clone: give the new site its OWN copy of
-    // the files/private dirs. A clone inherits a symlink into the SOURCE store
-    // (default backups preserve symlinks), so --force-unshare breaks that
-    // inherited link and moves the data into the new site's own store. The work
-    // is delegated to the root autosymlink tool via its hardened sudo wrapper
-    // (Provision is unprivileged and the store is root-managed). The post-deploy
-    // verify above has written the vhost, so the account auto-resolves (no
-    // --account). Warn-not-fail.
+    // the files/private dirs. Warn-not-fail.
     _provision_drupal_native_symlink($options['uri'], TRUE);
 
     $aegir_root = d('@server_master')->aegir_root;
@@ -155,8 +139,8 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     $backup_path = d('@server_master')->backup_path;
     $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
     provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_clone')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_clone');
+      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_clone')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_clone');
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');

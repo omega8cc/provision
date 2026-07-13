@@ -1,19 +1,19 @@
 <?php
 
 /**
- * Make sure we have a valid site being restored, and that the file being restored from exists
+ * Restore command implementation (Backdrop layer).
+ *
+ * Fork of platform/restore.provision.inc: CMS-agnostic (backup, then deploy from
+ * the restore file). The D8+ site-local Drush lock in validate is dropped and
+ * the settings writer is the Backdrop one.
  */
-function drush_provision_drupal_provision_restore_validate($restore_file = null) {
-  if (provision_platform_is_backdrop(d())) {
+
+/**
+ * Make sure we have a valid site being restored, and that the file being restored from exists.
+ */
+function drush_provision_backdrop_provision_restore_validate($restore_file = null) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
-  }
-  if (drush_drupal_major_version() >= 8) {
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('RESTORE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
-    }
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
@@ -27,20 +27,20 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
 }
 
 /**
- * Make a backup before making any changes, and add extract the file we are restoring from
+ * Make a backup before making any changes, and extract the file we are restoring from.
  */
-function drush_provision_drupal_pre_provision_restore($restore_file) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_pre_provision_restore($restore_file) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
-  _provision_drupal_create_settings_file();
-  drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_restore'));
+  _provision_backdrop_create_settings_file();
+  drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_restore'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
   $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_restore';
+  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_restore';
   if (!provision_file()->exists($internal_backup_flag)->status()) {
     provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
       ->succeed('Generated blank ' . $local_description)
@@ -49,8 +49,8 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
   drush_invoke('provision-backup');
 }
 
-function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_pre_provision_restore_rollback($restore_file) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
@@ -59,14 +59,13 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
 }
 
 /**
- * Switch the restore directories around now that we have the new db installed
+ * Switch the restore directories around now that we have the new db installed.
  */
-function drush_provision_drupal_provision_restore($restore_file) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_restore($restore_file) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  // Build an options array to pass to the deploy task. This allows injection
-  // of data into the deploy task. See: https://www.drupal.org/node/2471805
+  // Build an options array to pass to the deploy task.
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
@@ -80,7 +79,7 @@ function drush_provision_drupal_provision_restore($restore_file) {
     $backup_path = d('@server_master')->backup_path;
     $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
     provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore');
+      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_restore')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_restore');
   }
 }

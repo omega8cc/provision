@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "description": "D6 module -> D7 kit map, consumed by provision-backdrop-d6-upgrade. For each enabled D6 module: kit_projects = pinned kit project directories to stage into the copy's site dir (including hard dependencies of the D7 port), enable = D7 module names to pm-enable after staging (empty when the capability is absorbed elsewhere). Modules absent from this map are parked disabled by the D6->D7 conversion (data tables kept) - advisory, never a gate. content_migrate plus core file/image are always staged/enabled regardless of the map (D-026 item 3): the D6->D7 core upgrade only enables file when D6 upload was in use, and content_migrate misclassifies file/image fields as missing without them.",
+    "kit_versions": "cck 7.x-2.x-dev, references 7.x-2.4, date 7.x-2.14, views 7.x-3.30, token 7.x-1.9, pathauto 7.x-1.3, ctools 7.x-1.21, webform 7.x-4.27, libraries 7.x-2.5, admin_menu 7.x-3.0-rc7",
+    "verified_against": "ng019 Phase-3 rehearsal (docs/phase3-d6-investigation.md, 2026-07-13)",
+    "updated": "2026-07-13"
+  },
+  "modules": {
+    "content": { "kit_projects": ["cck"], "enable": [], "note": "D6 CCK core; D7 replaces it with core Field API, content_migrate (always enabled) converts the data" },
+    "text": { "kit_projects": [], "enable": ["text"] },
+    "number": { "kit_projects": [], "enable": ["number"] },
+    "optionwidgets": { "kit_projects": [], "enable": ["options"] },
+    "nodereference": { "kit_projects": ["references"], "enable": ["node_reference"] },
+    "userreference": { "kit_projects": ["references"], "enable": ["user_reference"] },
+    "filefield": { "kit_projects": [], "enable": ["file"], "note": "D7 core file replaces filefield; content_migrate remaps the widgets" },
+    "imagefield": { "kit_projects": [], "enable": ["image"], "note": "D7 core image replaces imagefield" },
+    "imagecache": { "kit_projects": [], "enable": ["image"], "note": "image styles ship in D7 core image" },
+    "imageapi": { "kit_projects": [], "enable": ["image"] },
+    "upload": { "kit_projects": [], "enable": ["file"], "note": "the D6->D7 core upgrade migrates upload attachments into core file when file is enabled" },
+    "date": { "kit_projects": ["date"], "enable": ["date"] },
+    "date_api": { "kit_projects": ["date"], "enable": ["date_api"] },
+    "date_popup": { "kit_projects": ["date"], "enable": ["date_popup"] },
+    "date_timezone": { "kit_projects": ["date"], "enable": [], "note": "folded into D7 date_api" },
+    "views": { "kit_projects": ["views", "ctools"], "enable": ["views"], "note": "D7 views requires ctools" },
+    "views_ui": { "kit_projects": ["views", "ctools"], "enable": ["views_ui"] },
+    "views_export": { "kit_projects": ["views", "ctools"], "enable": [], "note": "folded into D7 views" },
+    "token": { "kit_projects": ["token"], "enable": ["token"] },
+    "pathauto": { "kit_projects": ["pathauto", "token"], "enable": ["pathauto"], "note": "D7 pathauto requires token" },
+    "ctools": { "kit_projects": ["ctools"], "enable": ["ctools"] },
+    "webform": { "kit_projects": ["webform"], "enable": ["webform"] },
+    "libraries": { "kit_projects": ["libraries"], "enable": ["libraries"] },
+    "admin_menu": { "kit_projects": ["admin_menu"], "enable": ["admin_menu"] },
+    "admin_menu_toolbar": { "kit_projects": ["admin_menu"], "enable": ["admin_menu_toolbar"] }
+  }
+}

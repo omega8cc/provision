@@ -22,6 +22,9 @@
  * Implementation of drush_hook_COMMAND_validate().
  */
 function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $exists = provision_file()->exists($backup_file)
     ->succeed('Deploying site from @path')
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
@@ -51,6 +54,9 @@ function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
  * Implements drush_hook_pre_COMMAND().
  */
 function drush_provision_drupal_pre_provision_deploy($backup_file) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $extracted = provision_file()->extract($backup_file, drush_get_option('extract_path'))
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
@@ -147,6 +153,9 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
  * Implementation of drush_hook_pre_COMMAND_rollback().
  */
 function drush_provision_drupal_pre_provision_deploy_rollback() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (drush_get_option('deploy_replace_site', FALSE)) {
     if (drush_get_option('site_dirs_swapped', FALSE)) {
 
@@ -172,6 +181,9 @@ function drush_provision_drupal_pre_provision_deploy_rollback() {
  * Implements drush_hook_COMMAND().
  */
 function drush_provision_drupal_provision_deploy() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   _provision_drupal_maintain_aliases();
   _provision_drupal_create_directories();
 }
@@ -180,9 +192,32 @@ function drush_provision_drupal_provision_deploy() {
  * Implements drush_hook_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_deploy() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  // D6 -> D7 upgrade deploy (transient d6_d7_upgrade option): the imported
+  // copy database is still Drupal 6 until the updatedb below converts it.
+  // Move the copied site-local D6 module directories out of the scan path
+  // first: left in place, updatedb's full bootstrap loads them against the
+  // D7 platform namesakes and fatals on duplicate function definitions
+  // before update_fix_compatibility() can disable anything (BOA platforms
+  // ship name-shadowing o_contrib copies, so the compatibility check alone
+  // cannot be trusted). Directories only; loose files like
+  // default.boa_site_control.ini stay in place.
+  if (drush_get_option('d6_d7_upgrade', FALSE)) {
+    _provision_drupal_deploy_quarantine_d6_modules(d()->site_path);
+  }
   // Run registry-rebuild without cache-clear, if available.
   if (function_exists('drush_registry_rebuild')) {
-    if (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
+    if (drush_get_option('d6_d7_upgrade', FALSE)) {
+      // A still-Drupal-6 database cannot pass the Drupal 7 bootstrap this
+      // rebuild needs ({blocked_ips} exists only after updatedb's
+      // update_prepare_d7_bootstrap()), and the failed subprocess error
+      // would ride the integrated invoke into a full deploy rollback that
+      // drops the copy database. The post-updatedb rebuild below suffices.
+      drush_log(dt('Pre-updatedb registry rebuild skipped for the D6 upgrade deploy (updatedb converts the copy database first).'), 'info');
+    }
+    elseif (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
       provision_backend_invoke(d()->name, 'registry-rebuild --no-cache-clear');
       drush_log(dt('Registry rebuilt with --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
@@ -430,6 +465,83 @@ function drush_provision_drupal_post_provision_deploy() {
       else {
         drush_log(dt('Dropped the old database (@old_database).', array('@old_database' => $old_database)), 'info');
       }
+    }
+  }
+}
+
+/**
+ * Quarantine copied site-local D6 modules before the D6 -> D7 updatedb.
+ *
+ * Runs only on a deploy carrying the transient d6_d7_upgrade option. Every
+ * DIRECTORY under sites/<uri>/modules that ships a .info file (at any depth)
+ * is moved, parents first, into the sibling holding directory
+ * sites/<uri>/modules-d6d7-quarantine -- kept, never deleted, and off every
+ * Drupal module scan path (a holding dir under modules/ itself would be
+ * re-discovered by drupal_system_listing and defeat the quarantine). Loose
+ * files directly in modules/ (default.boa_site_control.ini) stay in place.
+ * Failures log a warning only: a drush_set_error here would ride the
+ * integrated invoke into a rollback that drops the copy database, while a
+ * missed directory is backstopped fail-closed by the updatedb fatal.
+ */
+function _provision_drupal_deploy_quarantine_d6_modules($site_path) {
+  $modules_dir = $site_path . '/modules';
+  if (!is_dir($modules_dir)) {
+    return;
+  }
+
+  // Collect every directory that holds a .info file.
+  $to_move = array();
+  $iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($modules_dir, FilesystemIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::SELF_FIRST
+  );
+  foreach ($iterator as $item) {
+    if (!$item->isFile() || substr($item->getFilename(), -5) !== '.info') {
+      continue;
+    }
+    $dir = dirname($item->getPathname());
+    if ($dir === $modules_dir) {
+      // A loose .info directly in modules/ has no directory of its own to
+      // move; never move modules/ itself.
+      continue;
+    }
+    $to_move[$dir] = TRUE;
+  }
+  if (empty($to_move)) {
+    return;
+  }
+
+  $holding = $site_path . '/modules-d6d7-quarantine';
+  if (!is_dir($holding) && !mkdir($holding, 0755)) {
+    drush_log(dt('Could not create @dir; the D6 module quarantine was skipped and updatedb may fatal on duplicate definitions.', array('@dir' => $holding)), 'warning');
+    return;
+  }
+
+  // Parents first: moving a project root (date/) takes its sub-modules along.
+  $dirs = array_keys($to_move);
+  usort($dirs, 'strcmp');
+  foreach ($dirs as $dir) {
+    if (!is_dir($dir)) {
+      // Already moved with its parent project directory.
+      continue;
+    }
+    // Only top-level children of modules/ are moved directly; nested module
+    // dirs whose top-level parent is being moved ride along with it.
+    $relative = substr($dir, strlen($modules_dir) + 1);
+    $top = strpos($relative, '/') === FALSE ? $dir : $modules_dir . '/' . substr($relative, 0, strpos($relative, '/'));
+    if (!is_dir($top)) {
+      continue;
+    }
+    $dest = $holding . '/' . basename($top);
+    $suffix = 1;
+    while (file_exists($dest)) {
+      $dest = $holding . '/' . basename($top) . '-' . $suffix++;
+    }
+    if (rename($top, $dest)) {
+      drush_log(dt('DEPLOY/D6-QUARANTINE moved @dir to @dest before updatedb.', array('@dir' => $top, '@dest' => $dest)), 'ok');
+    }
+    else {
+      drush_log(dt('DEPLOY/D6-QUARANTINE could not move @dir; updatedb may fatal on duplicate definitions.', array('@dir' => $top)), 'warning');
     }
   }
 }

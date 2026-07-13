@@ -1,56 +1,34 @@
 <?php
 
 /**
- * Provision backup command
+ * Provision backup command (Backdrop layer).
  *
- * Back up an existing site
+ * Fork of platform/backup.provision.inc: CMS-agnostic tarball + sqldump. The
+ * D8+ site-local Drush lock block is dropped and the settings writer is the
+ * Backdrop one. The PROVISION_BACKUP_EXCLUDED_DIRECTORIES* constants are defined
+ * by the always-loaded Drupal layer and reused here.
  */
-
-const PROVISION_BACKUP_EXCLUDED_DIRECTORIES = array(
-  './files/advagg_css',
-  './files/advagg_js',
-  './files/civicrm/templates_c',
-  './files/css',
-  './files/js',
-  './files/php',
-  './files/tmp',
-  './private/temp',
-);
-
-const PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
-  './.redisOff',
-  './.redisOn',
-  './files',
-  './libraries',
-  './modules',
-  './private',
-  './themes',
-  './vendor',
-);
 
 /**
  * Make sure the site is installed and enabled, and that we have a valid target to back up to.
  */
-function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_backup_validate($backup_file = NULL) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
 
-  if (drush_drupal_major_version() >= 8) {
-    // Lock Site-Local Drush if Unlocked
-    provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
-      drush_log(dt('BACKUP/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-      provision_lock_drush_local_vnd();
-    }
-  }
-
-  if (!@drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION)) {
-    if (drush_get_option('force', false)) {
-      drush_log("clearing error");
-      drush_set_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
-    }
-  }
+  // NO bootstrap here (the Drupal engine's configuration-phase attempt is
+  // dropped): under BackdropBoot an in-process bootstrap can die with a hard
+  // PHP fatal that no @/if() guard can catch -- a cloned site's pre-delete
+  // backup died exactly there. Nothing in the backup needs it: the tarball is
+  // filesystem work, the sqldump runs on the provision DB service, and the
+  // installedness check below reads the persisted site drushrc.
+  //
+  // drush's bootstrap does not reload the Backdrop site drushrc into the context,
+  // so the persisted 'installed' flag is absent on a bare `drush @site backup`
+  // (as invoked by the clone pre-hook) -- restore it before the guard below, or
+  // an installed site is wrongly rejected as PROVISION_DRUPAL_SITE_NOT_FOUND.
+  _provision_backdrop_ensure_db_creds_loaded();
   if (!drush_get_option('installed') && !drush_get_option('force', false)) {
      drush_set_error('PROVISION_DRUPAL_SITE_NOT_FOUND');
   }
@@ -71,7 +49,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
   }
 
   if (!$backup_file) {
-    $suggested = drush_provision_drupal_provision_backup_suggest_filename();
+    $suggested = drush_provision_backdrop_provision_backup_suggest_filename();
     drush_set_option('backup_file', $suggested);
   }
 
@@ -80,7 +58,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
 /**
  * Util function to suggest a filename for a new site backup.
  */
-function drush_provision_drupal_provision_backup_suggest_filename() {
+function drush_provision_backdrop_provision_backup_suggest_filename() {
 
   if (!provision_is_hostmaster_site()) {
     if (defined('SELECTED_BACKUP_MODE')) {
@@ -109,7 +87,7 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
       if (!defined('SELECTED_BACKUP_MODE')) {
         define('SELECTED_BACKUP_MODE', $backup_mode);
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_backdrop_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
     }
   }
 
@@ -154,8 +132,8 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
 /**
  * Implentation of hook_provision_backup()
  */
-function drush_provision_drupal_provision_backup() {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_backup() {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   $backup_file = drush_get_option('backup_file');
@@ -176,7 +154,7 @@ function drush_provision_drupal_provision_backup() {
     drush_set_option('provision_db_cloaking', FALSE);
 
     // Write the uncloaked credentials to the settings.php
-    _provision_drupal_create_settings_file();
+    _provision_backdrop_create_settings_file();
     provision_drupal_push_site();
 
   }
@@ -214,29 +192,26 @@ function drush_provision_drupal_provision_backup() {
       if (!defined('SELECTED_BACKUP_MODE')) {
         define('SELECTED_BACKUP_MODE', $backup_mode);
       }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
+      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_backdrop_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
     }
   }
 
   if (isset($backup_mode) && $backup_mode == 'backup_mysqldump_only') {
-    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
-    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
+    $exclude_tag = "touch" . drush_provision_backdrop_provision_backup_get_exclusions_sqldump();
+    $exclude_clean = "rm" . drush_provision_backdrop_provision_backup_get_exclusions_sqldump();
   }
   else {
-    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
-    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions();
+    $exclude_tag = "touch" . drush_provision_backdrop_provision_backup_get_exclusions();
+    $exclude_clean = "rm" . drush_provision_backdrop_provision_backup_get_exclusions();
   }
   drush_shell_exec($exclude_tag);
 
-  // A Drupal site dir must never contain device/block/fifo/socket special files.
-  // A stray one (e.g. a /dev node copied into the site root by an out-of-band
-  // operation) is archived by tar as a special member; a later non-root
-  // `tar -pxf` on deploy/migrate/clone/restore then cannot recreate it (mknod
-  // needs CAP_MKNOD) and aborts the whole extraction, rolling back the task.
-  // Strip any such node here, at the source, so no poisoned archive is ever
-  // produced. cwd is the site dir (chdir above); -xdev stays on the site's own
-  // filesystem and, with no -L, never follows the files/private symlinks into
-  // the per-account store.
+  // A site dir must never contain device/block/fifo/socket special files. A
+  // stray one is archived by tar as a special member; a later non-root tar -pxf
+  // on deploy/migrate/clone/restore then cannot recreate it (mknod needs
+  // CAP_MKNOD) and aborts the whole extraction. Strip any such node here, at the
+  // source. cwd is the site dir; -xdev stays on the site's own filesystem and,
+  // with no -L, never follows the files/private symlinks into the store.
   $strip_specials = 'find . -xdev \( -type b -o -type c -o -type p -o -type s \) -print -delete 2>/dev/null';
   if (drush_shell_exec($strip_specials)) {
     $stripped_specials = drush_shell_exec_output();
@@ -324,39 +299,39 @@ function drush_provision_drupal_provision_backup() {
   if (drush_get_option('cloaking_off_temp', FALSE)) {
     drush_log(dt("Re-cloaking database credentials after backup"));
     drush_set_option('provision_db_cloaking', TRUE);
-    _provision_drupal_create_settings_file();
+    _provision_backdrop_create_settings_file();
     provision_drupal_push_site();
 
   }
 
   if (!$result && !drush_get_option('force', false)) {
-    drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal"));
+    drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for backdrop"));
   }
 }
 
-function drush_provision_drupal_provision_backup_get_exclusions() {
+function drush_provision_backdrop_provision_backup_get_exclusions() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
   drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
   $exclusions = "";
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
   }
-  drush_log(dt("In drush_provision_drupal_provision_backup_get_exclusions: @var", array('@var' => $exclusions)), 'info');
+  drush_log(dt("In drush_provision_backdrop_provision_backup_get_exclusions: @var", array('@var' => $exclusions)), 'info');
   return $exclusions;
 }
 
-function drush_provision_drupal_provision_backup_get_exclusions_sqldump() {
+function drush_provision_backdrop_provision_backup_get_exclusions_sqldump() {
   $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
   $exclusions = "";
   foreach ($directories as $directory) {
     $exclusions .= " '$directory'/exclude.tag";
   }
-  drush_log(dt("In drush_provision_drupal_provision_backup_get_exclusions_sqldump: @var", array('@var' => $exclusions)), 'info');
+  drush_log(dt("In drush_provision_backdrop_provision_backup_get_exclusions_sqldump: @var", array('@var' => $exclusions)), 'info');
   return $exclusions;
 }
 
-function drush_provision_drupal_post_provision_backup() {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_post_provision_backup() {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
@@ -396,7 +371,7 @@ function drush_provision_drupal_post_provision_backup() {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
-        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_backdrop_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
       }
     }
 
@@ -417,7 +392,7 @@ function drush_provision_drupal_post_provision_backup() {
         ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
-        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_drupal_post_provision_backup @var", array('@var' => $old)), 'info');
+        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_backdrop_post_provision_backup @var", array('@var' => $old)), 'info');
       }
     }
   }
@@ -434,8 +409,8 @@ function drush_provision_drupal_post_provision_backup() {
 /**
  * Remove the backup file if something went wrong
  */
-function drush_provision_drupal_provision_backup_rollback() {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_backup_rollback() {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   $backup_file = drush_get_option('backup_file');
@@ -475,7 +450,7 @@ function drush_provision_drupal_provision_backup_rollback() {
         if (!defined('SELECTED_BACKUP_MODE')) {
           define('SELECTED_BACKUP_MODE', $backup_mode);
         }
-        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
+        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_backdrop_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
       }
     }
 
@@ -496,7 +471,7 @@ function drush_provision_drupal_provision_backup_rollback() {
         ->fail('Moving the Post-DB-Cleanup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
-        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_drupal_provision_backup_rollback @var", array('@var' => $old)), 'info');
+        drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_backdrop_provision_backup_rollback @var", array('@var' => $old)), 'info');
       }
     }
   }

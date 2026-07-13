@@ -190,6 +190,9 @@ function _provision_drupal_site_exists() {
  * so we can recover gracefully if things go really wrong.
  */
 function drush_provision_drupal_provision_install_backend() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   drush_include_engine('drupal', 'install');
 }
 
