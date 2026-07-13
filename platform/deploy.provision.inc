@@ -215,7 +215,9 @@ function drush_provision_drupal_post_provision_deploy() {
       // update_prepare_d7_bootstrap()), and the failed subprocess error
       // would ride the integrated invoke into a full deploy rollback that
       // drops the copy database. The post-updatedb rebuild below suffices.
-      drush_log(dt('Pre-updatedb registry rebuild skipped for the D6 upgrade deploy (updatedb converts the copy database first).'), 'info');
+      // 'ok' so the skip is visible in a normal task log (the info level
+      // only surfaces under --verbose).
+      drush_log(dt('Pre-updatedb registry rebuild skipped for the D6 upgrade deploy (updatedb converts the copy database first).'), 'ok');
     }
     elseif (drush_drupal_major_version() < 8 && !provision_is_hostmaster_site()) {
       provision_backend_invoke(d()->name, 'registry-rebuild --no-cache-clear');
