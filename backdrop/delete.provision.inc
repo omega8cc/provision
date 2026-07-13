@@ -1,10 +1,18 @@
 <?php
 
 /**
- * Before starting to delete the site, make a backup
+ * Delete command implementation (Backdrop layer).
+ *
+ * Fork of platform/delete.provision.inc: CMS-agnostic recursive delete + alias
+ * flips. The D8+ site-local Drush lock/unlock blocks are dropped (Backdrop has
+ * no site-local vendor/drush).
  */
-function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
-  if (provision_platform_is_backdrop(d())) {
+
+/**
+ * Before starting to delete the site, make a backup.
+ */
+function drush_provision_backdrop_pre_provision_delete($backup_file = NULL) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   if (d()->type === 'site') {
@@ -13,7 +21,7 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
     }
     else {
-      drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_delete'));
+      drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_delete'));
       drush_invoke("provision-backup", $backup_file);
       drush_unset_option('force', 'process');
     }
@@ -21,33 +29,22 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
 }
 
 /**
- * If we're deleting a site, remove any directories for the site in sites folder
- * If we're deleting a platform, remove the whole platform
- * This can't be rolled back. so won't even try.
+ * If we're deleting a site, remove any directories for the site in sites folder.
+ * If we're deleting a platform, remove the whole platform.
+ * This can't be rolled back, so won't even try.
  */
-function drush_provision_drupal_provision_delete() {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_delete() {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   if (d()->type === 'site') {
 
     // Add platform root auto-discovery to avoid confusing
-    // Composer based D8+ codebase root with Drupal real root.
+    // Composer based codebase root with the real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Re-set the ROOT PATH for Drush.
-    // In cases where we just build the platform Drush would have cleared this value.
-    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
-
-    if (drush_drupal_major_version() >= 8) {
-      // Lock Site-Local Drush if Unlocked
-      provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
-        drush_log(dt('DELETE1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-        provision_lock_drush_local_vnd();
-      }
-    }
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
@@ -62,7 +59,7 @@ function drush_provision_drupal_provision_delete() {
     _provision_recursive_delete(d()->site_path);
     // we remove the aliases even if redirection is enabled as a precaution
     // if redirection is enabled, keep silent about errors
-    _provision_drupal_delete_aliases();
+    _provision_backdrop_delete_aliases();
 
     // Remove the symlink in the clients directory.
     _provision_client_delete_symlink();
@@ -72,7 +69,7 @@ function drush_provision_drupal_provision_delete() {
   elseif (d()->type === 'platform') {
 
     // Add platform root auto-discovery to avoid confusing
-    // Composer based D8+ codebase root with Drupal real root.
+    // Composer based codebase root with the real root.
     d()->root = provision_auto_fix_platform_root(d()->root);
 
     // Make sure if we are within parent codebase directory
@@ -84,15 +81,7 @@ function drush_provision_drupal_provision_delete() {
     }
 
     // Re-set the ROOT PATH for Drush.
-    // In cases where we just build the platform Drush would have cleared this value.
-    // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
-
-    if (drush_drupal_major_version() >= 8) {
-      // Unlock Site-Local Drush If Locked
-      drush_log(dt('DELETE2/LOCAL/DRUSH/UNLOCK with provision_unlock_some_vnd'), 'info');
-      provision_unlock_some_vnd();
-    }
 
     if (!drush_get_option('force', FALSE) && drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT) && provision_drupal_find_sites()) {
       $local_delete_parent = FALSE;

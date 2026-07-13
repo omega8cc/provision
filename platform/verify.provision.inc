@@ -11,6 +11,9 @@
  * Disable an enabled and installed site
  */
 function drush_provision_drupal_provision_verify_validate() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (d()->type === 'site') {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -34,6 +37,9 @@ function drush_provision_drupal_provision_verify_validate() {
  * Implements drush_hook_pre_COMMAND().
  */
 function drush_provision_drupal_pre_provision_verify() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   if (d()->type === 'server') {
 
     $config_root = dirname(d()->config_path);
@@ -483,6 +489,9 @@ function drush_provision_drupal_pre_provision_verify() {
  * Implements drush_hook_provision_post_COMMAND().
  */
 function drush_provision_drupal_post_provision_verify() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
 
   // Add platform root auto-discovery to avoid confusing
   // Composer based D8+ codebase root with Drupal real root.

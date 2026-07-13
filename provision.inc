@@ -96,6 +96,55 @@ function provision_class_file($class_name) {
 }
 
 /**
+ * Detect a Backdrop CMS platform/site root (D-013).
+ *
+ * Positive signal, matching BackdropBoot::valid_root() and bee's bee_find_root():
+ * a root index.php + core/includes/bootstrap.inc + core/misc/backdrop.js, and NO
+ * root autoload.php (which would mark a Composer-managed Drupal whose real docroot
+ * is web/). Keyed on the codebase root, so it is FALSE for a server context (the
+ * aegir root is not a Backdrop codebase) and FALSE for every Drupal tree -- which
+ * makes every guard that calls it a no-op on non-Backdrop platforms (the drupal-
+ * layer edits stay inert on the public merge path).
+ *
+ * @param $context
+ *   A codebase root path (string), or a Provision context (site or platform)
+ *   whose ->root is the platform docroot. Defaults to the active d(). A site
+ *   context carries the platform root in ->root, so a single ->root test covers
+ *   both platform and site contexts.
+ * @return
+ *   TRUE if the resolved root is a Backdrop root, FALSE otherwise (including for
+ *   any non-string or empty root).
+ */
+function provision_platform_is_backdrop($context = NULL) {
+  static $cache = array();
+  if (is_null($context)) {
+    $context = d();
+  }
+  $root = '';
+  if (is_string($context)) {
+    $root = $context;
+  }
+  elseif (is_object($context) && isset($context->root)) {
+    $root = $context->root;
+  }
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (!isset($cache[$root])) {
+    $is_backdrop = FALSE;
+    if (is_dir($root)
+      && file_exists($root . '/index.php')
+      && file_exists($root . '/core/includes/bootstrap.inc')
+      && file_exists($root . '/core/misc/backdrop.js')
+      && !file_exists($root . '/autoload.php')) {
+      $is_backdrop = TRUE;
+    }
+    $cache[$root] = $is_backdrop;
+  }
+  return $cache[$root];
+}
+
+/**
  * @defgroup sitedata Site data management utility functions.
  * @{
  * The provision framework maintains a site.php file in the sites directory, to maintain additional

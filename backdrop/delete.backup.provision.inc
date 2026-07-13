@@ -1,20 +1,16 @@
 <?php
 /**
  * @file
- * Provision hooks for the provision backup-delete command.
- */
-
-/**
- * Provision backup-delete command.
+ * Provision hooks for the provision backup-delete command (Backdrop layer).
  *
- * These are the hooks that will be executed by the drush_invoke function
- * when deleting a backup file from the backend.
+ * Fork of platform/delete.backup.provision.inc. CMS-agnostic: unlink backup
+ * files + clean up client backup symlinks.
  *
  * @param string $backup
  *   A comma-separated list of backup filenames.
  */
-function drush_provision_drupal_provision_backup_delete($backup) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_provision_backup_delete($backup) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   $backups = explode(',', $backup);
@@ -28,17 +24,13 @@ function drush_provision_drupal_provision_backup_delete($backup) {
 /**
  * Implements drush_hook_post_COMMAND().
  *
- * If we have a client name, cleanup the backup symlinks created for that
- * client.
- *
- * Will not provoke a rollback if there is no symlink, for backward
- * compatibility.
+ * If we have a client name, cleanup the backup symlinks created for that client.
  *
  * @param string $backup
  *   A comma-separated list of backup filenames.
  */
-function drush_provision_drupal_post_provision_backup_delete($backup) {
-  if (provision_platform_is_backdrop(d())) {
+function drush_provision_backdrop_post_provision_backup_delete($backup) {
+  if (!provision_platform_is_backdrop(d())) {
     return;
   }
   if (d()->client_name) {

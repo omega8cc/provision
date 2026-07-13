@@ -463,12 +463,16 @@ map $uri $is_cms_probe {
 }
 
 ###
-### Security-banned client IPs, populated by the BOA monitor/firewall layer
-### (scan_nginx/fire write offending real-client IPs here).  Keyed on
-### $remote_addr, which Cloudflare realip resolves to the real client, so the
-### deny bites CF-proxied attackers at the origin's nginx — where an origin
-### CSF/iptables ban on a CF-fronted IP would not.  Wildcard include: an
-### absent or empty file is safe (no entries → $is_banned stays 0).
+### Security-banned client IPs, populated by the BOA monitor/firewall layer.
+### The wildcard include pulls BOTH deny sets: nginx_deny.sh mirrors the csf
+### IPv4 web bans into nginx_banned_ips.conf, and nginx_deny6.sh mirrors the
+### nginx-native IPv6 ban store into nginx_banned_ips.conf6 (csf is IPv4-only,
+### so v6 offenders — which can only arrive via trusted realip — are banned
+### here at nginx instead).  Keyed on $remote_addr, which Cloudflare realip
+### resolves to the real client (v4 or v6), so the deny bites CF-proxied
+### attackers at the origin's nginx — where an origin CSF/iptables ban on a
+### CF-fronted IP would not.  Wildcard include: an absent or empty file is safe
+### (no entries → $is_banned stays 0).
 ###
 geo $remote_addr $is_banned {
   default 0;

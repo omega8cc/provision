@@ -15,6 +15,9 @@
  * Generate a one-time login reset url
  */
 function drush_provision_drupal_provision_login_reset() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
   $uri = d()->redirection ?: d()->uri;
   $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $uri, 'no-browser' => TRUE));
 
