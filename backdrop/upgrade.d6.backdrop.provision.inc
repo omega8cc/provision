@@ -261,8 +261,16 @@ function _provision_backdrop_d6_upgrade_kit_report($db, $db_name) {
   }
   $covered = 0;
   $core = 0;
+  $native = 0;
   $unmapped = array();
   foreach ($modules as $name) {
+    // Modules shipping in the source's own core modules/ dir (D6 core and
+    // Pressflow additions) are converted or retired by the D7 core upgrade
+    // natively — warning about them is pure noise.
+    if (is_dir(d()->root . '/modules/' . $name)) {
+      $native++;
+      continue;
+    }
     if (!isset($map['modules'][$name])) {
       $unmapped[] = $name;
       continue;
@@ -278,8 +286,8 @@ function _provision_backdrop_d6_upgrade_kit_report($db, $db_name) {
   foreach ($unmapped as $name) {
     drush_log(dt('D6-UPGRADE/KIT @name has no D6->D7 kit mapping; the conversion will park it disabled at its D6 schema (data tables are kept).', array('@name' => $name)), 'warning');
   }
-  drush_log(dt('D6-UPGRADE/KIT coverage: @covered kit-mapped, @core core-mapped, @unmapped unmapped of @total enabled modules.',
-    array('@covered' => $covered, '@core' => $core, '@unmapped' => count($unmapped), '@total' => count($modules))), 'ok');
+  drush_log(dt('D6-UPGRADE/KIT coverage: @covered kit-mapped, @core core-mapped, @native handled by the core upgrade natively, @unmapped unmapped of @total enabled modules.',
+    array('@covered' => $covered, '@core' => $core, '@native' => $native, '@unmapped' => count($unmapped), '@total' => count($modules))), 'ok');
 }
 
 /**
