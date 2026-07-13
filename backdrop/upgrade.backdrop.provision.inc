@@ -86,7 +86,12 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
       dt('The @profile profile does not exist on the target platform.', array('@profile' => $profile)));
   }
 
-  // The hard gate: source system schema >= 7069 (REQUIRED_D7_SCHEMA_VERSION).
+  // The hard gate: source system schema >= 7078. Backdrop's own entry gate is
+  // 7069 (REQUIRED_D7_SCHEMA_VERSION), but its effective floor is
+  // system_update_last_removed() = 7078: a source between 7069 and 7077
+  // passes the core gate and then has every system 1xxx update silently
+  // SKIPPED (core/includes/update.inc update_get_update_list) — a broken
+  // upgrade, so fail it here.
   // Bootstrap-free: the provision DB service PDO selects no default schema, so
   // the table MUST be qualified with the source db name (cron_key.inc lesson).
   $db_name = _provision_backdrop_site_db_name();
@@ -104,12 +109,12 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
       $schema = intval($row[0]);
     }
   }
-  if ($schema < 7069) {
+  if ($schema < 7078) {
     return drush_set_error('PROVISION_BACKDROP_UPGRADE_SCHEMA_TOO_OLD',
-      dt('The source system schema is @schema; Backdrop requires >= 7069. Update the Drupal 7 site to the most recent version first.',
+      dt('The source system schema is @schema; the upgrade requires >= 7078 (Backdrop\'s documented gate is 7069, but below 7078 its system updates are silently skipped). Update the Drupal 7 site to the most recent version first.',
       array('@schema' => $schema ? $schema : dt('unreadable'))));
   }
-  drush_log(dt('Source system schema @schema passes the Backdrop >= 7069 gate.', array('@schema' => $schema)), 'ok');
+  drush_log(dt('Source system schema @schema passes the Backdrop >= 7078 gate.', array('@schema' => $schema)), 'ok');
 
   // Advisory module compatibility report from the data map. Never a hard gate:
   // update_fix_compatibility() disables non-backdrop extensions anyway; this
