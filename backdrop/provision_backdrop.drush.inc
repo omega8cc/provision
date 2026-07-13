@@ -103,6 +103,22 @@ function provision_backdrop_drush_command() {
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
   );
+  $items['provision-backdrop-cutover'] = array(
+    'description' => 'Make this Backdrop site answer at a domain currently held by another site (typically its upgrade source): retire that site (backup first), then rename this site to the freed domain. Runs on the Backdrop copy; hook functions in cutover.backdrop.provision.inc.',
+    'arguments' => array(
+      'target_domain' => dt('The domain to take over (usually the upgrade source\'s original domain).'),
+    ),
+    'options' => array(
+      'cutover_source' => dt('Context name of the site currently holding the domain (resolved by the frontend at execution time; omitted when the domain is free).'),
+      'cutover_platform_nid' => dt('Frontend node id of this site\'s platform (forwarded to the chained migrate task).'),
+      'cutover_db_server_nid' => dt('Frontend node id of this site\'s db server (forwarded to the chained migrate task).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @bd.example.com provision-backdrop-cutover example.com' => 'Retire the site at example.com (backed up first) and rename the Backdrop copy to it.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
   return $items;
 }
 
