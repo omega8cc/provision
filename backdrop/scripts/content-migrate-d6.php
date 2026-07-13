@@ -47,7 +47,16 @@ drupal_get_messages(NULL, TRUE);
 
 $info = content_migrate_get_options();
 if ($info === FALSE || !is_array($info)) {
-  drush_log(dt('CONTENT-MIGRATE no CCK field tables on the source; nothing to migrate.'), 'ok');
+  // FALSE must mean "no legacy CCK data" — verify that positively before
+  // passing the gate: legacy field definitions present alongside a FALSE
+  // return would mean content_migrate lost sight of data it should convert.
+  if (db_table_exists('content_node_field')
+    && intval(db_query('SELECT COUNT(*) FROM {content_node_field}')->fetchField()) > 0) {
+    drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_CONTENT_MIGRATE',
+      dt('content_migrate reported nothing to migrate but the legacy CCK field definitions are present; aborting rather than stranding the data.'));
+    return;
+  }
+  drush_log(dt('CONTENT-MIGRATE no CCK field data on the source; nothing to migrate.'), 'ok');
   return;
 }
 
