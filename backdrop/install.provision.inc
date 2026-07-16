@@ -110,8 +110,14 @@ function drush_provision_backdrop_provision_install() {
     '!method' => d()->install_method,
   )), 'ok');
 
-  // Run Backdrop installation if option was specified.
-  if (d()->install_method == 'profile') {
+  // Run Backdrop installation if option was specified. The hosting_backdrop
+  // front-end stamps sites on marker-verified Backdrop platforms with
+  // install_method 'backdrop' (HOSTING_BACKDROP_INSTALL_METHOD, set in its
+  // hook_hosting_TASK_OBJECT_context_options); site nodes carry no persistent
+  // install_method column, so that is the value every front-end-created
+  // Backdrop site arrives with. It is the same automated profile-driven
+  // install -- only the label differs -- so both values drive the bee engine.
+  if (d()->install_method == 'profile' || d()->install_method == 'backdrop') {
     // Drive the install via bee (its own subprocess) and capture the one-time
     // login link. Deliberately NO in-process drush_bootstrap(DRUPAL_FULL) here:
     // an in-process BackdropBoot FULL bootstrap layered onto this parent process
@@ -128,6 +134,16 @@ function drush_provision_backdrop_provision_install() {
   elseif (d()->install_method == 'manual') {
     drush_set_option('login_link', 'http://' . d()->uri . '/core/install.php');
   }
+  // Fail closed on anything else: silently skipping the engine while still
+  // marking the site installed mints an ENABLED shell site (empty database,
+  // empty active config) whose every later deploy -- migrate, rename, clone
+  // restore -- dies deep in Backdrop's bootstrap. Erroring here rolls the
+  // install back loudly instead.
+  else {
+    return drush_set_error('PROVISION_BACKDROP_INSTALL_METHOD_UNKNOWN',
+      dt('Unknown install_method "!method" for !uri; refusing to mark the site installed.',
+      array('!method' => d()->install_method, '!uri' => d()->uri)));
+  }
 
   drush_set_option('installed', TRUE, 'site');
   _provision_backdrop_maintain_aliases();
@@ -141,8 +157,11 @@ function drush_provision_backdrop_post_provision_install() {
     return;
   }
 
-  // If a Backdrop profile was installed, rebuild caches and save the package map.
-  if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
+  // If a Backdrop profile was installed, rebuild caches and save the package
+  // map. 'backdrop' is the front-end's label for the same profile-driven
+  // install (see drush_provision_backdrop_provision_install()).
+  if ((d()->install_method == 'profile' || d()->install_method == 'backdrop')
+    && drush_get_option('profile_installed', FALSE, 'site')) {
     // Backdrop bootstraps under Aegir Drush 8 (BackdropBoot); rebuild caches
     // in-process, then record the package map + cron key for the front end.
     _provision_backdrop_rebuild_caches();

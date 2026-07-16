@@ -224,17 +224,22 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     if (is_array($old_aliases) && !empty($old_aliases)) {
       foreach ($old_aliases as $alias) {
         drush_log(dt("LOG/RENAME old_aliases is @this", array('@this' => $alias)), 'info');
+        // Rewrite only the alias which is exactly the old name's counterpart
+        // variant; an unanchored str_replace() would mangle any custom alias
+        // merely containing the old domain as a substring, e.g. on the
+        // www.example.com => example.com rename shop.example.com would become
+        // shop.www.example.com and my-example.com.pl => my-www.example.com.pl.
         if (!preg_match("/^www\./", $pre_old_uri) && preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($www_old_uri, $raw_new_uri, $alias);
+          $new_aliases[] = ($alias === $www_old_uri) ? $raw_new_uri : $alias;
         }
         elseif (preg_match("/^www\./", $pre_old_uri) && !preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($raw_old_uri, $www_new_uri, $alias);
+          $new_aliases[] = ($alias === $raw_old_uri) ? $www_new_uri : $alias;
         }
         elseif (!preg_match("/^www\./", $pre_old_uri) && !preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($www_old_uri, $www_new_uri, $alias);
+          $new_aliases[] = ($alias === $www_old_uri) ? $www_new_uri : $alias;
         }
         elseif (preg_match("/^www\./", $pre_old_uri) && preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($raw_old_uri, $raw_new_uri, $alias);
+          $new_aliases[] = ($alias === $raw_old_uri) ? $raw_new_uri : $alias;
         }
       }
       $unique_aliases = array_unique($new_aliases); // Make sure there are no duplicates.
@@ -250,6 +255,33 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
       // sites.php via the alias store; there are no D6-style alias symlinks
       // to scan, so an empty source alias list stays empty.
       drush_set_option('aliases', array());
+    }
+    // A same-platform rename onto the site's own current alias (the one-step
+    // www/non-www swap) leaves sites.php mapping the NEW uri at the OLD site
+    // directory until the final verify rewrites it. The provision-deploy
+    // sub-process bootstraps the new uri through that stale mapping
+    // (conf_path), loads the OLD site's drushrc.php into the 'site' scope,
+    // imports the dump into the OLD database and writes the new settings.php
+    // against it — the database drush_db_post_provision_migrate() then drops,
+    // leaving the renamed site with no database at all. Drop that one record
+    // before the deploy so the new uri resolves to its own site directory.
+    // Platform moves are immune: the deploy bootstraps under the target
+    // platform root, whose sites.php never mapped the source's aliases.
+    if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
+      $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+      $merged = $store->merged_records();
+      if (isset($merged[$pre_new_uri]) && $merged[$pre_new_uri] == $pre_old_uri) {
+        // maintain() before the drop: it re-keys this site's records from
+        // the live alias set, so subdir aliases keep the slash-form keys
+        // the template's slash->dot conversion expects — hand-unsetting
+        // alone leaves them dot-keyed and the template nulls them out.
+        $store->maintain();
+        unset($store->records[$pre_new_uri]);
+        unset($store->loaded_records[$pre_new_uri]);
+        $store->write();
+        d()->service('http')->sync($store->filename());
+        drush_log(dt('[migrate] Dropped stale sites.php record @alias => @site before deploy', array('@alias' => $pre_new_uri, '@site' => $pre_old_uri)), 'info');
+      }
     }
     // Warning: do not try to re-verify the original site here
     // even with backend-only verify, because it would create
@@ -372,9 +404,22 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
  * Re-target the alias back to the old platform — the Backdrop mirror of
  * drush_provision_drupal_provision_migrate_rollback().
  */
-function drush_provision_backdrop_provision_migrate_rollback($platform) {
+function drush_provision_backdrop_provision_migrate_rollback($platform, $new_name = NULL) {
   if (!provision_platform_is_backdrop(d())) {
     return;
+  }
+  // A same-platform rename may have dropped the rename target's sites.php
+  // record before invoking the deploy; a failed deploy must not leave the
+  // source's alias routing incomplete. Rebuild the full mapping from the
+  // source's still-unchanged alias set (the store-based body of
+  // _provision_drupal_maintain_aliases(), inlined to skip its Drupal
+  // major-version branching).
+  if (!is_null($new_name) && ($new_name != d()->name)
+    && !is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
+    $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+    $store->maintain();
+    $store->write();
+    d()->service('http')->sync($store->filename());
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
 }
