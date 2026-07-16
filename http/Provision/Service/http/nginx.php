@@ -67,6 +67,11 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_ktls = preg_match("/enable-ktls/", implode('', drush_shell_exec_output()), $match);
+    // Operator opt-out (_NGINX_KTLS=NO): force KTLS off regardless of the
+    // compiled-in capability, to shed the OpenSSL 3.2+ kTLS RX EIO storm.
+    if (provision_file()->exists("/etc/nginx/no_ktls.conf")->status()) {
+      $this->server->nginx_has_ktls = FALSE;
+    }
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
@@ -124,6 +129,11 @@ class Provision_Service_http_nginx extends Provision_Service_http_public {
     $this->server->nginx_has_http2 = preg_match("/http_v2_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_http3 = preg_match("/http_v3_module/", implode('', drush_shell_exec_output()), $match);
     $this->server->nginx_has_ktls = preg_match("/enable-ktls/", implode('', drush_shell_exec_output()), $match);
+    // Operator opt-out (_NGINX_KTLS=NO): force KTLS off regardless of the
+    // compiled-in capability, to shed the OpenSSL 3.2+ kTLS RX EIO storm.
+    if (provision_file()->exists("/etc/nginx/no_ktls.conf")->status()) {
+      $this->server->nginx_has_ktls = FALSE;
+    }
     $this->server->nginx_has_gzip = preg_match("/http_gzip_static_module/", implode('', drush_shell_exec_output()), $match);
 
     // Use basic nginx configuration if this control file exists.
