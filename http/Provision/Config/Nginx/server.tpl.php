@@ -94,8 +94,11 @@ if (!$satellite_mode && $server->satellite_mode) {
 }
 
 if ($nginx_is_modern) {
-  print "  limit_conn_zone \$binary_remote_addr zone=limreq:10m;\n";
-  print "  limit_req_zone  \$binary_remote_addr zone=search_limit:10m rate=3r/s;\n";
+  # Both per-IP zones use $boa_per_ip_limit_key (map below the $is_banned geo),
+  # not $binary_remote_addr directly: requests proxied by BOA's local wild-ssl
+  # HTTPS front arrive from 127.0.0.1 and must not share one bucket.
+  print "  limit_conn_zone \$boa_per_ip_limit_key zone=limreq:10m;\n";
+  print "  limit_req_zone  \$boa_per_ip_limit_key zone=search_limit:10m rate=3r/s;\n";
   # Per-vhost global search rate cap.
   # Keyed on $host so the ceiling applies across ALL source IPs collectively.
   # This is the primary defence against distributed one-request-per-IP search
@@ -477,6 +480,25 @@ map $uri $is_cms_probe {
 geo $remote_addr $is_banned {
   default 0;
   include /data/conf/nginx_banned_ips.c*;
+}
+
+###
+### Per-IP limit key for the limreq/search_limit zones above: normally the
+### client address, but EMPTY (= not counted) for requests arriving over the
+### local loopback front - BOA's wild-ssl catch-all (pre.d/nginx_wild_ssl.conf)
+### proxies HTTPS for port-80-only vhosts to 127.0.0.1, where realip never
+### fires. Without this exemption every visitor of every wild-proxied vhost
+### shares ONE 127.0.0.1 bucket, so the per-IP caps falsely shed their
+### aggregate traffic. The per-IP CONNECTION ceiling and ban enforcement for
+### that path are reconstituted at the front itself, where $remote_addr is the
+### real visitor; the per-IP search RATE cap is intentionally traded there for
+### the per-vhost search_flood cap plus IDS visibility. (The per-host ssl
+### proxies are a separate front that presents as the box IP, not loopback, so
+### they are out of scope here - a follow-on if that path needs the same.)
+###
+map $remote_addr $boa_per_ip_limit_key {
+  default    $binary_remote_addr;
+  127.0.0.1  '';
 }
 
 ###
