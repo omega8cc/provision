@@ -271,6 +271,11 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
       $store = new Provision_Config_Drupal_Alias_Store(d()->name);
       $merged = $store->merged_records();
       if (isset($merged[$pre_new_uri]) && $merged[$pre_new_uri] == $pre_old_uri) {
+        // maintain() before the drop: it re-keys this site's records from
+        // the live alias set, so subdir aliases keep the slash-form keys
+        // the template's slash->dot conversion expects — hand-unsetting
+        // alone leaves them dot-keyed and the template nulls them out.
+        $store->maintain();
         unset($store->records[$pre_new_uri]);
         unset($store->loaded_records[$pre_new_uri]);
         $store->write();
@@ -399,9 +404,22 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
  * Re-target the alias back to the old platform — the Backdrop mirror of
  * drush_provision_drupal_provision_migrate_rollback().
  */
-function drush_provision_backdrop_provision_migrate_rollback($platform) {
+function drush_provision_backdrop_provision_migrate_rollback($platform, $new_name = NULL) {
   if (!provision_platform_is_backdrop(d())) {
     return;
+  }
+  // A same-platform rename may have dropped the rename target's sites.php
+  // record before invoking the deploy; a failed deploy must not leave the
+  // source's alias routing incomplete. Rebuild the full mapping from the
+  // source's still-unchanged alias set (the store-based body of
+  // _provision_drupal_maintain_aliases(), inlined to skip its Drupal
+  // major-version branching).
+  if (!is_null($new_name) && ($new_name != d()->name)
+    && !is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
+    $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+    $store->maintain();
+    $store->write();
+    d()->service('http')->sync($store->filename());
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
 }

@@ -217,6 +217,11 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
         $store = new Provision_Config_Drupal_Alias_Store(d()->name);
         $merged = $store->merged_records();
         if (isset($merged[$pre_new_uri]) && $merged[$pre_new_uri] == $pre_old_uri) {
+          // maintain() before the drop: it re-keys this site's records from
+          // the live alias set, so subdir aliases keep the slash-form keys
+          // the template's slash->dot conversion expects — hand-unsetting
+          // alone leaves them dot-keyed and the template nulls them out.
+          $store->maintain();
           unset($store->records[$pre_new_uri]);
           unset($store->loaded_records[$pre_new_uri]);
           $store->write();
@@ -358,12 +363,20 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
  *
  * Implementation of drush_hook_COMMAND_rollback().
  */
-function drush_provision_drupal_provision_migrate_rollback($platform) {
+function drush_provision_drupal_provision_migrate_rollback($platform, $new_name = NULL) {
   // Backdrop migrate is not implemented in Phase 1; guard so this D-lineage
   // migrate never runs against a Backdrop site (it would clobber settings.php
   // with a legacy Drupal file). The Backdrop migrate fork lands in Phase 2.
   if (provision_platform_is_backdrop(d())) {
     return;
+  }
+  // A same-platform rename may have dropped the rename target's sites.php
+  // record (pre-D7: its alias symlink) before invoking the deploy; a failed
+  // deploy must not leave the source's alias routing incomplete. Rebuild the
+  // full mapping from the source's still-unchanged alias set.
+  if (!is_null($new_name) && ($new_name != d()->name)
+    && !is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
+    _provision_drupal_maintain_aliases();
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
 }
