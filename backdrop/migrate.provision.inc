@@ -224,17 +224,22 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     if (is_array($old_aliases) && !empty($old_aliases)) {
       foreach ($old_aliases as $alias) {
         drush_log(dt("LOG/RENAME old_aliases is @this", array('@this' => $alias)), 'info');
+        // Rewrite only the alias which is exactly the old name's counterpart
+        // variant; an unanchored str_replace() would mangle any custom alias
+        // merely containing the old domain as a substring, e.g. on the
+        // www.example.com => example.com rename shop.example.com would become
+        // shop.www.example.com and my-example.com.pl => my-www.example.com.pl.
         if (!preg_match("/^www\./", $pre_old_uri) && preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($www_old_uri, $raw_new_uri, $alias);
+          $new_aliases[] = ($alias === $www_old_uri) ? $raw_new_uri : $alias;
         }
         elseif (preg_match("/^www\./", $pre_old_uri) && !preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($raw_old_uri, $www_new_uri, $alias);
+          $new_aliases[] = ($alias === $raw_old_uri) ? $www_new_uri : $alias;
         }
         elseif (!preg_match("/^www\./", $pre_old_uri) && !preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($www_old_uri, $www_new_uri, $alias);
+          $new_aliases[] = ($alias === $www_old_uri) ? $www_new_uri : $alias;
         }
         elseif (preg_match("/^www\./", $pre_old_uri) && preg_match("/^www\./", $pre_new_uri)) {
-          $new_aliases[] = str_replace($raw_old_uri, $raw_new_uri, $alias);
+          $new_aliases[] = ($alias === $raw_old_uri) ? $raw_new_uri : $alias;
         }
       }
       $unique_aliases = array_unique($new_aliases); // Make sure there are no duplicates.
