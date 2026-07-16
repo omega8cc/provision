@@ -201,6 +201,40 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       }
       drush_set_option('aliases', $detected_aliases);
     }
+    // A same-platform rename onto the site's own current alias (the one-step
+    // www/non-www swap) leaves sites.php mapping the NEW uri at the OLD site
+    // directory until the final verify rewrites it. The provision-deploy
+    // sub-process bootstraps the new uri through that stale mapping
+    // (conf_path), loads the OLD site's drushrc.php into the 'site' scope,
+    // imports the dump into the OLD database and writes the new settings.php
+    // against it — the database drush_db_post_provision_migrate() then drops,
+    // leaving the renamed site with no database at all. Drop that one record
+    // before the deploy so the new uri resolves to its own site directory.
+    // Platform moves are immune: the deploy bootstraps under the target
+    // platform root, whose sites.php never mapped the source's aliases.
+    if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
+      if (drush_drupal_major_version() >= 7) {
+        $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+        $merged = $store->merged_records();
+        if (isset($merged[$pre_new_uri]) && $merged[$pre_new_uri] == $pre_old_uri) {
+          unset($store->records[$pre_new_uri]);
+          unset($store->loaded_records[$pre_new_uri]);
+          $store->write();
+          d()->service('http')->sync($store->filename());
+          drush_log(dt('[migrate] Dropped stale sites.php record @alias => @site before deploy', array('@alias' => $pre_new_uri, '@site' => $pre_old_uri)), 'info');
+        }
+      }
+      else {
+        // Pre-D7 alias symlink: sites/<alias> -> <uri>.
+        $stale_link = d()->root . '/sites/' . $pre_new_uri;
+        if (is_link($stale_link) && (readlink($stale_link) == $pre_old_uri)) {
+          provision_file()->unlink($stale_link)
+            ->succeed('Removed stale alias symlink @path before deploy')
+            ->fail('Could not remove stale alias symlink @path');
+          d()->service('http')->sync($stale_link);
+        }
+      }
+    }
     // Warning: do not try to re-verify the original site here
     // even with backend-only verify, because it would create
     // (and never delete) duplicate vhost with old domain
