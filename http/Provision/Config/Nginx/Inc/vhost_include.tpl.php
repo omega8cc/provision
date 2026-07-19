@@ -667,12 +667,23 @@ location ^~ /user/login {
 
 ###
 ### Support for https://drupal.org/project/js module.
+### The js.php handler exists only where the contrib js module
+### ships it (D6/D7). Backdrop core admin_bar serves its menu at
+### js/admin_bar/cache/* as a regular router path, so without
+### js.php the request must go to the front controller instead.
 ###
 location ^~ /js/ {
   if ( $is_bot ) {
     return 444;
   }
   location ~* ^/js/ {
+    if ( $is_bot ) {
+      return 444;
+    }
+    error_page 418 = @drupal;
+    if ( !-e $document_root/js.php ) {
+      return 418;
+    }
     rewrite ^/(.*)$ /js.php?q=$1 last;
   }
 }
