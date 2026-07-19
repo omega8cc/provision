@@ -22,13 +22,16 @@
  * functions are not loaded in-process, and the next menu rebuild fatals
  * (dashboard_menu() -> layout_load_multiple_by_path()).
  *
- * Phase 1 (default): update_prepare_bootstrap() -> SESSION -> LANGUAGE ->
+ * Phase compat (default): update_prepare_bootstrap() -> SESSION -> LANGUAGE ->
  * update_fix_requirements() -> FULL -> backdrop_load_updates() ->
- * update_fix_compatibility() -> D7 dependency report + enables (pre-including
- * each module file it enables) -> re-exec phase 2.
- * Phase 2 (--phase=batch, fresh process, clean statuses): same staged
- * bootstrap (all idempotent) -> requirements gate -> non-progressive
- * update_batch() -> hard success checks -> node access rebuild.
+ * update_fix_compatibility() -> re-exec phase enable.
+ * Phase enable (fresh process, D7 leftovers disabled): D7 dependency report +
+ * enables (pre-including each module file it enables) -> re-exec phase batch.
+ * Phase batch (fresh process, clean statuses): same staged bootstrap (all
+ * idempotent) -> requirements gate -> non-progressive update_batch() -> hard
+ * success checks -> node access rebuild -> re-exec phase flush.
+ * Phase flush (fresh process, converted statuses): backdrop_flush_all_caches()
+ * so every registry rebuild sees the modules the batch itself enabled.
  *
  * Usage (cwd anywhere):
  *   php update-d7.php --root=/path/to/backdrop/platform --url=site.example.com
@@ -231,6 +234,22 @@ try {
     exit($exit_code);
   }
 
+  if ($options['phase'] === 'flush') {
+    // ---- PHASE flush: rebuild every registry under the CONVERTED module
+    // world. update_finished()'s backdrop_flush_all_caches() runs inside the
+    // batch process, whose loaded-module list predates the enables performed
+    // by the system updates themselves (system_update_1009 enables admin_bar
+    // via update_module_enable(), which never loads the module file), so that
+    // rebuild cannot see their hooks: menu_router came out without the
+    // admin_bar paths and js/admin_bar/cache/* answered 404 until the first
+    // manual cache flush (VM-caught: admin bar empty on every page that
+    // relied on the client-side cache callback). This fresh process
+    // bootstraps with the final {system} statuses, so the rebuild is whole.
+    backdrop_flush_all_caches();
+    print "Registries rebuilt with the converted module world.\n";
+    exit(0);
+  }
+
   // ---- PHASE batch: requirements gate + the update batch. ----
 
   // CLI form of update_check_requirements(): the web version prints an HTML
@@ -325,10 +344,18 @@ try {
 
   $final_schema = backdrop_get_installed_schema_version('system');
   print "Conversion complete. system schema: $system_schema -> $final_schema.\n";
-  exit(0);
+  print "Phase batch complete; rebuilding registries in a fresh process.\n";
+  passthru(_update_d7_phase_cmd($script_path, 'flush'), $exit_code);
+  exit($exit_code);
 }
 catch (Throwable $e) {
-  print "Conversion failed:\n";
+  // The flush phase runs after the hard success checks: its failure means
+  // the converted module world cannot rebuild its registries (a fault that
+  // would equally fatal on the first real request), not a data-conversion
+  // failure — keep the exit non-zero, but say so.
+  print $options['phase'] === 'flush'
+    ? "Registry rebuild failed after a completed data conversion:\n"
+    : "Conversion failed:\n";
   print get_class($e) . ': ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() . "\n";
   print $e->getTraceAsString() . "\n";
   exit(1);
