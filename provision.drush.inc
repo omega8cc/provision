@@ -230,6 +230,7 @@ function provision_drush_command() {
     ),
     'options' => array(
       'leftover_db_name' => dt('The database name recorded at expose time; the drop only happens when it matches a fresh re-parse of the leftover settings.php.'),
+      'leftover_db_host' => dt('The database host recorded at expose time; the drop only happens when it matches a fresh re-parse of the leftover settings.php.'),
       'leftover_db_server' => dt('Context name of the db server to drop the orphan database on (e.g. server_master). No database is touched when omitted.'),
     ),
     'examples' => array(

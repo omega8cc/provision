@@ -92,7 +92,15 @@ function drush_provision_leftover_purge($leftover = NULL) {
   }
 
   if ($drop !== '') {
+    // The drop is best-effort cleanup, never the task's success criterion --
+    // but d() on an unloadable server context fires drush_set_error itself
+    // (provision_context_factory), which would fail the whole task AFTER the
+    // directory removal and leave the pseudo-site un-retired. Snapshot and
+    // restore the error code around the drop (established pattern, see
+    // platform/deploy.provision.inc update_fetch clear).
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
     _provision_leftover_drop_db($drop, $parsed['db_host']);
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
   }
 
   _provision_recursive_delete($path);
