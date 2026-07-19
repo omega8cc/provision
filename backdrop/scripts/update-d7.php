@@ -169,6 +169,18 @@ try {
   include_once BACKDROP_ROOT . '/core/includes/batch.inc';
   backdrop_load_updates();
 
+  // filter_update_1004() compares against VIEWS_STORAGE_DEFAULT, defined only
+  // in views.module (upstream #5390, unfixed through 1.34.x). views is
+  // required=TRUE so the constant is always loaded on real Backdrop sites,
+  // but a D7 source without a views {system} row defeats
+  // update_fix_requirements(): its update_module_enable() is a row-UPDATE
+  // no-op, views stays disabled, and the batch fatals on the undefined
+  // constant under PHP 8 (silent bareword no-op under PHP 5/7). Load the
+  // file the way upstream's fix PR #4326 does; no enable, no hooks.
+  if (!defined('VIEWS_STORAGE_DEFAULT') && is_file(BACKDROP_ROOT . '/core/modules/views/views.module')) {
+    include_once BACKDROP_ROOT . '/core/modules/views/views.module';
+  }
+
   // Disable extensions whose .info lacks backdrop = 1.x (D7 leftovers).
   update_fix_compatibility();
 

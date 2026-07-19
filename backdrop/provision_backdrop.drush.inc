@@ -401,7 +401,7 @@ function _provision_backdrop_maintain_aliases() {
     return;
   }
   _provision_backdrop_unlink_alias_symlinks();
-  $config = new Provision_Config_Drupal_Alias_Store(d()->name);
+  $config = new Provision_Config_Backdrop_Alias_Store(d()->name);
   $config->maintain();
   $config->write();
   d()->service('http')->sync($config->filename());
@@ -420,7 +420,7 @@ function _provision_backdrop_delete_aliases() {
     return;
   }
   _provision_backdrop_unlink_alias_symlinks();
-  $config = new Provision_Config_Drupal_Alias_Store(d()->name);
+  $config = new Provision_Config_Backdrop_Alias_Store(d()->name);
   $config->delete();
   $config->write();
   d()->service('http')->sync($config->filename());
