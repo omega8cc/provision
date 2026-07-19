@@ -95,6 +95,14 @@ function drush_provision_backdrop_pre_provision_deploy($backup_file) {
     provision_prepare_environment();
     provision_save_site_data();
 
+    // Write sites.php BEFORE the first site bootstrap: Backdrop caches the
+    // first conf_path() for the whole process, and on a fresh target platform
+    // an empty sites.php resolves it to '.' -- the post-hook FULL escalation
+    // then loads the platform-root stub settings.php and dies (RCA
+    // 2026-07-19). The Backdrop store's primary-URI self-map guarantees a
+    // truthy $sites even for alias-less sites.
+    _provision_backdrop_maintain_aliases();
+
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     _provision_backdrop_create_settings_file();
     provision_drupal_push_site($override_slave_authority = TRUE);
@@ -226,6 +234,15 @@ function drush_provision_backdrop_post_provision_deploy() {
       drush_log(dt('BACKDROP/DRUSH Invoking backdrop-updatedb in drush_provision_backdrop_post_provision_deploy'), 'info');
       provision_backend_invoke(d()->name, 'backdrop-updatedb');
     }
+  }
+
+  // Belt-and-braces for the '.'-poison class (RCA 2026-07-19): sites.php is
+  // certainly truthy by now (the COMMAND hook rewrote it), so recompute the
+  // process-cached conf_path before the FULL escalation reads settings
+  // through it. Backdrop core's global conf_path() honours $reset; the stock
+  // BackdropBoot wrapper drops its arguments (patched at stage time).
+  if (function_exists('conf_path')) {
+    conf_path(TRUE, TRUE);
   }
 
   // Finish the rebuild in-process under a FULL bootstrap: regenerate the site
