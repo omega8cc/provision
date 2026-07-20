@@ -1326,6 +1326,68 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
 }
 
 /**
+ * Validate a revert-artifact leftover directory name (D-035).
+ *
+ * Strict allowlist: a lowercase domain-shaped basename carrying the .restore
+ * or .original revert-artifact suffix. No slashes, no dot-dot, no leading dot
+ * -- the name is later joined to the platform root by the leftover commands,
+ * so this is the traversal guard as much as the artifact-pattern gate. The
+ * frontend mirrors this pattern when recording manageable leftovers; keep the
+ * two in sync.
+ *
+ * @param string $name
+ *   The candidate directory basename.
+ *
+ * @return bool
+ *   TRUE when the name is a well-formed revert-artifact leftover name.
+ */
+function _provision_leftover_valid_name($name) {
+  if (!is_string($name) || $name === '' || strlen($name) > 200) {
+    return FALSE;
+  }
+  if (strpos($name, '..') !== FALSE) {
+    return FALSE;
+  }
+  return (bool) preg_match('/^[a-z0-9][a-z0-9.-]*\.(restore|original)$/', $name);
+}
+
+/**
+ * Parse the db credentials out of a site-dir settings.php without including it.
+ *
+ * Regex-parse (never include -- the file runs code) targeting the literal-creds
+ * branch every provision settings template emits when BOA uncloaks credentials:
+ * the D7+ $databases array and the Backdrop scalar $database array both carry
+ * 'database' => "<name>" / 'host' => "<host>" lines. The cloaked $_SERVER
+ * variant deliberately does not match (unquoted value): with cloaking on the
+ * file holds no literal db name and the caller treats the parse as empty.
+ *
+ * @param string $dir
+ *   Absolute path of the site directory holding settings.php.
+ *
+ * @return array
+ *   array('db_name' => string, 'db_host' => string) -- empty strings when the
+ *   file is missing or the pattern is not found.
+ */
+function _provision_leftover_parse_settings($dir) {
+  $result = array('db_name' => '', 'db_host' => '');
+  $settings = $dir . '/settings.php';
+  if (!is_file($settings) || !is_readable($settings)) {
+    return $result;
+  }
+  $body = file_get_contents($settings);
+  if ($body === FALSE) {
+    return $result;
+  }
+  if (preg_match('/[\'"]database[\'"]\s*=>\s*["\']([A-Za-z0-9_]+)["\']/', $body, $m)) {
+    $result['db_name'] = $m[1];
+  }
+  if (preg_match('/[\'"]host[\'"]\s*=>\s*["\']([A-Za-z0-9._-]+)["\']/', $body, $m)) {
+    $result['db_host'] = $m[1];
+  }
+  return $result;
+}
+
+/**
  * Run a command, sending output to drush logs in real time.
  *
  * The Symfony\Component\Process\Process Object is used to run this command.
