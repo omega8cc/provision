@@ -204,6 +204,41 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
+  // Revert-artifact leftover management (D-035): a deploy/restore/migrate that
+  // aborts mid-swap strands sites/<name>.restore on the platform — a syndrome
+  // shared by Drupal and Backdrop alike, so the pair lives here in the general
+  // layer. provision-leftover-import inspects such a leftover (so the frontend
+  // can register a purgeable pseudo-site record for it); provision-leftover-
+  // purge removes it (directory + orphan copy database) on demand. Both run on
+  // any platform context; neither declares or performs a CMS bootstrap (file
+  // ops + regex parsing only). Hook functions in
+  // import.leftover.provision.inc / purge.leftover.provision.inc.
+  $items['provision-leftover-import'] = array(
+    'description' => dt('Inspect a revert-artifact leftover (sites/<site>.restore or .original) on this platform and report its facts to the frontend. Read-only.'),
+    'arguments' => array(
+      'leftover' => dt('The leftover directory name under sites/ (must end in .restore or .original).'),
+    ),
+    'examples' => array(
+      'drush @platform_example provision-leftover-import example.com.restore' => 'Report the facts of the stranded example.com.restore directory.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
+  );
+  $items['provision-leftover-purge'] = array(
+    'description' => dt('Delete a revert-artifact leftover (sites/<site>.restore or .original) from this platform, dropping its orphan copy database when it is provably unused.'),
+    'arguments' => array(
+      'leftover' => dt('The leftover directory name under sites/ (must end in .restore or .original).'),
+    ),
+    'options' => array(
+      'leftover_db_name' => dt('The database name recorded at expose time; the drop only happens when it matches a fresh re-parse of the leftover settings.php.'),
+      'leftover_db_host' => dt('The database host recorded at expose time; the drop only happens when it matches a fresh re-parse of the leftover settings.php.'),
+      'leftover_db_server' => dt('Context name of the db server to drop the orphan database on (e.g. server_master). No database is touched when omitted.'),
+    ),
+    'examples' => array(
+      'drush @platform_example provision-leftover-purge example.com.restore' => 'Remove the stranded example.com.restore directory (and its orphan copy database when safe).',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
+  );
+
   $items['provision-verify'] = array(
     'aliases' => array('v', 'pv', 'verify'),
     'arguments' => array('domain.com' => dt('The domain of the site to verify).')),
