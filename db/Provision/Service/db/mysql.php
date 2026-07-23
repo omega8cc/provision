@@ -497,7 +497,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --directory=' . escapeshellarg($oct_db_dirx)
           . ' --threads=' . escapeshellarg($threads)
-          . ' --overwrite-tables --verbose=1';
+          . ' --drop-table=DROP --verbose=1';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         }
