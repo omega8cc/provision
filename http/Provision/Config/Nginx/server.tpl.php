@@ -838,7 +838,7 @@ map $uri $is_node_chain {
 
 ###
 ### Detect “language-prefix chain” URL mutation spam.
-### Examples (3+ language-like prefixes in a row):
+### Examples (4+ language-like prefixes in a row):
 ### /pl/en/fr/de/office/city-benelux
 ### /pt-br/es/it/nl/product/ai-driven-project-manager
 ### /zh-hans/ja/ko/en/node/1771
@@ -847,8 +847,9 @@ map $uri $is_node_chain {
 map $uri $is_lang_chain {
   default 0;
 
-  # 3+ leading language-like segments: /xx/ or /xx-xxxx/
-  ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
+  # 4+ leading language-like segments: /xx/ or /xx-xxxx/; the 3-segment
+  # threshold 404-ed real multilingual short-slug content (/pl/co/to-jest/...)
+  ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
 }
 
 ###
