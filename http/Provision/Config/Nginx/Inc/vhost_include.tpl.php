@@ -150,13 +150,19 @@ if ($is_content_chain) {
 
 ###
 ### Block the Referer-less /print* flood (see $is_print_path /
-### $block_print_no_referer in server.tpl.php).  444 to match the no-referrer
-### hostile-traffic family ($block_search_no_referrer); a legitimate print or
-### email-this-page click carries a Referer and passes straight through.  Works
-### regardless of whether any print module is enabled, on D7 and D10+.
+### $block_print_no_referer in server.tpl.php).  404, not 444: search crawlers
+### never send a Referer, so this class also contains Googlebot/Bingbot hits on
+### linked print pages — a 444 reached them as Cloudflare 520 / proxy 502 and
+### produced GSC "Server error (5xx)" churn plus wasted crawl-budget retries.
+### A static 404 is equally php-fpm-free, still starves the botnet, and is the
+### right crawl outcome anyway (print pages are duplicate content that should
+### not be indexed); mirrors the $is_content_chain guard above.  A legitimate
+### print or email-this-page click carries a Referer and passes straight
+### through.  Works regardless of whether any print module is enabled, on D7
+### and D10+.
 ###
 if ($block_print_no_referer) {
-  return 444;
+  return 404;
 }
 
 ###

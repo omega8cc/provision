@@ -551,13 +551,16 @@ map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
 
 ###
 ### Block the /print* email/printer-friendly flood without assuming module state.
-### A printer-friendly or email-this-page request is always a click FROM a page,
-### so it carries a Referer; a Referer-less hit to a /print*/ path is the
-### distributed botnet (100% of the observed flood had no Referer).  Covers D7
-### print/print_mail/print_pdf/printer_and_pdf, D10+ entity_print + printable,
-### and Backdrop — anchored on a numeric node id or an export-format segment so
-### content slugs (/printing-services, /print/about-us, /printable-maps) never
-### match.  No module/version detection; mirrors $block_search_no_referrer.
+### A Referer-less hit to a /print*/ path is either the distributed botnet
+### (100% of the observed flood had no Referer) or a search crawler following a
+### linked print page — crawlers never send a Referer, so the guard must answer
+### with a cheap static 404 (see vhost_include.tpl.php), never 444: a 444
+### reached crawlers as Cloudflare 520 / proxy 502 and filled GSC with
+### "Server error (5xx)" noise.  Covers D7 print/print_mail/print_pdf/
+### printer_and_pdf, D10+ entity_print + printable, and Backdrop — anchored on
+### a numeric node id or an export-format segment so content slugs
+### (/printing-services, /print/about-us, /printable-maps) never match.
+### No module/version detection; mirrors $block_search_no_referrer.
 ###
 map $uri $is_print_path {
   default 0;
@@ -565,7 +568,7 @@ map $uri $is_print_path {
 }
 map $is_print_path$has_no_referrer $block_print_no_referer {
   default 0;
-  "11"  1;   # print-module path AND no referrer → botnet
+  "11"  1;   # print-module path AND no referrer → botnet or crawler
 }
 
 ###
