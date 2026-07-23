@@ -509,12 +509,15 @@ map $remote_addr $boa_per_ip_limit_key {
 ### perplexity) were moved out: bare "openai"/"perplexity" matched the
 ### openai.com / perplexity.ai vendor URLs in OAI-SearchBot / ChatGPT-User /
 ### PerplexityBot / Perplexity-User UAs and wrongly blocked allowed AI traffic.
+### Pinterest, Sogou and TikTok (legitimate preview/search crawlers) and the
+### generic Go-http-client library token are deliberately NOT listed: a hard
+### 444 on them blocks real user-facing services, not scrapers.
 ###
 map $http_user_agent $is_crawler {
   default  '';
-  ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot|TikTok  is_crawler;
-  ~*Go-http-client|GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
-  ~*PECL|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|Turnitin  is_crawler;
+  ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot  is_crawler;
+  ~*GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
+  ~*PECL|PetalBot|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Turnitin  is_crawler;
 }
 
 ###
