@@ -148,6 +148,9 @@ if ($is_node_chain) {
 
 ###
 ### Drop “too many language prefixes” (botnet typical abuse)
+### The map keys on the full $uri, so a language-like subdir name (/pl,
+### /pt-br) consumes one of the 4 chain slots — such subdir sites see an
+### effective site-relative threshold of 3.
 ###
 if ($is_lang_chain) {
   return 404;

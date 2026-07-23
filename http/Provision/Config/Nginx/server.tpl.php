@@ -509,12 +509,15 @@ map $remote_addr $boa_per_ip_limit_key {
 ### perplexity) were moved out: bare "openai"/"perplexity" matched the
 ### openai.com / perplexity.ai vendor URLs in OAI-SearchBot / ChatGPT-User /
 ### PerplexityBot / Perplexity-User UAs and wrongly blocked allowed AI traffic.
+### Pinterest, Sogou and TikTok (legitimate preview/search crawlers) and the
+### generic Go-http-client library token are deliberately NOT listed: a hard
+### 444 on them blocks real user-facing services, not scrapers.
 ###
 map $http_user_agent $is_crawler {
   default  '';
-  ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot|TikTok  is_crawler;
-  ~*Go-http-client|GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
-  ~*PECL|PetalBot|Pinterest|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Sogou|Turnitin  is_crawler;
+  ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot  is_crawler;
+  ~*GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
+  ~*PECL|PetalBot|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Turnitin  is_crawler;
 }
 
 ###
@@ -551,13 +554,16 @@ map $has_fulltext_search$has_no_referrer $block_search_no_referrer {
 
 ###
 ### Block the /print* email/printer-friendly flood without assuming module state.
-### A printer-friendly or email-this-page request is always a click FROM a page,
-### so it carries a Referer; a Referer-less hit to a /print*/ path is the
-### distributed botnet (100% of the observed flood had no Referer).  Covers D7
-### print/print_mail/print_pdf/printer_and_pdf, D10+ entity_print + printable,
-### and Backdrop — anchored on a numeric node id or an export-format segment so
-### content slugs (/printing-services, /print/about-us, /printable-maps) never
-### match.  No module/version detection; mirrors $block_search_no_referrer.
+### A Referer-less hit to a /print*/ path is either the distributed botnet
+### (100% of the observed flood had no Referer) or a search crawler following a
+### linked print page — crawlers never send a Referer, so the guard must answer
+### with a cheap static 404 (see vhost_include.tpl.php), never 444: a 444
+### reached crawlers as Cloudflare 520 / proxy 502 and filled GSC with
+### "Server error (5xx)" noise.  Covers D7 print/print_mail/print_pdf/
+### printer_and_pdf, D10+ entity_print + printable, and Backdrop — anchored on
+### a numeric node id or an export-format segment so content slugs
+### (/printing-services, /print/about-us, /printable-maps) never match.
+### No module/version detection; mirrors $block_search_no_referrer.
 ###
 map $uri $is_print_path {
   default 0;
@@ -565,7 +571,7 @@ map $uri $is_print_path {
 }
 map $is_print_path$has_no_referrer $block_print_no_referer {
   default 0;
-  "11"  1;   # print-module path AND no referrer → botnet
+  "11"  1;   # print-module path AND no referrer → botnet or crawler
 }
 
 ###
@@ -835,7 +841,7 @@ map $uri $is_node_chain {
 
 ###
 ### Detect “language-prefix chain” URL mutation spam.
-### Examples (3+ language-like prefixes in a row):
+### Examples (4+ language-like prefixes in a row):
 ### /pl/en/fr/de/office/city-benelux
 ### /pt-br/es/it/nl/product/ai-driven-project-manager
 ### /zh-hans/ja/ko/en/node/1771
@@ -844,8 +850,9 @@ map $uri $is_node_chain {
 map $uri $is_lang_chain {
   default 0;
 
-  # 3+ leading language-like segments: /xx/ or /xx-xxxx/
-  ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
+  # 4+ leading language-like segments: /xx/ or /xx-xxxx/; the 3-segment
+  # threshold 404-ed real multilingual short-slug content (/pl/co/to-jest/...)
+  ~*^/([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)([a-z][a-z](-[a-z0-9]+)?/)*  1;
 }
 
 ###
