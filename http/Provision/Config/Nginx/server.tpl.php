@@ -746,9 +746,15 @@ map $http_user_agent $is_catalina_stale_chrome {
 ###
 ### Deny almost all crawlers under high load.
 ###
+### The roster must mirror $is_bot above. Dropping the bare 'bot' token here
+### silently exempts every UA that self-identifies only as '...bot' from
+### high-load shedding, which makes Spider Protection a no-op against them: an
+### observed distributed crawler drove a hosted box to load 264 while being
+### served zero 503s, because it matched $is_bot but never this map.
+###
 map $http_user_agent $deny_on_high_load {
   default  '';
-  ~*crawl|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  deny_on_high_load;
+  ~*crawl|bot|spider|tracker|click|parser|google|yahoo|yandex|baidu|bing  deny_on_high_load;
 }
 
 ###
