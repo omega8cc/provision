@@ -273,7 +273,18 @@ if ($nginx_has_gzip) {
                          'proto="$server_protocol" '
                          'alpn="$ssl_alpn_protocol" '
                          'http2="$http2" '
-                         'xff="$proxy_add_x_forwarded_for"';
+                         'xff="$proxy_add_x_forwarded_for" '
+                         # ut = $upstream_response_time. Reads "-" whenever nginx
+                         # answered the request itself (static, cache hit, 444,
+                         # redirect) and a number only when a backend actually ran,
+                         # so it is the one field that separates backend cost from
+                         # wall-clock. $request_time cannot: under saturation it
+                         # inflates across every status, static files included.
+                         # Quoted because it also takes the forms "0.017, 20.400"
+                         # and "0.017 : 20.400" when a request hits more than one
+                         # upstream. Trailing field, so log parsers that stop
+                         # earlier are unaffected.
+                         'ut="$upstream_response_time"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
