@@ -7,11 +7,12 @@
  * Fork of platform/verify.provision.inc. The server branch is intentionally
  * absent: provision_platform_is_backdrop() is FALSE for a server context (the
  * aegir root is not a Backdrop codebase), so this whole hook early-returns and
- * the CMS-neutral server verify is left to the Drupal layer. The entire D6..D11
- * o_contrib_* symlink matrix and the D8+ site-local Drush locking are dropped --
- * Backdrop ships no o_contrib bundle and no site-local vendor/drush. The verify
- * additionally reports $data['backdrop'] = the version string, the front-end's
- * Backdrop signal.
+ * the CMS-neutral server verify is left to the Drupal layer. The D6..D11
+ * o_contrib_* symlink matrix and the D8+ site-local Drush locking are dropped
+ * (those bundles carry Drupal-only module sets); instead the platform verify
+ * attaches Backdrop's own shared bundle, modules/o_contrib_backdrop, from the
+ * same /data/all/<NNN>/ shared space model. The verify additionally reports
+ * $data['backdrop'] = the version string, the front-end's Backdrop signal.
  */
 
 /**
@@ -144,12 +145,97 @@ function drush_provision_backdrop_pre_provision_verify() {
         ->fail('Could not create sites/example.sites.php');
     }
 
+    // Attach the shared Backdrop contrib bundle, mirroring the Drupal layer's
+    // o_contrib_* matrix: the bundle lives under the newest /data/all/<NNN>/
+    // shared space (Octopus creates and refreshes it on upgrades; the nightly
+    // agent repairs missing symlinks). A Backdrop root always has core/, so
+    // no /static/ disjunct is needed here -- every Backdrop platform,
+    // including user-uploaded ones under static/, takes this path on verify.
+    // Placed before the packages option is set below so the bundle's modules
+    // land in the platform's package scan on the same verify.
+    $pathAll = '/data/all/';
+    if (provision_file()->exists($pathAll)->status()) {
+      $sortedDirs = array();
+      foreach (scandir($pathAll) as $dir) {
+        if ($dir != '.' && $dir != '..' && is_dir($pathAll . $dir)) {
+          array_push($sortedDirs, $dir);
+        }
+      }
+      $latestDir = empty($sortedDirs) ? '' : max($sortedDirs);
+      drush_log(dt('Contrib latestDir: !latest', array('!latest' => $latestDir)), 'message');
+      if (is_numeric($latestDir)) {
+        $bd_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_backdrop';
+      }
+      else {
+        $bd_contrib_dir = '/data/all/000/modules/o_contrib_backdrop';
+      }
+      $bd_contrib_symlink = d()->root . '/modules/o_contrib_backdrop';
+      $bd_contrib_dot = d()->root . '/modules/.o_contrib_backdrop_dont_use';
+      $bd_baked_redis = d()->root . '/modules/redis';
+      $bd_baked_redis_dot = d()->root . '/modules/.redis_dont_use';
+      $bd_is_static = preg_match("/\/static\//", d()->root);
+      if (provision_file()->exists($bd_contrib_dir)->status()) {
+        // Make sure the platform root and core modules directories are writable.
+        provision_file()->writable(d()->root)
+          ->succeed('Platform root directory @path is writable')
+          ->fail('Platform root directory @path is not writable', 'PROVISION_DRUPAL_ROOT_DIR_NOT_WRITABLE');
+        provision_file()->writable(d()->root . '/modules')
+          ->succeed('Core modules directory @path is writable')
+          ->fail('Core modules directory @path is not writable', 'PROVISION_CORE_MODULES_DIR_NOT_WRITABLE');
+        // Two copies of the same module in one scan directory make Backdrop's
+        // module winner readdir-order dependent (and its status report flag
+        // the platform), so a platform never carries both the bundle and a
+        // modules/redis copy. On BOA-built platforms modules/redis can only
+        // be the retired bake older core tarballs carried: demote it to a
+        // scan-invisible dot dir -- but only once the shared module is really
+        // readable through the bundle, so the fallback stays alive until the
+        // store has landed. On user-uploaded static/ platforms modules/redis
+        // is the user's content: leave it alone and skip the bundle instead
+        // (global-bd.inc keeps wiring Valkey through the modules/redis path).
+        if ($bd_is_static) {
+          if (provision_file()->exists($bd_baked_redis)->status()) {
+            if (is_link($bd_contrib_symlink)) {
+              provision_file()->unlink($bd_contrib_symlink)
+                ->succeed('Removed symlink @path (platform carries its own modules/redis)')
+                ->fail('Could not remove symlink @path');
+            }
+            drush_log(dt('Platform ships its own modules/redis; shared Backdrop contrib not attached.'), 'message');
+            $bd_contrib_dir = FALSE;
+          }
+        }
+        elseif (is_dir($bd_baked_redis) && !is_link($bd_baked_redis)
+          && is_readable($bd_contrib_dir . '/redis_backdrop/redis.autoload.inc')) {
+          if (provision_file()->exists($bd_baked_redis_dot)->status()) {
+            _provision_recursive_delete($bd_baked_redis_dot);
+            drush_log(dt('Stale dot-copy of baked redis removed from: !dot', array('!dot' => $bd_baked_redis_dot)), 'message');
+          }
+          rename($bd_baked_redis, $bd_baked_redis_dot);
+          drush_log(dt('Baked redis module renamed to dot-copy : !dot', array('!dot' => $bd_baked_redis_dot)), 'message');
+        }
+        // Check if a static copy exists first and demote it to a dot dir,
+        // exactly like the Drupal arms do.
+        if ($bd_contrib_dir && is_dir($bd_contrib_symlink) && !is_link($bd_contrib_symlink)) {
+          if (provision_file()->exists($bd_contrib_dot)->status()) {
+            _provision_recursive_delete($bd_contrib_dot);
+            drush_log(dt('Static dot-copy of BOA contrib removed from: !contrib', array('!contrib' => $bd_contrib_dot)), 'message');
+          }
+          rename($bd_contrib_symlink, $bd_contrib_dot);
+          drush_log(dt('Static BOA contrib renamed to dot-copy : !dot', array('!dot' => $bd_contrib_dot)), 'message');
+        }
+        if ($bd_contrib_dir && !provision_file()->exists($bd_contrib_symlink)->status()) {
+          provision_file()->symlink($bd_contrib_dir, $bd_contrib_symlink)
+            ->succeed('Created symlink @path to @target')
+            ->fail('Could not create symlink @path to @target: @reason');
+        }
+      }
+    }
+
     drush_set_option('sites', array_keys((array) provision_drupal_find_sites()), 'drupal');
     drush_log(dt("This platform is running @short_name @version", array('@short_name' => 'Backdrop', '@version' => _provision_backdrop_get_version())), 'info');
     drush_set_option('packages', _scrub_object(provision_backdrop_find_packages()), 'drupal');
 
     // The Backdrop signal the front end keys on (its presence marks the platform
-    // as Backdrop). No o_contrib is attached for Backdrop.
+    // as Backdrop).
     drush_set_option('backdrop', _provision_backdrop_get_version(), 'drupal');
 
     // Determine latest BOA contrib directory name and add INI template if missing.
