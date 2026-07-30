@@ -384,6 +384,64 @@ location ^~ /admin/httprl-test {
   }
 }
 
+<?php
+// D7 background_process/background_batch drive batches via self-HTTP POSTs
+// to /bgp-start/<handle>/<token>; under FPM saturation the re-dispatch loop
+// feeds itself into a request wall the edge cannot ban (the source is the
+// box's own address). The per-vhost bgp_flood cap bounds that wall while
+// clearing worst-case legitimate cadence with headroom.
+// The zone is declared in a BOA-written http-scope file, NOT in the master
+// render, and these consumers appear only when that file is present with
+// the expected zone: no delivery order can produce an undeclared-zone
+// reference, which matters because a missing zone is a whole-box nginx
+// [emerg] and the upgrade path restarts nginx without a configtest.
+$bgp_zone_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+$bgp_zone_ok = @is_file($bgp_zone_file)
+  && strpos((string) @file_get_contents($bgp_zone_file), 'zone=bgp_flood') !== FALSE;
+if ($bgp_zone_ok):
+?>
+###
+### Background process/batch self-request storm guard. Every legitimate
+### request here is POST /bgp-start/<handle>/<token> from the site itself
+### (fire-and-forget, HTTP/1.0, response never read), so the two-segment
+### shape is exact and anything else under the prefix is junk we can shed
+### for less than today's bootstrap-per-404. Access logging must stay ON:
+### the batch_guard monitor reads these lines. The bot shed sits inside
+### the limit-carrying location (an outer-block `if` never runs for
+### requests matched by a nested location) and runs in the rewrite phase,
+### before limit_req accounting, so crawler noise cannot spend the budget.
+### 444 is deliberate: the dispatcher only detects TCP-connect failures,
+### so no status is visible to it and the cheapest close wins.
+###
+location ^~ /bgp-start/ {
+  location ~* ^/bgp-start/[^/]+/[^/]+$ {
+    if ( $is_bot ) {
+      return 444;
+    }
+    limit_req zone=bgp_flood burst=50 nodelay;
+    limit_req_status 444;
+    set $nocache_details "Skip";
+    try_files $uri @drupal;
+  }
+  return 444;
+}
+
+###
+### Language-prefix sibling (D7 url() prepends the prefix on multilingual
+### sites), mirroring the /\w\w/search and /\w\w/civicrm convention; longer
+### prefixes stay fail-open exactly like those precedents.
+###
+location ~* ^/\w\w/bgp-start/[^/]+/[^/]+$ {
+  if ( $is_bot ) {
+    return 444;
+  }
+  limit_req zone=bgp_flood burst=50 nodelay;
+  limit_req_status 444;
+  set $nocache_details "Skip";
+  try_files $uri @drupal;
+}
+<?php endif; ?>
+
 ###
 ### CDN Far Future expiration support.
 ###
