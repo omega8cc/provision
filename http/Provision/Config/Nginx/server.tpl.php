@@ -338,6 +338,11 @@ map $http_user_agent $is_ai_training {
   default  '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili                                                  is_ai_training;
+  # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
+  # sweeping full site content (~1.8k pages/day from 2 IPs, all 200s -- so the
+  # status-scoring IDS never sees it); both tokens so a build that drops the
+  # parenthetical still matches.
+  ~*md-proxy|RetrievableAIAgentProxy                                                     is_ai_training;
 }
 
 ###
