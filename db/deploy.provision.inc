@@ -82,7 +82,13 @@ function drush_db_post_provision_deploy() {
       ->succeed('MyQuick Removed Post-DB-Import Flag-File in drush_db_post_provision_deploy')
       ->fail('MyQuick Could not remove Post-DB-Import Flag-File in drush_db_post_provision_deploy');
   }
-  else {
+
+  // Always remove an extracted/imported database.sql from the live site dir,
+  // whichever import path ran: the MyQuick branch above used to skip this,
+  // leaving a restore-extracted dump behind - which then failed the NEXT
+  // classic-dump backup at its fopen('x') and sat as a stale credential-rich
+  // file in the web-served site dir.
+  if (is_file(d()->site_path . '/database.sql')) {
     provision_file()->unlink(d()->site_path . '/database.sql')
       ->succeed('Removed dump file @path after restoring from it')
       ->fail('Could not remove dump file @path', 'DRUSH_PERM_ERROR');

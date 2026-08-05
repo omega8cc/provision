@@ -64,6 +64,14 @@ function drush_provision_backdrop_pre_provision_restore_rollback($restore_file) 
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused migration site package')
     ->fail('Could not remove unused migration site package');
+  // Belt for the flag cleanup above: rollback of the completed pre phase runs
+  // when a later phase fails before the command-level cleanup is reached.
+  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
+  if (is_file($internal_backup_flag)) {
+    provision_file()->unlink($internal_backup_flag)
+      ->succeed('Removed Internal-DB-Backup Flag-File in restore rollback')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in restore rollback');
+  }
 }
 
 /**
@@ -78,6 +86,11 @@ function drush_provision_backdrop_provision_restore($restore_file) {
     'old_uri' => d()->uri,
     'strict' => 0,
   );
+  // The deploy import must use the archive's own database.sql: on MyQuick
+  // boxes the tmp_expim dir holds the PRE-restore safety dump of the CURRENT
+  // database (left in place by the internal-backup flag), and the fast-import
+  // path would silently re-import it - restoring nothing.
+  $deploy_options['is_restore'] = TRUE;
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
@@ -94,8 +107,14 @@ function drush_provision_backdrop_provision_restore($restore_file) {
     _provision_drupal_native_symlink_after_restore(d()->uri);
 
     drush_set_option('installed', false);
-    $backup_path = d('@server_master')->backup_path;
-    $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  }
+
+  // Always clear the flag, success or failure: a leftover one makes every
+  // later backup on the account skip the MyQuick tmp_expim rotation, silently
+  // ending dated DB-dump retention.
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  if (is_file($internal_backup_flag)) {
     provision_file()->unlink($internal_backup_flag)
       ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_restore')
       ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_provision_restore');

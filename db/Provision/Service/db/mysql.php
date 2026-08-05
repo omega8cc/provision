@@ -409,7 +409,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
 
-    if (empty($backup_mode)) {
+    if (empty($backup_mode) && !drush_get_option('is_restore', FALSE)) {
+      // Never take the MyQuick fast-import path on a restore: tmp_expim then
+      // holds the PRE-restore safety dump of the CURRENT database, and
+      // importing it silently restores nothing. The classic path imports the
+      // archive's own database.sql instead.
       drush_log(dt("MyQuick import_dump mysql.php db_name first @var", array('@var' => $db_name)), 'info');
       $mydumper_path = '/usr/local/bin/mydumper';
       $myloader_path = '/usr/local/bin/myloader';
