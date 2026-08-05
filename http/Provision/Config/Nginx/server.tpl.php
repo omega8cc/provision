@@ -612,7 +612,61 @@ map $uri $is_flag_toggle {
 }
 map $request_method$is_flag_toggle$has_no_referrer $block_flag_no_referer {
   default 0;
-  "GET11"  1;   # GET flag toggle AND no referrer → scraper botnet or crawler
+  "GET11"   1;   # GET flag toggle AND no referrer → scraper botnet or crawler
+  "HEAD11"  1;   # a HEAD probe costs the same bootstrap and is never a real click
+}
+
+###
+### Block the cold HybridAuth window flood.  Distributed scrapers follow
+### /hybridauth/window/<Provider> social-login links scraped from page HTML
+### (one link per provider per node), and every hit is an uncacheable full
+### Drupal bootstrap that STARTS A SESSION and answers 302/200 — statuses the
+### log-scoring IDS never counts, so the flood stays invisible per-IP
+### (observed median 1 request/IP across thousands of IPs) and per-UA (rotated
+### browser versions).
+###
+### Referer alone is NOT a safe discriminator on this path, and that is the
+### whole reason for the session test below.  The window path is not only the
+### entry point: the D7 module passes it as hauth_return_to, so the provider's
+### callback at /hybridauth/endpoint redirects the browser BACK to
+### /hybridauth/window/<Provider>, and only that final hop runs the account
+### match/create, the login and the popup-close page.  A 302 carries the
+### original request's referrer forward rather than substituting the
+### redirecting URL, so whenever the provider strips the Referer (policy the
+### operator can neither see nor control) the login-completing hop arrives
+### Referer-less — verified on a hosted box, where the completion-shaped
+### window 200s were overwhelmingly Referer-less.  Gating on Referer alone
+### would therefore 404 real logins, silently and with no PHP-side trace.
+###
+### What every real hop DOES carry is the Drupal session cookie: the outbound
+### leg starts the session that holds the hauth state, so the return hop
+### cannot work without it.  A cold scraper hitting a scraped link carries
+### neither a Referer nor a session.  The guard therefore fires only on the
+### intersection — no Referer AND no session cookie ($cache_uid, the same map
+### the cache-bypass gates use, which is set by any SESS/SSESS cookie
+### including an anonymous session) — which is exactly the cold-fetch shape
+### and never a hop of a working login.  /hybridauth/endpoint stays unguarded:
+### it is the provider's own callback target.
+###
+### Tail anchored to a single path segment (the provider name) with an
+### optional trailing slash, so content aliases under /hybridauth/ never
+### match; optional language prefix; GET and HEAD only (a HEAD costs the same
+### bootstrap, and no login hop is ever a HEAD); mirrors
+### $block_flag_no_referer.  Works regardless of whether the module is
+### enabled, on D7 HybridAuth 2/3.
+###
+map $cache_uid $has_no_session {
+  default 0;
+  ""      1;   # no SESS/SSESS cookie at all → never a mid-flow login hop
+}
+map $uri $is_hybridauth_window {
+  default 0;
+  "~*^/(?:[a-z]{2}(?:-[a-z]+)?/)?hybridauth/window/[a-z0-9_.-]+/?$"  1;
+}
+map $request_method$is_hybridauth_window$has_no_referrer$has_no_session $block_hybridauth_no_referer {
+  default 0;
+  "GET111"   1;   # cold GET hybridauth window, no referrer, no session → scraper
+  "HEAD111"  1;   # same shape as a HEAD probe
 }
 
 ###
