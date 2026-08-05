@@ -338,6 +338,11 @@ map $http_user_agent $is_ai_training {
   default  '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili                                                  is_ai_training;
+  # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
+  # sweeping full site content (~1.8k pages/day from 2 IPs, all 200s -- so the
+  # status-scoring IDS never sees it); both tokens so a build that drops the
+  # parenthetical still matches.
+  ~*md-proxy|RetrievableAIAgentProxy                                                     is_ai_training;
 }
 
 ###
@@ -583,6 +588,31 @@ map $uri $is_print_path {
 map $is_print_path$has_no_referrer $block_print_no_referer {
   default 0;
   "11"  1;   # print-module path AND no referrer → botnet or crawler
+}
+
+###
+### Block the Referer-less Flag-module toggle flood.  Distributed scrapers
+### follow /flag/flag/<name>/<id> action links scraped from page HTML (a large
+### share with HTML-entity-mangled tokens: ?destination=&amp%3Btoken=...), and
+### every hit is an uncacheable full Drupal bootstrap answered 302 — a status
+### the log-scoring IDS never counts, so the flood stays invisible per-IP
+### (observed median 1 request/IP across thousands of IPs) and per-UA (rotated
+### browser versions).  A real flag click always carries a same-origin Referer;
+### a Referer-less toggle would fail the anonymous CSRF token check anyway and
+### bootstrap only to redirect, so the guard removes cost, not function.
+### GET-only (the composed map keys on the method) so form/POST-based flagging
+### never matches; tail anchored to machine-name/<numeric id> so content slugs
+### (/flag-day, /flag/flag-history) never match.  Covers D7 Flag 2/3 and D8+
+### Flag 4 (flag + unflag routes share the shape), with optional language
+### prefix; mirrors $block_print_no_referer.
+###
+map $uri $is_flag_toggle {
+  default 0;
+  "~*^/(?:[a-z]{2}(?:-[a-z]+)?/)?flag/(?:flag|unflag)/[a-z0-9_]+/[0-9]"  1;
+}
+map $request_method$is_flag_toggle$has_no_referrer $block_flag_no_referer {
+  default 0;
+  "GET11"  1;   # GET flag toggle AND no referrer → scraper botnet or crawler
 }
 
 ###

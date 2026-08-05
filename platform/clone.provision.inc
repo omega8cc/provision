@@ -61,6 +61,15 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused clone site package')
     ->fail('Could not remove unused clone site package');
+  // Belt: a crashed clone/migrate must not leave the internal-backup flag
+  // behind - a leftover one makes every later backup on the account skip the
+  // MyQuick tmp_expim rotation and can leak a dump into a files-only archive.
+  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
+  if (is_file($internal_backup_flag)) {
+    provision_file()->unlink($internal_backup_flag)
+      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
+  }
 }
 
 /**

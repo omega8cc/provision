@@ -166,6 +166,21 @@ if ($block_print_no_referer) {
 }
 
 ###
+### Block the Referer-less Flag-module toggle flood (see $is_flag_toggle /
+### $block_flag_no_referer in server.tpl.php).  404, not 444, for the same
+### crawler-safety reasons as the /print* guard above: the no-Referer class
+### includes crawlers following flag action links, and a static 404 is
+### php-fpm-free, starves the botnet, and tells crawlers to drop the URL.
+### A real flag click carries a Referer (and a valid session token) and
+### passes straight through; POST-based flagging is untouched (the composed
+### map is GET-only).  Works regardless of whether the Flag module is
+### enabled, on D7 and D8+.
+###
+if ($block_flag_no_referer) {
+  return 404;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
