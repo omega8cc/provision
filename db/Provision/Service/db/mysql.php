@@ -388,7 +388,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
       if (empty($backup_mode)) {
         if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
           if ($backup_mode) {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
@@ -710,7 +710,7 @@ port=%s
       }
       if (empty($backup_mode)) {
         if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
           if ($backup_mode) {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
