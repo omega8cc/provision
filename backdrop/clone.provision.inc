@@ -17,7 +17,9 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
     return;
   }
   // Backup mode ctrl file cleanup
-  unlink(AEGIR_BACKUP_MODE_CTRL);
+  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+    unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 

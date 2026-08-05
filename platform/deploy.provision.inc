@@ -597,15 +597,17 @@ function _provision_drupal_clear_update_fetch_tasks() {
     $appRoot = findAppRoot(d()->root);
     $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
     if (is_executable($drushAbsolutePath)) {
-      $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
-      // SECURITY: $dnameten derives from d()->name and is not validated against
-      // shell-unsafe characters at the Hostmaster UI layer; escape it. $php is
-      // a fixed literal but is escaped for symmetry. No extra args are passed to
-      // drush_shell_cd_and_exec(), so the command is NOT run through sprintf()
-      // (no '%' hazard). (string) cast guards the PHP 8.1+ null-to-escapeshellarg
-      // deprecation if preg_replace() ever returns null.
-      drush_log(dt('UPDFETCH/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten ev (clear update_fetch_task) in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-      drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' ev ' . escapeshellarg($php));
+      // SECURITY: $appRoot/$uri derive from the alias context; escape both.
+      // $php is a fixed literal but is escaped for symmetry. No extra args are
+      // passed to drush_shell_cd_and_exec(), so the command is NOT run through
+      // sprintf() (no '%' hazard). Absolute --root/--uri instead of the @alias
+      // form: alias resolution redispatches through a shell where the
+      // parenthesised eval payload broke parsing (observed as a /bin/dash
+      // syntax error in the restore deploy), so the clear silently never ran;
+      // the option form executes in-process, same convention as the pm:list /
+      // pm:uninstall calls.
+      drush_log(dt('UPDFETCH/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php ev (clear update_fetch_task) --root=@root --uri=@uri', array('@root' => d()->root, '@uri' => d()->uri)), 'info');
+      drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ev ' . escapeshellarg($php) . ' --root=' . escapeshellarg((string) d()->root) . ' --uri=' . escapeshellarg((string) d()->uri));
       foreach (drush_shell_exec_output() as $line) {
         drush_log($line, 'notice');
       }
