@@ -75,6 +75,16 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
     drush_set_option('backup_file', $suggested);
   }
 
+  // One-shot consume: by now the mode (if any) is latched in
+  // SELECTED_BACKUP_MODE for this whole process; removing the ctrl file
+  // immediately shrinks the window in which a concurrent task's implicit
+  // backup could inherit it. Only when a real mode was READ - the constant
+  // latches FALSE on modeless backups, and consuming then could delete a
+  // concurrent task's freshly written file this process never used.
+  if (defined('SELECTED_BACKUP_MODE') && SELECTED_BACKUP_MODE && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+    @unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
+
 }
 
 /**
@@ -92,7 +102,7 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
     }
     if (empty($backup_mode)) {
       if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
         if ($backup_mode) {
           drush_set_option('backup_mode', $backup_mode);
           if (!defined('SELECTED_BACKUP_MODE')) {
@@ -197,7 +207,7 @@ function drush_provision_drupal_provision_backup() {
     }
     if (empty($backup_mode)) {
       if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
         if ($backup_mode) {
           drush_set_option('backup_mode', $backup_mode);
           if (!defined('SELECTED_BACKUP_MODE')) {
@@ -251,19 +261,33 @@ function drush_provision_drupal_provision_backup() {
   $mounted_arch = "/data/disk/arch";
   $mounted_bak = d()->platform->server->backup_path;
 
-  // Allow to force symlinks mode
+  // Legacy hard-preserve override; preserving is the default now, so the
+  // file is redundant but still honoured (it also beats the opt-out below).
   $force_symlinks = "/data/conf/force_symlinks.conf";
+  // Opt-out restoring the old always-dereference behaviour for implicit
+  // backups: self-contained archives at the cost of duplicating store data
+  // into every safety copy.
+  $deref_backups = "/data/conf/dereference_backups.conf";
 
-  if (isset($backup_mode) && !is_file($force_symlinks)) {
-    // Follow symlinks to include all files in custom backup task
+  if (!empty($backup_mode) && ($backup_mode == 'site_files_with_mysqldump' ||
+    $backup_mode == 'site_files_without_db_backup')) {
+    // A files-carrying backup mode selected in the frontend must yield a
+    // self-contained archive: with site files/private symlinked into the
+    // per-account store by default, preserving symlinks would archive bare
+    // links and silently drop the real content the user asked for. The
+    // DB-only mode deliberately stays on the preserving default so its
+    // archives remain files-safe if ever fed to the Restore task.
     $command_base = "tar cphf";
   }
-  elseif (is_link($mounted_arch) || is_link($mounted_bak) || is_file($force_symlinks)) {
-    // Do not follow symlinks on mounted filesystem
-    $command_base = "tar cpf";
+  elseif (is_file($deref_backups) && !is_file($force_symlinks)) {
+    // Operator opted back into dereferencing implicit backups.
+    $command_base = "tar cphf";
   }
   else {
-    // Do not follow symlinks by defult
+    // Default: do not follow symlinks. A symlinked site's content lives in
+    // the per-account store and every lifecycle flow (clone, migrate,
+    // restore) re-homes it; a plain-dirs site is archived in full either
+    // way, since not FOLLOWING links never skips real directories.
     $command_base = "tar cpf";
   }
 
@@ -279,31 +303,33 @@ function drush_provision_drupal_provision_backup() {
     $command = $command_base . 'J' . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'lz4') {
-    if (isset($backup_mode) && !is_file($force_symlinks)) {
-      // Follow symlinks to include all files in custom backup task
+    if (!empty($backup_mode) && ($backup_mode == 'site_files_with_mysqldump' ||
+      $backup_mode == 'site_files_without_db_backup')) {
+      // Files-carrying mode: always follow symlinks for a self-contained archive
       $command_base = "tar -c -p -h -I lz4 -f";
     }
-    elseif (is_link($mounted_arch) || is_link($mounted_bak) || is_file($force_symlinks)) {
-      // Do not follow symlinks on mounted filesystem
-      $command_base = "tar -c -p -I lz4 -f";
+    elseif (is_file($deref_backups) && !is_file($force_symlinks)) {
+      // Operator opted back into dereferencing implicit backups.
+      $command_base = "tar -c -p -h -I lz4 -f";
     }
     else {
-      // Do not follow symlinks by defult
+      // Default: do not follow symlinks (content lives in the store).
       $command_base = "tar -c -p -I lz4 -f";
     }
     $command = $command_base . $command_arguments;
   }
   elseif (substr($backup_file, -3) == 'zst') {
-    if (isset($backup_mode) && !is_file($force_symlinks)) {
-      // Follow symlinks to include all files in custom backup task
+    if (!empty($backup_mode) && ($backup_mode == 'site_files_with_mysqldump' ||
+      $backup_mode == 'site_files_without_db_backup')) {
+      // Files-carrying mode: always follow symlinks for a self-contained archive
       $command_base = "tar -c -p -h -I zstd -f";
     }
-    elseif (is_link($mounted_arch) || is_link($mounted_bak) || is_file($force_symlinks)) {
-      // Do not follow symlinks on mounted filesystem
-      $command_base = "tar -c -p -I zstd -f";
+    elseif (is_file($deref_backups) && !is_file($force_symlinks)) {
+      // Operator opted back into dereferencing implicit backups.
+      $command_base = "tar -c -p -h -I zstd -f";
     }
     else {
-      // Do not follow symlinks by defult
+      // Default: do not follow symlinks (content lives in the store).
       $command_base = "tar -c -p -I zstd -f";
     }
     $command = $command_base . $command_arguments;
@@ -379,7 +405,7 @@ function drush_provision_drupal_post_provision_backup() {
       }
       if (empty($backup_mode)) {
         if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
           if ($backup_mode) {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
@@ -458,7 +484,7 @@ function drush_provision_drupal_provision_backup_rollback() {
       }
       if (empty($backup_mode)) {
         if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
           if ($backup_mode) {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
