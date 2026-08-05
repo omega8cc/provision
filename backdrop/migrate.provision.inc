@@ -159,6 +159,15 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
   provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused migration site package')
     ->fail('Could not remove unused migration site package');
+  // Belt: a crashed migrate must not leave the internal-backup flag behind -
+  // a leftover one makes every later backup on the account skip the MyQuick
+  // tmp_expim rotation and can leak a dump into a files-only archive.
+  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
+  if (is_file($internal_backup_flag)) {
+    provision_file()->unlink($internal_backup_flag)
+      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
+      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
+  }
   d()->service('http')->create_config('site');
   d()->service('http')->parse_configs();
 }
