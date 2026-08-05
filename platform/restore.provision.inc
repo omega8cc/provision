@@ -76,6 +76,16 @@ function drush_provision_drupal_provision_restore($restore_file) {
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
+
+    // Native files symlinking after restore: a files-carrying archive is
+    // extracted as plain files/private dirs, so the deploy swap replaces the
+    // in-site symlinks with real dirs on the platform partition and orphans
+    // the per-account store. The helper re-converts (as clone and migrate
+    // do, but without breaking a deliberate share), and protects against
+    // files-less archives (DB-only backup mode) by re-pointing at the
+    // existing store instead of archiving it away. Warn-not-fail.
+    _provision_drupal_native_symlink_after_restore(d()->uri);
+
     drush_set_option('installed', false);
     $backup_path = d('@server_master')->backup_path;
     $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
