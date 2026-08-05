@@ -35,7 +35,7 @@ function drush_db_post_provision_deploy() {
     }
     if (empty($backup_mode)) {
       if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
         if ($backup_mode) {
           drush_set_option('backup_mode', $backup_mode);
           if (!defined('SELECTED_BACKUP_MODE')) {
@@ -82,7 +82,13 @@ function drush_db_post_provision_deploy() {
       ->succeed('MyQuick Removed Post-DB-Import Flag-File in drush_db_post_provision_deploy')
       ->fail('MyQuick Could not remove Post-DB-Import Flag-File in drush_db_post_provision_deploy');
   }
-  else {
+
+  // Always remove an extracted/imported database.sql from the live site dir,
+  // whichever import path ran: the MyQuick branch above used to skip this,
+  // leaving a restore-extracted dump behind - which then failed the NEXT
+  // classic-dump backup at its fopen('x') and sat as a stale credential-rich
+  // file in the web-served site dir.
+  if (is_file(d()->site_path . '/database.sql')) {
     provision_file()->unlink(d()->site_path . '/database.sql')
       ->succeed('Removed dump file @path after restoring from it')
       ->fail('Could not remove dump file @path', 'DRUSH_PERM_ERROR');

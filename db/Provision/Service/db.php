@@ -192,7 +192,7 @@ class Provision_Service_db extends Provision_Service {
       }
       if (empty($backup_mode)) {
         if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = file_get_contents(AEGIR_BACKUP_MODE_CTRL);
+          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
           if ($backup_mode) {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
@@ -213,7 +213,24 @@ class Provision_Service_db extends Provision_Service {
       }
     }
 
-    if (empty($backup_mode)) {
+    $restore_wants_classic = FALSE;
+    if (drush_get_option('is_restore', FALSE)) {
+      if (is_file(d()->site_path . '/database.sql')) {
+        // Never take the MyQuick fast-import path on a restore that delivered
+        // a dump: tmp_expim then holds the PRE-restore safety dump of the
+        // CURRENT database, and importing it silently restores nothing. The
+        // classic branch imports the archive's own database.sql instead.
+        $restore_wants_classic = TRUE;
+      }
+      else {
+        // A modeless MyQuick-era archive carries no database.sql at all;
+        // hard-failing would make every such historical backup unrestorable.
+        // The fast path re-imports the pre-restore safety dump, so the
+        // database is left as it was - say so instead of pretending.
+        drush_log(dt('The restored archive carries no database dump; the database is left unchanged (files-only restore).'), 'warning');
+      }
+    }
+    if (empty($backup_mode) && !$restore_wants_classic) {
       drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
       $mydumper_path = '/usr/local/bin/mydumper';
       $myloader_path = '/usr/local/bin/myloader';

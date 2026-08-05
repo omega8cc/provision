@@ -501,7 +501,34 @@ function provision_count_cpus() {
 define('CRITICAL_LOAD_MULTIPLIER', 5);
 define('CRITICAL_LOAD_THRESHOLD', 10);
 if (!defined('AEGIR_BACKUP_MODE_CTRL')) {
-  define('AEGIR_BACKUP_MODE_CTRL', '/tmp/aegir_backup_mode.txt');
+  // Scoped by uid: /tmp is shared and sticky, so an unscoped file written by
+  // one Octopus account blocks (and silently mis-modes) every other account's
+  // backups. Frontend and backend run as the same account user, so both
+  // resolve the same path. posix_getuid() (real process uid), NOT getmyuid()
+  // — the latter returns the entry-script file OWNER, which is root for the
+  // shared drush8 launcher and would collapse every account onto one path.
+  if (function_exists('posix_getuid')) {
+    define('AEGIR_BACKUP_MODE_CTRL', '/tmp/aegir_backup_mode.' . (int) posix_getuid() . '.txt');
+  }
+  else {
+    define('AEGIR_BACKUP_MODE_CTRL', '/tmp/aegir_backup_mode.' . (int) getmyuid() . '.txt');
+  }
+}
+
+/**
+ * Reduce a backup-mode ctrl-file payload to a known mode or FALSE.
+ *
+ * The ctrl file lives on world-writable /tmp, so its content is untrusted:
+ * only the exact frontend-offered mode strings may steer tar/dump behaviour.
+ */
+function provision_backup_mode_sanitize($backup_mode) {
+  $backup_mode = trim((string) $backup_mode);
+  $known = array(
+    'backup_mysqldump_only',
+    'site_files_without_db_backup',
+    'site_files_with_mysqldump',
+  );
+  return in_array($backup_mode, $known, TRUE) ? $backup_mode : FALSE;
 }
 
 /**
