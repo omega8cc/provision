@@ -325,9 +325,9 @@ class Provision_Service_db extends Provision_Service {
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         }
-        drush_shell_exec($command);
+        $success = drush_shell_exec($command);
 
-        if (!$command) {
+        if (!$success) {
           drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
         }
 
