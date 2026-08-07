@@ -505,10 +505,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         }
-        drush_shell_exec($command);
+        $success = drush_shell_exec($command);
 
-        if (!$command) {
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
+        if (!$success) {
+          // Never interpolate $command into messages: it carries --password.
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
 
         // Delete pre-db-import flag file.
