@@ -448,7 +448,7 @@ map $http_user_agent $ai_utility_limit_key {
 map $uri $is_secret_path {
   default  '';
   ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
-  ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)    is_secret_path;
+  ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)  is_secret_path;
   ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
   ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
   ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
@@ -457,13 +457,13 @@ map $uri $is_secret_path {
 
 ###
 ### Deny probes for foreign-stack paths (WordPress / Joomla / phpMyAdmin admin
-### tokens, and framework probe segments — Spring Boot actuator, Vite @fs,
-### GraphiQL console — that can never exist on a Drupal / Backdrop /
-### Aegir-Hostmaster docroot, regardless of UA).  An observed distributed
-### scanner campaign probed these families by the hundreds per burst.
-### Without this the extensionless variant of such
-### a probe (e.g. /cms/wp-admin, /ru/administrator) misses every static
-### location, falls through try_files -> @drupal -> /index.php -> php-fpm, and
+### tokens, plus the Vite @fs segment and a root-anchored GraphiQL console —
+### none can exist on a Drupal / Backdrop / Aegir-Hostmaster docroot,
+### regardless of UA; an observed distributed scanner campaign probed these
+### families by the hundreds per burst).  Without this the extensionless
+### variant of such a probe (e.g. /cms/wp-admin, /ru/administrator) misses
+### every static location, falls through try_files -> @drupal -> /index.php
+### -> php-fpm, and
 ### costs a full Drupal bootstrap just to render a 404 — the exact sink that
 ### let a distributed auth-probe flood saturate a small VM's FPM pool.  444
 ### (drop, no bootstrap) instead, which also feeds the per-IP 444 counter in the
@@ -479,16 +479,22 @@ map $uri $is_secret_path {
 ### Bare /graphql and /api/* are also deliberately NOT matched: Drupal's
 ### graphql module serves /graphql, and /api is a common custom REST
 ### namespace — blocking either at this shared edge would break real sites.
-### A vhost that provably has no such routes may 444 them locally instead.
+### Spring Boot's /actuator is likewise excluded: "actuator" is an ordinary
+### product noun (aliases, uploads, image derivatives on industrial-customer
+### sites).  A vhost that provably has no such routes may 444 them locally.
+### GraphiQL is root-anchored on purpose: the Drupal graphql module ships a
+### LOCAL graphiql.css/js asset under /modules/contrib/graphql/, and
+### /libraries/graphiql/ is a real path — only the bare console route is
+### foreign.  Remember a hit here is not just a drop: 444 accrues per-IP
+### ban score in the scan_nginx IDS, so a false positive escalates.
 ###
 map $uri $is_cms_probe {
   default  '';
   ~*(?:^|/)wp-(?:admin|login|content|includes|json|config|cron|signup|mail|register|links-opml|trackback|comments-post)(?:[./?]|$)  is_cms_probe;
   ~*(?:^|/)administrator(?:/|$)                                                                                                     is_cms_probe;
   ~*(?:^|/)phpmyadmin(?:[./?]|$)                                                                                                    is_cms_probe;
-  ~*(?:^|/)actuator(?:[./?]|$)                                                                                                      is_cms_probe;
   ~*(?:^|/)@fs(?:[./?]|$)                                                                                                           is_cms_probe;
-  ~*(?:^|/)graphiql(?:[./?]|$)                                                                                                      is_cms_probe;
+  ~*^/graphiql(?:/|$)                                                                                                               is_cms_probe;
 }
 
 ###
