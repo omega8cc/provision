@@ -456,14 +456,11 @@ map $uri $is_secret_path {
 }
 
 ###
-### Deny probes for foreign-stack paths (WordPress / Joomla / phpMyAdmin admin
-### tokens, plus the Vite @fs segment and a root-anchored GraphiQL console —
-### none can exist on a Drupal / Backdrop / Aegir-Hostmaster docroot,
-### regardless of UA; an observed distributed scanner campaign probed these
-### families by the hundreds per burst).  Without this the extensionless
-### variant of such a probe (e.g. /cms/wp-admin, /ru/administrator) misses
-### every static location, falls through try_files -> @drupal -> /index.php
-### -> php-fpm, and
+### Deny probes for foreign-CMS admin paths (WordPress / Joomla / phpMyAdmin
+### tokens that can never exist on a Drupal / Backdrop / Aegir-Hostmaster
+### docroot, regardless of UA).  Without this the extensionless variant of such
+### a probe (e.g. /cms/wp-admin, /ru/administrator) misses every static
+### location, falls through try_files -> @drupal -> /index.php -> php-fpm, and
 ### costs a full Drupal bootstrap just to render a 404 — the exact sink that
 ### let a distributed auth-probe flood saturate a small VM's FPM pool.  444
 ### (drop, no bootstrap) instead, which also feeds the per-IP 444 counter in the
@@ -476,25 +473,28 @@ map $uri $is_secret_path {
 ### namespaces and with Drupal's own /admin, /user; the distributed tail that
 ### uses them is handled in aggregate by the scan_nginx UA-burst detector, not
 ### at this shared edge.  "adminer" is intentionally absent: BOA ships Adminer.
-### Bare /graphql and /api/* are also deliberately NOT matched: Drupal's
-### graphql module serves /graphql, and /api is a common custom REST
-### namespace — blocking either at this shared edge would break real sites.
-### Spring Boot's /actuator is likewise excluded: "actuator" is an ordinary
-### product noun (aliases, uploads, image derivatives on industrial-customer
-### sites).  A vhost that provably has no such routes may 444 them locally.
-### GraphiQL is root-anchored on purpose: the Drupal graphql module ships a
-### LOCAL graphiql.css/js asset under /modules/contrib/graphql/, and
-### /libraries/graphiql/ is a real path — only the bare console route is
-### foreign.  Remember a hit here is not just a drop: 444 accrues per-IP
-### ban score in the scan_nginx IDS, so a false positive escalates.
+###
+### DELIBERATELY NOT at this shared edge (each can be a REAL route on some
+### tenant, and this map fires for EVERY hosted vhost — a false positive here
+### is a fleet-wide 444 that also accrues per-IP ban score, so the bar is
+### "impossible on ANY conceivable tenant", not "unusual"):
+###   - bare /graphql, /api/*  — Drupal's graphql module + common REST namespaces
+###   - /actuator              — an ordinary product noun (aliases, uploads)
+###   - /graphiql              — PROVEN legit: an observed hosted tenant app
+###                              answers POST /graphiql from a real application
+###                              endpoint (2026-08-08); root-anchoring to the
+###                              docroot did NOT save it.
+###   - /@fs                   — any Vite/JS-framework-backed custom tenant app
+### These belong in a PER-VHOST guard map (where the route space is KNOWN) or
+### the scan_nginx aggregate detector, never here.  A one/two-box log negative
+### control CANNOT clear a fleet-wide token — the box without that tenant proves
+### nothing about the box that has it.
 ###
 map $uri $is_cms_probe {
   default  '';
   ~*(?:^|/)wp-(?:admin|login|content|includes|json|config|cron|signup|mail|register|links-opml|trackback|comments-post)(?:[./?]|$)  is_cms_probe;
   ~*(?:^|/)administrator(?:/|$)                                                                                                     is_cms_probe;
   ~*(?:^|/)phpmyadmin(?:[./?]|$)                                                                                                    is_cms_probe;
-  ~*(?:^|/)@fs(?:[./?]|$)                                                                                                           is_cms_probe;
-  ~*^/graphiql(?:/|$)                                                                                                               is_cms_probe;
 }
 
 ###
