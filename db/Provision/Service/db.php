@@ -328,7 +328,8 @@ class Provision_Service_db extends Provision_Service {
         $success = drush_shell_exec($command);
 
         if (!$success) {
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
+          // Never interpolate $command into messages: it carries --password.
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
 
         // Delete pre-db-import flag file.
