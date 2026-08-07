@@ -448,7 +448,7 @@ map $http_user_agent $ai_utility_limit_key {
 map $uri $is_secret_path {
   default  '';
   ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
-  ~*(?:^|/)(?:secrets|key|google-services|config|loadable-stats)\.json(?:$|/)    is_secret_path;
+  ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)    is_secret_path;
   ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
   ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
   ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
@@ -456,9 +456,12 @@ map $uri $is_secret_path {
 }
 
 ###
-### Deny probes for foreign-CMS admin paths (WordPress / Joomla / phpMyAdmin
-### tokens that can never exist on a Drupal / Backdrop / Aegir-Hostmaster
-### docroot, regardless of UA).  Without this the extensionless variant of such
+### Deny probes for foreign-stack paths (WordPress / Joomla / phpMyAdmin admin
+### tokens, and framework probe segments — Spring Boot actuator, Vite @fs,
+### GraphiQL console — that can never exist on a Drupal / Backdrop /
+### Aegir-Hostmaster docroot, regardless of UA).  An observed distributed
+### scanner campaign probed these families by the hundreds per burst.
+### Without this the extensionless variant of such
 ### a probe (e.g. /cms/wp-admin, /ru/administrator) misses every static
 ### location, falls through try_files -> @drupal -> /index.php -> php-fpm, and
 ### costs a full Drupal bootstrap just to render a 404 — the exact sink that
@@ -473,12 +476,19 @@ map $uri $is_secret_path {
 ### namespaces and with Drupal's own /admin, /user; the distributed tail that
 ### uses them is handled in aggregate by the scan_nginx UA-burst detector, not
 ### at this shared edge.  "adminer" is intentionally absent: BOA ships Adminer.
+### Bare /graphql and /api/* are also deliberately NOT matched: Drupal's
+### graphql module serves /graphql, and /api is a common custom REST
+### namespace — blocking either at this shared edge would break real sites.
+### A vhost that provably has no such routes may 444 them locally instead.
 ###
 map $uri $is_cms_probe {
   default  '';
   ~*(?:^|/)wp-(?:admin|login|content|includes|json|config|cron|signup|mail|register|links-opml|trackback|comments-post)(?:[./?]|$)  is_cms_probe;
   ~*(?:^|/)administrator(?:/|$)                                                                                                     is_cms_probe;
   ~*(?:^|/)phpmyadmin(?:[./?]|$)                                                                                                    is_cms_probe;
+  ~*(?:^|/)actuator(?:[./?]|$)                                                                                                      is_cms_probe;
+  ~*(?:^|/)@fs(?:[./?]|$)                                                                                                           is_cms_probe;
+  ~*(?:^|/)graphiql(?:[./?]|$)                                                                                                      is_cms_probe;
 }
 
 ###
