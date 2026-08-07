@@ -501,7 +501,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --directory=' . escapeshellarg($oct_db_dirx)
           . ' --threads=' . escapeshellarg($threads)
-          . ' --drop-table=DROP --verbose=1';
+          . ' --drop-table=DROP --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         }
@@ -821,6 +821,15 @@ port=%s
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
+        // Any non-transactional table makes mydumper abort the whole
+        // database unless --trx-tables=0 is passed; InnoDB-only keeps the
+        // fast consistent-snapshot path. Mirrors mysql_backup.sh; a failed
+        // count degrades to the InnoDB-only behaviour.
+        $trx_opt = '';
+        $non_trx_result = $this->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_TYPE = 'BASE TABLE' AND ENGINE IS NOT NULL AND ENGINE NOT IN ('InnoDB')", $db_name);
+        if ($non_trx_result && ($non_trx_row = $non_trx_result->fetch()) && intval($non_trx_row[0]) > 0) {
+          $trx_opt = ' --trx-tables=0';
+        }
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value. See DECISIONS.md Decision 002.
@@ -832,11 +841,18 @@ port=%s
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
           . ' --rows=50000 --build-empty-files --threads=' . escapeshellarg($threads)
-          . ' --long-query-guard=900 --clear --verbose=1';
+          . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
         }
-        drush_shell_exec($command);
+        $success = drush_shell_exec($command);
+
+        if ((!$success || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
+          // Never interpolate $command into messages: it carries --password.
+          // A run that exits 0 without the final metadata marker still left
+          // no restorable dump (killed mid-flight), so treat it as failed.
+          drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+        }
       }
     }
     else {

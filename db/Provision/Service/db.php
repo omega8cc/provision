@@ -321,7 +321,7 @@ class Provision_Service_db extends Provision_Service {
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --directory=' . escapeshellarg($oct_db_dirx)
           . ' --threads=' . escapeshellarg($threads)
-          . ' --drop-table=DROP --verbose=1';
+          . ' --drop-table=DROP --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         }
