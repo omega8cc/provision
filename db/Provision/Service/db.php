@@ -299,8 +299,8 @@ class Provision_Service_db extends Provision_Service {
       $local_description = 'Adding Pre-DB-Import Flag-File import_site_database db.php';
       if (!provision_file()->exists($pre_import_flag)->status()) {
         provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
-      	->succeed('Generated blank ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
+          ->succeed('Generated blank ' . $local_description)
+          ->fail('Could not generate ' . $local_description);
       }
 
       if (is_dir($oct_db_dirx) &&
@@ -325,10 +325,11 @@ class Provision_Service_db extends Provision_Service {
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
         }
-        drush_shell_exec($command);
+        $success = drush_shell_exec($command);
 
-        if (!$command) {
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed (%command)', array('%command' => $command)));
+        if (!$success) {
+          // Never interpolate $command into messages: it carries --password.
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
 
         // Delete pre-db-import flag file.
@@ -336,15 +337,15 @@ class Provision_Service_db extends Provision_Service {
           ->succeed('Remove Pre-DB-Import Flag-File import_site_database db.php')
           ->fail('Could not remove Pre-DB-Import Flag-File import_site_database db.php');
 
-		// Create post-db-import flag file.
-		$post_import_flag = $backup_path . '/.post_import_flag.pid';
-		$post_import_flag_blank = "Post-DB-Import \n";
-		$local_description = 'Adding Post-DB-Import Flag-File import_site_database db.php';
-		if (!provision_file()->exists($post_import_flag)->status()) {
-		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
-			->succeed('Generated blank ' . $local_description)
-			->fail('Could not generate ' . $local_description);
-		}
+        // Create post-db-import flag file.
+        $post_import_flag = $backup_path . '/.post_import_flag.pid';
+        $post_import_flag_blank = "Post-DB-Import \n";
+        $local_description = 'Adding Post-DB-Import Flag-File import_site_database db.php';
+        if (!provision_file()->exists($post_import_flag)->status()) {
+          provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
+            ->succeed('Generated blank ' . $local_description)
+            ->fail('Could not generate ' . $local_description);
+        }
       }
     }
     else {

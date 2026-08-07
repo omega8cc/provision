@@ -181,6 +181,23 @@ if ($block_flag_no_referer) {
 }
 
 ###
+### Block the cold HybridAuth window flood (see $is_hybridauth_window /
+### $block_hybridauth_no_referer in server.tpl.php).  404, not 444, for the
+### same crawler-safety reasons as the guards above: a static 404 is
+### php-fpm-free, starves the botnet, and tells crawlers to drop the URL.
+### Fires only on the intersection of no Referer AND no session cookie, so
+### BOTH hops of a real login pass: the initiating click carries a Referer,
+### and the provider's return hop — which lands back on this same window path
+### as hauth_return_to, often Referer-less — carries the session cookie the
+### outbound leg created.  /hybridauth/endpoint is the provider's callback
+### target and stays unguarded.  Works regardless of whether the HybridAuth
+### module is enabled.
+###
+if ($block_hybridauth_no_referer) {
+  return 404;
+}
+
+###
 ### Mitigation for https://www.drupal.org/SA-CORE-2018-002
 ###
 set $rce "ZZ";
