@@ -427,9 +427,14 @@ location ^~ /admin/httprl-test {
 // the expected zone: no delivery order can produce an undeclared-zone
 // reference, which matters because a missing zone is a whole-box nginx
 // [emerg] and the upgrade path restarts nginx without a configtest.
-$bgp_zone_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
-$bgp_zone_ok = @is_file($bgp_zone_file)
-  && strpos((string) @file_get_contents($bgp_zone_file), 'zone=bgp_flood') !== FALSE;
+// Read once here and reuse: more than one guardrail in this template gates on
+// this file, and a vhost render should not stat and slurp it per consumer.
+// An absent or unreadable file yields '', so every gate below is simply FALSE.
+$boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+$boa_zones_body = @is_file($boa_zones_file)
+  ? (string) @file_get_contents($boa_zones_file)
+  : '';
+$bgp_zone_ok = strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE;
 if ($bgp_zone_ok):
 ?>
 ###
@@ -1814,9 +1819,22 @@ location = /index.php {
   limit_conn boa_i18n_anon <?php print $i18n_anon_conn; ?>;
   limit_conn_status 444;
 
+<?php
+  $perhost_zone_ok = isset($boa_zones_body)
+    && strpos($boa_zones_body, 'zone=boa_perhost_anon') !== FALSE;
+  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 100);
+  if ($perhost_anon_conn < 1 || $perhost_anon_conn > 65535) {
+    $perhost_anon_conn = 100;
+  }
+  if ($perhost_zone_ok):
+?>
   ###
   ### General anonymous-render guardrail.  The i18n cap above bounds one
-  ### expensive request class; this one bounds the total.  An observed
+  ### expensive request class; this one bounds the page-render total.  (Scope,
+  ### stated precisely: every PAGE request lands here, including clean URLs
+  ### after the internal rewrite through @drupal/@legacy/@regular/@modern.
+  ### Other fastcgi entry points in this file -- cron, xmlrpc, the ESI
+  ### microcache and friends -- have their own locations and are NOT counted.)  An observed
   ### distributed scraper swarm presented a single spoofed browser user-agent
   ### across ~270 client IPs at ~1.4 requests each against one vhost, every
   ### response a 200 from ordinary content routes: not an AI vendor, not a
@@ -1852,16 +1870,6 @@ location = /index.php {
   ### FPM pool pm.max_children via the nginx_perhost_anon_conn option (the
   ### render cannot read the pool size, so this cannot be derived here).
   ###
-<?php
-  $perhost_zone_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
-  $perhost_zone_ok = @is_file($perhost_zone_file)
-    && strpos((string) @file_get_contents($perhost_zone_file), 'zone=boa_perhost_anon') !== FALSE;
-  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 100);
-  if ($perhost_anon_conn < 1) {
-    $perhost_anon_conn = 100;
-  }
-  if ($perhost_zone_ok):
-?>
   limit_conn boa_perhost_anon <?php print $perhost_anon_conn; ?>;
 <?php endif; ?>
 
