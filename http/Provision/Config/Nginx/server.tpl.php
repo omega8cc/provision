@@ -448,7 +448,7 @@ map $http_user_agent $ai_utility_limit_key {
 map $uri $is_secret_path {
   default  '';
   ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
-  ~*(?:^|/)(?:secrets|key|google-services|config|loadable-stats)\.json(?:$|/)    is_secret_path;
+  ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)  is_secret_path;
   ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
   ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
   ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
@@ -473,6 +473,22 @@ map $uri $is_secret_path {
 ### namespaces and with Drupal's own /admin, /user; the distributed tail that
 ### uses them is handled in aggregate by the scan_nginx UA-burst detector, not
 ### at this shared edge.  "adminer" is intentionally absent: BOA ships Adminer.
+###
+### DELIBERATELY NOT at this shared edge (each can be a REAL route on some
+### tenant, and this map fires for EVERY hosted vhost — a false positive here
+### is a fleet-wide 444 that also accrues per-IP ban score, so the bar is
+### "impossible on ANY conceivable tenant", not "unusual"):
+###   - bare /graphql, /api/*  — Drupal's graphql module + common REST namespaces
+###   - /actuator              — an ordinary product noun (aliases, uploads)
+###   - /graphiql              — PROVEN legit: an observed hosted tenant app
+###                              answers POST /graphiql from a real application
+###                              endpoint (2026-08-08); root-anchoring to the
+###                              docroot did NOT save it.
+###   - /@fs                   — any Vite/JS-framework-backed custom tenant app
+### These belong in a PER-VHOST guard map (where the route space is KNOWN) or
+### the scan_nginx aggregate detector, never here.  A one/two-box log negative
+### control CANNOT clear a fleet-wide token — the box without that tenant proves
+### nothing about the box that has it.
 ###
 map $uri $is_cms_probe {
   default  '';
