@@ -236,7 +236,16 @@ function drush_provision_drupal_provision_backup() {
     $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
     $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions();
   }
-  drush_shell_exec($exclude_tag);
+  // An exclude.tag left behind by an aborted run makes tar skip that whole
+  // directory FOR EVER AFTER: the next backups quietly become
+  // settings-and-database-only archives that still report success and still
+  // restore "cleanly", minus the files. Both the tagging and the cleanup are
+  // best-effort shell calls whose status was discarded, so nothing noticed.
+  // Clear any stale tags first, then tag, and say so if either step fails.
+  drush_shell_exec($exclude_clean);
+  if (!drush_shell_exec($exclude_tag)) {
+    drush_log(dt('Could not write the backup exclusion tags; the archive may include directories that are normally excluded'), 'warning');
+  }
 
   // A Drupal site dir must never contain device/block/fifo/socket special files.
   // A stray one (e.g. a /dev node copied into the site root by an out-of-band
@@ -339,7 +348,11 @@ function drush_provision_drupal_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
-  drush_shell_exec($exclude_clean);
+  // Leaving a tag behind silently truncates every FUTURE backup, so failing
+  // to clean up is worth a warning even though this run succeeded.
+  if (!drush_shell_exec($exclude_clean)) {
+    drush_log(dt('Could not remove the backup exclusion tags - a stale tag would silently shrink later backups; remove exclude.tag by hand'), 'warning');
+  }
 
   // Get the size of the backup
   $size = filesize($backup_file);

@@ -295,13 +295,32 @@ class Provision_FileSystem extends Provision_ChainedState {
         // we need to do this because some retarded implementations of tar (e.g. SunOS) don't support -C
         chdir($target);
 
-        // We need to check if the archive is gzipped and choose the command accordingly
-        if (substr($path, -2) == 'gz') {
-          // same here: some do not support -z
-          $command = 'gunzip -c %s | tar pxf -';
+        // Decompression is driven by tar, not through a pipe, and the
+        // decompressor is chosen from the suffix exactly as the backup side
+        // chooses it when creating the archive.
+        //
+        // `gunzip -c %s | tar pxf -` reported only TAR's status, so a
+        // corrupt or truncated archive whose decompressor died still looked
+        // like a clean extraction: tar unpacks the prefix it received and
+        // exits 0. And the old suffix ladder never matched anything but gz
+        // -- `substr($path, -2) == 'bz2'` compares two characters against
+        // three -- while the backup side can emit .tar.zst and .tar.lz4,
+        // neither of which plain `tar -pxf` nor `tar -paxf` can read (tar
+        // auto-detects zstd but NOT lz4; verified against GNU tar 1.35).
+        if (substr($path, -3) == '.gz' || substr($path, -4) == '.tgz') {
+          $command = 'tar -pxzf %s';
         }
-        elseif (substr($path, -2) == 'bz2') {
-          $command = 'bunzip2 -c %s | tar pxf -';
+        elseif (substr($path, -4) == '.bz2') {
+          $command = 'tar -pxjf %s';
+        }
+        elseif (substr($path, -3) == '.xz') {
+          $command = 'tar -pxJf %s';
+        }
+        elseif (substr($path, -4) == '.zst') {
+          $command = 'tar -p -I zstd -xf %s';
+        }
+        elseif (substr($path, -4) == '.lz4') {
+          $command = 'tar -p -I lz4 -xf %s';
         }
         else {
           $command = 'tar -pxf %s';

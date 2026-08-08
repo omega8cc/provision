@@ -303,7 +303,16 @@ class Provision_Service_db extends Provision_Service {
           ->fail('Could not generate ' . $local_description);
       }
 
-      if (is_dir($oct_db_dirx) &&
+      // The dump side refuses to call an export successful without
+      // mydumper's final `metadata` marker (see generate_dump), because a
+      // run killed mid-flight leaves a directory full of partial table
+      // files. The import side only checked that the DIRECTORY exists, so
+      // exactly that half-written dump would be loaded over a live database
+      // and reported as a clean import. Require the same marker here.
+      if (is_dir($oct_db_dirx) && !is_file($oct_db_dirx . '/metadata')) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Refusing to import %dir: it carries no mydumper metadata marker, so the dump is incomplete', array('%dir' => $oct_db_dirx)));
+      }
+      elseif (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
