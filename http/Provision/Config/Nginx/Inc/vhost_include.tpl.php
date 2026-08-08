@@ -1815,6 +1815,57 @@ location = /index.php {
   limit_conn_status 444;
 
   ###
+  ### General anonymous-render guardrail.  The i18n cap above bounds one
+  ### expensive request class; this one bounds the total.  An observed
+  ### distributed scraper swarm presented a single spoofed browser user-agent
+  ### across ~270 client IPs at ~1.4 requests each against one vhost, every
+  ### response a 200 from ordinary content routes: not an AI vendor, not a
+  ### declared bot (so it received the short human cache window rather than the
+  ### long crawler one), not bad-status, and far too thin per IP for any per-IP
+  ### control.  The renders piled up until each took longer than the front
+  ### cache's own TTL and lock timeout, at which point waiting requests stopped
+  ### waiting and rendered too — a feedback loop the cache cannot break out of
+  ### by itself.  Capping the IN-FLIGHT anonymous render count per vhost keeps
+  ### render time inside that horizon, which is what keeps the front cache
+  ### effective; it is deliberately the only control here that does not
+  ### classify the client, because that class cannot be classified.
+  ###
+  ### $boa_perhost_anon_key and the zone are declared in the BOA-written
+  ### http-scope file, NOT in the master render, and this consumer appears only
+  ### when that file is present with the expected zone -- so no delivery order
+  ### can produce an undeclared-zone reference, which matters because a missing
+  ### zone is a whole-box nginx [emerg] and the upgrade path restarts nginx
+  ### without a configtest.  (Same contract as the bgp_flood zone above.)
+  ### The key is $host for anonymous requests and EMPTY for authenticated ones,
+  ### so an editor or admin is never shed while a flood is being trimmed.
+  ###
+  ### The shed status is the location-wide 444 set above, NOT 503:
+  ### limit_conn_status is one-per-context, and the scan_nginx i18n detector
+  ### counts those 444s (_NGINX_I18N_FLOOD_C444_THRESHOLD) as its Tier-A
+  ### shedding signal — forcing 503 here would silently blind that detector.
+  ### Shedding at 444 also keeps this guardrail visible to the IDS.
+  ###
+  ### Default 100: above the busiest legitimate per-vhost in-flight peak
+  ### measured on a production box (13-57 across every tenant over a full day)
+  ### with headroom, and far below an observed flood (417).  Deliberately loose
+  ### so it only ever bounds a genuine flood; tune toward ~1.5x the instance's
+  ### FPM pool pm.max_children via the nginx_perhost_anon_conn option (the
+  ### render cannot read the pool size, so this cannot be derived here).
+  ###
+<?php
+  $perhost_zone_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $perhost_zone_ok = @is_file($perhost_zone_file)
+    && strpos((string) @file_get_contents($perhost_zone_file), 'zone=boa_perhost_anon') !== FALSE;
+  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 100);
+  if ($perhost_anon_conn < 1) {
+    $perhost_anon_conn = 100;
+  }
+  if ($perhost_zone_ok):
+?>
+  limit_conn boa_perhost_anon <?php print $perhost_anon_conn; ?>;
+<?php endif; ?>
+
+  ###
   ### Detect supported no-cache exceptions
   ###
   if ( $request_method = POST ) {
