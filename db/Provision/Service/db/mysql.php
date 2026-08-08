@@ -535,8 +535,24 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
       drush_log(sprintf("Importing database using command: %s", $cmd));
 
+      // --force makes the client CONTINUE past every failing statement and
+      // still exit 0, so the exit status alone cannot tell a clean restore
+      // from one where every CREATE TABLE failed. Measured on Percona 8.4: a
+      // dump whose statements all fail imports "successfully" and leaves the
+      // database empty; a partially failing dump silently loses whole tables.
+      // That matters most on Restore, which ALWAYS takes this branch and
+      // whose post-hook drops the ORIGINAL database once no error is set.
+      // --force is kept so a salvageable dump still loads as much as it can,
+      // but the errors it prints are now read and reported.
+      $import_errors = '';
+      if (preg_match_all('/^ERROR .*/m', $this->safe_shell_exec_output, $matches)) {
+        $import_errors = implode("\n", array_slice($matches[0], 0, 10));
+      }
       if (!$success) {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
+      }
+      elseif ($import_errors && !drush_get_option('force', FALSE)) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import reported errors and is INCOMPLETE - refusing to treat it as restored: %errors", array('%errors' => $import_errors)));
       }
     }
   }
@@ -877,8 +893,16 @@ port=%s
           while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
             $this->filter_line($buffer);
             // Write the resulting line in the backup file.
-            if ($buffer && fwrite($dump_file, $buffer) === FALSE) {
-              drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not write database backup file mysqldump'));
+            if ($buffer) {
+              // fwrite returns the byte count, and a SHORT write (disk full,
+              // quota) returns a number smaller than the buffer rather than
+              // FALSE -- which the old === FALSE test read as success and
+              // then kept appending to, producing a silently truncated dump.
+              $written = fwrite($dump_file, $buffer);
+              if ($written === FALSE || $written < strlen($buffer)) {
+                drush_set_error('PROVISION_BACKUP_FAILED', dt('Short or failed write to the database backup file (wrote %w of %n bytes) - the dump is truncated', array('%w' => ($written === FALSE ? 0 : $written), '%n' => strlen($buffer))));
+                break;
+              }
             }
           }
           // Close stdout.
@@ -928,7 +952,37 @@ port=%s
       fwrite($pipes[3], $mycnf);
       fclose($pipes[3]);
 
-      $this->safe_shell_exec_output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+      // Drain BOTH pipes concurrently. Reading stdout to EOF first deadlocks
+      // as soon as the child writes more than one pipe buffer (64K on Linux)
+      // to stderr: the child blocks writing stderr, we block reading stdout,
+      // and neither side moves again. mysql --force on a bad dump emits one
+      // ERROR line per statement, so filling stderr is the NORMAL failure
+      // case here, not an exotic one.
+      $this->safe_shell_exec_output = '';
+      stream_set_blocking($pipes[1], 0);
+      stream_set_blocking($pipes[2], 0);
+      $open = array(1 => TRUE, 2 => TRUE);
+      while ($open[1] || $open[2]) {
+        $read = array();
+        if ($open[1]) { $read[1] = $pipes[1]; }
+        if ($open[2]) { $read[2] = $pipes[2]; }
+        $write = NULL;
+        $except = NULL;
+        if (stream_select($read, $write, $except, 5) === FALSE) {
+          break;
+        }
+        foreach ($read as $idx => $stream) {
+          $chunk = fread($stream, 8192);
+          if ($chunk === FALSE || $chunk === '') {
+            if (feof($stream)) {
+              $open[$idx] = FALSE;
+            }
+          }
+          else {
+            $this->safe_shell_exec_output .= $chunk;
+          }
+        }
+      }
       // "It is important that you close any pipes before calling
       // proc_close in order to avoid a deadlock"
       fclose($pipes[1]);
