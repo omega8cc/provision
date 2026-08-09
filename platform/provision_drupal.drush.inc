@@ -615,7 +615,9 @@ function _provision_drupal_native_symlink_after_restore($url) {
     // so a bare rmdir would fail).
     _provision_recursive_delete($path);
     if (!@file_exists($path) && @symlink($store, $path)) {
-      drush_log(dt('[native-symlink] @url: restored archive carried no @type content; kept the existing store content and re-linked it', array('@url' => $url, '@type' => $type)), 'warning');
+      // This is the preservation design working as intended (DB from the
+      // archive, files keep their pre-restore state) - inform, don't alarm.
+      drush_log(dt('[native-symlink] @url: restored archive carried no @type content; kept the existing store content and re-linked it', array('@url' => $url, '@type' => $type)), 'notice');
     }
     else {
       drush_log(dt('[native-symlink] @url: restored archive carried no @type content and the extracted dir could not be re-linked to the store - manual review required', array('@url' => $url, '@type' => $type)), 'warning');
