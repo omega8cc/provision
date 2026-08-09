@@ -228,23 +228,32 @@ function drush_provision_drupal_provision_backup() {
     }
   }
 
-  if (isset($backup_mode) && $backup_mode == 'backup_mysqldump_only') {
-    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
-    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions_sqldump();
-  }
-  else {
-    $exclude_tag = "touch" . drush_provision_drupal_provision_backup_get_exclusions();
-    $exclude_clean = "rm" . drush_provision_drupal_provision_backup_get_exclusions();
-  }
-  // An exclude.tag left behind by an aborted run makes tar skip that whole
+  // Tag the excluded directories with exclude.tag markers for tar. Only a
+  // directory that exists can carry a tag: a fresh site lacks most of the
+  // excluded directories, and the previous wholesale
+  // `touch dir1/exclude.tag dir2/...` failed the whole command on the first
+  // missing directory, warning on every backup of a perfectly healthy site.
+  // Tag per existing directory instead, clearing any stale tag first (an
+  // exclude.tag left behind by an aborted run makes tar skip that whole
   // directory FOR EVER AFTER: the next backups quietly become
   // settings-and-database-only archives that still report success and still
-  // restore "cleanly", minus the files. Both the tagging and the cleanup are
-  // best-effort shell calls whose status was discarded, so nothing noticed.
-  // Clear any stale tags first, then tag, and say so if either step fails.
-  drush_shell_exec($exclude_clean);
-  if (!drush_shell_exec($exclude_tag)) {
-    drush_log(dt('Could not write the backup exclusion tags; the archive may include directories that are normally excluded'), 'warning');
+  // restore "cleanly", minus the files).
+  $exclusion_dirs = drush_provision_drupal_provision_backup_get_exclusion_dirs(isset($backup_mode) ? $backup_mode : NULL);
+  $failed_tags = array();
+  foreach ($exclusion_dirs as $exclusion_dir) {
+    if (!is_dir($exclusion_dir)) {
+      continue;
+    }
+    $exclusion_tag = $exclusion_dir . '/exclude.tag';
+    if (is_file($exclusion_tag)) {
+      @unlink($exclusion_tag);
+    }
+    if (!@touch($exclusion_tag)) {
+      $failed_tags[] = $exclusion_tag;
+    }
+  }
+  if (!empty($failed_tags)) {
+    drush_log(dt('Could not write the backup exclusion tags (@tags); the archive may include directories that are normally excluded', array('@tags' => implode(', ', $failed_tags))), 'warning');
   }
 
   // A Drupal site dir must never contain device/block/fifo/socket special files.
@@ -348,10 +357,22 @@ function drush_provision_drupal_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
-  // Leaving a tag behind silently truncates every FUTURE backup, so failing
-  // to clean up is worth a warning even though this run succeeded.
-  if (!drush_shell_exec($exclude_clean)) {
-    drush_log(dt('Could not remove the backup exclusion tags - a stale tag would silently shrink later backups; remove exclude.tag by hand'), 'warning');
+  // Leaving a tag behind silently truncates every FUTURE backup, so a tag
+  // that exists but cannot be removed is worth a warning even though this
+  // run succeeded. A tag that is already gone is not a failure.
+  $stale_tags = array();
+  foreach ($exclusion_dirs as $exclusion_dir) {
+    $exclusion_tag = $exclusion_dir . '/exclude.tag';
+    if (!is_file($exclusion_tag)) {
+      continue;
+    }
+    @unlink($exclusion_tag);
+    if (is_file($exclusion_tag)) {
+      $stale_tags[] = $exclusion_tag;
+    }
+  }
+  if (!empty($stale_tags)) {
+    drush_log(dt('Could not remove the backup exclusion tags (@tags) - a stale tag would silently shrink later backups; remove exclude.tag by hand', array('@tags' => implode(', ', $stale_tags))), 'warning');
   }
 
   // Get the size of the backup
@@ -371,6 +392,23 @@ function drush_provision_drupal_provision_backup() {
   if (!$result && !drush_get_option('force', false)) {
     drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal"));
   }
+}
+
+/**
+ * Return the list of directories to exclude from a backup archive.
+ *
+ * The mysqldump-only mode excludes all content directories (the archive is
+ * the database plus settings); every other mode excludes only the volatile
+ * cache directories. The alter hook applies to the content modes, matching
+ * the historical behaviour of the string-building helpers below.
+ */
+function drush_provision_drupal_provision_backup_get_exclusion_dirs($backup_mode = NULL) {
+  if ($backup_mode == 'backup_mysqldump_only') {
+    return PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
+  }
+  $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
+  drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
+  return $directories;
 }
 
 function drush_provision_drupal_provision_backup_get_exclusions() {
