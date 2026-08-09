@@ -490,26 +490,84 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $oct_db_pass &&
         $oct_db_host &&
         $oct_db_port) {
-        // SECURITY: $db_name derives from alias context; $oct_db_* originate
-        // in BOA root control files but may contain shell-special characters.
-        // Escape every interpolated value. See DECISIONS.md Decision 002.
-        $command = $myloader_path
-          . ' --database=' . escapeshellarg($db_name)
-          . ' --host=' . escapeshellarg($oct_db_host)
-          . ' --user=' . escapeshellarg($oct_db_user)
-          . ' --password=' . escapeshellarg($oct_db_pass)
-          . ' --port=' . escapeshellarg($oct_db_port)
-          . ' --directory=' . escapeshellarg($oct_db_dirx)
-          . ' --threads=' . escapeshellarg($threads)
-          . ' --drop-table=DROP --verbose=2';
-        if (provision_file()->exists($myquick_creds_log)->status()) {
-          drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+        // The tmp_expim store is shared by every site of the account, and a
+        // concurrent export rotates it wholesale; importing whatever sits
+        // there has restored the WRONG database into a site before.
+        // mydumper names its schema-create file after the source database,
+        // so the store itself proves whose dump it holds - even for dumps
+        // made by older code. Acceptance rules:
+        // - a mixed store (two databases' dumps) or an empty one: refuse;
+        // - this database's own dump: import;
+        // - a single foreign dump: import ONLY inside an internal flow
+        //   (clone/migrate import a source-named dump into the target
+        //   database, marked by the internal-backup flag); outside one it
+        //   is a stale leftover of another site - the exact shape that
+        //   imported the wrong database in the past - so refuse.
+        $own_dump = glob($oct_db_dirx . '/' . $db_name . '-schema-create.sql*');
+        $all_dumps = glob($oct_db_dirx . '/*-schema-create.sql*');
+        $own_count = is_array($own_dump) ? count($own_dump) : 0;
+        $all_count = is_array($all_dumps) ? count($all_dumps) : 0;
+        $internal_flow = is_file($backup_path . '/.internal_backup_flag.pid');
+        $import_allowed = FALSE;
+        if ($all_count && $own_count == $all_count) {
+          $import_allowed = TRUE;
         }
-        $success = drush_shell_exec($command);
+        elseif ($all_count && !$own_count && $internal_flow) {
+          $foreign_names = array();
+          foreach ($all_dumps as $dump_file) {
+            $foreign_names[] = basename($dump_file);
+          }
+          // A clone/migrate imports its own source dump under the target
+          // database name (Aegir renames databases mid-flow, which is why
+          // the store cannot be bound to a database name). Verify the store
+          // holds exactly ONE database's dump, and that the dump was
+          // written AFTER the internal flag: the flag is created before the
+          // flow's own backup dumps, so a legitimate flow always leaves
+          // metadata newer than the flag, while a dump left behind by an
+          // earlier broken task always predates it.
+          $distinct = array();
+          foreach ($foreign_names as $foreign_name) {
+            $distinct[preg_replace('/-schema-create\.sql.*$/', '', $foreign_name)] = TRUE;
+          }
+          $metadata_file = $oct_db_dirx . '/metadata';
+          $dump_fresh = is_file($metadata_file)
+            && (@filemtime($metadata_file) >= @filemtime($backup_path . '/.internal_backup_flag.pid'));
+          if (count($distinct) == 1 && $dump_fresh) {
+            $import_allowed = TRUE;
+            drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
+          }
+        }
+        if (!$import_allowed) {
+          $found_dumps = array();
+          if (is_array($all_dumps)) {
+            foreach ($all_dumps as $dump_file) {
+              $found_dumps[] = basename($dump_file);
+            }
+          }
+          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Refusing the fast database import: the shared dump store does not provably hold this site\'s database (expected @db, internal flow: @flow, found: @found). A concurrent backup may have rotated the store - re-run the task.', array('@db' => $db_name, '@flow' => $internal_flow ? 'yes' : 'no', '@found' => count($found_dumps) ? implode(', ', $found_dumps) : 'no dump at all')));
+        }
+        else {
+          // SECURITY: $db_name derives from alias context; $oct_db_* originate
+          // in BOA root control files but may contain shell-special characters.
+          // Escape every interpolated value. See DECISIONS.md Decision 002.
+          $command = $myloader_path
+            . ' --database=' . escapeshellarg($db_name)
+            . ' --host=' . escapeshellarg($oct_db_host)
+            . ' --user=' . escapeshellarg($oct_db_user)
+            . ' --password=' . escapeshellarg($oct_db_pass)
+            . ' --port=' . escapeshellarg($oct_db_port)
+            . ' --directory=' . escapeshellarg($oct_db_dirx)
+            . ' --threads=' . escapeshellarg($threads)
+            . ' --drop-table=DROP --verbose=2';
+          if (provision_file()->exists($myquick_creds_log)->status()) {
+            drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+          }
+          $success = drush_shell_exec($command);
 
-        if (!$success) {
-          // Never interpolate $command into messages: it carries --password.
-          drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+          if (!$success) {
+            // Never interpolate $command into messages: it carries --password.
+            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+          }
         }
 
         // Delete pre-db-import flag file.
