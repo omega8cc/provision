@@ -54,6 +54,17 @@ function drush_provision_backdrop_pre_provision_restore($restore_file) {
       ->succeed('Generated blank ' . $local_description)
       ->fail('Could not generate ' . $local_description);
   }
+  // The safety copy is registered in the panel as a real backup of this
+  // site, so it must honour the backup contract: self-contained, with the
+  // database inside the archive (see the Drupal-layer pre-restore hook for
+  // the full rationale). Clone/migrate pre-hooks are separate; their fast
+  // path is untouched.
+  if (!defined('SELECTED_BACKUP_MODE')) {
+    define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
+  }
+  drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
+  drush_set_option('backup_mode', 'site_files_with_mysqldump');
+  drush_log(dt('Restore safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_invoke('provision-backup');
 }
 

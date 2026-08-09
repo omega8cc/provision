@@ -206,15 +206,29 @@ function drush_provision_backdrop_provision_backup() {
     }
   }
 
-  if (isset($backup_mode) && $backup_mode == 'backup_mysqldump_only') {
-    $exclude_tag = "touch" . drush_provision_backdrop_provision_backup_get_exclusions_sqldump();
-    $exclude_clean = "rm" . drush_provision_backdrop_provision_backup_get_exclusions_sqldump();
+  // Tag the excluded directories with exclude.tag markers for tar, per
+  // existing directory only: a fresh site lacks most of the excluded
+  // directories, and a wholesale `touch dir1/exclude.tag dir2/...` fails
+  // the whole command on the first missing one. Stale tags are cleared
+  // first (a leftover tag makes tar skip that directory in every future
+  // backup). Mirrors the Drupal-layer backup.
+  $exclusion_dirs = drush_provision_backdrop_provision_backup_get_exclusion_dirs(isset($backup_mode) ? $backup_mode : NULL);
+  $failed_tags = array();
+  foreach ($exclusion_dirs as $exclusion_dir) {
+    if (!is_dir($exclusion_dir)) {
+      continue;
+    }
+    $exclusion_tag = $exclusion_dir . '/exclude.tag';
+    if (is_file($exclusion_tag)) {
+      @unlink($exclusion_tag);
+    }
+    if (!@touch($exclusion_tag)) {
+      $failed_tags[] = $exclusion_tag;
+    }
   }
-  else {
-    $exclude_tag = "touch" . drush_provision_backdrop_provision_backup_get_exclusions();
-    $exclude_clean = "rm" . drush_provision_backdrop_provision_backup_get_exclusions();
+  if (!empty($failed_tags)) {
+    drush_log(dt('Could not write the backup exclusion tags (@tags); the archive may include directories that are normally excluded', array('@tags' => implode(', ', $failed_tags))), 'warning');
   }
-  drush_shell_exec($exclude_tag);
 
   // A site dir must never contain device/block/fifo/socket special files. A
   // stray one is archived by tar as a special member; a later non-root tar -pxf
@@ -314,7 +328,22 @@ function drush_provision_backdrop_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
-  drush_shell_exec($exclude_clean);
+  // Remove the tags per existing file; a tag that exists but cannot be
+  // removed silently truncates every future backup, so say so loudly.
+  $stale_tags = array();
+  foreach ($exclusion_dirs as $exclusion_dir) {
+    $exclusion_tag = $exclusion_dir . '/exclude.tag';
+    if (!is_file($exclusion_tag)) {
+      continue;
+    }
+    @unlink($exclusion_tag);
+    if (is_file($exclusion_tag)) {
+      $stale_tags[] = $exclusion_tag;
+    }
+  }
+  if (!empty($stale_tags)) {
+    drush_log(dt('Could not remove the backup exclusion tags (@tags) - a stale tag would silently shrink later backups; remove exclude.tag by hand', array('@tags' => implode(', ', $stale_tags))), 'warning');
+  }
 
   // Get the size of the backup
   $size = filesize($backup_file);
@@ -333,6 +362,22 @@ function drush_provision_backdrop_provision_backup() {
   if (!$result && !drush_get_option('force', false)) {
     drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for backdrop"));
   }
+}
+
+/**
+ * Return the list of directories to exclude from a backup archive.
+ *
+ * Mirrors the Drupal-layer helper: mysqldump-only mode excludes all content
+ * directories; every other mode excludes only the volatile cache
+ * directories, with the alter hook applied.
+ */
+function drush_provision_backdrop_provision_backup_get_exclusion_dirs($backup_mode = NULL) {
+  if ($backup_mode == 'backup_mysqldump_only') {
+    return PROVISION_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP;
+  }
+  $directories = PROVISION_BACKUP_EXCLUDED_DIRECTORIES;
+  drush_command_invoke_all_ref('provision_backup_exclusions_alter', $directories);
+  return $directories;
 }
 
 function drush_provision_backdrop_provision_backup_get_exclusions() {
