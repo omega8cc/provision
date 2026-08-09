@@ -46,6 +46,21 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
       ->succeed('Generated blank ' . $local_description)
       ->fail('Could not generate ' . $local_description);
   }
+  // The safety copy is registered in the panel as a real backup of this
+  // site, so it must honour the backup contract: self-contained, with the
+  // database inside the archive. Force the restorable mode for this
+  // in-process provision-backup - the modeless fast path would dump only
+  // to the transient shared tmp_expim store and pack files/private as bare
+  // symlinks, leaving a registered backup that cannot restore its own
+  // database once tmp_expim rotates. Safe here: with is_restore the deploy
+  // never reads tmp_expim, and clone/migrate run their own pre-hooks, not
+  // this one, so their fast path is untouched.
+  if (!defined('SELECTED_BACKUP_MODE')) {
+    define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
+  }
+  drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
+  drush_set_option('backup_mode', 'site_files_with_mysqldump');
+  drush_log(dt('Restore safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_invoke('provision-backup');
 }
 
