@@ -25,36 +25,7 @@ function drush_db_post_provision_deploy() {
   $oct_db_test = FALSE;
   $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
-  if (!provision_is_hostmaster_site()) {
-    if (defined('SELECTED_BACKUP_MODE')) {
-      $backup_mode = SELECTED_BACKUP_MODE;
-      drush_set_option('backup_mode', $backup_mode);
-    }
-    else {
-      $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    }
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          if (!defined('SELECTED_BACKUP_MODE')) {
-            define('SELECTED_BACKUP_MODE', $backup_mode);
-          }
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-      }
-      else {
-        drush_log("Backup mode control file not found.", 'info');
-      }
-    }
-    if (isset($backup_mode)) {
-      if (!defined('SELECTED_BACKUP_MODE')) {
-        define('SELECTED_BACKUP_MODE', $backup_mode);
-      }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_db_post_provision_deploy is: @var", array('@var' => $backup_mode)), 'info');
-    }
-  }
+  $backup_mode = provision_backup_mode_resolve();
 
   if (empty($backup_mode)) {
     $aegir_root = d('@server_master')->aegir_root;
