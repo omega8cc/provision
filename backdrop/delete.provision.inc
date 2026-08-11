@@ -15,11 +15,13 @@ function drush_provision_backdrop_pre_provision_delete($backup_file = NULL) {
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  // Backup mode ctrl file cleanup
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   if (d()->type === 'site') {
+    // Backup mode ctrl file cleanup, only where the safety backup follows:
+    // a platform or server delete takes no backup, and unlinking there would
+    // destroy a concurrent backup task's live mode for nothing.
+    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+      unlink(AEGIR_BACKUP_MODE_CTRL);
+    }
     drush_set_option('force', true, 'process');
     if (!empty($backup_file) && !strpos($backup_file, '/')) {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
