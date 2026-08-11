@@ -60,6 +60,13 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
     drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND');
   }
 
+  // Latch the mode HERE, before the filename branches: an explicit-$backup_file
+  // invocation used to skip suggest_filename and reach the db pre hook with
+  // nothing latched, so a ctrl-selected site_files_without_db_backup still
+  // generated database.sql - straight into the "no DB" archive - and the ctrl
+  // file was never consumed. Resolving up front makes both branches identical.
+  provision_backup_mode_resolve();
+
   if ($backup_file) {
     if (provision_file()->exists($backup_file)->status()) {
       drush_set_error('PROVISION_BACKUP_ALREADY_EXISTS', dt('Back up file @path already exists.', array('@path' => $backup_file)));
@@ -94,37 +101,7 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
  */
 function drush_provision_drupal_provision_backup_suggest_filename() {
 
-  if (!provision_is_hostmaster_site()) {
-    if (defined('SELECTED_BACKUP_MODE')) {
-      $backup_mode = SELECTED_BACKUP_MODE;
-      drush_set_option('backup_mode', $backup_mode);
-    }
-    else {
-      $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    }
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          if (!defined('SELECTED_BACKUP_MODE')) {
-            define('SELECTED_BACKUP_MODE', $backup_mode);
-            define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
-          }
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-      }
-      else {
-        drush_log("Backup mode control file not found.", 'info');
-      }
-    }
-    if (isset($backup_mode)) {
-      if (!defined('SELECTED_BACKUP_MODE')) {
-        define('SELECTED_BACKUP_MODE', $backup_mode);
-      }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_suggest_filename is: @var", array('@var' => $backup_mode)), 'info');
-    }
-  }
+  $backup_mode = provision_backup_mode_resolve();
 
   // If mounted filesystem for files then use zst (optionally with tar pipelines)
   $mounted_arch = "/data/disk/arch";
@@ -140,7 +117,11 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
       $suffix = drush_get_option('provision_backup_suffix', '.tar.zst');
     }
   }
-  elseif (isset($backup_mode)) {
+  elseif (!provision_is_hostmaster_site()) {
+    // Historically keyed on isset($backup_mode), which was assigned exactly
+    // for non-hostmaster flows; spelled out now that the resolver defines
+    // $backup_mode (as FALSE) for hostmaster too - the hostmaster suffix
+    // must stay '.tar'.
     if ($backup_mode == 'backup_mysqldump_only' ||
       $backup_mode == 'site_files_without_db_backup' ||
       $backup_mode == 'site_files_with_mysqldump') {
@@ -200,37 +181,7 @@ function drush_provision_drupal_provision_backup() {
     return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND', dt('cannot change directory to %dir', array('%dir' => d()->site_path)));
   }
 
-  if (!provision_is_hostmaster_site()) {
-    if (defined('SELECTED_BACKUP_MODE')) {
-      $backup_mode = SELECTED_BACKUP_MODE;
-      drush_set_option('backup_mode', $backup_mode);
-    }
-    else {
-      $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-    }
-    if (empty($backup_mode)) {
-      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-        $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
-        if ($backup_mode) {
-          drush_set_option('backup_mode', $backup_mode);
-          if (!defined('SELECTED_BACKUP_MODE')) {
-            define('SELECTED_BACKUP_MODE', $backup_mode);
-            define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
-          }
-          drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-        }
-      }
-      else {
-        drush_log("Backup mode control file not found.", 'info');
-      }
-    }
-    if (isset($backup_mode)) {
-      if (!defined('SELECTED_BACKUP_MODE')) {
-        define('SELECTED_BACKUP_MODE', $backup_mode);
-      }
-      drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
-    }
-  }
+  $backup_mode = provision_backup_mode_resolve();
 
   // Tag the excluded directories with exclude.tag markers for tar. Only a
   // directory that exists can carry a tag: a fresh site lacks most of the
@@ -450,37 +401,7 @@ function drush_provision_drupal_post_provision_backup() {
     $oct_db_test = FALSE;
     $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
-    if (!provision_is_hostmaster_site()) {
-      if (defined('SELECTED_BACKUP_MODE')) {
-        $backup_mode = SELECTED_BACKUP_MODE;
-        drush_set_option('backup_mode', $backup_mode);
-      }
-      else {
-        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-      }
-      if (empty($backup_mode)) {
-        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
-          if ($backup_mode) {
-            drush_set_option('backup_mode', $backup_mode);
-            if (!defined('SELECTED_BACKUP_MODE')) {
-              define('SELECTED_BACKUP_MODE', $backup_mode);
-              define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
-            }
-            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-          }
-        }
-        else {
-          drush_log("Backup mode control file not found.", 'info');
-        }
-      }
-      if (isset($backup_mode)) {
-        if (!defined('SELECTED_BACKUP_MODE')) {
-          define('SELECTED_BACKUP_MODE', $backup_mode);
-        }
-        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_post_provision_backup is: @var", array('@var' => $backup_mode)), 'info');
-      }
-    }
+    $backup_mode = provision_backup_mode_resolve();
 
     if (empty($backup_mode)) {
       $aegir_root = d('@server_master')->aegir_root;
@@ -530,37 +451,7 @@ function drush_provision_drupal_provision_backup_rollback() {
     $oct_db_test = FALSE;
     $myquick_creds_log = '/data/conf/_myquick_creds_log.txt';
 
-    if (!provision_is_hostmaster_site()) {
-      if (defined('SELECTED_BACKUP_MODE')) {
-        $backup_mode = SELECTED_BACKUP_MODE;
-        drush_set_option('backup_mode', $backup_mode);
-      }
-      else {
-        $backup_mode = drush_get_option('selected_backup_mode', FALSE);
-      }
-      if (empty($backup_mode)) {
-        if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
-          $backup_mode = provision_backup_mode_sanitize(file_get_contents(AEGIR_BACKUP_MODE_CTRL));
-          if ($backup_mode) {
-            drush_set_option('backup_mode', $backup_mode);
-            if (!defined('SELECTED_BACKUP_MODE')) {
-              define('SELECTED_BACKUP_MODE', $backup_mode);
-              define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
-            }
-            drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
-          }
-        }
-        else {
-          drush_log("Backup mode control file not found.", 'info');
-        }
-      }
-      if (isset($backup_mode)) {
-        if (!defined('SELECTED_BACKUP_MODE')) {
-          define('SELECTED_BACKUP_MODE', $backup_mode);
-        }
-        drush_log(dt("DRUSH/GET/OPTION selected_backup_mode in drush_provision_drupal_provision_backup_rollback is: @var", array('@var' => $backup_mode)), 'info');
-      }
-    }
+    $backup_mode = provision_backup_mode_resolve();
 
     if (empty($backup_mode)) {
       $aegir_root = d('@server_master')->aegir_root;

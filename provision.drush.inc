@@ -532,6 +532,51 @@ function provision_backup_mode_sanitize($backup_mode) {
 }
 
 /**
+ * Resolve this process's backup mode exactly once.
+ *
+ * The first call latches the outcome in SELECTED_BACKUP_MODE - including the
+ * FALSE "this process is modeless" verdict - and every later call returns the
+ * latch. That is what makes an implicit (clone/migrate/delete/restore) backup
+ * immune to a ctrl file appearing mid-flow: the per-hook copies of this block
+ * used to gate the ctrl read on empty($backup_mode), and empty(FALSE) is TRUE,
+ * so a modeless process re-read the ctrl file in every later hook and could
+ * adopt a concurrent task's mode minutes into its own run.
+ *
+ * AEGIR_BACKUP_MODE_CTRL_READ is latched here iff the ctrl file content became
+ * the operative mode; the backup validate consume keys on that provenance.
+ *
+ * Hostmaster flows never carry a mode and never touch the ctrl file: they get
+ * FALSE without latching anything, so a concurrent task's live channel stays
+ * intact and $backup_mode is a defined, falsy local in every caller.
+ */
+function provision_backup_mode_resolve() {
+  if (defined('SELECTED_BACKUP_MODE')) {
+    return SELECTED_BACKUP_MODE;
+  }
+  if (provision_is_hostmaster_site()) {
+    return FALSE;
+  }
+  $backup_mode = provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE));
+  if (empty($backup_mode)) {
+    if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+      $backup_mode = provision_backup_mode_sanitize(@file_get_contents(AEGIR_BACKUP_MODE_CTRL));
+      if ($backup_mode) {
+        define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
+        drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
+      }
+    }
+    else {
+      drush_log("Backup mode control file not found.", 'info');
+    }
+  }
+  define('SELECTED_BACKUP_MODE', $backup_mode);
+  if ($backup_mode) {
+    drush_set_option('backup_mode', $backup_mode);
+  }
+  return $backup_mode;
+}
+
+/**
  * determine if overall load of the machine is critical
  *
  * We use the "average system load" of the system as a metric, as available
