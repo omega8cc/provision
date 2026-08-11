@@ -15,6 +15,10 @@ function drush_provision_backdrop_pre_provision_delete($backup_file = NULL) {
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // Backup mode ctrl file cleanup
+  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+    unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
   if (d()->type === 'site') {
     drush_set_option('force', true, 'process');
     if (!empty($backup_file) && !strpos($backup_file, '/')) {

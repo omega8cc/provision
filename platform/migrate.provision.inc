@@ -350,8 +350,8 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       $encryption_was_enabled = drush_get_option('encryption_was_enabled');
       if ($encryption_was_enabled) {
         drush_log(dt("LOG/ENABLE encryption_was_enabled WAS @this", array('@this' => $encryption_was_enabled)), 'info');
-        $temp_options_ssl_enabled = drush_get_option('encryption_was_enabled');
-        $temp_options_ssl_key = drush_get_option('encryption_was_enabled');
+        $temp_options_ssl_enabled = drush_get_option('temp_options_ssl_enabled');
+        $temp_options_ssl_key = drush_get_option('temp_options_ssl_key');
         $temp_uri_verify = drush_get_option('temp_uri_verify');
         if ($temp_options_ssl_enabled && $temp_options_ssl_key) {
           drush_log(dt("LOG/ENABLE temp_options_ssl_enabled WAS @this", array('@this' => $temp_options_ssl_enabled)), 'info');
