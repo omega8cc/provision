@@ -56,10 +56,12 @@ function drush_provision_backdrop_provision_backup_validate($backup_file = NULL)
   // One-shot consume: by now the mode (if any) is latched in
   // SELECTED_BACKUP_MODE for this whole process; removing the ctrl file
   // immediately shrinks the window in which a concurrent task's implicit
-  // backup could inherit it. Only when a real mode was READ - the constant
-  // latches FALSE on modeless backups, and consuming then could delete a
-  // concurrent task's freshly written file this process never used.
-  if (defined('SELECTED_BACKUP_MODE') && SELECTED_BACKUP_MODE && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+  // backup could inherit it. Only when the mode was actually READ from
+  // the ctrl file - the constant latches FALSE on modeless backups and
+  // is force-defined without any read for the restore safety copy;
+  // consuming in either case could delete a concurrent task's freshly
+  // written file this process never used.
+  if (defined('AEGIR_BACKUP_MODE_CTRL_READ') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
     @unlink(AEGIR_BACKUP_MODE_CTRL);
   }
 
@@ -85,6 +87,7 @@ function drush_provision_backdrop_provision_backup_suggest_filename() {
           drush_set_option('backup_mode', $backup_mode);
           if (!defined('SELECTED_BACKUP_MODE')) {
             define('SELECTED_BACKUP_MODE', $backup_mode);
+            define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
@@ -190,6 +193,7 @@ function drush_provision_backdrop_provision_backup() {
           drush_set_option('backup_mode', $backup_mode);
           if (!defined('SELECTED_BACKUP_MODE')) {
             define('SELECTED_BACKUP_MODE', $backup_mode);
+            define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
           }
           drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
         }
@@ -430,6 +434,7 @@ function drush_provision_backdrop_post_provision_backup() {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
               define('SELECTED_BACKUP_MODE', $backup_mode);
+              define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
@@ -509,6 +514,7 @@ function drush_provision_backdrop_provision_backup_rollback() {
             drush_set_option('backup_mode', $backup_mode);
             if (!defined('SELECTED_BACKUP_MODE')) {
               define('SELECTED_BACKUP_MODE', $backup_mode);
+              define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
             }
             drush_log(dt("BACKUP/MODE/SET from control file: @var", array('@var' => $backup_mode)), 'success');
           }
