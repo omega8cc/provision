@@ -57,6 +57,16 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  // Purge any cache namespace left in the shared Valkey/Redis store by a
+  // previously deleted site with the same URI, BEFORE the deployed site runs
+  // any code: clone, rename and restore land a site here without passing
+  // through provision-install, so the target would inherit a stale namespace
+  // (deleted site's compiled container and routing included) exactly the way
+  // a same-name reinstall did. For a same-URI deploy over an existing site
+  // (migrate/restore in place) this only flushes that site's own cache
+  // mid-maintenance -- the deploy tail rebuilds caches anyway. Non-fatal by
+  // design: an unreachable cache store must not fail a deploy.
+  _provision_valkey_purge_site(d()->uri);
   $extracted = provision_file()->extract($backup_file, drush_get_option('extract_path'))
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
