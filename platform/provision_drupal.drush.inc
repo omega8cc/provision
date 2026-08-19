@@ -1351,3 +1351,304 @@ function _provision_find_profile_languages($profile_path) {
   }
   return array_keys($languages);
 }
+
+/**
+ * Resolve the box-level Valkey/Redis wiring the hosted sites cache through.
+ *
+ * The rendered settings chain partial (global-valkey.inc, or global-redis.inc
+ * on Redis-legacy boxes) carries the connection literals every site's
+ * settings.php consumes, and the live password additionally sits in a pass
+ * file the same chain prefers. Both are world-readable by design (the web
+ * runtime reads them as the site user), so the account user running
+ * Provision tasks can read them too. Parse the rendered literals instead of
+ * re-deriving any value: these files are the system of record for what the
+ * sites actually connect to. Returns FALSE when the box has no such wiring
+ * (e.g. vanilla Aegir), which callers treat as nothing-to-purge.
+ */
+function _provision_valkey_conf() {
+  $conf_file = '/data/conf/global/global-valkey.inc';
+  if (!is_readable($conf_file)) {
+    $conf_file = '/data/conf/global/global-redis.inc';
+  }
+  if (!is_readable($conf_file)) {
+    return FALSE;
+  }
+  $data = file_get_contents($conf_file);
+  if (!is_string($data) || $data === '') {
+    return FALSE;
+  }
+  $host = '';
+  $port = 0;
+  $pass = '';
+  if (preg_match("/\\\$settings\\['redis\\.connection'\\]\\['host'\\]\\s*=\\s*'([^']+)'/", $data, $m)) {
+    $host = $m[1];
+  }
+  if (preg_match("/\\\$settings\\['redis\\.connection'\\]\\['port'\\]\\s*=\\s*'?(\\d+)'?/", $data, $m)) {
+    $port = (int) $m[1];
+  }
+  if (preg_match("/\\\$settings\\['redis\\.connection'\\]\\['password'\\]\\s*=\\s*'([^']*)'/", $data, $m)) {
+    $pass = $m[1];
+  }
+  if ($host === '') {
+    return FALSE;
+  }
+  // The pass file overrides the rendered literal, mirroring the runtime chain
+  // (global-if-valkey.inc reads the same file before probing the server).
+  $pass_file = '/data/conf/valkey/pass.inc';
+  if (is_readable($pass_file)) {
+    $pass_live = trim((string) @file_get_contents($pass_file));
+    if ($pass_live !== '') {
+      $pass = $pass_live;
+    }
+  }
+  return array('host' => $host, 'port' => $port, 'pass' => $pass);
+}
+
+/**
+ * Read one RESP reply from an open Valkey/Redis stream.
+ *
+ * Returns array('type' => status|error|int|bulk|array, 'value' => mixed),
+ * or FALSE on a broken/timed-out stream. Array replies nest the same shape.
+ */
+function _provision_valkey_read_reply($fp) {
+  $line = fgets($fp);
+  if ($line === FALSE) {
+    return FALSE;
+  }
+  $type = substr($line, 0, 1);
+  $payload = rtrim(substr($line, 1), "\r\n");
+  if ($type === '+') {
+    return array('type' => 'status', 'value' => $payload);
+  }
+  if ($type === '-') {
+    return array('type' => 'error', 'value' => $payload);
+  }
+  if ($type === ':') {
+    return array('type' => 'int', 'value' => (int) $payload);
+  }
+  if ($type === '$') {
+    $blen = (int) $payload;
+    if ($blen < 0) {
+      return array('type' => 'bulk', 'value' => NULL);
+    }
+    $data = '';
+    $need = $blen + 2;
+    while (strlen($data) < $need) {
+      $chunk = fread($fp, $need - strlen($data));
+      if ($chunk === FALSE || $chunk === '') {
+        return FALSE;
+      }
+      $data .= $chunk;
+    }
+    return array('type' => 'bulk', 'value' => substr($data, 0, $blen));
+  }
+  if ($type === '*') {
+    $count = (int) $payload;
+    if ($count < 0) {
+      return array('type' => 'array', 'value' => NULL);
+    }
+    $items = array();
+    for ($i = 0; $i < $count; $i++) {
+      $item = _provision_valkey_read_reply($fp);
+      if ($item === FALSE) {
+        return FALSE;
+      }
+      $items[] = $item;
+    }
+    return array('type' => 'array', 'value' => $items);
+  }
+  return FALSE;
+}
+
+/**
+ * Send one command to Valkey/Redis over an open stream and read the reply.
+ *
+ * Speaks raw RESP so the purge works from the Aegir Drush 8 CLI on any PHP
+ * the box pins (no phpredis dependency, PHP 5.6 floor) and the password never
+ * appears on a command line. Returns the _provision_valkey_read_reply() shape
+ * or FALSE on a broken stream.
+ */
+function _provision_valkey_cmd($fp, $args) {
+  $out = '*' . count($args) . "\r\n";
+  foreach ($args as $arg) {
+    $arg = (string) $arg;
+    $out .= '$' . strlen($arg) . "\r\n" . $arg . "\r\n";
+  }
+  $len = strlen($out);
+  $sent = 0;
+  while ($sent < $len) {
+    $n = fwrite($fp, substr($out, $sent));
+    if ($n === FALSE || $n === 0) {
+      return FALSE;
+    }
+    $sent += $n;
+  }
+  return _provision_valkey_read_reply($fp);
+}
+
+/**
+ * Delete every key matching one prefix in the currently SELECTed database.
+ *
+ * Purge-to-empty: one SCAN pass can miss keys written mid-iteration by
+ * still-in-flight workers of a dying site -- observed live, where a single
+ * pass left survivors and the freshly installed same-name site then rebuilt
+ * its router table from the stale cached container. Re-sweeps until a full
+ * pass finds nothing, bounded so a persistent concurrent writer cannot make
+ * the task spin forever. UNLINK keeps the deletion off the server's main
+ * thread; ancient pre-4.0 Redis without it falls back to DEL for the rest of
+ * the run (via $use_del, shared across calls by reference).
+ *
+ * Returns the number of keys deleted, or FALSE on a protocol/stream failure.
+ */
+function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
+  $deleted = 0;
+  for ($sweep = 0; $sweep < 8; $sweep++) {
+    $found = 0;
+    $cursor = '0';
+    do {
+      $reply = _provision_valkey_cmd($fp, array('SCAN', $cursor, 'MATCH', $prefix . '*', 'COUNT', '500'));
+      if ($reply === FALSE || $reply['type'] !== 'array' || !is_array($reply['value']) || count($reply['value']) < 2) {
+        return FALSE;
+      }
+      $cursor = (string) $reply['value'][0]['value'];
+      $keys = array();
+      if (is_array($reply['value'][1]['value'])) {
+        foreach ($reply['value'][1]['value'] as $key_reply) {
+          if (isset($key_reply['value']) && is_string($key_reply['value'])) {
+            $keys[] = $key_reply['value'];
+          }
+        }
+      }
+      if (count($keys)) {
+        $found += count($keys);
+        $verb = $use_del ? 'DEL' : 'UNLINK';
+        $dreply = _provision_valkey_cmd($fp, array_merge(array($verb), $keys));
+        if ($dreply !== FALSE && $dreply['type'] === 'error' && !$use_del) {
+          $use_del = TRUE;
+          $dreply = _provision_valkey_cmd($fp, array_merge(array('DEL'), $keys));
+        }
+        if ($dreply === FALSE) {
+          return FALSE;
+        }
+        if ($dreply['type'] === 'int') {
+          $deleted += $dreply['value'];
+        }
+      }
+    } while ($cursor !== '0');
+    if ($found === 0) {
+      break;
+    }
+    if ($sweep == 7) {
+      drush_log(dt('VALKEY/PURGE sweep bound reached for prefix !prefix -- something kept writing; keys removed so far: !n', array('!prefix' => $prefix, '!n' => $deleted)), 'warning');
+    }
+  }
+  return $deleted;
+}
+
+/**
+ * Purge every cache namespace belonging to one site from the shared store.
+ *
+ * The hosted sites share one Valkey/Redis instance; each site's keys are
+ * scoped only by prefix: md5(<host>)_sn_* (D8+ integration, compiled
+ * container and routing included), md5(<host>)_n_* (D7 integration) and
+ * <host>_z_* (front-end page cache, also consumed as cache_prefix when the
+ * front-end block is active). All three use the www-stripped host, and for
+ * subdirectory sites the host part only -- so a subdir purge flushes its
+ * siblings' shared namespace, which is safe (cache only) and unavoidable
+ * (the namespace does not distinguish them). The md5 scoping makes matching
+ * another site's keys impossible; the plain-host _z_ pattern cannot match a
+ * different host either (the match is anchored at the key start).
+ *
+ * Databases are enumerated from INFO keyspace (falling back to 0..15) rather
+ * than trusting the single rendered base literal: the poison was observed in
+ * the configured base, but containers have also been observed in db0, and a
+ * box whose base changed over time leaves keys behind in the old base. The
+ * prefixes are site-unique, so sweeping every populated database stays
+ * strictly site-scoped.
+ *
+ * Non-fatal by design: logs and returns FALSE on any failure -- a cache
+ * purge must never fail a delete or install task. Boxes without the wiring
+ * (vanilla Aegir) skip silently.
+ */
+function _provision_valkey_purge_site($uri) {
+  $host = strtolower(trim((string) $uri));
+  if ($host === '') {
+    return FALSE;
+  }
+  $slash = strpos($host, '/');
+  if ($slash !== FALSE) {
+    $host = substr($host, 0, $slash);
+  }
+  // Strip the leading www. exactly like the runtime prefix builders do.
+  $host = preg_replace('`^www\.`', '', $host);
+  if (!is_string($host) || $host === '') {
+    return FALSE;
+  }
+  $conf = _provision_valkey_conf();
+  if ($conf === FALSE) {
+    drush_log(dt('VALKEY/PURGE no cache store wiring on this box; nothing to purge for !uri', array('!uri' => $uri)), 'info');
+    return TRUE;
+  }
+  $remote = 'tcp://' . $conf['host'] . ':' . $conf['port'];
+  if (substr($conf['host'], 0, 1) === '/') {
+    $remote = 'unix://' . $conf['host'];
+  }
+  $errno = 0;
+  $errstr = '';
+  $fp = @stream_socket_client($remote, $errno, $errstr, 3);
+  if (!$fp) {
+    drush_log(dt('VALKEY/PURGE could not connect to !remote (!err); stale cache keys for !uri may remain', array('!remote' => $remote, '!err' => $errstr, '!uri' => $uri)), 'warning');
+    return FALSE;
+  }
+  stream_set_timeout($fp, 5);
+  if ($conf['pass'] !== '') {
+    $reply = _provision_valkey_cmd($fp, array('AUTH', $conf['pass']));
+    if ($reply === FALSE || $reply['type'] !== 'status') {
+      drush_log(dt('VALKEY/PURGE authentication failed; stale cache keys for !uri may remain', array('!uri' => $uri)), 'warning');
+      fclose($fp);
+      return FALSE;
+    }
+  }
+  // Enumerate populated databases; INFO keyspace only lists dbs with keys.
+  $dbs = array();
+  $reply = _provision_valkey_cmd($fp, array('INFO', 'keyspace'));
+  if ($reply !== FALSE && $reply['type'] === 'bulk' && is_string($reply['value'])) {
+    if (preg_match_all('/^db(\d+):/m', $reply['value'], $m)) {
+      $dbs = $m[1];
+    }
+  }
+  else {
+    $dbs = range(0, 15);
+  }
+  $prefixes = array(
+    md5($host) . '_sn_',
+    md5($host) . '_n_',
+    $host . '_z_'
+  );
+  $total = 0;
+  $failed = FALSE;
+  $use_del = FALSE;
+  foreach ($dbs as $db_n) {
+    $reply = _provision_valkey_cmd($fp, array('SELECT', (string) $db_n));
+    if ($reply === FALSE || $reply['type'] !== 'status') {
+      continue;
+    }
+    foreach ($prefixes as $prefix) {
+      $n = _provision_valkey_purge_prefix($fp, $prefix, $use_del);
+      if ($n === FALSE) {
+        $failed = TRUE;
+        drush_log(dt('VALKEY/PURGE scan failed in db !db for prefix !prefix; stale cache keys for !uri may remain', array('!db' => $db_n, '!prefix' => $prefix, '!uri' => $uri)), 'warning');
+        continue;
+      }
+      if ($n > 0) {
+        $total += $n;
+        drush_log(dt('VALKEY/PURGE removed !n stale cache keys in db !db (prefix !prefix) for !uri', array('!n' => $n, '!db' => $db_n, '!prefix' => $prefix, '!uri' => $uri)), 'success');
+      }
+    }
+  }
+  fclose($fp);
+  if ($total === 0 && !$failed) {
+    drush_log(dt('VALKEY/PURGE no stale cache keys found for !uri', array('!uri' => $uri)), 'info');
+  }
+  return $failed ? FALSE : TRUE;
+}
