@@ -1584,6 +1584,15 @@ function _provision_valkey_purge_site($uri) {
   if (!is_string($host) || $host === '') {
     return FALSE;
   }
+  // The plain-host <host>_z_ prefix goes into a SCAN MATCH glob verbatim, so
+  // a host carrying glob metacharacters (*, ?, [) could match other sites'
+  // keys. Site URIs are hostnames, so gate on the DNS-safe charset and skip
+  // anything else (the md5 prefixes would be safe, but a URI this malformed
+  // has no namespace of its own to purge anyway).
+  if (!preg_match('/^[a-z0-9._-]+$/', $host)) {
+    drush_log(dt('VALKEY/PURGE host part of !uri is not a plain hostname; skipping purge', array('!uri' => $uri)), 'warning');
+    return FALSE;
+  }
   $conf = _provision_valkey_conf();
   if ($conf === FALSE) {
     drush_log(dt('VALKEY/PURGE no cache store wiring on this box; nothing to purge for !uri', array('!uri' => $uri)), 'info');
@@ -1597,6 +1606,13 @@ function _provision_valkey_purge_site($uri) {
   $errstr = '';
   $fp = @stream_socket_client($remote, $errno, $errstr, 3);
   if (!$fp) {
+    // The rendered settings chain is deployed on every box, store or not, so
+    // a refused connection on a box with no server installed just means
+    // nothing was ever cached -- do not raise a false alarm there.
+    if (!is_file('/etc/valkey/valkey.conf') && !is_file('/etc/redis/redis.conf')) {
+      drush_log(dt('VALKEY/PURGE no cache store on this box; nothing to purge for !uri', array('!uri' => $uri)), 'info');
+      return TRUE;
+    }
     drush_log(dt('VALKEY/PURGE could not connect to !remote (!err); stale cache keys for !uri may remain', array('!remote' => $remote, '!err' => $errstr, '!uri' => $uri)), 'warning');
     return FALSE;
   }
@@ -1610,9 +1626,20 @@ function _provision_valkey_purge_site($uri) {
     }
   }
   // Enumerate populated databases; INFO keyspace only lists dbs with keys.
+  // A FALSE reply means the stream itself died (EOF/timeout) -- a broken
+  // socket cannot be reused and continuing would silently no-op the whole
+  // purge while reporting a clean store, so abort loudly instead. An error
+  // REPLY (server alive, INFO renamed/restricted) keeps the standard-range
+  // fallback: probing past the configured databases count is benign (see the
+  // SELECT handling below).
   $dbs = array();
   $reply = _provision_valkey_cmd($fp, array('INFO', 'keyspace'));
-  if ($reply !== FALSE && $reply['type'] === 'bulk' && is_string($reply['value'])) {
+  if ($reply === FALSE) {
+    drush_log(dt('VALKEY/PURGE connection lost while enumerating databases; stale cache keys for !uri may remain', array('!uri' => $uri)), 'warning');
+    fclose($fp);
+    return FALSE;
+  }
+  if ($reply['type'] === 'bulk' && is_string($reply['value'])) {
     if (preg_match_all('/^db(\d+):/m', $reply['value'], $m)) {
       $dbs = $m[1];
     }
@@ -1630,15 +1657,35 @@ function _provision_valkey_purge_site($uri) {
   $use_del = FALSE;
   foreach ($dbs as $db_n) {
     $reply = _provision_valkey_cmd($fp, array('SELECT', (string) $db_n));
-    if ($reply === FALSE || $reply['type'] !== 'status') {
-      continue;
+    if ($reply === FALSE) {
+      // Stream died mid-run: nothing after this point would execute, so a
+      // silent continue would report success on a purge that never happened.
+      $failed = TRUE;
+      drush_log(dt('VALKEY/PURGE connection lost at database !db; stale cache keys for !uri may remain', array('!db' => $db_n, '!uri' => $uri)), 'warning');
+      break;
+    }
+    if ($reply['type'] !== 'status') {
+      $select_err = is_string($reply['value']) ? $reply['value'] : '';
+      if ($reply['type'] === 'error' && stripos($select_err, 'out of range') !== FALSE) {
+        // Benign: the standard-range fallback probes past the server's
+        // configured databases count (the shipped configs use 8 or 16).
+        continue;
+      }
+      // Any other refusal (NOAUTH, NOPERM, LOADING, ...) refuses every
+      // database the same way -- abort loudly rather than sweep 16 rejections
+      // into a false all-clear.
+      $failed = TRUE;
+      drush_log(dt('VALKEY/PURGE database !db refused: !err; stale cache keys for !uri may remain', array('!db' => $db_n, '!err' => $select_err, '!uri' => $uri)), 'warning');
+      break;
     }
     foreach ($prefixes as $prefix) {
       $n = _provision_valkey_purge_prefix($fp, $prefix, $use_del);
       if ($n === FALSE) {
+        // Protocol/stream failure: the socket may be desynchronised, so no
+        // later reply on it can be trusted -- abort the whole run.
         $failed = TRUE;
         drush_log(dt('VALKEY/PURGE scan failed in db !db for prefix !prefix; stale cache keys for !uri may remain', array('!db' => $db_n, '!prefix' => $prefix, '!uri' => $uri)), 'warning');
-        continue;
+        break 2;
       }
       if ($n > 0) {
         $total += $n;
