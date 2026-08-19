@@ -233,6 +233,9 @@ location ^~ /<?php print $subdir; ?> {
 
   ###
   ### Add recommended HTTP headers
+  ### Note: any location with its own add_header directives cancels ALL
+  ### inherited add_header lines, so this pair is re-stated verbatim in
+  ### every such static-serving location below. Do not deduplicate.
   ###
   add_header X-Content-Type-Options "nosniff";
   add_header X-Frame-Options "SAMEORIGIN" always;
@@ -305,6 +308,8 @@ location ^~ /<?php print $subdir; ?> {
     set $nocache_details "Skip";
     location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less))$ {
       expires max;
+      add_header X-Content-Type-Options "nosniff";
+      add_header X-Frame-Options "SAMEORIGIN" always;
       add_header X-Header "CDN Far Future Generator 1.0";
       add_header Cache-Control "no-transform, public";
       add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
@@ -313,6 +318,8 @@ location ^~ /<?php print $subdir; ?> {
     }
     location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/) {
       expires epoch;
+      add_header X-Content-Type-Options "nosniff";
+      add_header X-Frame-Options "SAMEORIGIN" always;
       add_header X-Header "CDN Far Future Generator 1.1";
       add_header Cache-Control "private, must-revalidate, proxy-revalidate";
       rewrite ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
@@ -699,6 +706,8 @@ location ^~ /<?php print $subdir; ?> {
     access_log off;
     log_not_found off;
     rewrite ^/<?php print $subdir; ?>/sites/.*/files/private/(.*)$ $scheme://$host/<?php print $subdir; ?>/system/files/private/$1 permanent;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "Private Generator 1.0a";
     set $nocache_details "Skip";
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
@@ -751,6 +760,8 @@ location ^~ /<?php print $subdir; ?> {
 <?php else: ?>
     add_header ETag "";
 <?php endif; ?>
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "AdvAgg Generator 2.0";
     add_header Cache-Control "max-age=31449600, no-transform, public";
     set $nocache_details "Skip";
@@ -921,6 +932,8 @@ location ^~ /<?php print $subdir; ?> {
     error_page 405 = @drupal_<?php print $subdir_loc; ?>;
     access_log off;
     log_not_found off;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "Boost Citrus 1.0";
     add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
     add_header Cache-Control "must-revalidate, post-check=0, pre-check=0";
