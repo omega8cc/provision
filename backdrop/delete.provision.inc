@@ -108,3 +108,26 @@ function drush_provision_backdrop_provision_delete() {
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
   }
 }
+
+/**
+ * Purge the deleted site's cache namespace from the shared Valkey/Redis store.
+ *
+ * Backdrop counterpart of the Drupal post-delete purge: the Backdrop redis
+ * integration namespaces keys by the site's DB coordinates (see
+ * _provision_valkey_purge_backdrop_site()), and Aegir mints db names
+ * deterministically from the URI, so a site recreated (or cloned into) the
+ * same name inherits the deleted predecessor's keys. The db credentials are
+ * read from the in-memory task context (the site's files are already gone by
+ * the post phase, but the options loaded with the alias are not). Runs as a
+ * post hook so the vhost is already removed and nothing repopulates the
+ * namespace mid-purge. Non-fatal by design; the install and deploy paths
+ * purge the same namespace again defensively before any site code runs.
+ */
+function drush_provision_backdrop_post_provision_delete() {
+  if (!provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (d()->type === 'site') {
+    _provision_valkey_purge_backdrop_site(d()->uri);
+  }
+}

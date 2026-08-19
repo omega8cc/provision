@@ -191,6 +191,17 @@ function drush_provision_backdrop_provision_deploy() {
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // Purge any cache namespace left in the shared Valkey/Redis store by a
+  // previously deleted site whose DB coordinates the deployed site now
+  // reuses, BEFORE the post hook's updatedb runs the first site code. Clone,
+  // rename and restore land Backdrop sites here without passing through
+  // provision-install, and Aegir mints db names deterministically from the
+  // URI, so a target named after a deleted site inherits its namespace. The
+  // pre hooks have already created the target db and written its settings,
+  // so the credentials in context are the ones the site will cache under.
+  // For a same-URI deploy over an existing site this only flushes that
+  // site's own cache mid-maintenance. Non-fatal by design.
+  _provision_valkey_purge_backdrop_site(d()->uri);
   _provision_backdrop_maintain_aliases();
   _provision_backdrop_create_directories();
 }
