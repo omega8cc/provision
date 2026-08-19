@@ -119,6 +119,14 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   $options['cdn'] = 0;
   unset($options['cdn']);
 
+  // Auto-disable the migration source on the clone. An association to another
+  // site is dark-by-design state: the clone gets a brand-new database user with
+  // no grant, so a carried association would compose a connection it cannot
+  // open. The front-end holds no record for a clone either, so the two agree.
+  // (A rename-migrate deliberately KEEPS it -- same node, same databases.)
+  unset($options['migrate_source_db']);
+  unset($options['migrate_source_uri']);
+
   if ($profile = drush_get_option('profile', FALSE)) {
     $options['profile'] = $profile;
   }
