@@ -70,6 +70,16 @@ function drush_provision_drupal_pre_provision_install() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  // Purge any cache namespace left in the shared Valkey/Redis store by a
+  // previously deleted site with the same URI, BEFORE the installer runs any
+  // site code: an observed delete+recreate cycle inherited ~1700 stale keys
+  // (the deleted site's compiled container and routing among them), and the
+  // fresh install then rebuilt its router table FROM the stale container --
+  // cache poison propagated into durable site state. The Delete task purges
+  // too; this is the defensive half covering sites deleted before that fix
+  // ran, or keys written in between. Non-fatal: an unreachable cache store
+  // must not fail an install, and the common case has nothing to purge.
+  _provision_valkey_purge_site(d()->uri);
   // This is the actual drupal provisioning requirements.
   _provision_drupal_create_directories();
 }

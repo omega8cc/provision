@@ -119,3 +119,28 @@ function drush_provision_drupal_provision_delete() {
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
   }
 }
+
+/**
+ * Purge the deleted site's cache namespaces from the shared Valkey/Redis store.
+ *
+ * The Delete task removes the vhost, the database and the site dir, but the
+ * site's keys in the shared cache store survive it: D8+ sites cache under
+ * md5(<host>)_sn_* (compiled service container and routing included), D7
+ * under md5(<host>)_n_*, the front-end page cache under <host>_z_*. A site
+ * recreated later under the same name inherits that namespace -- observed
+ * live as a phantom route answering from the deleted site's compiled
+ * container, a stale site name in titles, and the front page 404ing -- and
+ * neither a cache flush on the new site nor an FPM restart cures it, because
+ * the state lives in the store, not in the opcode/APCu caches. Runs as a
+ * post hook so the vhost is already gone and no web worker can repopulate
+ * the namespace mid-purge. Non-fatal by design; the install path purges the
+ * same namespaces again defensively before any site code runs.
+ */
+function drush_provision_drupal_post_provision_delete() {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (d()->type === 'site') {
+    _provision_valkey_purge_site(d()->uri);
+  }
+}
