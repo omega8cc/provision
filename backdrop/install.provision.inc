@@ -99,6 +99,15 @@ function drush_provision_backdrop_provision_install() {
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // Purge any cache namespace left in the shared Valkey/Redis store by a
+  // previously deleted site with the same URI, BEFORE the install engine runs
+  // any site code. Backdrop namespaces by DB coordinates and Aegir mints the
+  // db name deterministically from the URI, so a same-name recreate lands in
+  // the deleted predecessor's namespace exactly like the Drupal case. The db
+  // service's pre hooks have set the db credentials by now (the settings file
+  // below is written from them), so the derived namespace is the one the new
+  // site will use. Non-fatal by design.
+  _provision_valkey_purge_backdrop_site(d()->uri);
   // Requires at least the database settings to complete.
   provision_prepare_environment();
   _provision_backdrop_create_settings_file();

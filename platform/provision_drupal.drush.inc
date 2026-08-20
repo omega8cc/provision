@@ -1593,6 +1593,52 @@ function _provision_valkey_purge_site($uri) {
     drush_log(dt('VALKEY/PURGE host part of !uri is not a plain hostname; skipping purge', array('!uri' => $uri)), 'warning');
     return FALSE;
   }
+  $prefixes = array(
+    md5($host) . '_sn_',
+    md5($host) . '_n_',
+    $host . '_z_'
+  );
+  return _provision_valkey_purge_prefixes($prefixes, $uri);
+}
+
+/**
+ * Purge every cache namespace belonging to one Backdrop site.
+ *
+ * The Backdrop redis integration namespaces keys by the site's DB
+ * coordinates, not its host: md5(db_host . db_name . db_table_prefix)
+ * (redis_backdrop Redis_Client::getGlobalPrefix(), mirroring what core does
+ * with database caching). The rendered Backdrop settings always write an
+ * empty table prefix, and the runtime host string is the same db_host value
+ * Provision holds (the settings template serves it from the creds this task
+ * wrote), so the md5 rebuilt here byte-matches the runtime one. Aegir derives
+ * the db name deterministically from the URI, so a site recreated (or cloned
+ * into) the same name lands in the same namespace and inherits the deleted
+ * predecessor's keys -- the same poisoning the Drupal purge closes.
+ *
+ * An md5 is 32 fixed hex chars, so the bare-prefix match cannot touch another
+ * site's namespace, and no charset gate is needed (nothing user-shaped enters
+ * the pattern). Missing db options (nothing provisioned yet) skip silently:
+ * with no db there is no namespace to purge.
+ */
+function _provision_valkey_purge_backdrop_site($uri) {
+  $db_host = (string) drush_get_option('db_host', '');
+  $db_name = (string) drush_get_option('db_name', '');
+  if ($db_host === '' || $db_name === '') {
+    drush_log(dt('VALKEY/PURGE no db credentials in context for !uri; nothing to purge', array('!uri' => $uri)), 'info');
+    return TRUE;
+  }
+  return _provision_valkey_purge_prefixes(array(md5($db_host . $db_name)), $uri);
+}
+
+/**
+ * Purge every key under the given prefixes from the shared store.
+ *
+ * The connection/sweep core shared by the Drupal (host-keyed) and Backdrop
+ * (db-keyed) namespace purges; see _provision_valkey_purge_site() for the
+ * full rationale. The caller is responsible for prefixes that cannot match
+ * another site's keys and are safe as SCAN MATCH globs.
+ */
+function _provision_valkey_purge_prefixes($prefixes, $uri) {
   $conf = _provision_valkey_conf();
   if ($conf === FALSE) {
     drush_log(dt('VALKEY/PURGE no cache store wiring on this box; nothing to purge for !uri', array('!uri' => $uri)), 'info');
@@ -1647,11 +1693,6 @@ function _provision_valkey_purge_site($uri) {
   else {
     $dbs = range(0, 15);
   }
-  $prefixes = array(
-    md5($host) . '_sn_',
-    md5($host) . '_n_',
-    $host . '_z_'
-  );
   $total = 0;
   $failed = FALSE;
   $use_del = FALSE;

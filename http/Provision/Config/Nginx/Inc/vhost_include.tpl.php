@@ -338,6 +338,9 @@ if ($tls_on_plain) {
 
 ###
 ### Add recommended HTTP headers
+### Note: any location with its own add_header directives cancels ALL
+### inherited add_header lines, so this pair is re-stated verbatim in
+### every such static-serving location below. Do not deduplicate.
 ###
 add_header X-Content-Type-Options "nosniff";
 add_header X-Frame-Options "SAMEORIGIN" always;
@@ -488,6 +491,8 @@ location ^~ /cdn/farfuture/ {
 <?php if ($nginx_has_etag): ?>
   etag off;
 <?php else: ?>
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header ETag "";
 <?php endif; ?>
   gzip_http_version 1.1;
@@ -495,6 +500,8 @@ location ^~ /cdn/farfuture/ {
   set $nocache_details "Skip";
   location ~* ^/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
     expires max;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "CDN Far Future Generator 1.0";
     add_header Cache-Control "no-transform, public";
     add_header Last-Modified "Wed, 20 Jan 1988 04:20:42 GMT";
@@ -503,6 +510,8 @@ location ^~ /cdn/farfuture/ {
   }
   location ~* ^/cdn/farfuture/ {
     expires epoch;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "CDN Far Future Generator 1.1";
     add_header Cache-Control "private, must-revalidate, proxy-revalidate";
     rewrite ^/cdn/farfuture/[^/]+/[^/]+/(.+)$ /$1 break;
@@ -981,6 +990,8 @@ location ~* ^/sites/.*/files/webform/ {
   access_log off;
   log_not_found off;
   expires 99s;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public, must-revalidate, proxy-revalidate";
   try_files $uri =404;
   ### to deny the access replace the last line with:
@@ -993,6 +1004,8 @@ location ~* ^/files/webform/ {
   access_log off;
   log_not_found off;
   expires 99s;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public, must-revalidate, proxy-revalidate";
   try_files $uri =404;
   ### to deny the access replace the last line with:
@@ -1065,6 +1078,8 @@ location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
   access_log off;
   log_not_found off;
   expires max;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public";
   try_files /sites/$main_site_name/files/$1/$2 $uri @drupal;
 }
@@ -1076,6 +1091,8 @@ location ~* /s3/files/(css|js|styles)/(.*)$ {
   access_log off;
   log_not_found off;
   expires max;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public";
   try_files /sites/$main_site_name/files/$1/$2 $uri @drupal;
 }
@@ -1090,6 +1107,8 @@ location ~* /sites/.*/files/imagecache/(.*)$ {
   # fix common problems with old paths after import from standalone to Aegir multisite
   rewrite ^/sites/(.*)/files/imagecache/(.*)/sites/default/files/(.*)$ /sites/$main_site_name/files/imagecache/$2/$3 last;
   rewrite ^/sites/(.*)/files/imagecache/(.*)/files/(.*)$               /sites/$main_site_name/files/imagecache/$2/$3 last;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public";
   try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
 }
@@ -1197,6 +1216,8 @@ location ~* files/advagg_(?:css|js)/ {
   add_header ETag "";
 <?php endif; ?>
   rewrite ^/files/advagg_(.*)/(.*)$ /sites/$main_site_name/files/advagg_$1/$2 last;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header X-Header "AdvAgg Generator 2.0";
   add_header Cache-Control "max-age=31449600, no-transform, public";
   set $nocache_details "Skip";
@@ -1331,6 +1352,8 @@ location ^~ /files/ {
     access_log off;
     log_not_found off;
     expires max;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Cache-Control "public";
     rewrite ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files /sites/$main_site_name/files/css/$1 $uri @drupal;
@@ -1343,6 +1366,8 @@ location ^~ /files/ {
     access_log off;
     log_not_found off;
     expires max;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Cache-Control "public";
     rewrite ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files /sites/$main_site_name/files/js/$1 $uri @drupal;
@@ -1355,6 +1380,8 @@ location ^~ /files/ {
     access_log off;
     log_not_found off;
     expires max;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Cache-Control "public";
     rewrite ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files /sites/$main_site_name/files/$1/$2 $uri @drupal;
@@ -1371,6 +1398,8 @@ location ^~ /files/ {
     rewrite ^/files/imagecache/(.*)/sites/default/files/(.*)$ /sites/$main_site_name/files/imagecache/$1/$2 last;
     rewrite ^/files/imagecache/(.*)/files/(.*)$               /sites/$main_site_name/files/imagecache/$1/$2 last;
     rewrite ^/sites/(.*)/files/imagecache/(.*)/sites/(.*)/files/(.*)$ /sites/$main_site_name/files/imagecache/$2/$4 last;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Cache-Control "public";
     rewrite ^/files/(.*)$  /sites/$main_site_name/files/$1 last;
     try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
@@ -1546,6 +1575,8 @@ location ~* \.xml$ {
   error_page 405 = @drupal;
   access_log off;
   log_not_found off;
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
   add_header X-Header "Boost Citrus 1.0";
   add_header Expires "Tue, 24 Jan 1984 08:00:00 GMT";
   add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
