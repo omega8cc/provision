@@ -519,6 +519,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         drush_log(dt("REVOKE/2: Could not read grants for sql user: @var, leaving it as-is", array('@var' => $username)), 'notice');
       }
       elseif (!$grant_found) {
+        // Support for ProxySQL integration
+        $this->proxysql_cleanup($name);
         $drop_desired_query = sprintf(
           "DROP USER `%s`@`%s`",
           $username,
