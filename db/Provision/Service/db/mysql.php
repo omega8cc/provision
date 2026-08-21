@@ -308,69 +308,6 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     $success = true;
 
-    while ($row = $hosts_result->fetch()) {
-      $host = $row['host'];
-
-      // Skip desired hosts; handle them separately if needed
-      if (in_array($host, $desired_hosts)) {
-        continue;
-      }
-
-      // Use SHOW GRANTS as the single source of truth for both the REVOKE and
-      // DROP decisions. Every supported version (Percona/MySQL 5.7 and 8.x
-      // alike) returns ERROR 1141 when revoking from a user that holds no
-      // matching grant, so we must verify grants exist before REVOKE.
-      // This also eliminates the duplicate SHOW GRANTS call that was previously
-      // run after the REVOKE to decide whether to DROP.
-      $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
-      $grant_found = false;
-
-      if ($grants_result) {
-        while ($grant = $grants_result->fetch()) {
-          $grant_statement = array_pop($grant);
-          if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
-            $grant_found = true;
-            break;
-          }
-        }
-      }
-
-      // Only REVOKE if the user actually holds real grants.
-      // Track whether REVOKE succeeded so the DROP decision is correct.
-      $should_drop = !$grant_found;
-      if ($grant_found) {
-        $revoke_query = sprintf(
-          "REVOKE ALL PRIVILEGES, GRANT OPTION FROM `%s`@`%s`",
-          $username,
-          $host
-        );
-        $revoke_success = $this->query($revoke_query);
-        if (!$revoke_success) {
-          drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
-        }
-        $success = $success && $revoke_success;
-        // Drop only if REVOKE succeeded; user now holds only GRANT USAGE.
-        $should_drop = (bool) $revoke_success;
-      }
-
-      // Drop the user@host if no real grants remain.
-      if ($should_drop) {
-        // Support for ProxySQL integration
-        $this->proxysql_cleanup($name);
-        $drop_query = sprintf(
-          "DROP USER `%s`@`%s`",
-          $username,
-          $host
-        );
-        $drop_success = $this->query($drop_query);
-        if (!$drop_success) {
-          //error_log("Failed to drop user `$username`@`$host`.");
-          drush_log(dt("DROP/1: Failed to drop db user: @var", array('@var' => $username)), 'warning');
-        }
-        $success = $success && $drop_success;
-      }
-    }
-
     // Since grant_privileges() escapes _ and % in the ON clause, the stored
     // spelling of a site's own grant is the escaped one (`site\_0`.*); grants
     // issued before that escaping hold the unescaped spelling. MySQL matches a
@@ -384,6 +321,127 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $escaped = str_replace(array('_', '%'), array('\_', '\%'), $name);
       if ($escaped !== $name) {
         $name_spellings[] = $escaped;
+      }
+    }
+
+    while ($row = $hosts_result->fetch()) {
+      $host = $row['host'];
+
+      // Skip desired hosts; handle them separately if needed
+      if (in_array($host, $desired_hosts)) {
+        continue;
+      }
+
+      // A stray host entry gets the same per-database semantics as the
+      // desired hosts below: destroying one site must never touch grants on
+      // databases it is not destroying, whatever host row the account holds.
+      // Import takes db_user verbatim from the site's settings, so a shared
+      // user can sit at `%` on a box without clstr.cnf -- a stray host here
+      // -- and the former global REVOKE ALL PRIVILEGES, GRANT OPTION plus
+      // unconditional DROP stripped its every grant on every database the
+      // moment any one of its sites was destroyed. An entry whose grants
+      // were confined to the destroyed database still converges to bare
+      // USAGE below and is dropped, so genuinely stray rows keep going away.
+      $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
+      $stored_spellings = array();
+      $grant_found = false;
+
+      if ($grants_result) {
+        while ($grant = $grants_result->fetch()) {
+          $grant_statement = array_pop($grant);
+          // Check for a grant on this specific database, in whichever spelling
+          // MySQL stored. SHOW GRANTS carries the single backslash verbatim
+          // over PDO; the doubled form is mysql CLI display escaping only.
+          foreach ($name_spellings as $spelling) {
+            if (preg_match("/^GRANT .+ ON `" . preg_quote($spelling, '/') . "`\.\*/", $grant_statement)) {
+              $stored_spellings[$spelling] = $spelling;
+            }
+          }
+          // Check for any real grant beyond GRANT USAGE (used for DROP decision).
+          if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
+            $grant_found = true;
+          }
+        }
+      }
+
+      // Only REVOKE spellings confirmed above, each exactly as stored; the
+      // spelling is interpolated, never passed as %s, for the PDO::quote
+      // backslash-doubling reason documented on the desired-hosts loop below.
+      $revokes_clean = !empty($stored_spellings);
+      foreach ($stored_spellings as $spelling) {
+        $revoke_query = sprintf(
+          "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
+          $spelling,
+          $username,
+          $host
+        );
+        $revoke_success = $this->query($revoke_query);
+        if (!$revoke_success) {
+          drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
+          $revokes_clean = FALSE;
+        }
+        $success = $success && $revoke_success;
+      }
+
+      // The DROP gates mirror the desired-hosts loop: an unreadable grant
+      // list keeps the account -- dropping on unknown state is never safe,
+      // and this branch used to drop exactly then, with $grant_found false
+      // only because the scan never ran; an account holding no real grants
+      // goes; otherwise only a clean revoke pass followed by a re-read
+      // showing the bare global USAGE row alone lets it go.
+      if (!$grants_result) {
+        drush_log(dt("REVOKE/1: Could not read grants for sql user: @var, leaving it as-is", array('@var' => $username)), 'notice');
+      }
+      elseif (!$grant_found) {
+        // Support for ProxySQL integration
+        $this->proxysql_cleanup($name);
+        $drop_query = sprintf(
+          "DROP USER `%s`@`%s`",
+          $username,
+          $host
+        );
+        $drop_success = $this->query($drop_query);
+        if (!$drop_success) {
+          drush_log(dt("DROP/1: Failed to drop db user: @var", array('@var' => $username)), 'warning');
+        }
+        $success = $success && $drop_success;
+      }
+      elseif ($revokes_clean) {
+        // Same bare-USAGE whitelist as DROP/3 below, for the same reasons;
+        // like there, it is deliberately stricter than the pre-revoke scan
+        // above -- do not unify the two.
+        $post_grants = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
+        if (!$post_grants) {
+          drush_log(dt("DROP/4: Could not re-read grants for sql user: @var, keeping it", array('@var' => $username)), 'notice');
+        }
+        else {
+          // Seeded FALSE so a result carrying no rows at all keeps the
+          // account too; only rows actually seen can qualify it for the drop.
+          $usage_only = FALSE;
+          while ($grant = $post_grants->fetch()) {
+            $grant_statement = array_pop($grant);
+            if (!preg_match("/^GRANT USAGE ON \*\.\* TO /", $grant_statement)
+              || strpos($grant_statement, ' WITH GRANT OPTION') !== FALSE) {
+              $usage_only = FALSE;
+              break;
+            }
+            $usage_only = TRUE;
+          }
+          if ($usage_only) {
+            // Support for ProxySQL integration
+            $this->proxysql_cleanup($name);
+            $drop_query = sprintf(
+              "DROP USER `%s`@`%s`",
+              $username,
+              $host
+            );
+            $drop_success = $this->query($drop_query);
+            if (!$drop_success) {
+              drush_log(dt("DROP/4: Failed to drop db user: @var", array('@var' => $username)), 'warning');
+            }
+            $success = $success && $drop_success;
+          }
+        }
       }
     }
 
