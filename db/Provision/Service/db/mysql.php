@@ -162,8 +162,71 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // MySQL did this to us. https://github.com/drush-ops/drush/issues/5368#issuecomment-1405209770
-    $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
-    return $this->query($statement, $name, $username, $host);
+    //
+    // MySQL reads _ and % in the ON clause as LIKE wildcards, so an unescaped
+    // name grants on a PATTERN of databases rather than on the one named: a
+    // grant on `site_0` also covers `siteX0` for any X. suggest_db_name() mints
+    // exactly those names, appending _<n> whenever a 16-character truncation
+    // collides, so the wildcard lands on real BOA databases -- and here it is
+    // ALL PRIVILEGES, not just SELECT. Verified on Percona 5.7.44 and 8.4.10.
+    //
+    // Interpolated rather than passed as %s: query() renders %s through
+    // PDO::quote(), whose MySQL escaping doubles the backslash, and a grant on
+    // `site\\_0` names a database with a literal backslash and confers nothing
+    // at all (measured). Only names that are already plain identifiers take this
+    // path; anything else keeps the previous behaviour untouched.
+    if (preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {
+      $statement = "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@`%s`";
+      return $this->query($statement, $name, $username, $host);
+    }
+
+    $escaped = str_replace(array('_', '%'), array('\_', '\%'), $name);
+    $statement = "GRANT ALL PRIVILEGES ON `" . $escaped . "`.* TO `%s`@`%s`";
+    $granted = $this->query($statement, $username, $host);
+
+    // Converge: a site created before this escaping existed still holds the old
+    // pattern grant, and adding the literal one does not take it away. Drop it
+    // once its replacement is in place, so existing sites heal on their next
+    // verify instead of keeping the wildcard for the life of the database.
+    if ($granted && $escaped !== $name) {
+      $this->revoke_wildcard_db_grant($name, $username, $host);
+    }
+
+    return $granted;
+  }
+
+  /**
+   * Drop a pre-escaping wildcard grant, once its literal replacement exists.
+   *
+   * Matches the UNESCAPED spelling only: the escaped grant reads back with a
+   * backslash, so it can never match this pattern and is never revoked here.
+   */
+  function revoke_wildcard_db_grant($name, $username, $host) {
+    if (preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {
+      return;
+    }
+    $grants = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
+    if (!$grants) {
+      return;
+    }
+    $found = FALSE;
+    while ($row = $grants->fetch()) {
+      $statement = array_pop($row);
+      if (preg_match('/^GRANT .+ ON `' . preg_quote($name, '/') . '`\.\* /', $statement) === 1) {
+        $found = TRUE;
+        break;
+      }
+    }
+    if (!$found) {
+      return;
+    }
+    $revoked = $this->query("REVOKE ALL PRIVILEGES ON `" . $name . "`.* FROM `%s`@`%s`", $username, $host);
+    if ($revoked) {
+      drush_log(dt("Replaced the wildcard grant on @name with an exact one for @user", array('@name' => $name, '@user' => $username)), 'notice');
+    }
+    else {
+      drush_log(dt("Could not drop the wildcard grant on @name for @user; the exact grant is in place alongside it", array('@name' => $name, '@user' => $username)), 'warning');
+    }
   }
 
   function revoke($name, $username, $host = '') {
