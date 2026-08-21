@@ -421,6 +421,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // (e.g. during migrate cleanup). The spelling is interpolated, never
       // passed as %s: query() renders %s through PDO::quote(), which doubles
       // the backslash into a spelling MySQL never stored.
+      $revokes_clean = !empty($stored_spellings);
       foreach ($stored_spellings as $spelling) {
         $revoke_desired_query = sprintf(
           "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
@@ -431,12 +432,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $revoke_desired = $this->query($revoke_desired_query);
         if (!$revoke_desired) {
           drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
+          $revokes_clean = FALSE;
         }
         $success = $success && $revoke_desired;
       }
 
-      // Drop the user@desired_host if no real grants remain.
-      if (!$grant_found) {
+      // Drop the user@desired_host if no real grants remain. An unreadable
+      // grant list leaves the account as it stands: with the scan above
+      // skipped, $grant_found reports nothing about the account's real state,
+      // and dropping on unknown state is never safe.
+      if (!$grants_result) {
+        drush_log(dt("REVOKE/2: Could not read grants for sql user: @var, leaving it as-is", array('@var' => $username)), 'notice');
+      }
+      elseif (!$grant_found) {
         $drop_desired_query = sprintf(
           "DROP USER `%s`@`%s`",
           $username,
@@ -447,6 +455,98 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           drush_log(dt("DROP/2: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
         $success = $success && $drop_desired;
+      }
+      elseif ($revokes_clean) {
+        // A revoke above can leave the account holding nothing: MySQL keeps a
+        // privilege-less user as a bare `GRANT USAGE ON *.*` row, so the user
+        // a credential rotation (restore, deploy, migrate) supersedes would
+        // otherwise linger, one per rotation. Re-read the grants and drop the
+        // account only when bare USAGE is all that remains: a db_user imported
+        // verbatim from a site's settings may legitimately hold grants on
+        // other databases, and any line beyond bare USAGE -- a real privilege,
+        // `WITH GRANT OPTION`, or a grant list that cannot be read -- keeps
+        // the account. The re-check runs only after every revoke on this host
+        // succeeded: dropping on partial or unknown state is never safe, and
+        // a kept account holds zero privileges either way. This test is
+        // deliberately stricter than the pre-revoke scan above: only the
+        // global bare-USAGE row qualifies here, while the scan treats any
+        // USAGE-prefixed line as empty -- do not unify the two.
+        $post_grants = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
+        if (!$post_grants) {
+          drush_log(dt("DROP/3: Could not re-read grants for sql user: @var, keeping it", array('@var' => $username)), 'notice');
+        }
+        else {
+          // Seeded FALSE so a result carrying no rows at all keeps the
+          // account too; only rows actually seen can qualify it for the drop.
+          $usage_only = FALSE;
+          while ($grant = $post_grants->fetch()) {
+            $grant_statement = array_pop($grant);
+            if (!preg_match("/^GRANT USAGE ON \*\.\* TO /", $grant_statement)
+              || strpos($grant_statement, ' WITH GRANT OPTION') !== FALSE) {
+              $usage_only = FALSE;
+              break;
+            }
+            $usage_only = TRUE;
+          }
+          if ($usage_only) {
+            // Support for ProxySQL integration -- accounts register there
+            // under the database name at grant time, so a dropped account
+            // leaves under the same key; mirrors the stray-host drop above.
+            if ($name && $this->server->db_port == '6033') {
+              if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
+                include('/opt/tools/drush/proxysql_adm_pwd.inc');
+                $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
+                $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                drush_shell_exec($command);
+                if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
+                  drush_log(dt("REVOKE/PXY: Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+                }
+                elseif (preg_match("/Host '([^']*)' is not allowed to connect to/", implode('', drush_shell_exec_output()), $match)) {
+                  drush_log(dt("REVOKE/PXY: Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
+                }
+                else {
+                  $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "LOAD MYSQL USERS TO RUNTIME;";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "SAVE MYSQL USERS FROM RUNTIME;";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "SAVE MYSQL USERS TO DISK;";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "DELETE FROM mysql_query_rules where username='" . $name . "';";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "LOAD MYSQL QUERY RULES TO RUNTIME;";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+
+                  $proxysqlc = "SAVE MYSQL QUERY RULES TO DISK;";
+                  $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
+                  drush_shell_exec($command);
+                }
+              }
+            }
+            $drop_desired_query = sprintf(
+              "DROP USER `%s`@`%s`",
+              $username,
+              $desired_host
+            );
+            $drop_desired = $this->query($drop_desired_query);
+            if (!$drop_desired) {
+              drush_log(dt("DROP/3: Failed to drop db user: @var", array('@var' => $username)), 'warning');
+            }
+            $success = $success && $drop_desired;
+          }
+        }
       }
     }
 
