@@ -369,9 +369,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
 
       // Use SHOW GRANTS as the single source of truth for both the REVOKE guard
-      // and the DROP decision. mysql.db is not populated in MySQL/Percona 8.0+
-      // so querying it would always return empty, silently skipping REVOKE even
-      // when a grant exists. SHOW GRANTS works correctly on all supported versions.
+      // and the DROP decision. mysql.db does hold schema-level grant rows on all
+      // supported versions (Percona/MySQL 5.7 and 8.x alike), but only that one
+      // scope: global grants live in mysql.user, table/column/routine grants in
+      // their own tables, and 8.0+ partial revokes in mysql.user restrictions,
+      // none of which a mysql.db read can see. A user holding only a global
+      // grant has no mysql.db row yet must not be dropped. SHOW GRANTS reports
+      // the full effective picture across all scopes in one statement.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
       $grant_on_db = false;
       $grant_found = false;
