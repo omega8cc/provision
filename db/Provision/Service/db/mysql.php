@@ -340,11 +340,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // -- and the former global REVOKE ALL PRIVILEGES, GRANT OPTION plus
       // unconditional DROP stripped its every grant on every database the
       // moment any one of its sites was destroyed. An entry whose grants
-      // were confined to the destroyed database still converges to bare
-      // USAGE below and is dropped, so genuinely stray rows keep going away.
+      // were confined to the destroyed database's `db`.* scope still
+      // converges to bare USAGE below and is dropped, so genuinely stray
+      // rows keep going away; object-level grants are surfaced below.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
       $stored_spellings = array();
       $grant_found = false;
+      $object_grants = FALSE;
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
@@ -356,12 +358,28 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             if (preg_match("/^GRANT .+ ON `" . preg_quote($spelling, '/') . "`\.\*/", $grant_statement)) {
               $stored_spellings[$spelling] = $spelling;
             }
+            // Table, column and routine grants live one level below the
+            // database and can never match the `db`.* matcher above; catch
+            // them so their retention below is never silent.
+            elseif (preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
+              $object_grants = TRUE;
+            }
           }
           // Check for any real grant beyond GRANT USAGE (used for DROP decision).
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
             $grant_found = true;
           }
         }
+      }
+
+      // A table, column or routine level grant on the destroyed database sits
+      // below the `db`.* scope every REVOKE here targets, so the account is
+      // kept while holding access scoped to a freed name a future site can
+      // take. grant_privileges() never mints such grants -- the shape is
+      // operator or import created -- so the fail-closed keep stands, but
+      // never silently: the warning also marks the task.
+      if ($object_grants) {
+        drush_log(dt("REVOKE/1: sql user @var holds table, column or routine level grants on @name; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
       }
 
       // Only REVOKE spellings confirmed above, each exactly as stored; the
@@ -471,6 +489,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
       $stored_spellings = array();
       $grant_found = false;
+      $object_grants = FALSE;
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
@@ -482,12 +501,23 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             if (preg_match("/^GRANT .+ ON `" . preg_quote($spelling, '/') . "`\.\*/", $grant_statement)) {
               $stored_spellings[$spelling] = $spelling;
             }
+            // Table, column and routine grants live one level below the
+            // database and can never match the `db`.* matcher above; catch
+            // them so their retention below is never silent.
+            elseif (preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
+              $object_grants = TRUE;
+            }
           }
           // Check for any real grant beyond GRANT USAGE (used for DROP decision).
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
             $grant_found = true;
           }
         }
+      }
+
+      // Same object-level-grant surfacing as the stray-host loop above.
+      if ($object_grants) {
+        drush_log(dt("REVOKE/2: sql user @var holds table, column or routine level grants on @name; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
       }
 
       // Only REVOKE spellings confirmed above. Skipping silently avoids MySQL
