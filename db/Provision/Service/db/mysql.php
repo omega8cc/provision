@@ -353,6 +353,22 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
 
+    // Since grant_privileges() escapes _ and % in the ON clause, the stored
+    // spelling of a site's own grant is the escaped one (`site\_0`.*); grants
+    // issued before that escaping hold the unescaped spelling. MySQL matches a
+    // REVOKE against the stored spelling only, so both spellings must be
+    // recognised below and each one revoked exactly as stored -- revoking the
+    // wrong spelling raises 1141 and a superseded user keeps ALL PRIVILEGES on
+    // a freed name a future site can take. Only plain identifiers ever carry
+    // the escaped spelling, mirroring the grant side.
+    $name_spellings = array($name);
+    if (preg_match('/^[A-Za-z0-9_]+$/', $name) === 1) {
+      $escaped = str_replace(array('_', '%'), array('\_', '\%'), $name);
+      if ($escaped !== $name) {
+        $name_spellings[] = $escaped;
+      }
+    }
+
     // Handle desired hosts separately if necessary
     foreach ($desired_hosts as $desired_host) {
       // Check if user actually exists for this host before attempting REVOKE/DROP.
@@ -369,19 +385,27 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
 
       // Use SHOW GRANTS as the single source of truth for both the REVOKE guard
-      // and the DROP decision. mysql.db is not populated in MySQL/Percona 8.0+
-      // so querying it would always return empty, silently skipping REVOKE even
-      // when a grant exists. SHOW GRANTS works correctly on all supported versions.
+      // and the DROP decision. mysql.db does hold schema-level grant rows on all
+      // supported versions (Percona/MySQL 5.7 and 8.x alike), but only that one
+      // scope: global grants live in mysql.user, table/column/routine grants in
+      // their own tables, and 8.0+ partial revokes in mysql.user restrictions,
+      // none of which a mysql.db read can see. A user holding only a global
+      // grant has no mysql.db row yet must not be dropped. SHOW GRANTS reports
+      // the full effective picture across all scopes in one statement.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
-      $grant_on_db = false;
+      $stored_spellings = array();
       $grant_found = false;
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
           $grant_statement = array_pop($grant);
-          // Check for a grant on this specific database.
-          if (preg_match("/^GRANT .+ ON `" . preg_quote($name, '/') . "`\.\*/", $grant_statement)) {
-            $grant_on_db = true;
+          // Check for a grant on this specific database, in whichever spelling
+          // MySQL stored. SHOW GRANTS carries the single backslash verbatim
+          // over PDO; the doubled form is mysql CLI display escaping only.
+          foreach ($name_spellings as $spelling) {
+            if (preg_match("/^GRANT .+ ON `" . preg_quote($spelling, '/') . "`\.\*/", $grant_statement)) {
+              $stored_spellings[$spelling] = $spelling;
+            }
           }
           // Check for any real grant beyond GRANT USAGE (used for DROP decision).
           if (!preg_match("/^GRANT USAGE ON /", $grant_statement)) {
@@ -390,13 +414,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
       }
 
-      // Only REVOKE if a grant on this specific database was confirmed above.
-      // Skipping silently avoids MySQL 1141 when the user exists globally but
-      // holds no grant on this database (e.g. during migrate cleanup).
-      if ($grant_on_db) {
+      // Only REVOKE spellings confirmed above. Skipping silently avoids MySQL
+      // 1141 when the user exists globally but holds no grant on this database
+      // (e.g. during migrate cleanup). The spelling is interpolated, never
+      // passed as %s: query() renders %s through PDO::quote(), which doubles
+      // the backslash into a spelling MySQL never stored.
+      foreach ($stored_spellings as $spelling) {
         $revoke_desired_query = sprintf(
           "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
-          $name,
+          $spelling,
           $username,
           $desired_host
         );
