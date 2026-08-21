@@ -242,9 +242,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     $hosts_result = $this->query("SELECT host FROM mysql.user WHERE user = '%s'", $username);
 
     if (!$hosts_result) {
-      // User does not exist, nothing to clean up.
-      drush_log(dt("REVOKE/0: User does not exist, skipping cleanup: @var", array('@var' => $username)), 'notice');
-      return $success;
+      // The host lookup itself failed, so the state is unknown: fail closed.
+      // $success was previously returned here before it was ever assigned.
+      drush_log(dt("REVOKE/0: Could not read host entries for sql user: @var", array('@var' => $username)), 'notice');
+      return FALSE;
     }
 
     $success = true;
