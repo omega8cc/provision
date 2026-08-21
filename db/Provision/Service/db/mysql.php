@@ -259,8 +259,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
 
       // Use SHOW GRANTS as the single source of truth for both the REVOKE and
-      // DROP decisions. MySQL 8.0+ returns ERROR 1141 when revoking from a user
-      // that has no privileges, so we must verify grants exist before REVOKE.
+      // DROP decisions. Every supported version (Percona/MySQL 5.7 and 8.x
+      // alike) returns ERROR 1141 when revoking from a user that holds no
+      // matching grant, so we must verify grants exist before REVOKE.
       // This also eliminates the duplicate SHOW GRANTS call that was previously
       // run after the REVOKE to decide whether to DROP.
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
