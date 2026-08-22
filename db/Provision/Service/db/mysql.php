@@ -287,6 +287,92 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
   }
 
+  /**
+   * Revoke table, column and routine level grants on a destroyed database.
+   *
+   * Each row arrives verbatim from SHOW GRANTS, already matched to the
+   * destroyed database by the caller. The REVOKE is the stored row
+   * transformed in place -- GRANT to REVOKE, the TO clause to FROM, and a
+   * WITH GRANT OPTION suffix taken back either as one more member of a
+   * named privilege list or, for ALL PRIVILEGES, as its own statement
+   * first -- so only privileges the server itself reported are revoked,
+   * spelled exactly as stored, and a no-such-grant error (1147) is
+   * impossible by construction.
+   * Grant table rows survive DROP DATABASE and these REVOKEs still clear
+   * them, so running after the database is gone -- the order
+   * destroy_site_database() calls in -- is safe. Verified on Percona 5.7.44
+   * and 8.4.10, whose row shapes differ: 5.7 quotes the account with single
+   * quotes and leaves column lists bare, 8.x backticks both; both merge a
+   * table's table and column privileges into one row, which the verbatim
+   * privilege list clears in one statement. A row the transform cannot
+   * parse is left in place and counted, never guessed at: revoking beyond
+   * what SHOW GRANTS confirmed is how the wrong grant gets revoked. Returns
+   * the number of rows left unrevoked; the caller keeps the account
+   * whenever that is non-zero.
+   *
+   * $name is the destroyed database's verbatim name, never the LIKE-escaped
+   * spelling: that equivalence exists at `db`.* scope alone, while one
+   * level down the stored name is literal, so an escaped-spelling object
+   * row can only ever belong to a different database whose name literally
+   * carries the backslash, and revoking it here would cross databases.
+   */
+  function revoke_object_grants($object_rows, $name, $username, $host) {
+    $kept = 0;
+    // A backtick-quoted identifier as SHOW GRANTS prints it: an identifier
+    // containing a backtick carries it doubled, and the doubled form must
+    // ride into the REVOKE unchanged to name the same object.
+    $ident = '`(?:[^`]|``)+`';
+    $pattern = '/^GRANT (.+) ON ((?:PROCEDURE |FUNCTION )?`'
+      . preg_quote($name, '/') . '`\.' . $ident . ') TO '
+      . '(?:\'[^\']+\'|' . $ident . ')@(?:\'[^\']*\'|' . $ident . ')'
+      . '( WITH GRANT OPTION)?$/';
+    foreach ($object_rows as $grant_statement) {
+      if (!preg_match($pattern, $grant_statement, $match)) {
+        $kept++;
+        continue;
+      }
+      $revoke_queries = array();
+      $privileges = $match[1];
+      if (isset($match[3]) && $match[3] !== '') {
+        if ($privileges === 'ALL PRIVILEGES') {
+          // REVOKE accepts the ALL PRIVILEGES, GRANT OPTION pair only in
+          // its global FROM-only form; at object scope the pair is a parse
+          // error (1064) on both engines, so the grant option goes first,
+          // alone, and the privileges follow.
+          $revoke_queries[] = sprintf(
+            "REVOKE GRANT OPTION ON %s FROM `%s`@`%s`",
+            $match[2],
+            $username,
+            $host
+          );
+        }
+        else {
+          // A named privilege list takes GRANT OPTION as one more member.
+          $privileges .= ', GRANT OPTION';
+        }
+      }
+      $revoke_queries[] = sprintf(
+        "REVOKE %s ON %s FROM `%s`@`%s`",
+        $privileges,
+        $match[2],
+        $username,
+        $host
+      );
+      foreach ($revoke_queries as $revoke_query) {
+        // query() rescans every statement for %d/%s/%%/%f/%b tokens even
+        // with no arguments to fill them, and identifiers echoed verbatim
+        // from SHOW GRANTS may carry such byte pairs; doubling every
+        // percent here lets the rescan collapse it back, so the executed
+        // statement is byte-identical to the built one.
+        if (!$this->query(str_replace('%', '%%', $revoke_query))) {
+          $kept++;
+          break;
+        }
+      }
+    }
+    return $kept;
+  }
+
   function revoke($name, $username, $host = '') {
     // Define the desired hosts
     if (provision_file()->exists('/data/conf/clstr.cnf')->status()) {
@@ -346,7 +432,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $host);
       $stored_spellings = array();
       $grant_found = false;
-      $object_grants = FALSE;
+      $object_grants = array();
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
@@ -359,10 +445,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $stored_spellings[$spelling] = $spelling;
             }
             // Table, column and routine grants live one level below the
-            // database and can never match the `db`.* matcher above; catch
-            // them so their retention below is never silent.
-            elseif (preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
-              $object_grants = TRUE;
+            // database and can never match the `db`.* matcher above; collect
+            // them verbatim for the per-object revoke below. Unescaped
+            // spelling only: the stored name is literal at object scope, so
+            // an escaped-spelling row belongs to a different, literally
+            // backslash-named database and is left alone here.
+            elseif ($spelling === $name && preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
+              $object_grants[] = $grant_statement;
             }
           }
           // Check for any real grant beyond GRANT USAGE (used for DROP decision).
@@ -373,19 +462,29 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
 
       // A table, column or routine level grant on the destroyed database sits
-      // below the `db`.* scope every REVOKE here targets, so the account is
-      // kept while holding access scoped to a freed name a future site can
-      // take. grant_privileges() never mints such grants -- the shape is
-      // operator or import created -- so the fail-closed keep stands, but
-      // never silently: the warning also marks the task.
-      if ($object_grants) {
-        drush_log(dt("REVOKE/1: sql user @var holds table, column or routine level grants on @name; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
+      // below the `db`.* scope the REVOKEs further down target, yet holds
+      // access scoped to a freed name a future site can take.
+      // grant_privileges() never mints such grants -- the shape is operator
+      // or import created -- so each collected row is revoked per object,
+      // exactly as stored, and only a row that cannot be provably revoked
+      // keeps the account, with the warning still marking the task.
+      $object_kept = 0;
+      if (!empty($object_grants)) {
+        $object_kept = $this->revoke_object_grants($object_grants, $name, $username, $host);
+        if ($object_kept) {
+          drush_log(dt("REVOKE/1: sql user @var holds table, column or routine level grants on @name that could not be revoked; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
+        }
+        else {
+          drush_log(dt("REVOKE/1: revoked table, column or routine level grants held by sql user @var on @name", array('@var' => $username, '@name' => $name)), 'notice');
+        }
       }
 
       // Only REVOKE spellings confirmed above, each exactly as stored; the
       // spelling is interpolated, never passed as %s, for the PDO::quote
       // backslash-doubling reason documented on the desired-hosts loop below.
-      $revokes_clean = !empty($stored_spellings);
+      // An account whose grants on this database were object level only also
+      // reaches the drop gates once every collected row is provably gone.
+      $revokes_clean = (!empty($stored_spellings) || !empty($object_grants)) && !$object_kept;
       foreach ($stored_spellings as $spelling) {
         $revoke_query = sprintf(
           "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
@@ -393,7 +492,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $host
         );
-        $revoke_success = $this->query($revoke_query);
+        // Doubled percents, as in revoke_object_grants(): query() rescans
+        // every statement for %d/%s/%%/%f/%b tokens even when called with no
+        // arguments to fill them, so a fully interpolated statement whose
+        // identifiers carry such a byte pair reaches the server rewritten.
+        // The rescan collapses the doubling back, leaving the executed
+        // statement byte-identical to the built one. Nothing BOA mints needs
+        // it -- names are [A-Za-z0-9_], and a bare `%` host or a resolved web
+        // host both survive the rescan unchanged -- but mysql.user holds
+        // whatever rows an operator or an import left, and a wildcard host
+        // pattern is exactly the shape that trips it: `%stage.` loses its %s,
+        // `%db01.` its %d. An imported db_name or db_user can carry one too;
+        // import decodes those rather than copying them.
+        $revoke_success = $this->query(str_replace('%', '%%', $revoke_query));
         if (!$revoke_success) {
           drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
           $revokes_clean = FALSE;
@@ -405,12 +516,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // list keeps the account -- dropping on unknown state is never safe,
       // and this branch used to drop exactly then, with $grant_found false
       // only because the scan never ran; an account holding no real grants
-      // goes; otherwise only a clean revoke pass followed by a re-read
-      // showing the bare global USAGE row alone lets it go.
+      // goes -- unless an object row above could not be revoked: a
+      // USAGE-prefixed object row never sets $grant_found, and dropping
+      // then would contradict the keep just logged; otherwise only a clean
+      // revoke pass followed by a re-read showing the bare global USAGE row
+      // alone lets it go.
       if (!$grants_result) {
         drush_log(dt("REVOKE/1: Could not read grants for sql user: @var, leaving it as-is", array('@var' => $username)), 'notice');
       }
-      elseif (!$grant_found) {
+      elseif (!$grant_found && !$object_kept) {
         // Support for ProxySQL integration
         $this->proxysql_cleanup($name);
         $drop_query = sprintf(
@@ -418,7 +532,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $host
         );
-        $drop_success = $this->query($drop_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $drop_success = $this->query(str_replace('%', '%%', $drop_query));
         if (!$drop_success) {
           drush_log(dt("DROP/1: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
@@ -453,7 +568,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $username,
               $host
             );
-            $drop_success = $this->query($drop_query);
+            // Doubled percents for the query() rescan; see REVOKE/1 above.
+            $drop_success = $this->query(str_replace('%', '%%', $drop_query));
             if (!$drop_success) {
               drush_log(dt("DROP/4: Failed to drop db user: @var", array('@var' => $username)), 'warning');
             }
@@ -489,7 +605,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $grants_result = $this->query("SHOW GRANTS FOR `%s`@`%s`", $username, $desired_host);
       $stored_spellings = array();
       $grant_found = false;
-      $object_grants = FALSE;
+      $object_grants = array();
 
       if ($grants_result) {
         while ($grant = $grants_result->fetch()) {
@@ -502,10 +618,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $stored_spellings[$spelling] = $spelling;
             }
             // Table, column and routine grants live one level below the
-            // database and can never match the `db`.* matcher above; catch
-            // them so their retention below is never silent.
-            elseif (preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
-              $object_grants = TRUE;
+            // database and can never match the `db`.* matcher above; collect
+            // them verbatim for the per-object revoke below. Unescaped
+            // spelling only: the stored name is literal at object scope, so
+            // an escaped-spelling row belongs to a different, literally
+            // backslash-named database and is left alone here.
+            elseif ($spelling === $name && preg_match("/^GRANT .+ ON (PROCEDURE |FUNCTION )?`" . preg_quote($spelling, '/') . "`\./", $grant_statement)) {
+              $object_grants[] = $grant_statement;
             }
           }
           // Check for any real grant beyond GRANT USAGE (used for DROP decision).
@@ -515,9 +634,18 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
       }
 
-      // Same object-level-grant surfacing as the stray-host loop above.
-      if ($object_grants) {
-        drush_log(dt("REVOKE/2: sql user @var holds table, column or routine level grants on @name; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
+      // Same per-object revoke as the stray-host loop above: every collected
+      // row provably revoked, or the account is kept and the warning marks
+      // the task.
+      $object_kept = 0;
+      if (!empty($object_grants)) {
+        $object_kept = $this->revoke_object_grants($object_grants, $name, $username, $desired_host);
+        if ($object_kept) {
+          drush_log(dt("REVOKE/2: sql user @var holds table, column or routine level grants on @name that could not be revoked; leaving the account and those grants in place", array('@var' => $username, '@name' => $name)), 'warning');
+        }
+        else {
+          drush_log(dt("REVOKE/2: revoked table, column or routine level grants held by sql user @var on @name", array('@var' => $username, '@name' => $name)), 'notice');
+        }
       }
 
       // Only REVOKE spellings confirmed above. Skipping silently avoids MySQL
@@ -525,7 +653,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // (e.g. during migrate cleanup). The spelling is interpolated, never
       // passed as %s: query() renders %s through PDO::quote(), which doubles
       // the backslash into a spelling MySQL never stored.
-      $revokes_clean = !empty($stored_spellings);
+      // An account whose grants on this database were object level only also
+      // reaches the drop gates once every collected row is provably gone.
+      $revokes_clean = (!empty($stored_spellings) || !empty($object_grants)) && !$object_kept;
       foreach ($stored_spellings as $spelling) {
         $revoke_desired_query = sprintf(
           "REVOKE ALL PRIVILEGES ON `%s`.* FROM `%s`@`%s`",
@@ -533,7 +663,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $desired_host
         );
-        $revoke_desired = $this->query($revoke_desired_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $revoke_desired = $this->query(str_replace('%', '%%', $revoke_desired_query));
         if (!$revoke_desired) {
           drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
           $revokes_clean = FALSE;
@@ -544,11 +675,14 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // Drop the user@desired_host if no real grants remain. An unreadable
       // grant list leaves the account as it stands: with the scan above
       // skipped, $grant_found reports nothing about the account's real state,
-      // and dropping on unknown state is never safe.
+      // and dropping on unknown state is never safe. An unrevoked object row
+      // also keeps the account -- a USAGE-prefixed object row never sets
+      // $grant_found, and dropping then would contradict the keep just
+      // logged.
       if (!$grants_result) {
         drush_log(dt("REVOKE/2: Could not read grants for sql user: @var, leaving it as-is", array('@var' => $username)), 'notice');
       }
-      elseif (!$grant_found) {
+      elseif (!$grant_found && !$object_kept) {
         // Support for ProxySQL integration
         $this->proxysql_cleanup($name);
         $drop_desired_query = sprintf(
@@ -556,7 +690,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $desired_host
         );
-        $drop_desired = $this->query($drop_desired_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $drop_desired = $this->query(str_replace('%', '%%', $drop_desired_query));
         if (!$drop_desired) {
           drush_log(dt("DROP/2: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
@@ -602,7 +737,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $username,
               $desired_host
             );
-            $drop_desired = $this->query($drop_desired_query);
+            // Doubled percents for the query() rescan; see REVOKE/1 above.
+            $drop_desired = $this->query(str_replace('%', '%%', $drop_desired_query));
             if (!$drop_desired) {
               drush_log(dt("DROP/3: Failed to drop db user: @var", array('@var' => $username)), 'warning');
             }
