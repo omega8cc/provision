@@ -492,7 +492,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $host
         );
-        $revoke_success = $this->query($revoke_query);
+        // Doubled percents, as in revoke_object_grants(): query() rescans
+        // every statement for %d/%s/%%/%f/%b tokens even when called with no
+        // arguments to fill them, so a fully interpolated statement whose
+        // identifiers carry such a byte pair reaches the server rewritten.
+        // The rescan collapses the doubling back, leaving the executed
+        // statement byte-identical to the built one. Nothing BOA mints needs
+        // it -- names are [A-Za-z0-9_], and a bare `%` host or a resolved web
+        // host both survive the rescan unchanged -- but mysql.user holds
+        // whatever rows an operator or an import left, and a wildcard host
+        // pattern is exactly the shape that trips it: `%stage.` loses its %s,
+        // `%db01.` its %d. An imported db_name or db_user can carry one too;
+        // import decodes those rather than copying them.
+        $revoke_success = $this->query(str_replace('%', '%%', $revoke_query));
         if (!$revoke_success) {
           drush_log(dt("REVOKE/1: Failed to revoke privileges for sql user: @var", array('@var' => $username)), 'warning');
           $revokes_clean = FALSE;
@@ -520,7 +532,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $host
         );
-        $drop_success = $this->query($drop_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $drop_success = $this->query(str_replace('%', '%%', $drop_query));
         if (!$drop_success) {
           drush_log(dt("DROP/1: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
@@ -555,7 +568,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $username,
               $host
             );
-            $drop_success = $this->query($drop_query);
+            // Doubled percents for the query() rescan; see REVOKE/1 above.
+            $drop_success = $this->query(str_replace('%', '%%', $drop_query));
             if (!$drop_success) {
               drush_log(dt("DROP/4: Failed to drop db user: @var", array('@var' => $username)), 'warning');
             }
@@ -649,7 +663,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $desired_host
         );
-        $revoke_desired = $this->query($revoke_desired_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $revoke_desired = $this->query(str_replace('%', '%%', $revoke_desired_query));
         if (!$revoke_desired) {
           drush_log(dt("REVOKE/2: Failed to revoke privileges for db user: @var", array('@var' => $username)), 'warning');
           $revokes_clean = FALSE;
@@ -675,7 +690,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $username,
           $desired_host
         );
-        $drop_desired = $this->query($drop_desired_query);
+        // Doubled percents for the query() rescan; see REVOKE/1 above.
+        $drop_desired = $this->query(str_replace('%', '%%', $drop_desired_query));
         if (!$drop_desired) {
           drush_log(dt("DROP/2: Failed to drop db user: @var", array('@var' => $username)), 'warning');
         }
@@ -721,7 +737,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
               $username,
               $desired_host
             );
-            $drop_desired = $this->query($drop_desired_query);
+            // Doubled percents for the query() rescan; see REVOKE/1 above.
+            $drop_desired = $this->query(str_replace('%', '%%', $drop_desired_query));
             if (!$drop_desired) {
               drush_log(dt("DROP/3: Failed to drop db user: @var", array('@var' => $username)), 'warning');
             }
