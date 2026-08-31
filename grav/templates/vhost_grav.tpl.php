@@ -80,6 +80,23 @@ server {
   # hostname -- aliases must not fork per-host config). Proven to reach
   # getenv() under this FPM stack (spike Q7).
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
+  # Truthful scheme for Grav's Uri fallbacks (stock fastcgi_params does not
+  # carry REQUEST_SCHEME under this stack), and -- presence-gated on the
+  # shared map -- the local HTTPS front's X-Forwarded-Proto translated into
+  # HTTPS for cert-less vhosts: Grav emits ABSOLUTE URLs from the request
+  # scheme and its 2.0 default refuses the header app-side, so without this
+  # a proxied https page carries http:// links and the session cookie loses
+  # its Secure flag. MUST stay at server level: a location-level
+  # fastcgi_param would cancel the whole inherited param set.
+  fastcgi_param REQUEST_SCHEME $scheme;
+<?php
+$grav_fe_zones_body = @is_file('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+  ? (string) @file_get_contents('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+  : '';
+if (strpos($grav_fe_zones_body, '$boa_grav_fe_https') !== FALSE) {
+  print "  fastcgi_param HTTPS \$boa_grav_fe_https;\n";
+}
+?>
   listen  *:<?php print $http_port; ?>;
   server_name  <?php
     if ($this->redirection) {

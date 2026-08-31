@@ -66,6 +66,7 @@ if ($this->redirection || !$this->redirection) {
       print "  include fastcgi_params;\n";
       print "  fastcgi_param HTTP_PROXY \"\";\n";
       print "  fastcgi_param HTTP_HOST \$host;\n";
+      print "  fastcgi_param REQUEST_SCHEME \$scheme;\n";
       print "  fastcgi_param MAIN_SITE_NAME {$this->uri};\n";
       print "  set \$main_site_name {$this->uri};\n";
       print "  fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;\n";
@@ -122,6 +123,9 @@ server {
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
   fastcgi_param HTTP_HOST $host;
+  # Belt for the settings-template proxied-https shim: it gates on
+  # REQUEST_SCHEME, which a not-yet-refreshed fastcgi_params lacks.
+  fastcgi_param REQUEST_SCHEME $scheme;
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
   set $main_site_name "<?php print $this->uri; ?>";
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
