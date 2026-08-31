@@ -358,6 +358,9 @@ function drush_provision_drupal_post_provision_deploy() {
           // Hostmaster UI layer. Escape before shell interpolation.
           // (string) cast guards against PHP 8.1+ null-to-escapeshellarg
           // deprecation if preg_replace() ever returns null upstream.
+          // Cloaked credentials reach the site-local Drush only through the
+          // real environment; harmless when credentials are not cloaked.
+          provision_prepare_environment_subprocess();
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' updatedb -y');
           // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line
           // log status from it ($success was previously used here but never set,
@@ -632,6 +635,9 @@ function _provision_drupal_clear_update_fetch_tasks() {
       // the option form executes in-process, same convention as the pm:list /
       // pm:uninstall calls.
       drush_log(dt('UPDFETCH/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php ev (clear update_fetch_task) --root=@root --uri=@uri', array('@root' => d()->root, '@uri' => d()->uri)), 'info');
+      // Cloaked credentials reach the site-local Drush only through the real
+      // environment; harmless when credentials are not cloaked.
+      provision_prepare_environment_subprocess();
       drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ev ' . escapeshellarg($php) . ' --root=' . escapeshellarg((string) d()->root) . ' --uri=' . escapeshellarg((string) d()->uri));
       foreach (drush_shell_exec_output() as $line) {
         drush_log($line, 'notice');

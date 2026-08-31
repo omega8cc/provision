@@ -234,11 +234,19 @@ function drush_provision_drupal_provision_install() {
           if (preg_match('/\$db_url\[\'default\'\]\s*=\s*"([^"]+)"/', $contents, $matches)) {
         	$db_url = $matches[1];
           } else {
-        	drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
-        	if ($lock_unlock) {
-        	  provision_lock_drush_local_vnd();
+        	// Cloaked settings.php carries no literal db_url -- it reads the
+        	// credentials from $_SERVER, which the vhost supplies at web request
+        	// time only. Build the URL from the site context instead: the same
+        	// source provision_prepare_environment() primes $_SERVER from, so it
+        	// is correct whether or not credentials are cloaked.
+        	$db_url = _provision_install_db_url_from_context();
+        	if (empty($db_url)) {
+        	  drush_log("D11/INSTALL/ERR Could not find db_url in $settings_path", 'error');
+        	  if ($lock_unlock) {
+        	    provision_lock_drush_local_vnd();
+        	  }
+        	  return FALSE;
         	}
-        	return FALSE;
           }
         } else {
           drush_log("D11/INSTALL/ERR settings.php not found at $settings_path", 'error');
@@ -509,4 +517,38 @@ function drush_provision_drupal_post_provision_install() {
   // written until the post-install verify, so pass the account explicitly
   // (autosymlink trusts the Drush alias). Warn-not-fail.
   _provision_drupal_native_symlink(d()->uri, FALSE, basename(d('@server_master')->aegir_root));
+}
+
+/**
+ * Build a Drupal --db-url from the site context credentials.
+ *
+ * The D10+ installer needs a db-url to hand to the site-local drush. Reading it
+ * back out of the freshly rendered settings.php only works while credentials are
+ * uncloaked; the cloaked variant resolves them from $_SERVER at request time and
+ * carries no literal URL. drush_get_option(..., 'site') is the source
+ * provision_prepare_environment() itself primes $_SERVER from, so it holds in
+ * both modes.
+ *
+ * @return string
+ *   The db-url, or an empty string when the context carries no credentials.
+ */
+function _provision_install_db_url_from_context() {
+  $type = drush_get_option('db_type', 'mysql', 'site');
+  $user = drush_get_option('db_user', '', 'site');
+  $pass = drush_get_option('db_passwd', '', 'site');
+  $host = drush_get_option('db_host', 'localhost', 'site');
+  $port = drush_get_option('db_port', '', 'site');
+  $name = drush_get_option('db_name', '', 'site');
+  if (empty($name) || empty($user)) {
+    return '';
+  }
+  // As of Drupal 7 there is no more mysqli type.
+  if ($type == 'mysqli') {
+    $type = 'mysql';
+  }
+  $url = $type . '://' . urlencode($user) . ':' . urlencode($pass) . '@' . $host;
+  if (!empty($port)) {
+    $url .= ':' . $port;
+  }
+  return $url . '/' . $name;
 }
