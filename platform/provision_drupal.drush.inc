@@ -839,7 +839,11 @@ function _provision_drupal_rebuild_d8plus() {
       // NOT run through sprintf() (no '%' hazard). (string) cast guards the PHP
       // 8.1+ null-to-escapeshellarg deprecation if preg_replace() returns null.
       drush_log(dt('REBUILD/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten cr in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
+      // Cloaked credentials reach the site-local Drush only through the real
+      // environment; harmless when credentials are not cloaked.
+      provision_prepare_environment_subprocess();
       drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' cr');
+      provision_clear_environment_subprocess();
       foreach (drush_shell_exec_output() as $line) {
         drush_log($line, 'notice');
       }
@@ -1240,6 +1244,48 @@ function provision_prepare_environment() {
   // preparation of the environment variables.
   drush_command_invoke_all('provision_prepare_environment');
 
+}
+
+/**
+ * Export the site DB credentials into the real process environment.
+ *
+ * provision_prepare_environment() assigns $_SERVER in THIS process only, which
+ * a spawned site-local Drush never inherits. With cloaked credentials that child
+ * bootstraps a settings.php whose $databases is defined only when
+ * $_SERVER['db_name'] is set, so without this it cannot connect. putenv() puts
+ * the values in the environment the child is forked with; the CLI SAPI exposes
+ * them through $_SERVER there regardless of variables_order.
+ *
+ * Call immediately before any drush_shell_cd_and_exec() of a site-local Drush.
+ */
+function provision_prepare_environment_subprocess() {
+  $fields = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+  foreach ($fields as $key) {
+    $value = drush_get_option($key, NULL, 'site');
+    if ($value === NULL) {
+      continue;
+    }
+    if ($key == 'db_type' && $value == 'mysqli') {
+      $value = 'mysql';
+    }
+    putenv($key . '=' . $value);
+  }
+}
+
+/**
+ * Drop the site DB credentials from the process environment.
+ *
+ * The exported values outlive the subprocess that needed them. A later site in
+ * the same run would otherwise inherit them, and because the cloaked
+ * settings.php only consults its own credentials when $_SERVER['db_name'] is
+ * absent, a stale value silently wins -- connecting the wrong database. Always
+ * pair with provision_prepare_environment_subprocess().
+ */
+function provision_clear_environment_subprocess() {
+  $fields = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+  foreach ($fields as $key) {
+    putenv($key);
+  }
 }
 
 

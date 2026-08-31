@@ -31,3 +31,18 @@ $txpcfg['multisite_root_path'] = '<?php print addcslashes($txp_multisite_root, "
 $txpcfg['admin_url'] = '<?php print addcslashes($txp_admin_url, "'\\"); ?>';
 $txpcfg['cookie_domain'] = '';
 if (!defined('txpath')) { define('txpath', $txpcfg['txpath']); }
+
+/**
+ * If the external request was HTTPS but the internal request is HTTP -- the
+ * box-level SSL catch-all serves cert-less vhosts by proxying to the plain
+ * vhost with X-Forwarded-Proto as the signal -- set $_SERVER['HTTPS'] so
+ * Textpattern derives the right PROTOCOL (publish.php reads only that var):
+ * https asset/link URLs and the secure cookie flag. The same contract as the
+ * Drupal and Backdrop settings templates; sites with their own SSL vhost get
+ * fastcgi_param HTTPS on directly and never enter this branch.
+ */
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && isset($_SERVER['REQUEST_SCHEME'])) {
+  if ($_SERVER['HTTP_X_FORWARDED_PROTO'] == 'https' && $_SERVER['REQUEST_SCHEME'] == 'http') {
+    $_SERVER['HTTPS'] = 'on';
+  }
+}

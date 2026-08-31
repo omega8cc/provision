@@ -22,7 +22,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
   public $ssl_enabled = TRUE;
 
   function cloaked_db_creds() {
-    return FALSE;
+    return TRUE;
   }
 
   /**
@@ -44,7 +44,7 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->setProperty('nginx_has_http3', FALSE);
     $this->server->setProperty('nginx_has_ktls', FALSE);
     $this->server->setProperty('nginx_has_gzip', FALSE);
-    $this->server->setProperty('provision_db_cloaking', FALSE);
+    $this->server->setProperty('provision_db_cloaking', TRUE);
     $this->server->setProperty('phpfpm_mode', 'port');
     $this->server->setProperty('satellite_mode', 'boa');
   }
