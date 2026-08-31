@@ -243,6 +243,31 @@ function drush_provision_grav_provision_backup() {
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
 
+  // Web-only secrets: Grav's web process writes user/config/*-private.php
+  // (security nonce salt, api JWT signing key) owner-web at an explicit 0600,
+  // unreadable by the CLI owner BY DESIGN -- strict tar exits 2 on them. When
+  // that is the only failure class, degrade honestly: name every unreadable
+  // file, warn that a restore regenerates the nonce salt (sessions reset) and
+  // invalidates issued API tokens, and re-run with --ignore-failed-read. Any
+  // other tar failure still fails the backup.
+  if (!$result) {
+    $unreadable = array();
+    if (drush_shell_exec('find . -type f ! -readable 2>/dev/null')) {
+      $unreadable = array_filter(drush_shell_exec_output());
+    }
+    if (!empty($unreadable)) {
+      foreach ($unreadable as $secret) {
+        drush_log(dt('BACKUP/SECRETS unreadable by the CLI owner, NOT in the archive: @f (web-only secret; a restore regenerates it -- sessions reset, issued API tokens invalidated)',
+          array('@f' => $secret)), 'warning');
+      }
+      if (is_file($backup_file)) {
+        @unlink($backup_file);
+      }
+      $retry = str_replace(' --exclude-tag=', ' --ignore-failed-read --exclude-tag=', $command);
+      $result = drush_shell_exec($retry, $backup_file);
+    }
+  }
+
   // Remove the tags per existing file; a stale tag silently shrinks every
   // later backup, so say so loudly.
   $stale_tags = array();
