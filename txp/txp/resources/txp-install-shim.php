@@ -22,6 +22,12 @@ if (version_compare(PHP_VERSION, '8.4.0', '<')) {
   exit(128);
 }
 
+// Group-write survival (grav-track finding, live-proven): the shim runs as
+// the instance user (umask 022 default) and TXP's setup creates dirs under
+// the writable trees (theme/skin import into public/themes) — without 0002
+// those dirs lose g+w and the web user's later writes fatal.
+umask(0002);
+
 $params = getopt('', array('config:', 'debug::'));
 if (!($file = $params['config'] ?? '')) {
   exit("Usage: php txp-install-shim.php --config=site.json\n");

@@ -63,6 +63,9 @@ function drush_provision_leftover_purge($leftover = NULL) {
   $expected = drush_get_option('leftover_db_name', '');
   $expected_host = drush_get_option('leftover_db_host', '');
   $parsed = _provision_leftover_parse_settings($path);
+  if ($parsed['db_name'] === '') {
+    $parsed = _provision_leftover_parse_foreign_cms($path);
+  }
   $drop = '';
   if (!is_string($expected) || $expected === '') {
     drush_log(dt('No recorded database name was passed; purging the directory only.'), 'info');
@@ -146,6 +149,9 @@ function _provision_leftover_db_in_use($root, $leftover, $db_name) {
       continue;
     }
     $other = _provision_leftover_parse_settings($dir);
+    if ($other['db_name'] === '') {
+      $other = _provision_leftover_parse_foreign_cms($dir);
+    }
     if ($other['db_name'] !== '' && $other['db_name'] === $db_name) {
       $found = $subdir;
       break;

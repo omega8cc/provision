@@ -1,7 +1,17 @@
 <?php
 /**
  * @file
- * nginx vhost template for a Textpattern multisite site (http).
+ * nginx vhost template for a Textpattern multisite site.
+ *
+ * Suspend parity (map R-18): BOA suspension = /data/conf/suspended/<oct>.pid
+ * (managed by `boa suspend|unsuspend`; enforced for Drupal/Backdrop in the
+ * global settings chain). Foreign-CMS sites never run that chain, so the
+ * check lives in the PHP locations here — location-scoped on purpose: statics
+ * and acme keep serving during suspension, exactly like the Drupal behaviour.
+ * Shared shape with the grav track.
+ *
+ * (original @file docs continue below)
+ * nginx vhost for a Textpattern multisite site (http).
  *
  * Selected via hook_provision_config_load_templates() when the platform is a
  * TXP root; the shared vhost.tpl.php + nginx_vhost_common.conf pair is
@@ -162,9 +172,11 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
 
   # Public PHP whitelist: EXACTLY index.php and css.php.
   location = /index.php {
+    if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
   location = /css.php {
+    if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
 
@@ -173,6 +185,7 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
     alias <?php print $site_admin; ?>;
     index index.php;
     location ~ ^/<?php print $txp_admin_path; ?>/index\.php$ {
+      if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
       # Full param set re-declared: nginx fastcgi_param inheritance is
       # all-or-nothing, and alias needs $request_filename.
       include fastcgi_params;

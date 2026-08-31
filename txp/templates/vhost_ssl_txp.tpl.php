@@ -1,7 +1,17 @@
 <?php
 /**
  * @file
- * nginx vhost template for a Textpattern multisite site (https + the http
+ * nginx vhost template for a Textpattern multisite site.
+ *
+ * Suspend parity (map R-18): BOA suspension = /data/conf/suspended/<oct>.pid
+ * (managed by `boa suspend|unsuspend`; enforced for Drupal/Backdrop in the
+ * global settings chain). Foreign-CMS sites never run that chain, so the
+ * check lives in the PHP locations here — location-scoped on purpose: statics
+ * and acme keep serving during suspension, exactly like the Drupal behaviour.
+ * Shared shape with the grav track.
+ *
+ * (original @file docs continue below)
+ * nginx vhost for a Textpattern multisite site (https + the http
  * vhost via the chained include at the end, mirroring the shared
  * vhost_ssl.tpl.php structure).
  *
@@ -203,9 +213,11 @@ server {
 
   # Public PHP whitelist: EXACTLY index.php and css.php.
   location = /index.php {
+    if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
   location = /css.php {
+    if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
 
@@ -214,6 +226,7 @@ server {
     alias <?php print $site_admin; ?>;
     index index.php;
     location ~ ^/<?php print $txp_admin_path; ?>/index\.php$ {
+      if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
       include fastcgi_params;
       fastcgi_param HTTP_PROXY "";
       fastcgi_param HTTP_HOST $host;

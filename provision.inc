@@ -1496,6 +1496,31 @@ function _provision_leftover_parse_settings($dir) {
 }
 
 /**
+ * Per-CMS leftover credential resolvers (foreign-CMS leftovers carry no
+ * settings.php, so the Drupal parse yields nothing and a later purge would
+ * orphan the database). Each CMS adds one arm here; keep 5.6-parse-safe.
+ */
+function _provision_leftover_parse_foreign_cms($dir) {
+  $result = array('db_name' => '', 'db_host' => '');
+  // Textpattern: sites/<name>/private/config.php ($txpcfg scalar keys).
+  $txp_config = $dir . '/private/config.php';
+  if (is_file($txp_config) && is_readable($txp_config)) {
+    $body = file_get_contents($txp_config);
+    if ($body !== FALSE) {
+      if (preg_match('/\$txpcfg\s*\[\s*[\'"]db[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]/', $body, $m)) {
+        $result['db_name'] = $m[1];
+      }
+      if (preg_match('/\$txpcfg\s*\[\s*[\'"]host[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9._:-]+)[\'"]/', $body, $m)) {
+        $result['db_host'] = $m[1];
+      }
+      return $result;
+    }
+  }
+  // (grav arm lands here in the grav track's unit.)
+  return $result;
+}
+
+/**
  * Run a command, sending output to drush logs in real time.
  *
  * The Symfony\Component\Process\Process Object is used to run this command.
