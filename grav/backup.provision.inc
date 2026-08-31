@@ -39,8 +39,13 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   $backup_mode = provision_backup_mode_resolve();
 
   // A DB-only backup of a DB-less site is an empty promise; refuse loudly
-  // rather than register an archive that restores nothing.
+  // rather than register an archive that restores nothing. Consume the ctrl
+  // FIRST (when it was actually read): an early return would otherwise leave
+  // the dead file mis-moding the next modeless backup on the account.
   if ($backup_mode == 'backup_mysqldump_only') {
+    if (defined('AEGIR_BACKUP_MODE_CTRL_READ') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+      @unlink(AEGIR_BACKUP_MODE_CTRL);
+    }
     return drush_set_error('PROVISION_GRAV_BACKUP_MODE_INVALID',
       dt('backup_mysqldump_only is not available for Grav sites (no database in phase 1).'));
   }

@@ -130,7 +130,7 @@ function drush_provision_grav_pre_provision_deploy_rollback() {
   }
 
   if (provision_file()->exists(drush_get_option('extract_path'))->status()) {
-    _provision_recursive_delete(drush_get_option('extract_path'));
+    _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-extract');
   }
 }
 
@@ -162,8 +162,8 @@ function drush_provision_grav_post_provision_deploy() {
   // tree's integrity gate is the verify engine (vendor/ + index.php + version)
   // run by the restore flow's provision-verify.
 
-  // Remove the restore directory.
+  // Remove the restore directory (or park web-owned residue).
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
-    _provision_recursive_delete(drush_get_option('extract_path'));
+    _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-restore');
   }
 }

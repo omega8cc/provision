@@ -123,6 +123,13 @@ function provision_grav_provision_config_load_templates($config) {
   if (!is_string($root) || $root === '' || !provision_platform_is_grav($root)) {
     return array();
   }
+  // A disabled site must render the CMS-agnostic disabled vhost: hook
+  // candidates outrank the class's own template swap in load_template(), so
+  // returning ours here would keep a disabled Grav site LIVE (proven on the
+  // first disable leg). Fall through to the stock machinery.
+  if (!$config->site_enabled) {
+    return array();
+  }
   $base = dirname(__FILE__) . '/templates';
   if ($class === 'Provision_Config_Nginx_Site') {
     return array($base . '/vhost_grav.tpl.php');
@@ -209,10 +216,44 @@ function provision_grav_find_sites($root = NULL) {
   if (is_array($markers)) {
     foreach ($markers as $marker) {
       $uri = basename(dirname(dirname($marker)));
+      // A deploy-failure leftover (<uri>.restore) is a full Grav tree too;
+      // it is transient debris, never a site.
+      if (strpos($uri, '.restore') !== FALSE) {
+        continue;
+      }
       $sites[$uri] = $uri;
     }
   }
   return $sites;
+}
+
+/**
+ * Remove a capsule-shaped tree, or park it for root-side cleanup.
+ *
+ * The web process creates cache subdirs at 0755 owned by the per-version web
+ * user (FPM umask 022), and the CLI owner can neither delete their contents
+ * nor chmod them -- a plain recursive delete leaves web-owned residue behind
+ * (proven on the restore leg). Until the sudo fix-ownership scripts learn
+ * foreign roots (the queued boa-*-src item), the honest fallback is a RENAME
+ * out of the live tree into the instance backup path (rename needs only the
+ * parent-dir write we do have), loudly labelled for cleanup.
+ */
+function _provision_grav_remove_tree_or_park($path, $label) {
+  if (!is_dir($path)) {
+    return TRUE;
+  }
+  _provision_recursive_delete($path);
+  if (!is_dir($path)) {
+    return TRUE;
+  }
+  $park = d('@server_master')->backup_path . '/pending-cleanup-' . $label . '-' . date('Ymd.His');
+  if (@rename($path, $park)) {
+    drush_log(dt('Could not fully delete @path (web-owned residue); PARKED at @park for root-side cleanup.',
+      array('@path' => $path, '@park' => $park)), 'warning');
+    return TRUE;
+  }
+  return drush_set_error('PROVISION_GRAV_CLEANUP_FAILED',
+    dt('Could not delete or park @path; remove it by hand.', array('@path' => $path)));
 }
 
 /**

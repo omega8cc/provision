@@ -75,7 +75,7 @@ function drush_provision_grav_provision_delete() {
     // Do not automatically save the drushrc at the end of the command.
     drush_set_option('provision_save_config', false);
 
-    _provision_recursive_delete(d()->site_path);
+    _provision_grav_remove_tree_or_park(d()->site_path, d()->uri . '-deleted');
 
     // No Drupal alias store / alias symlinks to clean: grav aliases exist
     // only in the rendered vhost's server_name.

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Provision reset.login command (Grav layer).
+ * Provision login-reset command (Grav layer).
  *
  * The Drupal flow mints a one-time login URL; Grav has no such mechanism, so
  * the honest equivalent is a password rotation on the first admin account:
@@ -11,7 +11,7 @@
  * new credentials once via the task options, exactly like install does.
  */
 
-function drush_provision_grav_provision_reset_login() {
+function drush_provision_grav_provision_login_reset() {
   if (!provision_platform_is_grav(d())) {
     return;
   }
