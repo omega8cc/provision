@@ -112,6 +112,15 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   include /data/conf/nginx_high_load.c*;
 
   ###
+  ### Deny not compatible request methods without 405 response. The allowed
+  ### set is the fleet-standard one and already covers the api plugin's full
+  ### REST verb surface (PUT/PATCH/DELETE) and CORS preflight (OPTIONS).
+  ###
+  if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
+    return 444;
+  }
+
+  ###
   ### Include high level local configuration override if exists.
   ###
   include  <?php print d('@server_master')->aegir_root; ?>/config/server_master/nginx/post.d/nginx_force_include*;
