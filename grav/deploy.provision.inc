@@ -51,6 +51,14 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     return;
   }
   $extract_path = drush_get_option('extract_path');
+  // A pre-existing extract path is stale debris from an older failed deploy
+  // (on the serial queue, by definition): extracting over its web-owned 0755
+  // cache subdirs fails. Park it first so extraction always starts clean.
+  if (is_dir($extract_path) && drush_get_option('deploy_replace_site', FALSE)) {
+    if (!_provision_grav_remove_tree_or_park($extract_path, d()->uri . '-stale-extract')) {
+      return FALSE;
+    }
+  }
   $extracted = provision_file()->extract($backup_file, $extract_path)
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
