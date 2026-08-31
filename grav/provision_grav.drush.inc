@@ -430,9 +430,12 @@ function _provision_grav_secure_secrets($site_path) {
     provision_file()->chgrp($env, $web_group);
     provision_file()->chmod($env, 0640);
   }
+  // 0440, matching Provision_Config_Drushrc's own $mode: a heal that
+  // disagrees with the writer makes the file flap on every cadence
+  // (cross-track lesson -- the TXP pass widened its drushrc the same way).
   $drushrc = $site_path . '/drushrc.php';
   if (is_file($drushrc)) {
-    provision_file()->chmod($drushrc, 0640);
+    provision_file()->chmod($drushrc, 0440);
   }
 }
 
@@ -461,6 +464,11 @@ function _provision_grav_write_env() {
   provision_file()->file_put_contents($env, $data)
     ->succeed('Generated config file <code>@path</code>')
     ->fail('Could not generate config file <code>@path</code>');
+  // The WRITER owns the mode (D-008): without this, deploy-path rewrites
+  // leave .env at the process umask (world-readable) until the next verify
+  // or heal tightens it. FPM reads it via the web group.
+  provision_file()->chgrp($env, d('@server_master')->web_group);
+  provision_file()->chmod($env, 0640);
 }
 
 /**
