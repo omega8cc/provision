@@ -140,6 +140,9 @@ server {
   set $main_site_name "<?php print $this->uri; ?>";
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   fastcgi_param HTTPS on;
+  # Truthful scheme for Grav's Uri fallbacks (server level -- a
+  # location-level fastcgi_param would cancel the inherited param set).
+  fastcgi_param REQUEST_SCHEME $scheme;
   # Pin the environment:// stream to the site uri (never the request
   # hostname). Proven to reach getenv() under this FPM stack (spike Q7).
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
