@@ -20,18 +20,6 @@ function drush_provision_txp_provision_restore_validate($restore_file = NULL) {
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
     ->status();
   drush_set_option('restore_file', $restore_file);
-  // Pin the restorable backup mode at the EARLIEST hook in this process.
-  // provision_backup_mode_resolve() memoises into the SELECTED_BACKUP_MODE
-  // constant on its first call and every later caller gets that value, so a
-  // force applied in a pre_ hook loses to anything that resolved first --
-  // which is how a "safety" copy ended up with no database in it. Setting it
-  // in validate is the earliest point this layer runs.
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
-  drush_set_option('backup_mode', 'site_files_with_mysqldump');
-
   // Clear a stale frontend backup-mode ctrl file: the safety copy below forces
   // its own mode, but a leftover would otherwise survive into the next flow.
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {

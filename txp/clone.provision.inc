@@ -31,23 +31,6 @@ function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  // The pre-clone copy registers in the panel as a real backup and is the
-  // operator's safety net if the clone goes wrong, so it must honour the
-  // backup contract (self-contained, DB inside) exactly like the restore
-  // safety copy. Without this it inherited whatever mode resolution produced
-  // and shipped a DB-less archive labelled "Pre-clone backup".
-  // Pin the restorable backup mode at the EARLIEST hook in this process.
-  // provision_backup_mode_resolve() memoises into the SELECTED_BACKUP_MODE
-  // constant on its first call and every later caller gets that value, so a
-  // force applied in a pre_ hook loses to anything that resolved first --
-  // which is how a "safety" copy ended up with no database in it. Setting it
-  // in validate is the earliest point this layer runs.
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
-  drush_set_option('backup_mode', 'site_files_with_mysqldump');
-  drush_log(dt('Clone safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
