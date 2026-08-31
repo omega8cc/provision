@@ -1661,6 +1661,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_param QUERY_STRING q=$esi;
   fastcgi_param SCRIPT_FILENAME $document_root/index.php;
   fastcgi_param HTTP_HOST $host;
+  ### This location declares its own minimal param set (no fastcgi_params
+  ### include, no inheritance), so the scheme must be passed explicitly.
+  fastcgi_param REQUEST_SCHEME $scheme;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass  unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -2057,6 +2060,7 @@ location @allowupdate {
   fastcgi_intercept_errors on;
   include fastcgi_params;
   fastcgi_param HTTP_HOST $host;
+  fastcgi_param REQUEST_SCHEME $scheme;
   limit_conn limreq 8;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/run/$user_socket.fpm.socket;
@@ -2077,6 +2081,7 @@ location @allowauthorize {
   fastcgi_intercept_errors on;
   include fastcgi_params;
   fastcgi_param HTTP_HOST $host;
+  fastcgi_param REQUEST_SCHEME $scheme;
   limit_conn limreq 8;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass unix:/run/$user_socket.fpm.socket;
