@@ -386,7 +386,54 @@ function _provision_grav_create_directories() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
   }
 
+  // AFTER the generic writable pass (which would re-widen them): the secret
+  // subtrees drop their world bits (boa-grav D-008).
+  _provision_grav_secure_secrets($site_path);
+
   _provision_grav_write_env();
+}
+
+/**
+ * Drop world access on the capsule's secret surfaces (boa-grav D-008).
+ *
+ * user/accounts (password hashes, reset tokens), user/config (session salt,
+ * SMTP/API credentials) and user/env are group-rw for FPM and owner-rw for
+ * the CLI, with NO world bits: dirs 02770, files 0660. nginx never serves
+ * or reads them (the vhost denies the paths; only FPM does, via group).
+ * The root .env (phase 2 carries DB credentials) is 0640 with the web
+ * group, so FPM keeps its read once the world bit is gone. Runs after every
+ * generic pass that would re-widen (install, deploy, verify, and mirrored
+ * in the sudo heal scripts) -- the cross-track review caught the same class
+ * on the TXP side (private/config.php widened 0440 -> 0644 on every heal).
+ */
+function _provision_grav_secure_secrets($site_path) {
+  $web_group = d('@server_master')->web_group;
+  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+    $path = $site_path . '/' . $dir;
+    if (!is_dir($path)) {
+      continue;
+    }
+    provision_file()->chmod($path, 02770, TRUE)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    $it = new RecursiveIteratorIterator(
+      new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+      RecursiveIteratorIterator::CHILD_FIRST);
+    foreach ($it as $entry) {
+      if ($entry->isFile() && !$entry->isLink()) {
+        @chmod($entry->getPathname(), 0660);
+      }
+    }
+  }
+  $env = $site_path . '/.env';
+  if (is_file($env)) {
+    provision_file()->chgrp($env, $web_group);
+    provision_file()->chmod($env, 0640);
+  }
+  $drushrc = $site_path . '/drushrc.php';
+  if (is_file($drushrc)) {
+    provision_file()->chmod($drushrc, 0640);
+  }
 }
 
 /**
@@ -500,7 +547,9 @@ function _provision_grav_create_admin_account($username, $email) {
     ->fail('Could not generate config file <code>@path</code>');
   $web_group = d('@server_master')->web_group;
   provision_file()->chgrp($yaml, $web_group);
-  provision_file()->chmod($yaml, 0640);
+  // 0660, not 0640: the login plugin WRITES here from FPM (reset tokens,
+  // admin profile edits) -- the D-008 secrets mode, group-rw and no world.
+  provision_file()->chmod($yaml, 0660);
   return $password;
 }
 
