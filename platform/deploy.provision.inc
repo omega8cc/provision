@@ -362,6 +362,7 @@ function drush_provision_drupal_post_provision_deploy() {
           // real environment; harmless when credentials are not cloaked.
           provision_prepare_environment_subprocess();
           $result = drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' updatedb -y');
+          provision_clear_environment_subprocess();
           // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line
           // log status from it ($success was previously used here but never set,
           // so every line was logged as 'notice', never 'success').
@@ -639,6 +640,7 @@ function _provision_drupal_clear_update_fetch_tasks() {
       // environment; harmless when credentials are not cloaked.
       provision_prepare_environment_subprocess();
       drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ev ' . escapeshellarg($php) . ' --root=' . escapeshellarg((string) d()->root) . ' --uri=' . escapeshellarg((string) d()->uri));
+      provision_clear_environment_subprocess();
       foreach (drush_shell_exec_output() as $line) {
         drush_log($line, 'notice');
       }

@@ -27,6 +27,34 @@ if (isset($_SERVER['SITE_SUBDIR']) && isset($_SERVER['RAW_HOST'])) {
 <?php endif; ?>
 
 <?php if ($this->cloaked): ?>
+if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
+  /**
+   * Command line has no vhost, so none of the fastcgi_param credentials below
+   * are set. Recover them from the sibling drushrc.php, which carries the same
+   * values and is group-restricted to the shell identities -- the web server
+   * user is not in that group and can never read it, so the credentials stay
+   * out of reach of site PHP. Drush 8 loads that file by itself; a site-local
+   * modern Drush (the `vdrush` alias in the limited shell) does not, which is
+   * why it is read explicitly here. Parsed, never included: the file is Drush
+   * configuration and must not execute as part of settings.php.
+   * PHP_SAPI is a routing test only -- the group on the file is the control.
+   */
+  $aegir_rc_file = dirname(__FILE__) . '/drushrc.php';
+  if (is_readable($aegir_rc_file)) {
+    $aegir_rc_body = file_get_contents($aegir_rc_file);
+    if ($aegir_rc_body !== FALSE) {
+      $aegir_rc_keys = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+      foreach ($aegir_rc_keys as $aegir_rc_key) {
+        $aegir_rc_match = array();
+        if (preg_match('/\$options\[\'' . $aegir_rc_key . '\'\]\s*=\s*\'([^\']*)\';/', $aegir_rc_body, $aegir_rc_match)) {
+          $_SERVER[$aegir_rc_key] = $aegir_rc_match[1];
+        }
+      }
+      unset($aegir_rc_body, $aegir_rc_keys, $aegir_rc_key, $aegir_rc_match);
+    }
+  }
+  unset($aegir_rc_file);
+}
 if (isset($_SERVER['db_name'])) {
   /**
    * The database credentials are stored in the Apache or Nginx vhost config

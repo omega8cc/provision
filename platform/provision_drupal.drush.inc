@@ -843,6 +843,7 @@ function _provision_drupal_rebuild_d8plus() {
       // environment; harmless when credentials are not cloaked.
       provision_prepare_environment_subprocess();
       drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' cr');
+      provision_clear_environment_subprocess();
       foreach (drush_shell_exec_output() as $line) {
         drush_log($line, 'notice');
       }
@@ -1268,6 +1269,22 @@ function provision_prepare_environment_subprocess() {
       $value = 'mysql';
     }
     putenv($key . '=' . $value);
+  }
+}
+
+/**
+ * Drop the site DB credentials from the process environment.
+ *
+ * The exported values outlive the subprocess that needed them. A later site in
+ * the same run would otherwise inherit them, and because the cloaked
+ * settings.php only consults its own credentials when $_SERVER['db_name'] is
+ * absent, a stale value silently wins -- connecting the wrong database. Always
+ * pair with provision_prepare_environment_subprocess().
+ */
+function provision_clear_environment_subprocess() {
+  $fields = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+  foreach ($fields as $key) {
+    putenv($key);
   }
 }
 
