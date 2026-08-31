@@ -54,6 +54,14 @@ foreach (array('84', '85') as $txp_php_ver) {
 $aegir_root = d('@server_master')->aegir_root;
 $satellite_mode = d('@server_master')->satellite_mode;
 
+// Direct /files/ downloads are DENIED by default (D-010). Per-site opt-out via
+// a control file, mirroring the tls-legacy-enable-<name>.info pattern used in
+// the SSL twin: touch <aegir_root>/static/control/txp-files-open-<name>.info.
+$txp_main_name = $this->redirection ? $this->redirection : $this->uri;
+$txp_files_open = provision_file()
+  ->exists($aegir_root . '/static/control/txp-files-open-' . $txp_main_name . '.info')
+  ->status();
+
 if ($this->redirection) {
   // Redirect all aliases to the main url in separate server blocks.
   foreach ($this->aliases as $alias_url) {
@@ -211,9 +219,14 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
   location ~ /\.(?!well-known) { deny all; }
   location ~* \.txp$ { return 403; }
   location ~* ^/themes/.*/manifest\.json$ { deny all; }
-  # files/ direct-download policy: OPEN by default pending the product ruling
-  # (integration-map open question 3); .php execution under it is denied by the
-  # whitelist below either way.
+<?php if (!$txp_files_open): ?>
+  ### Direct file downloads DENIED by default (D-010). Downloads belong on the
+  ### front controller (/index.php?s=file_download&id=N), which enforces the
+  ### per-file status/privs, the download counter and file_download_header;
+  ### serving public/files/ directly bypasses all three. Per-site opt-out:
+  ### touch <aegir_root>/static/control/txp-files-open-<uri>.info
+  location ^~ /files/ { return 403; }
+<?php endif; ?>
 
   location = /favicon.ico { access_log off; try_files $uri =204; }
   location = /robots.txt  { access_log off; try_files $uri =404; }

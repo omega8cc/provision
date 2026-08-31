@@ -91,6 +91,12 @@ $legacy_tls_enable = FALSE;
 if (provision_file()->exists($legacy_tls_ctrl)->status()) {
   $legacy_tls_enable = TRUE;
 }
+
+// Direct /files/ downloads are DENIED by default (D-010); per-site opt-out via
+// the same control-file idiom as the legacy-TLS gate above.
+$txp_files_open = provision_file()
+  ->exists($aegir_root . '/static/control/txp-files-open-' . $main_name . '.info')
+  ->status();
 ?>
 
 <?php if ($this->redirection): ?>
@@ -247,6 +253,10 @@ server {
   location ~ /\.(?!well-known) { deny all; }
   location ~* \.txp$ { return 403; }
   location ~* ^/themes/.*/manifest\.json$ { deny all; }
+<?php if (!$txp_files_open): ?>
+  ### Direct file downloads DENIED by default (D-010) -- see the http twin.
+  location ^~ /files/ { return 403; }
+<?php endif; ?>
 
   location = /favicon.ico { access_log off; try_files $uri =204; }
   location = /robots.txt  { access_log off; try_files $uri =404; }
