@@ -101,10 +101,18 @@ class Provision_TxpBoot extends \Drush\Boot\BaseBoot {
   }
 
   function bootstrap_txp_site() {
-    // Site-level drushrc (sites/<uri>/drushrc.php -- db creds + BOA options).
-    drush_load_config('site');
+    // Site-level drushrc (sites/<uri>/drushrc.php -- the BOA option carrier,
+    // incl. the persisted db credentials). drush_load_config('site') resolves
+    // through Drupal-shaped conf_path machinery and finds NOTHING on a TXP
+    // root (live-proven: the classic mysqldump path then derived a fresh db
+    // name and failed 1045) -- load the file EXPLICITLY.
     $uri = drush_bootstrap_value('site');
-    if ($uri) {
+    $root = drush_get_context('DRUSH_DRUPAL_ROOT');
+    if ($uri && $root) {
+      $drushrc = $root . '/sites/' . $uri . '/drushrc.php';
+      if (is_readable($drushrc)) {
+        drush_load_config_file('site', $drushrc);
+      }
       drush_set_context('DRUSH_URI', $uri);
     }
   }

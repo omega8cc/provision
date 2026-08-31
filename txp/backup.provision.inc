@@ -36,6 +36,10 @@ function drush_provision_txp_provision_backup_validate($backup_file = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
+  // Reload the persisted db creds NOW: the db service's pre hook dumps via
+  // fetch_site_credentials() before any of our other hooks run, and an empty
+  // context means "FAIL no db_name" — a silently dump-less backup.
+  _provision_txp_ensure_db_creds_loaded();
   $backup_mode = provision_backup_mode_resolve();
 
   if ($backup_file) {
@@ -203,13 +207,51 @@ function drush_provision_txp_post_provision_backup() {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  drush_set_option('backup_file', drush_get_option('backup_file'), 'process');
-  drush_set_option('backup_file_size', drush_get_option('backup_file_size'), 'process');
+  drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
+
+  // Non-internal modeless (MyQuick) backups: rotate tmp_expim into the dated
+  // per-site dump dir — the dated DB retention every other CMS gets; a stale
+  // tmp_expim left behind would feed a LATER clone/migrate fast-import with
+  // the wrong database.
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  if (!is_file($internal_backup_flag)) {
+    $backup_mode = provision_backup_mode_resolve();
+    if (empty($backup_mode)) {
+      $aegir_root = d('@server_master')->aegir_root;
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $oct_db_test = $oct_db_dirx . '/metadata';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
+      $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+      if (is_file($enable_myquick) && is_file($oct_db_test)) {
+        provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
+          ->succeed('Moving the Post-DB-Backup @path1 to @path2 was successful.')
+          ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
+        if (is_dir($uri_db_dirz)) {
+          _provision_recursive_delete($oct_db_dirx);
+          drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_txp_post_provision_backup @var", array('@var' => $oct_db_dirx)), 'info');
+        }
+      }
+    }
+  }
+
+  if (d()->client_name) {
+    $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
+    provision_file()->create_dir($backup_dir, dt('Client backup directory for @client', array('@client' => d()->client_name)), 0750);
+    provision_file()->symlink(drush_get_option('backup_file'), $backup_dir . '/' . basename(drush_get_option('backup_file')))
+      ->succeed('Created symlink @path to @target')
+      ->fail('Could not create symlink @path to @target: @reason');
+  }
 }
 
 function drush_provision_txp_provision_backup_rollback() {
   if (!provision_platform_is_txp(d())) {
     return;
+  }
+  $oct_db_dirx = d('@server_master')->backup_path . '/tmp_expim';
+  if (is_dir($oct_db_dirx)) {
+    _provision_recursive_delete($oct_db_dirx);
+    drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_txp_provision_backup_rollback @var", array('@var' => $oct_db_dirx)), 'info');
   }
   $backup_file = drush_get_option('backup_file');
   if ($backup_file && provision_file()->exists($backup_file)->status()) {

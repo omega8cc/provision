@@ -33,6 +33,19 @@ function drush_provision_txp_provision_deploy_validate($backup_file = NULL) {
     ->succeed('Platform path @path exists')
     ->fail('Platform path @path does not exist', 'PROVISION_ROOT_NOT_FOUND')
     ->status();
+
+  // Extraction target + replace-mode flags (the shared validate that computes
+  // these is union-guarded away): extract beside the live site when replacing
+  // (restore), straight into place for a fresh target (clone/migrate).
+  $site_present = _provision_txp_site_exists();
+  if ($site_present) {
+    drush_set_option('extract_path', d()->site_path . '.restore');
+    drush_set_option('old_db_name', drush_get_option('db_name', ''));
+  }
+  else {
+    drush_set_option('extract_path', d()->site_path);
+  }
+  drush_set_option('deploy_replace_site', $site_present);
 }
 
 function drush_provision_txp_pre_provision_deploy($backup_file) {
@@ -85,7 +98,22 @@ function drush_provision_txp_pre_provision_deploy_rollback() {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  if (!drush_get_option('site_dirs_swapped', FALSE)) {
+  if (drush_get_option('deploy_replace_site', FALSE)
+    && drush_get_option('site_dirs_swapped', FALSE)) {
+    // Swap the site directories back: a failed replace-deploy must leave the
+    // ORIGINAL tree live, not the extracted archive (live-proven: the first
+    // failed restore left the archive tree serving and .restore holding the
+    // real site).
+    $old = d()->site_path . '.restore';
+    $new = d()->site_path;
+    provision_file()->switch_paths($old, $new)
+      ->succeed('Swapping out the @path1 and @path2 directories was successful.')
+      ->fail('Swapping the @path1 and @path2 directories has failed.', 'DRUSH_PERM_ERROR');
+    _provision_txp_ensure_db_creds_loaded();
+    _provision_txp_create_settings_file();
+    provision_save_site_data();
+  }
+  elseif (!drush_get_option('site_dirs_swapped', FALSE)) {
     _provision_recursive_delete(drush_get_option('extract_path'));
   }
 }
