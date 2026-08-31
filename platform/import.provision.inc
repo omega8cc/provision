@@ -14,6 +14,9 @@ function drush_provision_drupal_provision_import() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 8) {
       // Lock Site-Local Drush if Unlocked
@@ -37,6 +40,9 @@ function drush_provision_drupal_provision_import() {
 
 function drush_provision_drupal_post_provision_import() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type === 'site') {

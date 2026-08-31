@@ -35,6 +35,9 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
 
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
@@ -150,6 +153,9 @@ function drush_provision_drupal_provision_backup_suggest_filename() {
  */
 function drush_provision_drupal_provision_backup() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   $backup_file = drush_get_option('backup_file');
@@ -391,6 +397,9 @@ function drush_provision_drupal_post_provision_backup() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
 
   $backup_path = d('@server_master')->backup_path;
@@ -439,6 +448,9 @@ function drush_provision_drupal_post_provision_backup() {
  */
 function drush_provision_drupal_provision_backup_rollback() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   $backup_file = drush_get_option('backup_file');

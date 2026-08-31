@@ -14,6 +14,9 @@ function drush_provision_drupal_provision_verify_validate() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (d()->type === 'site') {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
@@ -38,6 +41,9 @@ function drush_provision_drupal_provision_verify_validate() {
  */
 function drush_provision_drupal_pre_provision_verify() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type === 'server') {
@@ -490,6 +496,9 @@ function drush_provision_drupal_pre_provision_verify() {
  */
 function drush_provision_drupal_post_provision_verify() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
 

@@ -145,6 +145,114 @@ function provision_platform_is_backdrop($context = NULL) {
 }
 
 /**
+ * Detect a Textpattern (TXP) platform/site root.
+ *
+ * Positive signal: root index.php + css.php + textpattern/lib/constants.php +
+ * textpattern/index.php (the shared-core admin entry). Negative discriminators:
+ * NO root core/ (Drupal 8+/Backdrop shape) and NO root autoload.php (Composer-
+ * managed Drupal). Keyed on the codebase root exactly like
+ * provision_platform_is_backdrop(): FALSE for server contexts and for every
+ * Drupal/Backdrop tree, so every guard that calls it is a no-op on non-TXP
+ * platforms and the shared-layer edits stay inert on the public merge path.
+ *
+ * @param $context
+ *   A codebase root path (string), or a Provision context whose ->root is the
+ *   platform docroot. Defaults to the active d().
+ * @return
+ *   TRUE if the resolved root is a Textpattern root, FALSE otherwise.
+ */
+function provision_platform_is_txp($context = NULL) {
+  static $cache = array();
+  if (is_null($context)) {
+    $context = d();
+  }
+  $root = '';
+  if (is_string($context)) {
+    $root = $context;
+  }
+  elseif (is_object($context) && isset($context->root)) {
+    $root = $context->root;
+  }
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (!isset($cache[$root])) {
+    $is_txp = FALSE;
+    if (is_dir($root)
+      && file_exists($root . '/index.php')
+      && file_exists($root . '/css.php')
+      && file_exists($root . '/textpattern/index.php')
+      && file_exists($root . '/textpattern/lib/constants.php')
+      && !is_dir($root . '/core')
+      && !file_exists($root . '/autoload.php')) {
+      $is_txp = TRUE;
+    }
+    $cache[$root] = $is_txp;
+  }
+  return $cache[$root];
+}
+
+/**
+ * Detect a Grav 2 platform/site root (a capsule or the platform seed).
+ *
+ * Positive signal: root index.php + bin/grav + system/defines.php carrying
+ * GRAV_VERSION (the file Grav documents as include-safe standalone; the version
+ * is regex-readable with no CMS bootstrap). Negative discriminators: NO root
+ * core/ (Drupal 8+/Backdrop shape). NB the Backdrop-style !autoload.php test
+ * is deliberately absent -- a Grav root has no root autoload.php either, but
+ * relying on that would couple the detectors; system/defines.php is already
+ * distinctive (absent in every Drupal/Backdrop/TXP tree). Keyed on the
+ * codebase root exactly like provision_platform_is_backdrop(): FALSE for
+ * server contexts and every non-Grav tree, so every guard that calls it is a
+ * no-op on non-Grav platforms and the shared-layer edits stay inert on the
+ * public merge path. A site context's ->root is the PLATFORM root (the capsule
+ * lives at sites/<uri>/ inside it), which is itself a Grav tree -- one ->root
+ * test covers both context types.
+ */
+function provision_platform_is_grav($context = NULL) {
+  static $cache = array();
+  if (is_null($context)) {
+    $context = d();
+  }
+  $root = '';
+  if (is_string($context)) {
+    $root = $context;
+  }
+  elseif (is_object($context) && isset($context->root)) {
+    $root = $context->root;
+  }
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (!isset($cache[$root])) {
+    $is_grav = FALSE;
+    if (is_dir($root)
+      && file_exists($root . '/index.php')
+      && file_exists($root . '/bin/grav')
+      && file_exists($root . '/system/defines.php')
+      && !is_dir($root . '/core')) {
+      $is_grav = TRUE;
+    }
+    $cache[$root] = $is_grav;
+  }
+  return $cache[$root];
+}
+
+/**
+ * Union guard: is this a non-Drupal-lineage ("foreign") CMS root?
+ *
+ * The Drupal-layer hooks carry ONE added early-return on this union instead of
+ * a per-CMS line at every seam, so each later CMS wires itself in HERE (a
+ * single OR) with zero re-sweeps of the shared files. Backdrop is deliberately
+ * NOT in the union: its per-seam guards shipped first and stay untouched (the
+ * pure-addition rule for the public merge path).
+ */
+function provision_platform_is_foreign_cms($context = NULL) {
+  return provision_platform_is_txp($context)
+    || provision_platform_is_grav($context);
+}
+
+/**
  * @defgroup sitedata Site data management utility functions.
  * @{
  * The provision framework maintains a site.php file in the sites directory, to maintain additional
@@ -1384,6 +1492,41 @@ function _provision_leftover_parse_settings($dir) {
   if (preg_match('/[\'"]host[\'"]\s*=>\s*["\']([A-Za-z0-9._-]+)["\']/', $body, $m)) {
     $result['db_host'] = $m[1];
   }
+  return $result;
+}
+
+/**
+ * Per-CMS leftover credential resolvers (foreign-CMS leftovers carry no
+ * settings.php, so the Drupal parse yields nothing and a later purge would
+ * orphan the database). Each CMS adds one arm here; keep 5.6-parse-safe.
+ */
+function _provision_leftover_parse_foreign_cms($dir) {
+  $result = array('db_name' => '', 'db_host' => '');
+  // Textpattern: sites/<name>/private/config.php ($txpcfg scalar keys).
+  $txp_config = $dir . '/private/config.php';
+  if (is_file($txp_config) && is_readable($txp_config)) {
+    $body = file_get_contents($txp_config);
+    if ($body !== FALSE) {
+      if (preg_match('/\$txpcfg\s*\[\s*[\'"]db[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]/', $body, $m)) {
+        $result['db_name'] = $m[1];
+      }
+      if (preg_match('/\$txpcfg\s*\[\s*[\'"]host[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9._:-]+)[\'"]/', $body, $m)) {
+        // TXP stores host:port in one key; every consumer of db_host here
+        // compares against bare hostnames (localhost / 127.0.0.1 / the
+        // server's remote_host), so a ':port' suffix would fail every match
+        // and the purge would leave the orphan database in place -- defeating
+        // the whole point of this resolver on non-3306 (ProxySQL) topologies.
+        $host = $m[1];
+        $colon = strrpos($host, ':');
+        if ($colon !== FALSE) {
+          $host = substr($host, 0, $colon);
+        }
+        $result['db_host'] = $host;
+      }
+      return $result;
+    }
+  }
+  // (grav arm lands here in the grav track's unit.)
   return $result;
 }
 

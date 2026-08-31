@@ -17,6 +17,9 @@ function drush_provision_drupal_provision_backup_delete($backup) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   $backups = explode(',', $backup);
   foreach ($backups as $filename) {
     $success = provision_file()->unlink($filename)
@@ -39,6 +42,9 @@ function drush_provision_drupal_provision_backup_delete($backup) {
  */
 function drush_provision_drupal_post_provision_backup_delete($backup) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->client_name) {

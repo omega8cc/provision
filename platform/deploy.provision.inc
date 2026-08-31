@@ -25,6 +25,9 @@ function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   $exists = provision_file()->exists($backup_file)
     ->succeed('Deploying site from @path')
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
@@ -55,6 +58,9 @@ function drush_provision_drupal_provision_deploy_validate($backup_file = NULL) {
  */
 function drush_provision_drupal_pre_provision_deploy($backup_file) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   // Purge any cache namespace left in the shared Valkey/Redis store by a
@@ -166,6 +172,9 @@ function drush_provision_drupal_pre_provision_deploy_rollback() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (drush_get_option('deploy_replace_site', FALSE)) {
     if (drush_get_option('site_dirs_swapped', FALSE)) {
 
@@ -194,6 +203,9 @@ function drush_provision_drupal_provision_deploy() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   _provision_drupal_maintain_aliases();
   _provision_drupal_create_directories();
 }
@@ -203,6 +215,9 @@ function drush_provision_drupal_provision_deploy() {
  */
 function drush_provision_drupal_post_provision_deploy() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   // D6 -> D7 upgrade deploy (transient d6_d7_upgrade option): the imported

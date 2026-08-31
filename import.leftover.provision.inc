@@ -49,6 +49,9 @@ function drush_provision_leftover_import($leftover = NULL) {
   }
 
   $info = _provision_leftover_parse_settings($path);
+  if ($info['db_name'] === '') {
+    $info = _provision_leftover_parse_foreign_cms($path);
+  }
   $info['leftover'] = $leftover;
   $info['mtime'] = filemtime($path);
 

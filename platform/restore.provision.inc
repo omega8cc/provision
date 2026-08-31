@@ -7,6 +7,9 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Backup mode ctrl file cleanup. The safety copy force-defines its own mode
   // and never reads the ctrl file, so without this a dead backup task's
   // leftover would survive the whole restore - adopted by the provision-deploy
@@ -39,6 +42,9 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
  */
 function drush_provision_drupal_pre_provision_restore($restore_file) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   drush_log(dt("Putting site under maintenance"));
@@ -76,6 +82,9 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused migration site package')
     ->fail('Could not remove unused migration site package');
@@ -94,6 +103,9 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
  */
 function drush_provision_drupal_provision_restore($restore_file) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   // Build an options array to pass to the deploy task. This allows injection

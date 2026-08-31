@@ -16,6 +16,9 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Backup mode ctrl file cleanup
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
@@ -41,6 +44,9 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_name = NUL
   // migrate never runs against a Backdrop site (it would clobber settings.php
   // with a legacy Drupal file). The Backdrop migrate fork lands in Phase 2.
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   // Set offline mode to true and re-generate the settings.php file.
@@ -93,6 +99,9 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Set site_offline to false and regenerate the config.
   drush_log(dt("Bringing site out of maintenance"));
   d()->site_enabled = true;
@@ -125,6 +134,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   // migrate never runs against a Backdrop site (it would clobber settings.php
   // with a legacy Drupal file). The Backdrop migrate fork lands in Phase 2.
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
 
@@ -381,6 +393,9 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // A same-platform rename may have dropped the rename target's sites.php
   // record (pre-D7: its alias symlink) before invoking the deploy; a failed
   // deploy must not leave the source's alias routing incomplete. Rebuild the
@@ -402,6 +417,9 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   // migrate never runs against a Backdrop site (it would clobber settings.php
   // with a legacy Drupal file). The Backdrop migrate fork lands in Phase 2.
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   drush_set_option('installed', FALSE);
