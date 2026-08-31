@@ -185,6 +185,21 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
   add_header X-Content-Type-Options "nosniff";
   add_header X-Frame-Options "SAMEORIGIN" always;
 
+  ### Operator escape hatch: the box-wide high-load protection drop-in that
+  ### every other vhost includes. Without it a TXP site silently ignores
+  ### operator load shedding. (Capacity-shed layer, part 1 of 2: the
+  ### zone-dependent limits -- AI-class rate limits and the per-vhost
+  ### anonymous-render cap -- are a designed round-3 item, presence-gated on
+  ### the BOA-written zones file, NOT copied blind: their key semantics are
+  ### CMS-specific. See boa-txp docs/integration-map.md R-22.)
+  include /data/conf/nginx_high_load.c*;
+
+  ### Reject non-standard request methods without a 405 body (shared-include
+  ### parity; CMS-agnostic).
+  if ($request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$) {
+    return 444;
+  }
+
   ### Deny listed requests for security reasons (verbatim from the shared
   ### include: backups, dumps, editor swap files, VCS metadata, composer files).
   location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
