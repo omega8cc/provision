@@ -44,6 +44,18 @@ function drush_provision_grav_pre_provision_verify() {
         dt('Platform @path has no vendor/autoload.php -- not a usable seed (stage the official admin-bundle archive; a vendor-less tree turns any CLI entry into an unpinned network composer run).',
         array('@path' => d()->root)));
     }
+    // The platform-level Drushrc renders into sites/all/drush/drushrc.php
+    // (CMS-agnostic provision machinery; GravBoot loads it as the 'drupal'
+    // config). A Grav seed ships no sites/all -- pre-create the nested path
+    // or the render warns every verify. Inert to Grav itself; find_sites
+    // ignores it (no system/defines.php).
+    foreach (array('/sites', '/sites/all', '/sites/all/drush') as $subdir) {
+      if (!is_dir(d()->root . $subdir)) {
+        provision_file()->mkdir(d()->root . $subdir)
+          ->succeed('Created <code>@path</code>')
+          ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+      }
+    }
   }
 }
 
