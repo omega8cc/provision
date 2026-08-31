@@ -145,6 +145,67 @@ function provision_platform_is_backdrop($context = NULL) {
 }
 
 /**
+ * Detect a Textpattern (TXP) platform/site root.
+ *
+ * Positive signal: root index.php + css.php + textpattern/lib/constants.php +
+ * textpattern/index.php (the shared-core admin entry). Negative discriminators:
+ * NO root core/ (Drupal 8+/Backdrop shape) and NO root autoload.php (Composer-
+ * managed Drupal). Keyed on the codebase root exactly like
+ * provision_platform_is_backdrop(): FALSE for server contexts and for every
+ * Drupal/Backdrop tree, so every guard that calls it is a no-op on non-TXP
+ * platforms and the shared-layer edits stay inert on the public merge path.
+ *
+ * @param $context
+ *   A codebase root path (string), or a Provision context whose ->root is the
+ *   platform docroot. Defaults to the active d().
+ * @return
+ *   TRUE if the resolved root is a Textpattern root, FALSE otherwise.
+ */
+function provision_platform_is_txp($context = NULL) {
+  static $cache = array();
+  if (is_null($context)) {
+    $context = d();
+  }
+  $root = '';
+  if (is_string($context)) {
+    $root = $context;
+  }
+  elseif (is_object($context) && isset($context->root)) {
+    $root = $context->root;
+  }
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (!isset($cache[$root])) {
+    $is_txp = FALSE;
+    if (is_dir($root)
+      && file_exists($root . '/index.php')
+      && file_exists($root . '/css.php')
+      && file_exists($root . '/textpattern/index.php')
+      && file_exists($root . '/textpattern/lib/constants.php')
+      && !is_dir($root . '/core')
+      && !file_exists($root . '/autoload.php')) {
+      $is_txp = TRUE;
+    }
+    $cache[$root] = $is_txp;
+  }
+  return $cache[$root];
+}
+
+/**
+ * Union guard: is this a non-Drupal-lineage ("foreign") CMS root?
+ *
+ * The Drupal-layer hooks carry ONE added early-return on this union instead of
+ * a per-CMS line at every seam, so each later CMS wires itself in HERE (a
+ * single OR) with zero re-sweeps of the shared files. Backdrop is deliberately
+ * NOT in the union: its per-seam guards shipped first and stay untouched (the
+ * pure-addition rule for the public merge path).
+ */
+function provision_platform_is_foreign_cms($context = NULL) {
+  return provision_platform_is_txp($context);
+}
+
+/**
  * @defgroup sitedata Site data management utility functions.
  * @{
  * The provision framework maintains a site.php file in the sites directory, to maintain additional

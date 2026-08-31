@@ -22,6 +22,9 @@ function drush_provision_dlock() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Auto-fix the platform root BEFORE setting the selected-root context and
   // bootstrapping, so the corrected (D8+ web/) docroot is the one bootstrapped.
   d()->root = provision_auto_fix_platform_root(d()->root);

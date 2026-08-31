@@ -9,6 +9,9 @@ function drush_provision_drupal_provision_enable_validate() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (d()->type == 'site') {
     d()->site_enabled = true;
     if (drush_drupal_major_version() >= 8) {
@@ -25,6 +28,9 @@ function drush_provision_drupal_provision_enable_validate() {
 
 function drush_provision_drupal_post_provision_enable() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type == 'site') {

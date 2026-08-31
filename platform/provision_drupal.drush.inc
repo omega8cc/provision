@@ -193,6 +193,9 @@ function drush_provision_drupal_provision_install_backend() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   drush_include_engine('drupal', 'install');
 }
 
