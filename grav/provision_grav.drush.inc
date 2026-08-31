@@ -258,10 +258,16 @@ function provision_grav_find_sites($root = NULL) {
   $markers = glob($root . '/sites/*/system/defines.php');
   if (is_array($markers)) {
     foreach ($markers as $marker) {
-      $uri = basename(dirname(dirname($marker)));
-      // A deploy-failure leftover (<uri>.restore) is a full Grav tree too;
-      // it is transient debris, never a site.
-      if (strpos($uri, '.restore') !== FALSE) {
+      $capsule = dirname(dirname($marker));
+      $uri = basename($capsule);
+      // Deploy/restore leftovers (<uri>.restore, <uri>.original and the
+      // parked -stale-extract shapes) are full Grav trees too; they are
+      // transient debris, never sites. A symlinked entry is not a capsule
+      // either: both Grav upgrade paths refuse symlinked trees (D-003), so
+      // counting one would register a site every task must then choke on.
+      if (strpos($uri, '.restore') !== FALSE
+        || strpos($uri, '.original') !== FALSE
+        || is_link($capsule)) {
         continue;
       }
       $sites[$uri] = $uri;
