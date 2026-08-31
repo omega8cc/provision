@@ -146,6 +146,27 @@ try {
     }
   }
   $upd->close();
+
+  // Which contact/mail metadata did the copy actually inherit? Probed here,
+  // while the connection is open, so the advisory below can name what is
+  // really set instead of firing on every single copy.
+  $inherited = array();
+  if (!$is_restore) {
+    $probe = array('publisher_email', 'smtp_from', 'smtp_host', 'smtp_user');
+    foreach ($probe as $pref_name) {
+      $rs = $mysqli->query("SELECT val FROM txp_prefs WHERE name = '" . $mysqli->real_escape_string($pref_name) . "'");
+      if ($rs !== FALSE && ($row = $rs->fetch_row()) && trim((string) $row[0]) !== '') {
+        $inherited[] = $pref_name;
+      }
+    }
+    if ($table_exists($mysqli, 'txp_users')) {
+      $rs = $mysqli->query("SELECT COUNT(*) FROM txp_users WHERE email <> ''");
+      if ($rs !== FALSE && ($row = $rs->fetch_row()) && (int) $row[0] > 0) {
+        $inherited[] = dt('!n user email address(es)', array('!n' => (int) $row[0]));
+      }
+    }
+  }
+
   if (!empty($missing)) {
     drush_log(dt('These prefs rows were absent and could NOT be re-pointed: !list. TXP will recreate them from defaults on the next admin login (siteurl defaults to the ADMIN host) -- fix them in the Preferences panel.',
       array('!list' => implode(', ', $missing))), 'warning');
@@ -165,7 +186,15 @@ else {
   drush_log(dt('Deployed TXP copy re-pointed at !uri; blog_uid + user nonces regenerated, smtp_pass cleared, tokens/logs/nonces truncated.', array('!uri' => $uri)), 'ok');
   // Deliberately NOT mutated (they are content/identity, not credentials, and
   // silently rewriting them would break a legitimate copy): txp_users.email
-  // rows, publisher_email, smtp_from/smtp_host/smtp_user. Name them so the
-  // operator can decide.
-  drush_log(dt('NOTE: the copy inherits the source contact metadata (user emails, publisher_email, smtp_from/host/user). Review them in the Preferences and Users panels before the copy sends mail.'), 'warning');
+  // rows, publisher_email, smtp_from/smtp_host/smtp_user. Name what the copy
+  // actually carries so the operator can decide -- and stay silent when it
+  // carries nothing, because an advisory that fires on EVERY copy is noise
+  // that teaches operators to ignore the colour rather than read the line.
+  if (!empty($inherited)) {
+    drush_log(dt('NOTE: the copy inherited contact metadata from the source (!list). Review it in the Preferences and Users panels before the copy sends mail.',
+      array('!list' => implode(', ', $inherited))), 'warning');
+  }
+  else {
+    drush_log(dt('No contact metadata to review: the source carried no publisher/SMTP address and no user email addresses.'), 'ok');
+  }
 }

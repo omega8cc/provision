@@ -17,14 +17,19 @@ function drush_provision_txp_provision_migrate_validate($platform = NULL) {
   // site migrate ONTO a TXP platform -- the shared Drupal validate returns
   // early only when the SITE is foreign, so nothing else would stop it.
   $source_is_txp = provision_platform_is_txp(d());
-  $target_is_foreign = FALSE;
+  // The TARGET test must be THIS CMS's own predicate, never the foreign-CMS
+  // union: every CMS layer ships in the same provision tree and every
+  // validate hook fires on every clone/migrate, so a union target test makes
+  // this refusal swallow another CMS's supported task and answer with a
+  // TXP-flavoured message. Each CMS layer refuses its own platforms; the others refuse theirs.
+  $target_is_txp = FALSE;
   if (!empty($platform)) {
     $target = d($platform);
     if (is_object($target) && isset($target->root)) {
-      $target_is_foreign = provision_platform_is_foreign_cms($target->root);
+      $target_is_txp = provision_platform_is_txp($target->root);
     }
   }
-  if (!$source_is_txp && !$target_is_foreign) {
+  if (!$source_is_txp && !$target_is_txp) {
     return;
   }
   return drush_set_error('PROVISION_TXP_MIGRATE_UNSUPPORTED',

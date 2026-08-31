@@ -60,7 +60,15 @@ function provision_drupal_drush_exit() {
     d()->root = provision_auto_fix_platform_root(d()->root);
 
     if (d()->type === 'site') {
-      if (preg_match("/^provision-login-reset/", $command[0])) {
+      // The two permission branches below are Drupal-shaped end to end
+      // (sites/all/{modules,themes,libraries}, local.settings.php,
+      // civicrm.settings.php) and none of those paths exist on a foreign-CMS
+      // platform, so every TXP/Grav site verify logged three chmod failures.
+      // Guard the BRANCHES, never the whole exit hook: it also calls
+      // provision_save_site_data() / provision_save_platform_data() below,
+      // which write the drushrc.php files a foreign-CMS layer boots from.
+      $foreign_cms = provision_platform_is_foreign_cms(d());
+      if (!$foreign_cms && preg_match("/^provision-login-reset/", $command[0])) {
         // Make site and platform directories world writable temporarily,
         // until the next site verify, but only if apps module and
         // control file both exist.
@@ -113,7 +121,7 @@ function provision_drupal_drush_exit() {
             ->fail('Could not change permissions of <code>@path</code> to @perm');
         }
       }
-      elseif (preg_match("/^provision-verify/", $command[0])) {
+      elseif (!$foreign_cms && preg_match("/^provision-verify/", $command[0])) {
         // Revert site and platform directories permissions to default.
         provision_file()->chmod(d()->site_path, 0755)
           ->succeed('Changed permissions of <code>@path</code> to @perm')
