@@ -23,6 +23,12 @@ function drush_provision_grav_provision_delete_validate() {
   if (d()->type !== 'platform') {
     return;
   }
+  // Belt for never-verified platforms: the http layer's own delete guard
+  // opendir()s ./sites and error-logs when it is absent (a Grav release
+  // archive ships none; platform verify normally creates it).
+  if (!is_dir(d()->root . '/sites')) {
+    provision_file()->mkdir(d()->root . '/sites');
+  }
   if (drush_get_option('force', FALSE)) {
     return;
   }
