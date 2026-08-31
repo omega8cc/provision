@@ -13,6 +13,9 @@ function drush_provision_drupal_pre_provision_disable($backup_file = null) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (d()->type == 'site') {
     d()->site_enabled = false;
   }
@@ -23,6 +26,9 @@ function drush_provision_drupal_pre_provision_disable($backup_file = null) {
  */
 function drush_provision_drupal_post_provision_disable() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type == 'site') {

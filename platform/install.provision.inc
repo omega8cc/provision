@@ -18,6 +18,9 @@ function drush_provision_drupal_provision_install_validate() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
 
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
@@ -70,6 +73,9 @@ function drush_provision_drupal_pre_provision_install() {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Purge any cache namespace left in the shared Valkey/Redis store by a
   // previously deleted site with the same URI, BEFORE the installer runs any
   // site code: an observed delete+recreate cycle inherited ~1700 stale keys
@@ -89,6 +95,9 @@ function drush_provision_drupal_pre_provision_install() {
  */
 function drush_provision_drupal_pre_provision_install_rollback() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   provision_file()->chmod(d()->site_path, 0755);
@@ -120,6 +129,9 @@ function findDrupalAppRoot($startDir) {
  */
 function drush_provision_drupal_provision_install() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   // Requires at least the database settings to complete.
@@ -463,6 +475,9 @@ function drush_provision_drupal_provision_install() {
  */
 function drush_provision_drupal_post_provision_install() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
 

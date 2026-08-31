@@ -1,0 +1,43 @@
+<?php
+/**
+ * @file
+ * Provision hooks for the provision backup-delete command (TXP layer).
+ *
+ * Fork of backdrop/delete.backup.provision.inc (itself CMS-agnostic in body).
+ * Without it the frontend's "delete backup" reports success while the archive
+ * AND the client backup symlink this layer creates in the post-backup hook
+ * stay on disk.
+ *
+ * @param string $backup
+ *   A comma-separated list of backup filenames.
+ */
+function drush_provision_txp_provision_backup_delete($backup) {
+  if (!provision_platform_is_txp(d())) {
+    return;
+  }
+  $backups = explode(',', $backup);
+  foreach ($backups as $filename) {
+    provision_file()->unlink($filename)
+      ->succeed('Removed backup file @path')
+      ->fail('Could not remove backup file @path');
+  }
+}
+
+/**
+ * Implements drush_hook_post_COMMAND().
+ *
+ * Clean up the client backup symlinks created by the post-backup hook.
+ */
+function drush_provision_txp_post_provision_backup_delete($backup) {
+  if (!provision_platform_is_txp(d())) {
+    return;
+  }
+  if (d()->client_name) {
+    $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
+    $backups = explode(',', $backup);
+    foreach ($backups as $filename) {
+      provision_file()->unlink($backup_dir . '/' . basename($filename))
+        ->succeed('Deleted backup symlink @path');
+    }
+  }
+}

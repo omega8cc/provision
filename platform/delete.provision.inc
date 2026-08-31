@@ -7,6 +7,9 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   if (d()->type === 'site') {
     // Backup mode ctrl file cleanup, only where the safety backup follows:
     // a platform or server delete takes no backup, and unlinking there would
@@ -33,6 +36,9 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
  */
 function drush_provision_drupal_provision_delete() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type === 'site') {
@@ -138,6 +144,9 @@ function drush_provision_drupal_provision_delete() {
  */
 function drush_provision_drupal_post_provision_delete() {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   if (d()->type === 'site') {

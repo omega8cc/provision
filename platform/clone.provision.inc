@@ -16,6 +16,9 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   // Backup mode ctrl file cleanup
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
@@ -38,6 +41,9 @@ function drush_provision_drupal_pre_provision_clone($new_name, $platform = null)
   if (provision_platform_is_backdrop(d())) {
     return;
   }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
   drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
@@ -56,6 +62,9 @@ function drush_provision_drupal_pre_provision_clone($new_name, $platform = null)
  */
 function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platform = null) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   $success =  provision_file()->unlink(drush_get_option('backup_file'))
@@ -77,6 +86,9 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
  */
 function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
     return;
   }
   drush_set_option('old_platform', d()->platform->name);
