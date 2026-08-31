@@ -193,6 +193,52 @@ function provision_platform_is_txp($context = NULL) {
 }
 
 /**
+ * Detect a Grav 2 platform/site root (a capsule or the platform seed).
+ *
+ * Positive signal: root index.php + bin/grav + system/defines.php carrying
+ * GRAV_VERSION (the file Grav documents as include-safe standalone; the version
+ * is regex-readable with no CMS bootstrap). Negative discriminators: NO root
+ * core/ (Drupal 8+/Backdrop shape). NB the Backdrop-style !autoload.php test
+ * is deliberately absent -- a Grav root has no root autoload.php either, but
+ * relying on that would couple the detectors; system/defines.php is already
+ * distinctive (absent in every Drupal/Backdrop/TXP tree). Keyed on the
+ * codebase root exactly like provision_platform_is_backdrop(): FALSE for
+ * server contexts and every non-Grav tree, so every guard that calls it is a
+ * no-op on non-Grav platforms and the shared-layer edits stay inert on the
+ * public merge path. A site context's ->root is the PLATFORM root (the capsule
+ * lives at sites/<uri>/ inside it), which is itself a Grav tree -- one ->root
+ * test covers both context types.
+ */
+function provision_platform_is_grav($context = NULL) {
+  static $cache = array();
+  if (is_null($context)) {
+    $context = d();
+  }
+  $root = '';
+  if (is_string($context)) {
+    $root = $context;
+  }
+  elseif (is_object($context) && isset($context->root)) {
+    $root = $context->root;
+  }
+  if (!is_string($root) || $root === '') {
+    return FALSE;
+  }
+  if (!isset($cache[$root])) {
+    $is_grav = FALSE;
+    if (is_dir($root)
+      && file_exists($root . '/index.php')
+      && file_exists($root . '/bin/grav')
+      && file_exists($root . '/system/defines.php')
+      && !is_dir($root . '/core')) {
+      $is_grav = TRUE;
+    }
+    $cache[$root] = $is_grav;
+  }
+  return $cache[$root];
+}
+
+/**
  * Union guard: is this a non-Drupal-lineage ("foreign") CMS root?
  *
  * The Drupal-layer hooks carry ONE added early-return on this union instead of
@@ -202,7 +248,8 @@ function provision_platform_is_txp($context = NULL) {
  * pure-addition rule for the public merge path).
  */
 function provision_platform_is_foreign_cms($context = NULL) {
-  return provision_platform_is_txp($context);
+  return provision_platform_is_txp($context)
+    || provision_platform_is_grav($context);
 }
 
 /**
