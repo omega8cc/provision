@@ -31,6 +31,20 @@ function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
+  // The pre-clone copy is registered in the panel as "Pre-clone backup" and
+  // offered to the operator as a restore point, so it must be self-contained.
+  // Left to resolve on its own it comes out modeless: MyQuick then carries the
+  // database through the transient tmp_expim directory instead of the archive,
+  // and once that directory is gone the registered "backup" cannot restore the
+  // database at all. Force the same restorable mode the restore and delete
+  // safety copies already use. The deploy half below is switched to match --
+  // both halves MUST agree on the transport, or the clone breaks.
+  if (!defined('SELECTED_BACKUP_MODE')) {
+    define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
+  }
+  drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
+  drush_set_option('backup_mode', 'site_files_with_mysqldump');
+  drush_log(dt('Clone safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
@@ -100,6 +114,12 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
+    // Match the transport the safety copy above was written with. The deploy
+    // runs as a SEPARATE backend process, so it resolves the backup mode from
+    // scratch: without this it resolves to modeless, takes the MyQuick import
+    // branch and looks for a tmp_expim dump directory that a mysqldump-mode
+    // backup never wrote -- "Database import failed (dir: .../tmp_expim)".
+    'selected_backup_mode' => 'site_files_with_mysqldump',
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'clone');
 
