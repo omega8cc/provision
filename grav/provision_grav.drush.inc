@@ -43,6 +43,49 @@ function provision_grav_drush_init() {
 }
 
 /**
+ * Implements hook_drush_command().
+ *
+ * The mirror-fed Grav core+bundle upgrade command. Registered here (the owned
+ * Grav layer), not in provision.drush.inc, so the whole feature stays
+ * additive. Hook functions live in upgrade.grav.provision.inc (the
+ * reversed-dotted include Drush resolves for provision-grav-upgrade); Drush
+ * collapses the commandfile prefix out of the hook names because the command
+ * name starts with it.
+ */
+function provision_grav_drush_command() {
+  $items = array();
+  $items['provision-grav-upgrade'] = array(
+    'description' => 'Upgrade a Grav site capsule in place to a staged official admin-bundle release (mirror-fed, D-004/D-006; safety backup first; user content, accounts and configuration survive).',
+    'arguments' => array(
+      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged under <aegir_root>/static/grav-releases/.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @gravsite provision-grav-upgrade' => 'Upgrade the capsule to the newest staged official release.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  return $items;
+}
+
+/**
+ * Resolve the newest staged official admin-bundle artefact.
+ *
+ * The BOA channel (boa-grav D-004: staticbuild -> mirrors -> box) stages the
+ * official grav-admin-v*.zip files under <aegir_root>/static/grav-releases/;
+ * newest by version sort wins. Returns FALSE when nothing is staged.
+ */
+function _provision_grav_newest_artefact() {
+  $dir = d('@server_master')->aegir_root . '/static/grav-releases';
+  $candidates = glob($dir . '/grav-admin-v*.zip');
+  if (!is_array($candidates) || empty($candidates)) {
+    return FALSE;
+  }
+  usort($candidates, 'version_compare');
+  return end($candidates);
+}
+
+/**
  * Implements hook_bootstrap_candidates().
  *
  * The BackdropBoot/TxpBoot pattern: the boot class ships HERE (zero drush-fork
