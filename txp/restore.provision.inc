@@ -20,6 +20,11 @@ function drush_provision_txp_provision_restore_validate($restore_file = NULL) {
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
     ->status();
   drush_set_option('restore_file', $restore_file);
+  // Clear a stale frontend backup-mode ctrl file: the safety copy below forces
+  // its own mode, but a leftover would otherwise survive into the next flow.
+  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+    unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
 }
 
 function drush_provision_txp_pre_provision_restore($restore_file) {
@@ -83,6 +88,19 @@ function drush_provision_txp_provision_restore($restore_file) {
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', FALSE);
+  }
+  else {
+    // The pre-hook took the site into the maintenance (disabled) vhost. A
+    // FAILED restore must not leave it there: the deploy has already swapped
+    // the original tree back and re-rendered its config, so the only thing
+    // still wrong is the vhost. Re-render it from the persisted (enabled)
+    // state -- site_enabled was only ever flipped in memory, never written to
+    // the alias. Without this the site stays on "Under Construction" until an
+    // operator runs Enable/Verify by hand (live-proven on the rig).
+    d()->site_enabled = TRUE;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    drush_log(dt('Restore failed; the original site tree, credentials and vhost have been put back.'), 'warning');
   }
 
   // Always clear the flag, success or failure (a leftover one silently ends

@@ -40,7 +40,24 @@ function drush_provision_txp_provision_backup_validate($backup_file = NULL) {
   // fetch_site_credentials() before any of our other hooks run, and an empty
   // context means "FAIL no db_name" — a silently dump-less backup.
   _provision_txp_ensure_db_creds_loaded();
-  $backup_mode = provision_backup_mode_resolve();
+  // Latches SELECTED_BACKUP_MODE (and AEGIR_BACKUP_MODE_CTRL_READ) for the
+  // whole process; the return value is intentionally unused here.
+  provision_backup_mode_resolve();
+
+  // One-shot consume of the frontend's mode ctrl file, ONLY when this process
+  // actually read it: otherwise a stale file from a dead task is inherited by
+  // the next flow -- e.g. a Clone's internal backup silently built in
+  // "database only" mode, producing a copy with no files at all. Mirrors the
+  // shared/Backdrop layers, which the union guard turns off for TXP.
+  if (defined('AEGIR_BACKUP_MODE_CTRL_READ') && defined('AEGIR_BACKUP_MODE_CTRL')
+    && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+    @unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
+
+  if (!is_dir(d()->platform->server->backup_path)) {
+    return drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND',
+      dt('Backup path @path does not exist.', array('@path' => d()->platform->server->backup_path)));
+  }
 
   if ($backup_file) {
     if (provision_file()->exists($backup_file)->status()) {
@@ -84,7 +101,15 @@ function drush_provision_txp_provision_backup_suggest_filename() {
   }
 
   $backup_path = d()->platform->server->backup_path;
-  return $backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
+  $suggested = $backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . $suffix;
+  // Collision loop (dropped from the precedent in round 2): two backups of one
+  // site inside the same second would otherwise silently overwrite the first.
+  $count = 0;
+  while (is_file($suggested)) {
+    $count++;
+    $suggested = $backup_path . '/' . d()->uri . '-' . date("Ymd.His", time()) . '_' . $count . $suffix;
+  }
+  return $suggested;
 }
 
 /**
@@ -248,12 +273,31 @@ function drush_provision_txp_provision_backup_rollback() {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  $oct_db_dirx = d('@server_master')->backup_path . '/tmp_expim';
-  if (is_dir($oct_db_dirx)) {
-    _provision_recursive_delete($oct_db_dirx);
-    drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_txp_provision_backup_rollback @var", array('@var' => $oct_db_dirx)), 'info');
-  }
+  // tmp_expim is ACCOUNT-SHARED, not per-site: deleting it unconditionally
+  // (round-2 behaviour) destroyed a concurrent clone/migrate's in-flight dump,
+  // and destroyed dumps this command never created (e.g. a validate-time
+  // "backup file already exists" abort). Mirror the precedent instead: act
+  // only on a modeless run of OURS that produced an archive, and PRESERVE the
+  // dump by rotating it to a dated dir rather than deleting it.
   $backup_file = drush_get_option('backup_file');
+  $backup_mode = provision_backup_mode_resolve();
+  if (empty($backup_mode) && $backup_file && is_file($backup_file)) {
+    $backup_path = d('@server_master')->backup_path;
+    $aegir_root = d('@server_master')->aegir_root;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
+    $oct_db_test = $oct_db_dirx . '/metadata';
+    $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
+    if (is_file($enable_myquick) && is_file($oct_db_test)) {
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
+      provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
+        ->succeed('Moving the rollback DB dump @path1 to @path2 was successful.')
+        ->fail('Moving the rollback DB dump @path1 to @path2 has failed.');
+      if (is_dir($uri_db_dirz)) {
+        _provision_recursive_delete($oct_db_dirx);
+        drush_log(dt("MyQuick tmp_expim dir rotated in drush_provision_txp_provision_backup_rollback @var", array('@var' => $uri_db_dirz)), 'info');
+      }
+    }
+  }
   if ($backup_file && provision_file()->exists($backup_file)->status()) {
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')

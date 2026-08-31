@@ -121,6 +121,14 @@ function provision_txp_provision_config_load_templates($config) {
   if ($class !== 'Provision_Config_Nginx_Site' && $class !== 'Provision_Config_Nginx_Ssl_Site') {
     return array();
   }
+  // A hook-supplied template OUTRANKS the class's own selection
+  // (Provision_Config::load_template() consults hooks before $this->template),
+  // and Provision_Config_Http_Site::process() expresses "site disabled" by
+  // swapping $this->template to the disabled vhost. Returning a template here
+  // for a disabled site would therefore keep it SERVING. Stand aside.
+  if (!$config->site_enabled) {
+    return array();
+  }
   $root = $config->root;
   if (!is_string($root) || $root === '' || !provision_platform_is_txp($root)) {
     return array();
@@ -195,11 +203,46 @@ function provision_txp_find_sites($root = NULL) {
   $configs = glob($root . '/sites/*/private/config.php');
   if (is_array($configs)) {
     foreach ($configs as $config) {
-      $uri = basename(dirname(dirname($config)));
+      $dir = dirname(dirname($config));
+      $uri = basename($dir);
+      // Skip revert artefacts (<uri>.restore / <uri>.original): they carry a
+      // full config.php but are NOT sites. Counting them would deadlock
+      // platform delete and report phantom sites to the frontend; they are the
+      // D-035 leftover subsystem's business, not ours. Symlinked site dirs are
+      // skipped for the same reason the Drupal scan skips them.
+      if (preg_match('/\.(restore|original)$/', $uri) || is_link($dir)) {
+        continue;
+      }
       $sites[$uri] = $uri;
     }
   }
   return $sites;
+}
+
+/**
+ * Read the db credentials out of a persisted site drushrc.php into an array.
+ *
+ * Regex parse (no include, so the file's $_SERVER side effects never run).
+ * Returns the db_* subset found, or an empty array. Used where the credentials
+ * must NOT pass through the 'site' option context -- notably the deploy
+ * rollback, where that context already holds the credentials of a database
+ * that is about to be dropped.
+ */
+function _provision_txp_drushrc_creds($drushrc) {
+  $creds = array();
+  if (!is_readable($drushrc)) {
+    return $creds;
+  }
+  $body = file_get_contents($drushrc);
+  if ($body === FALSE) {
+    return $creds;
+  }
+  foreach (array('db_type', 'db_user', 'db_passwd', 'db_host', 'db_name', 'db_port') as $key) {
+    if (preg_match('/\\$options\\s*\\[\\s*[\'"]' . $key . '[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+      $creds[$key] = $m[1];
+    }
+  }
+  return $creds;
 }
 
 /**
@@ -450,7 +493,10 @@ function _provision_txp_send_welcome_mail($client_email, $login_link) {
     drush_log(dt('No valid client email; welcome mail skipped.'), 'notice');
     return;
   }
-  $uri = d()->uri;
+  // Header-injection hygiene: every value that reaches a header line is
+  // CR/LF-stripped, not just the (already FILTER_VALIDATE_EMAIL'd) recipient.
+  $uri = str_replace(array("\r", "\n"), '', d()->uri);
+  $host = str_replace(array("\r", "\n"), '', php_uname('n'));
   $subject = '[' . $uri . '] ' . dt('Your new Textpattern site');
   $body = dt("Your new Textpattern site is ready.") . "\n\n"
     . dt("Site: ") . 'https://' . $uri . '/' . "\n"
@@ -458,7 +504,7 @@ function _provision_txp_send_welcome_mail($client_email, $login_link) {
     . dt("Username: ") . 'admin' . "\n\n"
     . dt("Set your password here (the link expires):") . "\n"
     . $login_link . "\n";
-  $headers = 'From: noreply@' . php_uname('n');
+  $headers = 'From: noreply@' . $host;
   if (@mail($client_email, $subject, $body, $headers)) {
     drush_log(dt('Welcome mail sent to @to.', array('@to' => $client_email)), 'ok');
   }

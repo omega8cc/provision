@@ -12,9 +12,21 @@
  */
 
 function drush_provision_txp_provision_migrate_validate($platform = NULL) {
-  if (!provision_platform_is_txp(d())) {
+  // Refuse on EITHER side: a TXP source (this hook's own context) and a
+  // TXP/foreign TARGET platform. Guarding only the source would let a Drupal
+  // site migrate ONTO a TXP platform -- the shared Drupal validate returns
+  // early only when the SITE is foreign, so nothing else would stop it.
+  $source_is_txp = provision_platform_is_txp(d());
+  $target_is_foreign = FALSE;
+  if (!empty($platform)) {
+    $target = d($platform);
+    if (is_object($target) && isset($target->root)) {
+      $target_is_foreign = provision_platform_is_foreign_cms($target->root);
+    }
+  }
+  if (!$source_is_txp && !$target_is_foreign) {
     return;
   }
   return drush_set_error('PROVISION_TXP_MIGRATE_UNSUPPORTED',
-    dt('Migrate/rename is not implemented for Textpattern sites yet; refusing rather than silently doing nothing. Use Clone to copy the site to a new name/platform.'));
+    dt('Migrate/rename is not implemented for Textpattern sites/platforms yet; refusing rather than silently doing nothing or migrating a Drupal site onto a foreign-CMS platform. Use Clone to copy the site to a new name/platform.'));
 }

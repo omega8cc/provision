@@ -42,8 +42,14 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  if (d()->type === 'site' && !drush_get_option('force', FALSE)) {
+  if (d()->type === 'site') {
     _provision_txp_ensure_db_creds_loaded();
+    // Clear a stale mode ctrl file, ONLY on the path that takes a backup (a
+    // platform/server delete takes none, and unlinking there would destroy a
+    // concurrent backup task's live mode for nothing).
+    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+      unlink(AEGIR_BACKUP_MODE_CTRL);
+    }
     // The last copy of a site must be restorable: force the self-contained
     // mode exactly like the restore safety copy.
     if (!defined('SELECTED_BACKUP_MODE')) {
@@ -51,7 +57,17 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
     }
     drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
     drush_set_option('backup_mode', 'site_files_with_mysqldump');
+    // NB force is SET here (precedent), never tested: it carries the backup
+    // past provision-backup's own force-gated guards. Testing it -- the
+    // round-2 shape -- skipped the final safety backup for exactly the
+    // force-flagged deletes that most need one.
     drush_set_option('force', TRUE, 'process');
+    if (!empty($backup_file) && !strpos($backup_file, '/')) {
+      drush_unset_option('force', 'process');
+      return drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE',
+        dt('The passed backup name is a relative path; storing the final backup inside the site directory that is about to be deleted is probably not intended. Use an absolute name, or none to let one be generated.'));
+    }
+    drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_delete'));
     drush_invoke('provision-backup', $backup_file);
     drush_unset_option('force', 'process');
   }

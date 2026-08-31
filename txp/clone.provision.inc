@@ -18,6 +18,13 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }
+  // Clear a stale frontend backup-mode ctrl file before the internal safety
+  // backup runs: inheriting a dead task's mode would build the clone source
+  // archive in e.g. "database only" mode and deploy a files-less copy that
+  // still reports success.
+  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+    unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
 }
 
 function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {
@@ -69,6 +76,17 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   $options['ssl_enabled'] = 0;
   unset($options['ssl_key']);
   drush_log(dt('[clone] Encryption disabled for new site @name before final verify', array('@name' => $new_name)), 'info');
+
+  // Do not copy CDN aliases to the clone.
+  $options['cdn'] = 0;
+  unset($options['cdn']);
+
+  // Auto-disable any migration-source association: the clone gets a brand-new
+  // database user with no grant on the referenced database, so a carried
+  // association composes a connection it cannot open. (Latent while migrate is
+  // fail-closed; it must be here BEFORE the real migrate engine lands.)
+  unset($options['migrate_source_db']);
+  unset($options['migrate_source_uri']);
 
   if ($profile = drush_get_option('profile', FALSE)) {
     $options['profile'] = $profile;

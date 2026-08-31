@@ -1511,7 +1511,17 @@ function _provision_leftover_parse_foreign_cms($dir) {
         $result['db_name'] = $m[1];
       }
       if (preg_match('/\$txpcfg\s*\[\s*[\'"]host[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9._:-]+)[\'"]/', $body, $m)) {
-        $result['db_host'] = $m[1];
+        // TXP stores host:port in one key; every consumer of db_host here
+        // compares against bare hostnames (localhost / 127.0.0.1 / the
+        // server's remote_host), so a ':port' suffix would fail every match
+        // and the purge would leave the orphan database in place -- defeating
+        // the whole point of this resolver on non-3306 (ProxySQL) topologies.
+        $host = $m[1];
+        $colon = strrpos($host, ':');
+        if ($colon !== FALSE) {
+          $host = substr($host, 0, $colon);
+        }
+        $result['db_host'] = $host;
       }
       return $result;
     }

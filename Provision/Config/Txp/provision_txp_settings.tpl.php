@@ -23,11 +23,11 @@ $txpcfg['user'] = '<?php print addcslashes($this->creds['db_user'], "'\\"); ?>';
 $txpcfg['pass'] = '<?php print addcslashes($this->creds['db_passwd'], "'\\"); ?>';
 $txpcfg['host'] = '<?php print addcslashes($this->creds['db_host'] . (!empty($this->creds['db_port']) && $this->creds['db_port'] != '3306' ? ':' . $this->creds['db_port'] : ''), "'\\"); ?>';
 $txpcfg['table_prefix'] = '';
-$txpcfg['txpath'] = '<?php print $txp_txpath; ?>';
+$txpcfg['txpath'] = '<?php print addcslashes($txp_txpath, "'\\"); ?>';
 $txpcfg['dbcharset'] = 'utf8mb4';
 $txpcfg['table_collation'] = 'utf8mb4_unicode_ci';
 $txpcfg['dbengine'] = 'InnoDB';
-$txpcfg['multisite_root_path'] = '<?php print $txp_multisite_root; ?>';
-$txpcfg['admin_url'] = '<?php print $txp_admin_url; ?>';
+$txpcfg['multisite_root_path'] = '<?php print addcslashes($txp_multisite_root, "'\\"); ?>';
+$txpcfg['admin_url'] = '<?php print addcslashes($txp_admin_url, "'\\"); ?>';
 $txpcfg['cookie_domain'] = '';
 if (!defined('txpath')) { define('txpath', $txpcfg['txpath']); }

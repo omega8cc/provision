@@ -106,12 +106,18 @@ $cfg = array(
 
 // The JSON carries credentials: 0600, in the per-site tmp dir, removed in
 // every exit path below.
-$json_file = $site_path . '/tmp/txp-install-' . substr(md5($uri . microtime()), 0, 8) . '.json';
-if (@file_put_contents($json_file, json_encode($cfg)) === FALSE) {
+// The name is unpredictable and the file is created 0600 by UMASK, not by a
+// post-write chmod: the containing tmp dir is group-writable (web group), so a
+// create-then-chmod leaves a window in which the db password and the minted
+// admin password are group-readable.
+$json_file = $site_path . '/tmp/txp-install-' . substr(md5($uri . microtime() . mt_rand()), 0, 16) . '.json';
+$old_umask = umask(0177);
+$json_written = @file_put_contents($json_file, json_encode($cfg));
+umask($old_umask);
+if ($json_written === FALSE) {
   return drush_set_error('PROVISION_TXP_INSTALL_FAILED',
     dt('Could not write the shim config to @file.', array('@file' => $json_file)));
 }
-@chmod($json_file, 0600);
 
 $shim = dirname(__FILE__) . '/resources/txp-install-shim.php';
 $result = drush_shell_exec('%s %s --config=%s', $php_bin, $shim, $json_file);
@@ -176,8 +182,11 @@ if ($login_link === FALSE) {
   $login_link = 'https://' . $uri . '/' . PROVISION_TXP_ADMIN_PATH . '/';
 }
 drush_set_option('login_link', $login_link);
-drush_set_option('admin_user', $admin_user, 'site');
-drush_set_option('admin_pass', $admin_pass, 'site');
+// DELIBERATELY not persisted: the 'site' option context is var_export()ed
+// wholesale into sites/<uri>/drushrc.php by the shared Drushrc writer, which
+// lives at the site-dir root and therefore rides EVERY backup archive (and the
+// client-readable backup symlink). The minted password has no consumer beyond
+// this process -- the welcome mail carries a reset link, never a password.
 _provision_txp_send_welcome_mail($client_email, $login_link);
 
 // The shared textpattern/setup dir stays (other sites + future installs need

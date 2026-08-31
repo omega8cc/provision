@@ -160,6 +160,39 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
   ### TXP location contract -- inline (no shared common include).
   ### NB no acme-challenge block here: BOA injects it via $extra_config
   ### (provision_nginx_vhost_config) into every main server block.
+
+  ###
+  ### SHARED PROTECTIONS, RE-STATED. This vhost deliberately does not include
+  ### nginx_vhost_common.conf (Drupal-shaped end to end), so every CMS-AGNOSTIC
+  ### guard that include carries must be repeated here -- otherwise TXP sites
+  ### are the only unprotected sites on the box. In particular the AI policy:
+  ### the vhost above defaults $ai_train_allow/$ai_evasive_allow to 0 and
+  ### includes the per-site ai_policy fragment, but the ENFORCEMENT lives in
+  ### the include, so without these lines the policy renders and is inert.
+  ###
+  if ($is_ai_forged) { return 444; }
+  set $ai_train_block $is_ai_training;
+  if ($ai_train_allow) { set $ai_train_block ''; }
+  if ($ai_train_block) { return 444; }
+  set $ai_evasive_block $is_ai_evasive;
+  if ($ai_evasive_allow) { set $ai_evasive_block ''; }
+  if ($ai_evasive_block) { return 444; }
+  if ($is_crawler) { return 444; }
+  ### TLS ClientHello sent to the plain HTTP port.
+  if ($tls_on_plain) { return 444; }
+  ### Recommended headers (no location here defines its own add_header, so the
+  ### server-level pair is inherited everywhere; if one ever does, re-state).
+  add_header X-Content-Type-Options "nosniff";
+  add_header X-Frame-Options "SAMEORIGIN" always;
+
+  ### Deny listed requests for security reasons (verbatim from the shared
+  ### include: backups, dumps, editor swap files, VCS metadata, composer files).
+  location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig\.save))$ {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+
   location ~ /\.(?!well-known) { deny all; }
   location ~* \.txp$ { return 403; }
   location ~* ^/themes/.*/manifest\.json$ { deny all; }
@@ -184,6 +217,17 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
   location ^~ /<?php print $txp_admin_path; ?> {
     alias <?php print $site_admin; ?>;
     index index.php;
+    ### A `^~` prefix location suppresses evaluation of every server-level
+    ### REGEX location, so the dotfile and sensitive-file denies above do NOT
+    ### reach requests under the admin path. Re-state them here: the plugins
+    ### dir is a per-site upload target and plugin archives routinely carry
+    ### .git/, .env, dumps and editor leftovers.
+    location ~ /\. { deny all; }
+    location ~* \.(?:git.*|htaccess|ini|sh|.*sql|yml|bak|orig|save|swp)$ {
+      access_log off;
+      log_not_found off;
+      return 404;
+    }
     location ~ ^/<?php print $txp_admin_path; ?>/index\.php$ {
       if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
       # Full param set re-declared: nginx fastcgi_param inheritance is
