@@ -93,6 +93,7 @@ function provision_txp_drush_engine_type_info() {
 function provision_txp_drush_engine_txp() {
   $engines = array();
   $engines['clear'] = array();
+  $engines['deploy'] = array();
   $engines['install'] = array();
   $engines['packages'] = array();
   $engines['verify'] = array();
@@ -398,4 +399,70 @@ function provision_txp_find_packages() {
 function provision_txp_system_map() {
   drush_include_engine('txp', 'packages');
   return _provision_txp_packages();
+}
+
+/**
+ * Mint a TXP password-reset confirmation link for the admin user via the
+ * token shim. Returns the full https URL, or FALSE. Lives in the shell (not
+ * the reset.login hook file) because the install engine reuses it for the
+ * welcome mail.
+ */
+function _provision_txp_mint_login_link() {
+  $php_bin = _provision_txp_php_bin();
+  if ($php_bin === FALSE) {
+    return FALSE;
+  }
+  $shim = dirname(__FILE__) . '/txp/resources/txp-token-shim.php';
+  $config_php = d()->site_path . '/private/config.php';
+  if (!is_readable($config_php)) {
+    return FALSE;
+  }
+  $txpath = d()->root . '/textpattern';
+  $result = drush_shell_exec('%s %s --txpath=%s --config-php=%s --user=%s',
+    $php_bin, $shim, $txpath, $config_php, 'admin');
+  $output = (array) drush_shell_exec_output();
+  if (!$result || empty($output)) {
+    drush_log(dt('Token shim failed: !out', array('!out' => implode("\n", $output))), 'warning');
+    return FALSE;
+  }
+  // The shim prints exactly one line: CONFIRM=<token>
+  $confirm = '';
+  foreach ($output as $line) {
+    if (strpos($line, 'CONFIRM=') === 0) {
+      $confirm = substr($line, 8);
+    }
+  }
+  if ($confirm === '') {
+    drush_log(dt('Token shim returned no confirmation code: !out', array('!out' => implode("\n", $output))), 'warning');
+    return FALSE;
+  }
+  return 'https://' . d()->uri . '/' . PROVISION_TXP_ADMIN_PATH . '/index.php?lang=en-gb&confirm=' . rawurlencode($confirm);
+}
+
+/**
+ * Compose + best-effort send the welcome mail (D-006: box-level MTA/relay
+ * only; on boxes without a relay this logs and moves on). Content per the
+ * map OQ-6 proposal: site URL, admin URL, username and a password-SET link —
+ * never a plaintext password.
+ */
+function _provision_txp_send_welcome_mail($client_email, $login_link) {
+  if (!$client_email || !filter_var($client_email, FILTER_VALIDATE_EMAIL)) {
+    drush_log(dt('No valid client email; welcome mail skipped.'), 'notice');
+    return;
+  }
+  $uri = d()->uri;
+  $subject = '[' . $uri . '] ' . dt('Your new Textpattern site');
+  $body = dt("Your new Textpattern site is ready.") . "\n\n"
+    . dt("Site: ") . 'https://' . $uri . '/' . "\n"
+    . dt("Admin: ") . 'https://' . $uri . '/' . PROVISION_TXP_ADMIN_PATH . '/' . "\n"
+    . dt("Username: ") . 'admin' . "\n\n"
+    . dt("Set your password here (the link expires):") . "\n"
+    . $login_link . "\n";
+  $headers = 'From: noreply@' . php_uname('n');
+  if (@mail($client_email, $subject, $body, $headers)) {
+    drush_log(dt('Welcome mail sent to @to.', array('@to' => $client_email)), 'ok');
+  }
+  else {
+    drush_log(dt('Welcome mail could not be sent (no MTA/relay on this box?) — the login link is recorded on the task instead.'), 'notice');
+  }
 }

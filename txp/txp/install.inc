@@ -168,12 +168,17 @@ catch (Exception $e) {
 }
 drush_log(dt('Admin user asserted and per-site prefs seeded for !uri.', array('!uri' => $uri)), 'ok');
 
-// The frontend's "Log in" affordance. v1: the admin login URL (a real TXP
-// one-time token link is the reset.login engine's job, next work-unit); the
-// minted password rides the same options the Drupal welcome-mail flow reads.
-drush_set_option('login_link', 'https://' . $uri . '/' . PROVISION_TXP_ADMIN_PATH . '/');
+// The frontend's "Log in" affordance: a real TXP password-reset link when
+// the token shim delivers, the admin login URL otherwise. The welcome mail
+// carries the same link (never a plaintext password).
+$login_link = _provision_txp_mint_login_link();
+if ($login_link === FALSE) {
+  $login_link = 'https://' . $uri . '/' . PROVISION_TXP_ADMIN_PATH . '/';
+}
+drush_set_option('login_link', $login_link);
 drush_set_option('admin_user', $admin_user, 'site');
 drush_set_option('admin_pass', $admin_pass, 'site');
+_provision_txp_send_welcome_mail($client_email, $login_link);
 
 // The shared textpattern/setup dir stays (other sites + future installs need
 // it); the per-site admin/setup dir is spent -- remove it like the multisite
