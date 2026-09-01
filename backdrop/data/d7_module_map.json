@@ -1,8 +1,8 @@
 {
   "_meta": {
     "description": "D7 module -> Backdrop disposition map, consumed by provision-backdrop-upgrade validate for the operator compatibility report. Dispositions: core (namesake or successor ships in Backdrop core), superseded (core equivalent under a new name), contrib (needs a Backdrop contrib port on the target platform), none (removed; a community port may exist - check backdrop-contrib). Advisory only: update_fix_compatibility() disables anything without backdrop = 1.x in its .info regardless.",
-    "verified_against": "backdrop-core core/modules/ (1.x, 2026-07-12)",
-    "updated": "2026-07-13"
+    "verified_against": "backdrop-core core/modules/ (1.x, 2026-07-12); ctools/pathauto/token re-verified against backdrop-contrib repo contents + core path.install pathauto conversion (2026-09-01)",
+    "updated": "2026-09-01"
   },
   "modules": {
     "views": { "disposition": "core", "backdrop_name": "views" },
@@ -18,9 +18,9 @@
     "ckeditor": { "disposition": "core", "backdrop_name": "ckeditor5", "note": "core ships ckeditor (deprecated) and ckeditor5" },
     "admin_menu": { "disposition": "superseded", "backdrop_name": "admin_bar" },
     "toolbar": { "disposition": "superseded", "backdrop_name": "admin_bar" },
-    "token": { "disposition": "contrib", "backdrop_name": "token" },
-    "pathauto": { "disposition": "contrib", "backdrop_name": "pathauto" },
-    "ctools": { "disposition": "contrib", "backdrop_name": "ctools" },
+    "token": { "disposition": "contrib", "backdrop_name": "token", "note": "low-stakes if absent: core ships the token system itself; the port restores the token-browser UI and extra tokens" },
+    "pathauto": { "disposition": "superseded", "backdrop_name": "path", "note": "core path converts the D7 pathauto settings during the upgrade (path.install); the real backdrop-contrib/pathauto port remains an option for code needing the D7 pathauto API" },
+    "ctools": { "disposition": "none", "note": "core has covered its tools since 1.0 (the backdrop-contrib page itself says there is no reason to install it); safe to leave disabled" },
     "webform": { "disposition": "contrib", "backdrop_name": "webform" },
     "devel": { "disposition": "contrib", "backdrop_name": "devel" },
     "devel_generate": { "disposition": "contrib", "backdrop_name": "devel" },
