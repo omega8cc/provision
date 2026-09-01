@@ -86,4 +86,17 @@ function drush_provision_grav_provision_restore($restore_file) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', false);
   }
+  else {
+    // The pre-hook took the site into the maintenance (disabled) vhost. A
+    // FAILED restore must not leave it there: the deploy has already swapped
+    // the original tree back, so the only thing still wrong is the vhost.
+    // Re-render it from the persisted (enabled) state -- site_enabled was
+    // only ever flipped in memory, never written to the alias. Without this
+    // the capsule stays on "Under Construction" until an operator runs
+    // Enable/Verify by hand. Same shape as the Textpattern twin.
+    d()->site_enabled = true;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    drush_log(dt('Restore failed; the original site tree and vhost have been put back.'), 'warning');
+  }
 }

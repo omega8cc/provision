@@ -50,6 +50,15 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
     if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
       unlink(AEGIR_BACKUP_MODE_CTRL);
     }
+    // The classic dump creates the file with fopen($path, 'x'), which FAILS
+    // on an existing file, so a dump left behind by a killed earlier backup
+    // would wedge the final safety copy -- on the one flow where there is no
+    // second chance. Clear it first.
+    if (is_file(d()->site_path . '/database.sql')) {
+      provision_file()->unlink(d()->site_path . '/database.sql')
+        ->succeed('Removed a stale database.sql before the final safety copy')
+        ->fail('Could not remove a stale database.sql before the final safety copy');
+    }
     // The last copy of a site must be restorable: force the self-contained
     // mode exactly like the restore safety copy.
     if (!defined('SELECTED_BACKUP_MODE')) {

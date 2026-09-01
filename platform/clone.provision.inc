@@ -166,6 +166,11 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   // (A rename-migrate deliberately KEEPS it -- same node, same databases.)
   unset($options['migrate_source_db']);
   unset($options['migrate_source_uri']);
+  // The wired latch is the SOURCE site's history, not the clone's: the clone
+  // has a new user and no grant, so it must not inherit 'this feature has
+  // touched me' -- provision-save retains an option it is not told about, and
+  // the latch is what lets the MySQL-state-driven revoke pass run at all.
+  unset($options['migrate_source_wired']);
 
   if ($profile = drush_get_option('profile', FALSE)) {
     $options['profile'] = $profile;

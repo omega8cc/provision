@@ -69,6 +69,15 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
   // database once tmp_expim rotates. Safe here: with is_restore the deploy
   // never reads tmp_expim, and clone/migrate run their own pre-hooks, not
   // this one, so their fast path is untouched.
+  // The classic dump creates the file with fopen($path, 'x'), which FAILS on
+  // an existing file, so a dump left behind by a killed earlier backup would
+  // wedge every later restore of this site. Clear it first (the guard the
+  // clone pre-hook already carries).
+  if (is_file(d()->site_path . '/database.sql')) {
+    provision_file()->unlink(d()->site_path . '/database.sql')
+      ->succeed('Removed a stale database.sql before the restore safety copy')
+      ->fail('Could not remove a stale database.sql before the restore safety copy');
+  }
   if (!defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
   }
@@ -135,6 +144,20 @@ function drush_provision_drupal_provision_restore($restore_file) {
     _provision_drupal_native_symlink_after_restore(d()->uri);
 
     drush_set_option('installed', false);
+  }
+  else {
+    // The pre-hook took the site into maintenance: settings.php carries the
+    // offline flag and the vhost was re-rendered disabled. A FAILED restore
+    // must not leave it there -- the deploy has already swapped the original
+    // tree back, so those two are the only things still wrong. Re-render both
+    // from the persisted (enabled) state; site_enabled was only ever flipped
+    // in memory, never written to the alias. Without this the site stays on
+    // "Under Construction" until an operator runs Enable/Verify by hand.
+    d()->site_enabled = true;
+    _provision_drupal_create_settings_file();
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    drush_log(dt('Restore failed; the original site tree, settings and vhost have been put back.'), 'warning');
   }
 
   // Always clear the flag, success or failure: a leftover one makes every

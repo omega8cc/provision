@@ -67,6 +67,15 @@ function drush_provision_backdrop_pre_provision_restore($restore_file) {
   // database inside the archive (see the Drupal-layer pre-restore hook for
   // the full rationale). Clone/migrate pre-hooks are separate; their fast
   // path is untouched.
+  // The classic dump creates the file with fopen($path, 'x'), which FAILS on
+  // an existing file, so a dump left behind by a killed earlier backup would
+  // wedge every later restore of this site. Clear it first (the guard the
+  // clone pre-hook already carries).
+  if (is_file(d()->site_path . '/database.sql')) {
+    provision_file()->unlink(d()->site_path . '/database.sql')
+      ->succeed('Removed a stale database.sql before the restore safety copy')
+      ->fail('Could not remove a stale database.sql before the restore safety copy');
+  }
   if (!defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
   }
@@ -126,6 +135,19 @@ function drush_provision_backdrop_provision_restore($restore_file) {
     _provision_drupal_native_symlink_after_restore(d()->uri);
 
     drush_set_option('installed', false);
+  }
+  else {
+    // The pre-hook took the site into the maintenance (disabled) vhost. A
+    // FAILED restore must not leave it there: the deploy has already swapped
+    // the original tree back and re-rendered its config, so the only thing
+    // still wrong is the vhost -- Backdrop's maintenance mode is state-based,
+    // never written into settings.php, so there is nothing to un-write there.
+    // Re-render from the persisted (enabled) state; site_enabled was only ever
+    // flipped in memory, never written to the alias.
+    d()->site_enabled = true;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    drush_log(dt('Restore failed; the original site tree and vhost have been put back.'), 'warning');
   }
 
   // Always clear the flag, success or failure: a leftover one makes every
