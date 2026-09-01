@@ -30,6 +30,33 @@ function drush_provision_backdrop_pre_provision_clone($new_name, $platform = nul
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // Make the pre-clone safety copy a self-contained restorable backup, the
+  // same contract commit 7913dedb established for the pre-restore copy. Left
+  // modeless it runs the MyQuick path: the dump goes only to the transient
+  // shared tmp_expim store and files/private are packed as bare symlinks, so
+  // the archive the panel registers as "Pre-clone backup" and offers as a
+  // restore point cannot restore its own database once that store rotates.
+  // Reproduced on a rig: restoring one leaves a marker planted after the
+  // backup intact, proving the database was never restored.
+  // Skipped on hostmaster, whose own backup contract deliberately resolves to
+  // no mode (provision_backup_mode_resolve() returns FALSE for it before any
+  // constant is latched); defining the constant here would override that.
+  if (!provision_is_hostmaster_site()) {
+    // The classic dump creates the file with fopen($path, 'x'), which FAILS
+    // on an existing file, so a dump left behind by a killed earlier backup
+    // would wedge every later clone of this site. Clear it first.
+    if (is_file(d()->site_path . '/database.sql')) {
+      provision_file()->unlink(d()->site_path . '/database.sql')
+        ->succeed('Removed a stale database.sql before the clone safety copy')
+        ->fail('Could not remove a stale database.sql before the clone safety copy');
+    }
+    if (!defined('SELECTED_BACKUP_MODE')) {
+      define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
+    }
+    drush_set_option('selected_backup_mode', 'site_files_with_mysqldump');
+    drush_set_option('backup_mode', 'site_files_with_mysqldump');
+    drush_log(dt('Clone safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
+  }
   drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_clone'));
   $backup_path = d('@server_master')->backup_path;
   $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
@@ -134,6 +161,19 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
     'strict' => 0,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'clone');
+
+  // The deploy runs as a SEPARATE process and resolves the backup mode from
+  // scratch, so it must be told what the safety copy above was ACTUALLY
+  // written with or it takes the MyQuick branch and hunts a tmp_expim dump a
+  // mysqldump-mode backup never wrote. Derived from the resolver rather than
+  // repeating the literal, so the two halves cannot disagree: whatever the
+  // backup half used is what the deploy is told, and when nothing was pinned
+  // (hostmaster) the option is omitted and the deploy keeps today's path.
+  // Set AFTER the alter hook so a contributed alter cannot drop it.
+  $resolved_backup_mode = provision_backup_mode_resolve();
+  if (!empty($resolved_backup_mode)) {
+    $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
+  }
 
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 
