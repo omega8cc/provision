@@ -56,6 +56,29 @@ if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
   }
   unset($aegir_rc_file);
 }
+if (!empty($_SERVER['db_creds_urlencoded'])) {
+  /**
+   * The vhost emits the six credentials urlencode()d so that no value can
+   * break the web server's config syntax. The uncloaked branch of this
+   * template decodes them once (the per-CMS Settings.php class), so without
+   * this the cloaked web tier was the only path authenticating with the
+   * ESCAPED form -- breaking any adopted site whose password contains '@',
+   * '#' or '!' while its CLI tier kept working.
+   *
+   * Decode ONLY the vhost-sourced set. The drushrc.php recovery above, and
+   * the credentials exported into the environment for a spawned site-local
+   * Drush, both carry RAW values; decoding those would corrupt them instead.
+   * The marker is emitted next to the credentials themselves, so it is
+   * present exactly when they are encoded.
+   */
+  $aegir_enc_keys = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
+  foreach ($aegir_enc_keys as $aegir_enc_key) {
+    if (isset($_SERVER[$aegir_enc_key])) {
+      $_SERVER[$aegir_enc_key] = urldecode($_SERVER[$aegir_enc_key]);
+    }
+  }
+  unset($aegir_enc_keys, $aegir_enc_key);
+}
 if (isset($_SERVER['db_name'])) {
   /**
    * The database credentials are stored in the Apache or Nginx vhost config
@@ -118,6 +141,10 @@ if (isset($_SERVER['db_name'])) {
   unset($_SERVER['REDIRECT_db_host']);
   unset($_SERVER['REDIRECT_db_port']);
   unset($_SERVER['REDIRECT_db_name']);
+  // The marker that steered the decode above: not a credential, but it has no
+  // business surviving into site PHP either.
+  unset($_SERVER['db_creds_urlencoded']);
+  unset($_SERVER['REDIRECT_db_creds_urlencoded']);
 
 <?php else: ?>
 

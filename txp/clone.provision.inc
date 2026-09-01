@@ -12,8 +12,31 @@
  */
 
 function drush_provision_txp_provision_clone_validate($new_name = NULL, $platform = NULL) {
-  if (!provision_platform_is_txp(d())) {
+  // Refuse a MIXED pair on EITHER side, the same shape as the migrate guard:
+  // guarding only the source lets a Drupal site be cloned ONTO a TXP platform
+  // (the shared Drupal validate returns early only when the SITE is foreign),
+  // and a TXP site onto a Drupal one. TXP -> TXP is the supported path and
+  // must keep working.
+  $source_is_txp = provision_platform_is_txp(d());
+  // The TARGET test must be THIS CMS's own predicate, never the foreign-CMS
+  // union: every CMS layer ships in the same provision tree and every validate
+  // hook fires on every clone, so a union target test makes this refusal
+  // swallow another CMS's supported task (observed live on the Grav guard).
+  // Defaults to the source's verdict, so an unresolvable target platform can
+  // never manufacture a refusal.
+  $target_is_txp = $source_is_txp;
+  if (!empty($platform)) {
+    $target = d($platform);
+    if (is_object($target) && isset($target->root)) {
+      $target_is_txp = provision_platform_is_txp($target->root);
+    }
+  }
+  if (!$source_is_txp && !$target_is_txp) {
     return;
+  }
+  if ($source_is_txp != $target_is_txp) {
+    return drush_set_error('PROVISION_TXP_CLONE_CROSS_CMS',
+      dt('Refusing a cross-CMS clone: the source site and the target platform must both be Textpattern.'));
   }
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
@@ -39,6 +62,15 @@ function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {
   // database at all. Force the same restorable mode the restore and delete
   // safety copies already use. The deploy half below is switched to match --
   // both halves MUST agree on the transport, or the clone breaks.
+  // The classic dump creates the file with fopen($path, 'x'), which FAILS on
+  // an existing file, so a dump left behind by a killed earlier backup would
+  // wedge every later clone of this site. Clear it first (the guard the
+  // Drupal and Backdrop clone twins already carry).
+  if (is_file(d()->site_path . '/database.sql')) {
+    provision_file()->unlink(d()->site_path . '/database.sql')
+      ->succeed('Removed a stale database.sql before the clone safety copy')
+      ->fail('Could not remove a stale database.sql before the clone safety copy');
+  }
   if (!defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
   }
@@ -101,6 +133,11 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   // fail-closed; it must be here BEFORE the real migrate engine lands.)
   unset($options['migrate_source_db']);
   unset($options['migrate_source_uri']);
+  // The wired latch is the SOURCE site's history, not the clone's: the clone
+  // has a new user and no grant, so it must not inherit 'this feature has
+  // touched me' -- provision-save retains an option it is not told about, and
+  // the latch is what lets the MySQL-state-driven revoke pass run at all.
+  unset($options['migrate_source_wired']);
 
   if ($profile = drush_get_option('profile', FALSE)) {
     $options['profile'] = $profile;
@@ -114,14 +151,21 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
-    // Match the transport the safety copy above was written with. The deploy
-    // runs as a SEPARATE backend process, so it resolves the backup mode from
-    // scratch: without this it resolves to modeless, takes the MyQuick import
-    // branch and looks for a tmp_expim dump directory that a mysqldump-mode
-    // backup never wrote -- "Database import failed (dir: .../tmp_expim)".
-    'selected_backup_mode' => 'site_files_with_mysqldump',
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'clone');
+
+  // Match the transport the safety copy above was written with. The deploy
+  // runs as a SEPARATE backend process and resolves the backup mode from
+  // scratch: without this it resolves to modeless, takes the MyQuick import
+  // branch and looks for a tmp_expim dump directory that a mysqldump-mode
+  // backup never wrote -- "Database import failed (dir: .../tmp_expim)".
+  // Derived from the resolver rather than repeating the literal, so the two
+  // halves cannot disagree, and set AFTER the alter hook so a contributed
+  // alter cannot drop it.
+  $resolved_backup_mode = provision_backup_mode_resolve();
+  if (!empty($resolved_backup_mode)) {
+    $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
+  }
 
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 

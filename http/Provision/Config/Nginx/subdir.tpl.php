@@ -369,6 +369,10 @@ location ^~ /<?php print $subdir; ?> {
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
 
+    # Marks the six credentials below as urlencode()d (the cloaked
+    # settings.php decodes exactly this source; the CLI tier is raw).
+    fastcgi_param db_creds_urlencoded 1;
+
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
     fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
@@ -848,6 +852,10 @@ location ^~ /<?php print $subdir; ?> {
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
 
+    # Marks the six credentials below as urlencode()d (the cloaked
+    # settings.php decodes exactly this source; the CLI tier is raw).
+    fastcgi_param db_creds_urlencoded 1;
+
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
     fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
@@ -1027,6 +1035,10 @@ location ^~ /<?php print $subdir; ?> {
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
 
+    # Marks the six credentials below as urlencode()d (the cloaked
+    # settings.php decodes exactly this source; the CLI tier is raw).
+    fastcgi_param db_creds_urlencoded 1;
+
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
     fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
@@ -1111,6 +1123,10 @@ location ^~ /<?php print $subdir; ?> {
 
     # Block https://httpoxy.org/ attacks.
     fastcgi_param HTTP_PROXY "";
+
+    # Marks the six credentials below as urlencode()d (the cloaked
+    # settings.php decodes exactly this source; the CLI tier is raw).
+    fastcgi_param db_creds_urlencoded 1;
 
     fastcgi_param db_type   <?php print urlencode($db_type); ?>;
     fastcgi_param db_name   <?php print urlencode($db_name); ?>;
@@ -1290,6 +1306,10 @@ location @allowupdate_<?php print $subdir_loc; ?> {
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
 
+  # Marks the six credentials below as urlencode()d (the cloaked settings.php
+  # decodes exactly this source; the CLI tier is raw).
+  fastcgi_param db_creds_urlencoded 1;
+
   fastcgi_param db_type   <?php print urlencode($db_type); ?>;
   fastcgi_param db_name   <?php print urlencode($db_name); ?>;
   fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
@@ -1330,6 +1350,10 @@ location @allowauthorize_<?php print $subdir_loc; ?> {
 
   # Block https://httpoxy.org/ attacks.
   fastcgi_param HTTP_PROXY "";
+
+  # Marks the six credentials below as urlencode()d (the cloaked settings.php
+  # decodes exactly this source; the CLI tier is raw).
+  fastcgi_param db_creds_urlencoded 1;
 
   fastcgi_param db_type   <?php print urlencode($db_type); ?>;
   fastcgi_param db_name   <?php print urlencode($db_name); ?>;

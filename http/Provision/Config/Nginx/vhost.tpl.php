@@ -79,17 +79,20 @@ if ($this->redirection || !$this->redirection) {
         $db_host = 'localhost';
       }
 
-      $db_type = urlencode($db_type);
-      $db_name = urlencode($db_name);
-      $db_user = urlencode($db_user);
-      $db_passwd = urlencode($db_passwd);
-      $db_host = urlencode($db_host);
+      // Locals: the main server block below urlencode()s the SAME variables
+      // again, so mutating them here double-encodes every credential on any
+      // site that carries a nodns alias.
+      $nodns_db_type = urlencode($db_type);
+      $nodns_db_name = urlencode($db_name);
+      $nodns_db_user = urlencode($db_user);
+      $nodns_db_passwd = urlencode($db_passwd);
+      $nodns_db_host = urlencode($db_host);
 
-      print "  fastcgi_param db_type   {$db_type};\n";
-      print "  fastcgi_param db_name   {$db_name};\n";
-      print "  fastcgi_param db_user   {$db_user};\n";
-      print "  fastcgi_param db_passwd {$db_passwd};\n";
-      print "  fastcgi_param db_host   {$db_host};\n";
+      print "  fastcgi_param db_type   {$nodns_db_type};\n";
+      print "  fastcgi_param db_name   {$nodns_db_name};\n";
+      print "  fastcgi_param db_user   {$nodns_db_user};\n";
+      print "  fastcgi_param db_passwd {$nodns_db_passwd};\n";
+      print "  fastcgi_param db_host   {$nodns_db_host};\n";
 
       if (!$db_port) {
         $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt';
@@ -102,6 +105,12 @@ if ($this->redirection || !$this->redirection) {
       }
       $db_port = urlencode($db_port);
       print "  fastcgi_param db_port   {$db_port};\n";
+      // Marks the credentials above as urlencode()d, so the cloaked
+      // settings.php decodes exactly this source. The CLI tier recovers them
+      // RAW (from drushrc.php, or from the exported environment) and must not
+      // decode. Without this an adopted site whose password holds '@', '#' or
+      // '!' authenticates the web tier with the escaped form.
+      print "  fastcgi_param db_creds_urlencoded 1;\n";
 
       $alias_url = str_replace('/', '.', $alias_url);
       print "  server_name  {$alias_url};\n";
@@ -163,6 +172,10 @@ server {
   }
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+  # Marks the six credentials above as urlencode()d: the cloaked settings.php
+  # decodes exactly this source, while the CLI tier (drushrc.php / exported
+  # environment) carries them raw and must not decode.
+  fastcgi_param db_creds_urlencoded 1;
   listen  *:<?php print $http_port; ?>;
   server_name  <?php
     // this is the main vhost, so we need to put the redirection

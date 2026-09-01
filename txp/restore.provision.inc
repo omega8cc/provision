@@ -47,6 +47,14 @@ function drush_provision_txp_pre_provision_restore($restore_file) {
   }
   // The safety copy registers in the panel as a real backup: it must honour
   // the backup contract (self-contained, DB inside).
+  // The classic dump creates the file with fopen($path, 'x'), which FAILS on
+  // an existing file, so a dump left behind by a killed earlier backup would
+  // wedge every later restore of this site. Clear it first.
+  if (is_file(d()->site_path . '/database.sql')) {
+    provision_file()->unlink(d()->site_path . '/database.sql')
+      ->succeed('Removed a stale database.sql before the restore safety copy')
+      ->fail('Could not remove a stale database.sql before the restore safety copy');
+  }
   if (!defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_with_mysqldump');
   }

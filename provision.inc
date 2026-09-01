@@ -1466,8 +1466,12 @@ function _provision_leftover_valid_name($name) {
  * branch every provision settings template emits when BOA uncloaks credentials:
  * the D7+ $databases array and the Backdrop scalar $database array both carry
  * 'database' => "<name>" / 'host' => "<host>" lines. The cloaked $_SERVER
- * variant deliberately does not match (unquoted value): with cloaking on the
- * file holds no literal db name and the caller treats the parse as empty.
+ * variant carries no literal name at all, and cloaking is now the default, so
+ * the sibling drushrc.php -- which holds the same values as plain $options
+ * literals -- is parsed as a second source whenever settings.php yields
+ * nothing. Parsed the same way, never included. Both callers (the expose-time
+ * record and the purge-time re-parse) go through this one function, so the
+ * two-source agreement the purge gate depends on is preserved.
  *
  * @param string $dir
  *   Absolute path of the site directory holding settings.php.
@@ -1490,6 +1494,31 @@ function _provision_leftover_parse_settings($dir) {
     $result['db_name'] = $m[1];
   }
   if (preg_match('/[\'"]host[\'"]\s*=>\s*["\']([A-Za-z0-9._-]+)["\']/', $body, $m)) {
+    $result['db_host'] = $m[1];
+  }
+  if ($result['db_name'] !== '') {
+    return $result;
+  }
+  // Cloaked settings.php holds no literal credentials -- they arrive as
+  // fastcgi_param -- and cloaking is the default, so without this arm the
+  // orphan copy database of every leftover would be left on the server
+  // forever. The sibling drushrc.php carries the same values as plain
+  // $options literals (var_export'd, always single-quoted). Parsed with the
+  // same charsets as above and NEVER included: it is Drush configuration and
+  // must not execute here.
+  $drushrc = $dir . '/drushrc.php';
+  if (!is_file($drushrc) || !is_readable($drushrc)) {
+    return $result;
+  }
+  $rc_body = file_get_contents($drushrc);
+  if ($rc_body === FALSE) {
+    return $result;
+  }
+  if (preg_match('/\$options\s*\[\s*[\'"]db_name[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]\s*;/', $rc_body, $m)) {
+    $result['db_name'] = $m[1];
+  }
+  if ($result['db_host'] === ''
+    && preg_match('/\$options\s*\[\s*[\'"]db_host[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9._-]+)[\'"]\s*;/', $rc_body, $m)) {
     $result['db_host'] = $m[1];
   }
   return $result;
