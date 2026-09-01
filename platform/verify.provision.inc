@@ -25,6 +25,19 @@ function drush_provision_drupal_provision_verify_validate() {
     provision_drupal_push_site();
 
     drush_errors_on();
+    // Re-lock before bootstrapping: on an unlocked platform the typed core
+    // logger classes are incompatible with Drush 8's bundled psr/log v1,
+    // which is already bound at preflight, so the full bootstrap below
+    // fatals as soon as any logger class loads. Platforms are locked at
+    // platform verify, but a dunlock without re-lock leaves them stock;
+    // heal here exactly like provision-import does.
+    if (drush_drupal_major_version() >= 8) {
+      provision_check_codebase_status();
+      if (!d()->isConsolePatched || !d()->isCorePatched) {
+        drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
+        provision_lock_drush_local_vnd();
+      }
+    }
     if (drush_drupal_major_version() < 12) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
