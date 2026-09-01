@@ -173,7 +173,7 @@ function drush_provision_drupal_provision_backup() {
     drush_set_option('cloaking_off_temp', TRUE);
     // Close the plaintext window even if this run aborts before the restore
     // below -- the chdir() failure a few lines down returns early.
-    register_shutdown_function('_provision_recloak_after_backup');
+    register_shutdown_function('_provision_drupal_recloak_after_backup');
     // Disable the cloaking of credentials temporarily
     drush_log(dt("Temporarily uncloaking database credentials for backup"));
     drush_set_option('provision_db_cloaking', FALSE);
@@ -345,7 +345,7 @@ function drush_provision_drupal_provision_backup() {
 
   chdir($olddir);
 
-  _provision_recloak_after_backup();
+  _provision_drupal_recloak_after_backup();
 
   if (!$result && !drush_get_option('force', false)) {
     drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal"));
@@ -497,17 +497,15 @@ function drush_provision_drupal_provision_backup_rollback() {
  * called on the normal path; the option is cleared first so it only ever runs
  * once.
  */
-// The Drupal and Backdrop backup engines both need this and are separate
-// command files; guard so loading both can never fatal on redeclare.
-if (!function_exists('_provision_recloak_after_backup')) {
-  function _provision_recloak_after_backup() {
-    if (!drush_get_option('cloaking_off_temp', FALSE)) {
-      return;
-    }
-    drush_set_option('cloaking_off_temp', FALSE);
-    drush_log(dt("Re-cloaking database credentials after backup"));
-    drush_set_option('provision_db_cloaking', TRUE);
-    _provision_drupal_create_settings_file();
-    provision_drupal_push_site();
+// Named per engine: the Backdrop backup engine is a separate command file with
+// its own settings writer, and a shared name silently gave it this one.
+function _provision_drupal_recloak_after_backup() {
+  if (!drush_get_option('cloaking_off_temp', FALSE)) {
+    return;
   }
+  drush_set_option('cloaking_off_temp', FALSE);
+  drush_log(dt("Re-cloaking database credentials after backup"));
+  drush_set_option('provision_db_cloaking', TRUE);
+  _provision_drupal_create_settings_file();
+  provision_drupal_push_site();
 }
