@@ -1714,8 +1714,10 @@ location / {
   ###
   ### Allow but rate-limit AI search/index, user-triggered and utility bots on
   ### the main content surface.  Empty-key maps mean only these AI classes are
-  ### counted; all other traffic is unaffected.  Keyed on the real client IP
-  ### (Cloudflare realip).  Training and forged AI are already 444'd above.
+  ### counted; all other traffic is unaffected.  Keyed per vendor (UA-derived
+  ### $ai_*_limit_key), NOT per client IP: one assistant job fans out across
+  ### many IPs, so only a shared per-vendor key caps the aggregate.  Training
+  ### and forged AI are already 444'd above.
   ###
   limit_req zone=ai_search  burst=20 nodelay;
   limit_req zone=ai_user    burst=20 nodelay;
