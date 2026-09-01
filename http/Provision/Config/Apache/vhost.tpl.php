@@ -32,6 +32,10 @@ if (!$aegir_root && $server->aegir_root) {
 
   SetEnv db_port  <?php print urlencode($db_port); ?>
 
+  # Marks the six credentials above as urlencode()d: the cloaked settings.php
+  # decodes exactly this source, while the CLI tier carries them raw.
+  SetEnv db_creds_urlencoded  1
+
 
 <?php
 if (count($this->aliases)) {

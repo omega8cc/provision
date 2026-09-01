@@ -159,6 +159,9 @@ server {
   }
 ?>
   fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+  # Marks the six credentials above as urlencode()d: the cloaked settings.php
+  # decodes exactly this source, while the CLI tier carries them raw.
+  fastcgi_param db_creds_urlencoded 1;
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>; 

@@ -67,6 +67,17 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   if ($is_cms_probe) {
     return 444;
   }
+  ###
+  ### Deny forged AI user-agents. Google-Extended / Applebot-Extended are
+  ### robots.txt-only opt-out tokens a real client never sends, so their
+  ### presence proves forgery (zero false positive). Present in the shared
+  ### include and in both Textpattern twins; the converged foreign-CMS shape
+  ### carries it. $is_botnet is deliberately NOT re-stated here: it is
+  ### referer-based, and the referer is attacker-controlled.
+  ###
+  if ($is_ai_forged) {
+    return 444;
+  }
   if ($is_crawler) {
     return 444;
   }
@@ -155,7 +166,19 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # front controller's asset map). Placed BELOW the denies: regex locations
   # match in order of appearance. expires is not add_header, so the security
   # header pair above still inherits here.
-  location ~* ^/(system/assets|assets|user/themes)/.*\.(css|js|jpe?g|png|gif|svg|webp|avif|ico|woff2?|ttf|eot|map)$ {
+  #
+  # Code assets take a SHORT window, media and fonts the fleet-standard 30d.
+  # The Drupal include can afford a long expiry on css/js because the
+  # aggregator renames the file on every change; Grav's shipped defaults have
+  # the css/js pipelines and the asset timestamp all off, so a theme's
+  # stylesheet keeps ONE stable URL for its whole life and a long expiry hides
+  # an edit from returning visitors until it lapses.
+  location ~* ^/(system/assets|assets|user/themes)/.*\.(css|js|map)$ {
+    access_log off;
+    expires 10m;
+    try_files $uri =404;
+  }
+  location ~* ^/(system/assets|assets|user/themes)/.*\.(jpe?g|png|gif|svg|webp|avif|ico|woff2?|ttf|eot)$ {
     access_log off;
     expires 30d;
     try_files $uri =404;
