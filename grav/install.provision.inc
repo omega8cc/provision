@@ -119,5 +119,10 @@ function drush_provision_grav_post_provision_install() {
   }
 
   drush_set_option('packages', _scrub_object(provision_grav_system_map()), 'site');
-  _provision_client_create_symlink();
+  // No client symlink for this site: a Grav capsule / Textpattern site is the
+  // whole codebase, so linking it under ~/clients/<client>/ would hand a
+  // per-client shell sub-account full code and database access there, against
+  // the files-only policy those accounts have on Drupal sites. Drop a link an
+  // earlier release created; the sub-account's lshell path skips these too.
+  _provision_client_delete_symlink();
 }
