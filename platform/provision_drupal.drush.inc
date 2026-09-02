@@ -140,9 +140,22 @@ function provision_drupal_drush_exit() {
         provision_file()->chmod(d()->root . '/sites/all', 0755)
           ->succeed('Changed permissions of <code>@path</code> to @perm')
           ->fail('Could not change permissions of <code>@path</code> to @perm');
-        provision_file()->chmod(d()->root . '/sites', 0751)
-          ->succeed('Changed permissions of <code>@path</code> to @perm')
-          ->fail('Could not change permissions of <code>@path</code> to @perm');
+        // Tenant composer codebases (~/static, D8+): core's composer scaffold,
+        // run by the shell user, rewrites its files under sites/ and needs a
+        // writable parent; keep the owner and the x-only bit for others
+        // (omega8cc/boa#1936). Mirrors fix-drupal-platform-permissions.sh.
+        $sites_perm = 0751;
+        if (preg_match("/\/static\//", d()->root) &&
+            provision_file()->exists(d()->root . '/core/lib/Drupal.php')->status()) {
+          $sites_perm = 02771;
+        }
+        // The docroot is group-writable, so sites/ is a name a tenant can
+        // plant as a symlink; chmod() would follow it. Never legitimate.
+        if (!is_link(d()->root . '/sites')) {
+          provision_file()->chmod(d()->root . '/sites', $sites_perm)
+            ->succeed('Changed permissions of <code>@path</code> to @perm')
+            ->fail('Could not change permissions of <code>@path</code> to @perm');
+        }
         // Revert local.settings.php permissions to default.
         $local_settings = d()->site_path . '/local.settings.php';
         if (provision_file()->exists($local_settings)->status()) {
