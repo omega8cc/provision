@@ -1235,6 +1235,12 @@ port=%s
         if ($non_trx_result && ($non_trx_row = $non_trx_result->fetch()) && intval($non_trx_row[0]) > 0) {
           $trx_opt = ' --trx-tables=0';
         }
+        // --rows=-1 turns integer chunking off: a fixed --rows=N walks the
+        // whole primary-key span in steps of N key values (a sparse bigint
+        // key spun out empty chunk files to inode exhaustion), and the
+        // adaptive chunker used when the flag is absent intermittently
+        // drops a whole chunk of a sparse-keyed table while exiting clean.
+        // Mirrors mysql_backup.sh.
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value. See DECISIONS.md Decision 002.
@@ -1245,7 +1251,7 @@ port=%s
           . ' --password=' . escapeshellarg($oct_db_pass)
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
-          . ' --rows=50000 --build-empty-files --threads=' . escapeshellarg($threads)
+          . ' --rows=-1 --build-empty-files --threads=' . escapeshellarg($threads)
           . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
