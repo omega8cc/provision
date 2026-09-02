@@ -1235,12 +1235,20 @@ port=%s
         if ($non_trx_result && ($non_trx_row = $non_trx_result->fetch()) && intval($non_trx_row[0]) > 0) {
           $trx_opt = ' --trx-tables=0';
         }
-        // --rows=-1 turns integer chunking off: a fixed --rows=N walks the
-        // whole primary-key span in steps of N key values (a sparse bigint
-        // key spun out empty chunk files to inode exhaustion), and the
-        // adaptive chunker used when the flag is absent intermittently
-        // drops a whole chunk of a sparse-keyed table while exiting clean.
-        // Mirrors mysql_backup.sh.
+        // mydumper 1.x fixed the adaptive chunker (0.21.x truncated a chunk's
+        // file to 0 bytes when a split landed past the last existing key,
+        // exiting clean), so on 1.x tables are chunked and dumped in parallel
+        // again; older builds keep chunking off (--rows=-1). A fixed --rows=N
+        // walks a sparse key span to inode exhaustion. Mirrors mysql_backup.sh.
+        // The banner starts with the tool's own version; the MySQL version it
+        // was built against follows, so the match is anchored.
+        $rows_opt = ' --rows=-1';
+        if (drush_shell_exec($mydumper_path . ' --version 2>/dev/null')) {
+          $md_banner = implode(' ', drush_shell_exec_output());
+          if (preg_match('/^mydumper v?([0-9]+)\./', trim($md_banner), $md_m) && intval($md_m[1]) >= 1) {
+            $rows_opt = '';
+          }
+        }
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value. See DECISIONS.md Decision 002.
@@ -1251,7 +1259,7 @@ port=%s
           . ' --password=' . escapeshellarg($oct_db_pass)
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
-          . ' --rows=-1 --build-empty-files --threads=' . escapeshellarg($threads)
+          . $rows_opt . ' --build-empty-files --threads=' . escapeshellarg($threads)
           . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
