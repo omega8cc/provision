@@ -433,8 +433,16 @@ function _provision_default_web_group() {
     'webservd',
     'httpd',
     'nogroup',
-    'nobody',
-    $info['name']);
+    'nobody');
+  // The caller's own primary group used to close the list. On BOA that group
+  // is the account's per-instance group (named after the account itself), a
+  // tenant-isolation group and never a web group: offering it would chgrp
+  // settings.php away from the FPM pool's www-data on a box with no common
+  // web group. Only a primary group that is not the caller's own name stays
+  // a candidate.
+  if (isset($info['name']) && $info['name'] != provision_current_user()) {
+    $common_groups[] = $info['name'];
+  }
 
   foreach ($common_groups as $group) {
     if (provision_posix_groupname($group)) {

@@ -85,6 +85,12 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
     $this->data['extra_config'] = "# Extra configuration from modules:\n";
     $this->data['extra_config'] .= join("\n", drush_command_invoke_all('provision_drupal_config', d()->uri, $this->data));
 
+    // Two groups own a site directory on BOA and they must never be merged:
+    // web_group (www-data) is the FPM read and write path -- settings.php,
+    // local.settings.php, files/, private/ -- while everything else in the
+    // tree, drushrc.php included, carries the account's own group (the
+    // per-instance group once the instance is converted, the box-wide 'users'
+    // before that) so the pool identity can never read the site credentials.
     $this->group = $this->platform->server->web_group;
 
     // Add a handy variable indicating if the site is being backed up, we can

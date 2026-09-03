@@ -18,8 +18,11 @@ class Provision_Config_Drushrc_Site extends Provision_Config_Drushrc {
 
   /**
    * The hostmaster site's drushrc.php carries the instance DB user, which
-   * holds ALL PRIVILEGES; only the backend user (its owner) ever reads it,
-   * and group users is box-wide, so it takes no group read at all.
+   * holds ALL PRIVILEGES; only the backend user (its owner) ever reads it, so
+   * it takes no group read at all -- whether the group is still the box-wide
+   * 'users' or the account's per-instance group. Tenant sites keep 0440: the
+   * shell identity reads their credentials through the group (the CLI
+   * pre-block in the settings templates), never through the web group.
    */
   function process() {
     if (provision_is_hostmaster_site()) {

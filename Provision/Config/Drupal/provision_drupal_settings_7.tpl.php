@@ -33,9 +33,10 @@ if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
   /**
    * Command line has no vhost, so none of the fastcgi_param credentials below
    * are set. Recover them from the sibling drushrc.php, which carries the same
-   * values and is group-restricted to the shell identities -- the web server
-   * user is not in that group and can never read it, so the credentials stay
-   * out of reach of site PHP. Drush 8 loads that file by itself; a site-local
+   * values and is group-restricted to the account's shell identities (its
+   * per-instance group; the box-wide 'users' on an instance not yet converted)
+   * -- the web server user is in neither group and can never read it, so the
+   * credentials stay out of reach of site PHP. Drush 8 loads that file by itself; a site-local
    * modern Drush (the `vdrush` alias in the limited shell) does not, which is
    * why it is read explicitly here. Parsed, never included: the file is Drush
    * configuration and must not execute as part of settings.php.
