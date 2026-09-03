@@ -1240,12 +1240,14 @@ port=%s
         // exiting clean), so on 1.x tables are chunked and dumped in parallel
         // again; older builds keep chunking off (--rows=-1). A fixed --rows=N
         // walks a sparse key span to inode exhaustion. Mirrors mysql_backup.sh.
-        // The banner starts with the tool's own version; the MySQL version it
-        // was built against follows, so the match is anchored.
+        // The banner line starts with the tool's own version; the MySQL
+        // version it was built against follows. drush merges stderr into the
+        // captured output, so the match is anchored per line: a warning ahead
+        // of the banner can neither hide it nor pass as a version.
         $rows_opt = ' --rows=-1';
-        if (drush_shell_exec($mydumper_path . ' --version 2>/dev/null')) {
-          $md_banner = implode(' ', drush_shell_exec_output());
-          if (preg_match('/^mydumper v?([0-9]+)\./', trim($md_banner), $md_m) && intval($md_m[1]) >= 1) {
+        if (drush_shell_exec($mydumper_path . ' --version')) {
+          $md_banner = implode("\n", drush_shell_exec_output());
+          if (preg_match('/^mydumper v?([0-9]+)\./m', $md_banner, $md_m) && intval($md_m[1]) >= 1) {
             $rows_opt = '';
           }
         }
