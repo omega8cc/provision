@@ -186,11 +186,14 @@ function drush_provision_drupal_provision_install() {
       // subprocess exits non-zero with no captured output (the observed break).
       // So revert the patches to modern stock for the install (this also chmods
       // the site-local Drush executable), then re-apply them at the end. The
-      // post-install hook's _provision_drupal_rebuild_d8plus() rebuilds the D8+
-      // container in the re-patched state as the last write, so the stock
-      // install-time container never reaches the web. This is why the deploy
-      // updatedb / cr chmod-only window (which operate on an already-installed
-      // site) is NOT a valid precedent for a fresh install. Honour
+      // post-install hook's _provision_drupal_rebuild_d8plus() then rebuilds the
+      // D8+ container by core itself, with no Drush loaded, in the re-patched
+      // state as the last write, so the stock install-time container (which
+      // carries the installer Drush's logger.drupaltodrush) never stays the one
+      // the web serves. The deploy updatedb window works the same way: a real
+      // unlock for the site-local Drush, a real re-lock, then that rebuild --
+      // under PHP 8 no site-local Drush loads on a locked platform at all, so a
+      // chmod-only window is never enough. Honour
       // _no_codebase_lock_unlock.ctrl ($lock_unlock).
       if ($lock_unlock) {
         drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
@@ -492,10 +495,11 @@ function drush_provision_drupal_provision_install() {
       // Re-apply the Aegir core/console/validator/psr-log patches (restore the
       // at-rest posture the patched web serves in) now that the modern site-local
       // Drush has finished the install. The post-install hook's
-      // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container in this
-      // re-patched state as the last container write, so the stock install-time
-      // container never reaches the web; D<12 also gets the Aegir Drush 8 FULL
-      // bootstrap tail in the caller.
+      // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container by
+      // core itself (no Drush) in this re-patched state as the last container
+      // write, so the stock install-time container never stays the one the web
+      // serves; D<12 also gets the Aegir Drush 8 FULL bootstrap tail in the
+      // caller.
       if ($lock_unlock) {
         provision_check_codebase_status();
         if (!d()->isConsolePatched || !d()->isCorePatched) {
@@ -550,11 +554,12 @@ function drush_provision_drupal_post_provision_install() {
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
     if (drush_drupal_major_version() >= 10) {
-      // D10+: working container + cache rebuild via the site-local Drush; the
+      // D10+: working container + cache rebuild by core itself in a Drush-free
+      // subprocess, the last container write after the re-lock above; the
       // in-process _provision_drupal_rebuild_caches() must not recompile a D10+
       // container inside Aegir Drush 8 (version-mismatched; its FULL bootstrap
-      // here is read-only introspection on a locked platform, f9466d37). The
-      // helper self-manages the vendor/drush lock window. Non-fatal.
+      // here is read-only introspection on a locked platform, f9466d37).
+      // Non-fatal, never silent.
       _provision_drupal_rebuild_d8plus();
     }
     elseif (drush_drupal_major_version() < 12) {

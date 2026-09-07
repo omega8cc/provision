@@ -521,12 +521,13 @@ function drush_provision_drupal_post_provision_verify() {
 
   if (d()->type === 'site') {
     if (drush_drupal_major_version() >= 10) {
-      // D10+: working container + cache rebuild via the site-local Drush. The
-      // in-process _provision_drupal_rebuild_caches() would recompile the D10+
-      // container inside Aegir Drush 8, which is version-mismatched for it (its
-      // FULL bootstrap works only on a locked platform and only for read-only
-      // work, f9466d37). The helper self-manages the vendor/drush lock window.
-      // Non-fatal.
+      // D10+: working container + cache rebuild by core itself, in a Drush-free
+      // subprocess (the helper's docblock says why: on a locked platform no
+      // site-local Drush loads under PHP 8, and the in-process
+      // _provision_drupal_rebuild_caches() would compile the D10+ container
+      // inside Aegir Drush 8, whose FULL bootstrap is for read-only work on a
+      // locked platform only, f9466d37). Lock state is irrelevant to it.
+      // Non-fatal, never silent.
       _provision_drupal_rebuild_d8plus();
     }
     elseif (drush_drupal_major_version() < 12) {
