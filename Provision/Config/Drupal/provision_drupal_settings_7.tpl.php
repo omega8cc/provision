@@ -33,9 +33,10 @@ if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
   /**
    * Command line has no vhost, so none of the fastcgi_param credentials below
    * are set. Recover them from the sibling drushrc.php, which carries the same
-   * values and is group-restricted to the shell identities -- the web server
-   * user is not in that group and can never read it, so the credentials stay
-   * out of reach of site PHP. Drush 8 loads that file by itself; a site-local
+   * values and is group-restricted to the account's shell identities (its
+   * per-instance group; the box-wide 'users' on an instance not yet converted)
+   * -- the web server user is in neither group and can never read it, so the
+   * credentials stay out of reach of site PHP. Drush 8 loads that file by itself; a site-local
    * modern Drush (the `vdrush` alias in the limited shell) does not, which is
    * why it is read explicitly here. Parsed, never included: the file is Drush
    * configuration and must not execute as part of settings.php.
@@ -48,8 +49,16 @@ if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
       $aegir_rc_keys = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
       foreach ($aegir_rc_keys as $aegir_rc_key) {
         $aegir_rc_match = array();
-        if (preg_match('/\$options\[\'' . $aegir_rc_key . '\'\]\s*=\s*\'([^\']*)\';/', $aegir_rc_body, $aegir_rc_match)) {
-          $_SERVER[$aegir_rc_key] = $aegir_rc_match[1];
+        // The file is written with var_export(): a single-quoted string in
+        // which only the quote and the backslash are escaped, or a bare
+        // integer. Read back exactly those forms.
+        if (preg_match('/^\s*\$options\[\'' . $aegir_rc_key . '\'\]\s*=\s*(?:\'((?:[^\'\\\\]|\\\\.)*)\'|(-?[0-9]+));/m', $aegir_rc_body, $aegir_rc_match)) {
+          if (isset($aegir_rc_match[2]) && $aegir_rc_match[2] !== '') {
+            $_SERVER[$aegir_rc_key] = $aegir_rc_match[2];
+          }
+          else {
+            $_SERVER[$aegir_rc_key] = strtr($aegir_rc_match[1], array("\\'" => "'", "\\\\" => "\\"));
+          }
         }
       }
       unset($aegir_rc_body, $aegir_rc_keys, $aegir_rc_key, $aegir_rc_match);

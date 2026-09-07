@@ -1321,6 +1321,15 @@ function provision_user_in_group($user, $group) {
     if (in_array($user, $info['members'])) {
       return TRUE;
     }
+    // posix_getgrnam() lists supplementary members only: a user whose PRIMARY
+    // group this is never appears there. On BOA an Octopus account carrying
+    // its per-instance group has that group as the primary group of oN and
+    // oN.ftp, so a chgrp to it would be refused as "not in group" and
+    // silently skipped. Compare the primary gid as well.
+    $pw = posix_getpwnam($user);
+    if (is_array($pw) && isset($pw['gid']) && isset($info['gid']) && $pw['gid'] == $info['gid']) {
+      return TRUE;
+    }
   }
   return FALSE;
 }
