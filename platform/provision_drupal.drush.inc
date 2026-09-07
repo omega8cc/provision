@@ -800,13 +800,16 @@ function _provision_drupal_rebuild_caches() {
  * stable alias across Drush 8..13) calls drupal_rebuild(), which recompiles the
  * service container and flushes every cache bin.
  *
- * D10+ MUST be driven by the SITE-LOCAL Drush: Aegir's own Drush 8 cannot
- * bootstrap a D10/D11 site, so provision_backend_invoke(..., 'cache-rebuild')
- * silently no-ops there — the historical gap this closes. The in-process
- * drupal_flush_all_caches() in _provision_drupal_rebuild_caches() has the same
- * problem, as it depends on a FULL bootstrap that fails on D10+. Site-local
- * 'cr' also works on D12+, where the Aegir-Drush-8 paths are skipped entirely.
- * D8/D9 can still be driven by Aegir Drush 8, so they use 'cache-rebuild'.
+ * D10+ MUST be driven by the SITE-LOCAL Drush. Aegir's own Drush 8 binds its
+ * psr/log v1 at preflight, so it can FULL-bootstrap a D10/D11 platform only
+ * while that platform is LOCKED (de-typed), and only for read-only work such
+ * as the system_map() introspection at install/verify/deploy time (f9466d37).
+ * The container itself must be recompiled by the version-matched site-local
+ * Drush, in the same patched state the web serves in: a container compiled
+ * inside Aegir Drush 8 bakes its own logger into the persisted D10+ container
+ * and the web then fatals resolving it. Site-local 'cr' also works on D12+,
+ * where the Aegir-Drush-8 paths are skipped entirely. D8/D9 can still be
+ * driven by Aegir Drush 8, so they use 'cache-rebuild'.
  *
  * Locking: on D10+ the rebuild needs vendor/drush executable. BOA keeps the
  * site-local Drush locked (chmod 0400) on some paths and unlocked on others, so

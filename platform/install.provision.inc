@@ -551,9 +551,10 @@ function drush_provision_drupal_post_provision_install() {
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
     if (drush_drupal_major_version() >= 10) {
       // D10+: working container + cache rebuild via the site-local Drush; the
-      // in-process _provision_drupal_rebuild_caches() no-ops on D10+ (it needs an
-      // Aegir Drush 8 FULL bootstrap the site cannot satisfy). The helper
-      // self-manages the vendor/drush lock window. Non-fatal.
+      // in-process _provision_drupal_rebuild_caches() must not recompile a D10+
+      // container inside Aegir Drush 8 (version-mismatched; its FULL bootstrap
+      // here is read-only introspection on a locked platform, f9466d37). The
+      // helper self-manages the vendor/drush lock window. Non-fatal.
       _provision_drupal_rebuild_d8plus();
     }
     elseif (drush_drupal_major_version() < 12) {

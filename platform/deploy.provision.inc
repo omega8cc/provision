@@ -318,13 +318,14 @@ function drush_provision_drupal_post_provision_deploy() {
           // Log The Useful Info
           drush_log(dt('DEPLOY4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
           // D10+ with no executable site-local Drush. Do NOT fall back to Aegir
-          // Drush 8: it cannot bootstrap a D10/D11 site, so 'updatedb' would only
-          // fail noisily ("could not bootstrap") without applying anything. Skip
-          // with a warning; the schema update must be applied manually (Unlock
-          // Local Drush, then 'vdrush @alias updb') or by repairing the site-local
+          // Drush 8: it is version-mismatched for D10+ and must never run
+          // updatedb or a container rebuild there (its FULL bootstrap is for
+          // read-only introspection on a locked platform only). Skip with a
+          // warning; the schema update must be applied manually (Unlock Local
+          // Drush, then 'vdrush @alias updb') or by repairing the site-local
           // Drush. (D6/D7/D8/D9 keep using Aegir Drush 8 in the branch below — it
           // is the version-matched Drush for them and bootstraps them fine.)
-          drush_log(dt('DEPLOY4b/LOCAL/DRUSH/SKIP updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 cannot bootstrap D10+; apply the DB update manually', array('@drush_path' => $drushAbsolutePath)), 'warning');
+          drush_log(dt('DEPLOY4b/LOCAL/DRUSH/SKIP updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@drush_path' => $drushAbsolutePath)), 'warning');
           // Break the Update-module fetch-task deadlock introduced by the DB
           // import (clone/migrate/restore). On this degraded D10+ path the
           // site-local Drush is not executable, so the helper logs and skips
@@ -387,10 +388,12 @@ function drush_provision_drupal_post_provision_deploy() {
           // Rebuild the D8+ service container and flush all caches via the
           // site-local Drush, the analog of the D<8 registry-rebuild above.
           // Runs here, in the same exec window as updatedb and before the
-          // chmod-only relock below, so it works on D10+ where Aegir Drush 8
-          // cannot bootstrap the site (the FULL-bootstrap rebuild in the deploy
-          // tail no-ops there). With the window already open it reuses it (its own
-          // is_executable() gate no-ops), compiling in the patched state. Non-fatal.
+          // chmod-only relock below, so the D10+ container is compiled by the
+          // version-matched site-local Drush (the FULL-bootstrap pass in the
+          // deploy tail is Aegir Drush 8, read-only introspection on a locked
+          // platform, never the compiler). With the window already open it
+          // reuses it (its own is_executable() gate no-ops), compiling in the
+          // patched state. Non-fatal.
           _provision_drupal_rebuild_d8plus();
           // Relock the chmod-only window if we opened it, leaving the patches
           // untouched (never a patch re-apply here). Restores the at-rest 0400
@@ -444,8 +447,9 @@ function drush_provision_drupal_post_provision_deploy() {
   // Drush 8 CAN read-only FULL-bootstrap D10/D11 here, exactly as it does at
   // install/verify VALIDATE time (the install/verify gates were restored to
   // < 12 in f9466d37 because that in-process container is what the unconditional
-  // post-hook system_map() needs); this gate now mirrors them (install:323,
-  // verify:22). The in-process pass regenerates the site 'packages' map so the
+  // post-hook system_map() needs); this gate now mirrors the FULL-bootstrap gates
+  // in install.provision.inc and verify.provision.inc (same '< 12' test; line
+  // numbers move, the functions do not). The in-process pass regenerates the site 'packages' map so the
   // Hostmaster module/theme inventory stays current after a clone/migrate/
   // restore, runs the deploy_11 URL-rename engine (system.site name on a
   // clone-to-new-URL), and rebuilds node access. D10/D11 are ALSO rebuilt above
