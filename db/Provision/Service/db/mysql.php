@@ -796,10 +796,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
-        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
-        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
-        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
+        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
+        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
+        $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
@@ -1174,10 +1174,10 @@ port=%s
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
-        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
-        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
-        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
+        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
+        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
+        $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
