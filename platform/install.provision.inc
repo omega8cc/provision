@@ -288,14 +288,59 @@ function drush_provision_drupal_provision_install() {
           }
         }
 
-        // Call The Drush site-install Command with Site-Local Drush
+        // Resolve what the site-local Drush will run under: its
+        // "#!/usr/bin/env php" shebang finds php on PATH, so the same lookup
+        // reports the memory_limit the child inherits. BOA sizes the account
+        // CLI limit for the box, not for a Drupal 11 distro install, which is
+        // a single job that can need far more than a pool worker (a Varbase
+        // install peaks near 600 MB; a 4 GB guest with a 2 GB reserve derived
+        // 466M and died after its last "module installed" line). Floor the
+        // child at a quarter of installed RAM, capped at 1024M, unless
+        // <aegir_root>/static/control/install-memory.info pins a value in MB.
+        $mem = _provision_d11_install_memory($appRoot);
+        // The child's PHP errors go to a file this task controls: the account
+        // php.ini points error_log at a root-owned path the account cannot
+        // write, and on this backend leg the stderr fallback never reached the
+        // task log (the observed break: a non-zero exit with no fatal text).
+        // The tail of that file is logged on failure; it is removed on success.
+        $php_errlog = _provision_d11_install_errlog_path();
+        @unlink($php_errlog);
+        // Belt and braces: the application can turn log_errors off or move
+        // error_log at runtime (observed: the fatal never reached the file
+        // while Drush's own "terminated abnormally" shutdown line did), so a
+        // prepended shutdown hook records the last fatal into the same file
+        // and to stderr regardless of what the runtime did to the ini values.
+        $php_hook = _provision_d11_install_hook_write($php_errlog);
+        $php_prefix = array('php', '-d', 'log_errors=1', '-d', 'error_log=' . $php_errlog);
+        if ($php_hook !== FALSE) {
+          $php_prefix[] = '-d';
+          $php_prefix[] = 'auto_prepend_file=' . $php_hook;
+        }
+        if ($mem['child_mb'] > 0) {
+          $php_prefix[] = '-d';
+          $php_prefix[] = 'memory_limit=' . $mem['child_mb'] . 'M';
+        }
+        drush_log(dt('D11/INSTALL/MEM php cli memory_limit @cur; site-install child runs with @child (@why; installed RAM @ram MB)', array(
+          '@cur' => $mem['current'],
+          '@child' => ($mem['child_mb'] > 0) ? $mem['child_mb'] . 'M' : $mem['current'],
+          '@why' => $mem['why'],
+          '@ram' => $mem['ram_mb'],
+        )), 'info');
+        $command = array_merge($php_prefix, $command);
+
+        // Call The Drush site-install Command with Site-Local Drush, keeping
+        // the exit status: drush_shell_cd_and_exec() returns only a bool, and
+        // the status is the one fact a silent death leaves behind (255 = PHP
+        // fatal, 137 = SIGKILL, 143 = SIGTERM).
         $cmd_string = implode(' ', array_map('escapeshellarg', $command));
-        $result = drush_shell_cd_and_exec($appRoot, $cmd_string);
-        // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line log
-        // status from it (mirrors the deploy updatedb fix: $success was read below
-        // but never set, so every output line was logged 'notice', never 'success').
+        $output = array();
+        $rc = 0;
+        exec('cd ' . escapeshellarg($appRoot) . ' && ' . $cmd_string . ' 2>&1', $output, $rc);
+        $result = ($rc === 0);
+        // Drive the per-line log status from the exit status (mirrors the
+        // deploy updatedb fix: $success was read below but never set, so every
+        // output line was logged 'notice', never 'success').
         $success = $result;
-        $output = drush_shell_exec_output();
         foreach ($output as $index => $line) {
           if (!$success) { // Log the entire error as a notice.
             $line_status = 'notice';
@@ -306,20 +351,33 @@ function drush_provision_drupal_provision_install() {
           drush_log($line, $line_status);
         }
 
-        // Detect a failed site-install. drush_shell_cd_and_exec() returns FALSE on
-        // a non-zero exit; without this the D11+ path reported a broken install as
-        // success (Aegir then marked the site installed and skipped rollback). The
-        // subprocess output was already logged as notices above. Re-apply the Aegir
-        // patches (restore the at-rest posture the patched web serves in), then
-        // register the canonical install error and abort before the login-link
-        // derivation and the pm:list cleanup run against a broken site.
+        // Detect a failed site-install. Without this the D11+ path reported a
+        // broken install as success (Aegir then marked the site installed and
+        // skipped rollback). The subprocess output was already logged as
+        // notices above; add the exit status and the PHP error log tail, then
+        // re-apply the Aegir patches (restore the at-rest posture the patched
+        // web serves in), register the canonical install error and abort
+        // before the login-link derivation and the pm:list cleanup run against
+        // a broken site.
         if (!$result) {
+          drush_log(dt('D11/INSTALL/RC site-install exit code @rc@note', array(
+            '@rc' => $rc,
+            '@note' => _provision_d11_exit_note($rc, $output),
+          )), 'error');
+          _provision_d11_log_php_errlog($php_errlog);
+          if ($php_hook !== FALSE) {
+            @unlink($php_hook);
+          }
           drush_log(dt('D11/INSTALL/ERR site-install failed (non-zero exit) in @appRoot', array('@appRoot' => $appRoot)), 'error');
           if ($lock_unlock) {
             drush_log(dt('D11/INSTALL/LOCK re-apply Aegir patches after failed site-install'), 'info');
             provision_lock_drush_local_vnd();
           }
           return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal site-install failed for @uri', array('@uri' => d()->uri)));
+        }
+        @unlink($php_errlog);
+        if ($php_hook !== FALSE) {
+          @unlink($php_hook);
         }
 
         // Generate the one-time admin login link with the site-local modern
@@ -551,4 +609,192 @@ function _provision_install_db_url_from_context() {
     $url .= ':' . $port;
   }
   return $url . '/' . $name;
+}
+
+/**
+ * Installed RAM in MB from /proc/meminfo, 0 when unreadable.
+ */
+function _provision_d11_installed_ram_mb() {
+  if (is_readable('/proc/meminfo')) {
+    $meminfo = file_get_contents('/proc/meminfo');
+    if (preg_match('/^MemTotal:\s+(\d+)\s*kB/m', $meminfo, $m)) {
+      return (int) ($m[1] / 1024);
+    }
+  }
+  return 0;
+}
+
+/**
+ * A php.ini memory shorthand (466M, 1G, 536870912, -1) in MB.
+ * Returns 0 for unlimited and -1 for an unreadable value.
+ */
+function _provision_d11_ini_to_mb($value) {
+  $value = trim((string) $value);
+  if ($value === '') {
+    return -1;
+  }
+  if ($value === '-1') {
+    return 0;
+  }
+  $unit = strtoupper(substr($value, -1));
+  $num = (float) $value;
+  if ($unit === 'G') {
+    return (int) ($num * 1024);
+  }
+  if ($unit === 'M') {
+    return (int) $num;
+  }
+  if ($unit === 'K') {
+    return (int) ($num / 1024);
+  }
+  return (int) ($num / 1048576);
+}
+
+/**
+ * Decide the memory_limit the D11 site-install child runs with.
+ *
+ * Asks the php the child's shebang resolves to for its memory_limit, then
+ * applies the install floor (a quarter of installed RAM, capped at 1024M)
+ * when that limit is lower. <aegir_root>/static/control/install-memory.info
+ * holding a number of MB (minimum 64) pins the child's limit instead, up or
+ * down. Returns current (the inherited value as text), child_mb (0 = leave
+ * the inherited value), why and ram_mb.
+ */
+function _provision_d11_install_memory($appRoot) {
+  $out = array();
+  $rc = 1;
+  exec('cd ' . escapeshellarg($appRoot) . ' && php -d display_errors=0 -r ' . escapeshellarg('echo ini_get("memory_limit");') . ' 2>/dev/null', $out, $rc);
+  $current = ($rc === 0 && !empty($out)) ? trim(end($out)) : '';
+  $current_mb = _provision_d11_ini_to_mb($current);
+  $ret = array(
+    'current' => ($current === '') ? 'unknown' : $current,
+    'child_mb' => 0,
+    'why' => 'unchanged',
+    'ram_mb' => _provision_d11_installed_ram_mb(),
+  );
+  $aegir_root = d('@server_master')->aegir_root;
+  if (!empty($aegir_root)) {
+    $pin_file = $aegir_root . '/static/control/install-memory.info';
+    if (is_file($pin_file)) {
+      $pin = (int) trim(file_get_contents($pin_file));
+      if ($pin >= 64) {
+        $ret['child_mb'] = $pin;
+        $ret['why'] = 'pinned by static/control/install-memory.info';
+        return $ret;
+      }
+      drush_log(dt('D11/INSTALL/MEM ignoring static/control/install-memory.info: expected a number of MB (minimum 64)'), 'warning');
+    }
+  }
+  if ($current_mb === 0) {
+    $ret['why'] = 'unlimited in php.ini';
+    return $ret;
+  }
+  $floor = 0;
+  if ($ret['ram_mb'] > 0) {
+    $floor = (int) ($ret['ram_mb'] / 4);
+    if ($floor > 1024) {
+      $floor = 1024;
+    }
+  }
+  if ($floor > 0 && $current_mb < $floor) {
+    $ret['child_mb'] = $floor;
+    $ret['why'] = 'raised to a quarter of installed RAM, capped at 1024M';
+  }
+  return $ret;
+}
+
+/**
+ * Where the site-install child's PHP error log goes: the account log
+ * directory when writable, else the system temp directory. Deliberately
+ * outside the site directory, which the rollback of a failed install removes.
+ */
+function _provision_d11_install_errlog_path() {
+  $dir = sys_get_temp_dir();
+  $aegir_root = d('@server_master')->aegir_root;
+  if (!empty($aegir_root) && is_dir($aegir_root . '/log') && is_writable($aegir_root . '/log')) {
+    $dir = $aegir_root . '/log';
+  }
+  return $dir . '/php-site-install-' . preg_replace('/[^a-zA-Z0-9._-]/', '_', d()->uri) . '.log';
+}
+
+/**
+ * Write the shutdown hook the site-install child prepends: on a fatal error it
+ * appends the message to the child's PHP error log and prints it to stderr,
+ * so the text survives a runtime that turned log_errors off. Returns the hook
+ * path, or FALSE when it could not be written (the install then runs without
+ * it). The hook body runs under the platform's modern PHP; it stays 5.3-safe.
+ */
+function _provision_d11_install_hook_write($php_errlog) {
+  $hook = preg_replace('/\.log$/', '', $php_errlog) . '.hook.php';
+  $body = "<?php\n"
+    . "// Written by Aegir provision for one site-install run; removed after it.\n"
+    . "register_shutdown_function(function () {\n"
+    . "  \$e = error_get_last();\n"
+    . "  if (!\$e || !in_array(\$e['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR), TRUE)) {\n"
+    . "    return;\n"
+    . "  }\n"
+    . "  \$line = 'PHP Fatal error (shutdown hook): ' . \$e['message'] . ' in ' . \$e['file'] . ' on line ' . \$e['line'];\n"
+    . "  @fwrite(STDERR, \$line . \"\\n\");\n"
+    . "  @file_put_contents(" . var_export($php_errlog, TRUE) . ", '[' . date('d-M-Y H:i:s') . '] ' . \$line . \"\\n\", FILE_APPEND);\n"
+    . "});\n";
+  @unlink($hook);
+  if (@file_put_contents($hook, $body) === FALSE) {
+    drush_log(dt('D11/INSTALL/MEM could not write the shutdown hook at @path, installing without it', array('@path' => $hook)), 'warning');
+    return FALSE;
+  }
+  @chmod($hook, 0644);
+  return $hook;
+}
+
+/**
+ * Log the tail of the site-install child's PHP error log as task errors.
+ */
+function _provision_d11_log_php_errlog($path) {
+  if (!is_file($path) || !is_readable($path)) {
+    drush_log(dt('D11/INSTALL/PHPLOG no PHP error log was written at @path', array('@path' => $path)), 'warning');
+    return;
+  }
+  $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+  if (empty($lines)) {
+    drush_log(dt('D11/INSTALL/PHPLOG the PHP error log at @path is empty', array('@path' => $path)), 'warning');
+    return;
+  }
+  $tail = array_slice($lines, -20);
+  drush_log(dt('D11/INSTALL/PHPLOG last @n of @t PHP error log lines, full file kept at @path', array(
+    '@n' => count($tail),
+    '@t' => count($lines),
+    '@path' => $path,
+  )), 'error');
+  foreach ($tail as $line) {
+    drush_log($line, 'error');
+  }
+}
+
+/**
+ * A short reading of a non-zero site-install exit status.
+ */
+function _provision_d11_exit_note($rc, $output = array()) {
+  $rc = (int) $rc;
+  if ($rc == 255) {
+    return ' (PHP fatal error: see the D11/INSTALL/PHPLOG lines)';
+  }
+  // Modern Drush turns a fatal into its own shutdown line and exit 1.
+  foreach ((array) $output as $line) {
+    if (strpos($line, 'Drush command terminated abnormally') !== FALSE) {
+      return ' (PHP fatal error inside Drush: see the D11/INSTALL/PHPLOG lines)';
+    }
+  }
+  if ($rc == 137 || $rc == 9) {
+    return ' (killed by SIGKILL: out-of-memory killer or a watchdog)';
+  }
+  if ($rc == 143 || $rc == 15) {
+    return ' (terminated by SIGTERM)';
+  }
+  if ($rc == 124) {
+    return ' (timed out)';
+  }
+  if ($rc == 1) {
+    return ' (Drush reported the error in its output above)';
+  }
+  return '';
 }
