@@ -49,8 +49,16 @@ if (!isset($_SERVER['db_name']) && PHP_SAPI == 'cli') {
       $aegir_rc_keys = array('db_type', 'db_host', 'db_user', 'db_passwd', 'db_name', 'db_port');
       foreach ($aegir_rc_keys as $aegir_rc_key) {
         $aegir_rc_match = array();
-        if (preg_match('/\$options\[\'' . $aegir_rc_key . '\'\]\s*=\s*\'([^\']*)\';/', $aegir_rc_body, $aegir_rc_match)) {
-          $_SERVER[$aegir_rc_key] = $aegir_rc_match[1];
+        // The file is written with var_export(): a single-quoted string in
+        // which only the quote and the backslash are escaped, or a bare
+        // integer. Read back exactly those forms.
+        if (preg_match('/^\s*\$options\[\'' . $aegir_rc_key . '\'\]\s*=\s*(?:\'((?:[^\'\\\\]|\\\\.)*)\'|(-?[0-9]+));/m', $aegir_rc_body, $aegir_rc_match)) {
+          if (isset($aegir_rc_match[2]) && $aegir_rc_match[2] !== '') {
+            $_SERVER[$aegir_rc_key] = $aegir_rc_match[2];
+          }
+          else {
+            $_SERVER[$aegir_rc_key] = strtr($aegir_rc_match[1], array("\\'" => "'", "\\\\" => "\\"));
+          }
         }
       }
       unset($aegir_rc_body, $aegir_rc_keys, $aegir_rc_key, $aegir_rc_match);
