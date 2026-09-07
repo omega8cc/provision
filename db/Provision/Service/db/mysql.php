@@ -383,7 +383,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // Fetch all host entries for the user
-    $hosts_result = $this->query("SELECT host FROM mysql.user WHERE user = '%s'", $username);
+    $hosts_result = $this->query("SELECT Host FROM mysql.user WHERE User = '%s'", $username);
 
     if (!$hosts_result) {
       // The host lookup itself failed, so the state is unknown: fail closed.
@@ -411,7 +411,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     while ($row = $hosts_result->fetch()) {
-      $host = $row['host'];
+      $host = $row['Host'];
 
       // Skip desired hosts; handle them separately if needed
       if (in_array($host, $desired_hosts)) {
@@ -840,8 +840,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $local_description = 'Adding Pre-DB-Import Flag-File import_dump mysql.php';
       if (!provision_file()->exists($pre_import_flag)->status()) {
         provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
-      	->succeed('Generated blank ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
+          ->succeed('Generated blank ' . $local_description)
+          ->fail('Could not generate ' . $local_description);
       }
 
       if (is_dir($oct_db_dirx) &&
@@ -935,15 +935,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           ->succeed('Remove Pre-DB-Import Flag-File')
           ->fail('Could not remove Pre-DB-Import Flag-File');
 
-		// Create post-db-import flag file.
-		$post_import_flag = $backup_path . '/.post_import_flag.pid';
-		$post_import_flag_blank = "Post-DB-Import \n";
-		$local_description = 'Adding Post-DB-Import Flag-File import_dump mysql.php';
-		if (!provision_file()->exists($post_import_flag)->status()) {
-		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
-			->succeed('Generated blank ' . $local_description)
-			->fail('Could not generate ' . $local_description);
-		}
+        // Create post-db-import flag file.
+        $post_import_flag = $backup_path . '/.post_import_flag.pid';
+        $post_import_flag_blank = "Post-DB-Import \n";
+        $local_description = 'Adding Post-DB-Import Flag-File import_dump mysql.php';
+        if (!provision_file()->exists($post_import_flag)->status()) {
+          provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
+            ->succeed('Generated blank ' . $local_description)
+            ->fail('Could not generate ' . $local_description);
+        }
       }
     }
     else {
