@@ -186,11 +186,14 @@ function drush_provision_drupal_provision_install() {
       // subprocess exits non-zero with no captured output (the observed break).
       // So revert the patches to modern stock for the install (this also chmods
       // the site-local Drush executable), then re-apply them at the end. The
-      // post-install hook's _provision_drupal_rebuild_d8plus() rebuilds the D8+
-      // container in the re-patched state as the last write, so the stock
-      // install-time container never reaches the web. This is why the deploy
-      // updatedb / cr chmod-only window (which operate on an already-installed
-      // site) is NOT a valid precedent for a fresh install. Honour
+      // post-install hook's _provision_drupal_rebuild_d8plus() then rebuilds the
+      // D8+ container by core itself, with no Drush loaded, in the re-patched
+      // state as the last write, so the stock install-time container (which
+      // carries the installer Drush's logger.drupaltodrush) never stays the one
+      // the web serves. The deploy updatedb window works the same way: a real
+      // unlock for the site-local Drush, a real re-lock, then that rebuild --
+      // under PHP 8 no site-local Drush loads on a locked platform at all, so a
+      // chmod-only window is never enough. Honour
       // _no_codebase_lock_unlock.ctrl ($lock_unlock).
       if ($lock_unlock) {
         drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
@@ -288,9 +291,9 @@ function drush_provision_drupal_provision_install() {
           }
         }
 
-        // Resolve what the site-local Drush will run under: its
-        // "#!/usr/bin/env php" shebang finds php on PATH, so the same lookup
-        // reports the memory_limit the child inherits. BOA sizes the account
+        // The site-local Drush runs under this backend's own interpreter
+        // (_provision_site_local_php(), the account's pinned CLI PHP), and the
+        // memory helper reads that same interpreter's limit. BOA sizes the account
         // CLI limit for the box, not for a Drupal 11 distro install, which is
         // a single job that can need far more than a pool worker (a Varbase
         // install peaks near 600 MB; a 4 GB guest with a 2 GB reserve derived
@@ -311,14 +314,14 @@ function drush_provision_drupal_provision_install() {
         // prepended shutdown hook records the last fatal into the same file
         // and to stderr regardless of what the runtime did to the ini values.
         $php_hook = _provision_d11_install_hook_write($php_errlog);
-        $php_prefix = array('php', '-d', 'log_errors=1', '-d', 'error_log=' . $php_errlog);
+        $php_opts = array('-d', 'log_errors=1', '-d', 'error_log=' . $php_errlog);
         if ($php_hook !== FALSE) {
-          $php_prefix[] = '-d';
-          $php_prefix[] = 'auto_prepend_file=' . $php_hook;
+          $php_opts[] = '-d';
+          $php_opts[] = 'auto_prepend_file=' . $php_hook;
         }
         if ($mem['child_mb'] > 0) {
-          $php_prefix[] = '-d';
-          $php_prefix[] = 'memory_limit=' . $mem['child_mb'] . 'M';
+          $php_opts[] = '-d';
+          $php_opts[] = 'memory_limit=' . $mem['child_mb'] . 'M';
         }
         drush_log(dt('D11/INSTALL/MEM php cli memory_limit @cur; site-install child runs with @child (@why; installed RAM @ram MB)', array(
           '@cur' => $mem['current'],
@@ -326,13 +329,15 @@ function drush_provision_drupal_provision_install() {
           '@why' => $mem['why'],
           '@ram' => $mem['ram_mb'],
         )), 'info');
-        $command = array_merge($php_prefix, $command);
-
-        // Call The Drush site-install Command with Site-Local Drush, keeping
-        // the exit status: drush_shell_cd_and_exec() returns only a bool, and
-        // the status is the one fact a silent death leaves behind (255 = PHP
-        // fatal, 137 = SIGKILL, 143 = SIGTERM).
-        $cmd_string = implode(' ', array_map('escapeshellarg', $command));
+        // Call The Drush site-install Command with Site-Local Drush in the
+        // exec form (_provision_site_local_drush_cmd: the interpreter first,
+        // its -d options, the launcher, then the arguments, each escaped) --
+        // websh execs a quoted absolute argv[0] verbatim and plain dash runs
+        // it as written, so the line survives whichever /bin/sh the box has
+        // during the task. Keep the exit status: drush_shell_cd_and_exec()
+        // returns only a bool, and the status is the one fact a silent death
+        // leaves behind (255 = PHP fatal, 137 = SIGKILL, 143 = SIGTERM).
+        $cmd_string = _provision_site_local_drush_cmd(array_slice($command, 1), $php_opts);
         $output = array();
         $rc = 0;
         exec('cd ' . escapeshellarg($appRoot) . ' && ' . $cmd_string . ' 2>&1', $output, $rc);
@@ -400,7 +405,7 @@ function drush_provision_drupal_provision_install() {
             '--root=' . d()->root,
             '--uri=' . d()->uri,
           );
-          $uli_cmd_string = implode(' ', array_map('escapeshellarg', $uli_command));
+          $uli_cmd_string = _provision_site_local_drush_cmd(array_slice($uli_command, 1));
           drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI generate one-time login link via user:login in @appRoot', array('@appRoot' => $appRoot)), 'info');
           $uli_result = drush_shell_cd_and_exec($appRoot, $uli_cmd_string);
           $uli_output = drush_shell_exec_output();
@@ -438,7 +443,7 @@ function drush_provision_drupal_provision_install() {
           '--uri=' . d()->uri,
         ];
         $pml_command[] = '-vvv';
-        $pml_cmd_string = implode(' ', array_map('escapeshellarg', $pml_command));
+        $pml_cmd_string = _provision_site_local_drush_cmd(array_slice($pml_command, 1));
         $pml_result = drush_shell_cd_and_exec($appRoot, $pml_cmd_string);
         $pml_output = drush_shell_exec_output();
         foreach ((array) $pml_output as $pml_line) {
@@ -459,7 +464,7 @@ function drush_provision_drupal_provision_install() {
             '--uri=' . d()->uri,
           ];
           $uninstall_command[] = '-vvv';
-          $uninstall_cmd_string = implode(' ', array_map('escapeshellarg', $uninstall_command));
+          $uninstall_cmd_string = _provision_site_local_drush_cmd(array_slice($uninstall_command, 1));
           drush_log(dt('D11/INSTALL/LOCAL6/DRUSH/UNINSTALL automatic_updates in @appRoot', array('@appRoot' => $appRoot)), 'info');
           $uninstall_result = drush_shell_cd_and_exec($appRoot, $uninstall_cmd_string);
           $uninstall_output = drush_shell_exec_output();
@@ -479,7 +484,7 @@ function drush_provision_drupal_provision_install() {
             '--uri=' . d()->uri,
           ];
           $uninstall_command[] = '-vvv';
-          $uninstall_cmd_string = implode(' ', array_map('escapeshellarg', $uninstall_command));
+          $uninstall_cmd_string = _provision_site_local_drush_cmd(array_slice($uninstall_command, 1));
           drush_log(dt('D11/INSTALL/LOCAL7/DRUSH/UNINSTALL package_manager in @appRoot', array('@appRoot' => $appRoot)), 'info');
           $uninstall_result = drush_shell_cd_and_exec($appRoot, $uninstall_cmd_string);
           $uninstall_output = drush_shell_exec_output();
@@ -492,10 +497,11 @@ function drush_provision_drupal_provision_install() {
       // Re-apply the Aegir core/console/validator/psr-log patches (restore the
       // at-rest posture the patched web serves in) now that the modern site-local
       // Drush has finished the install. The post-install hook's
-      // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container in this
-      // re-patched state as the last container write, so the stock install-time
-      // container never reaches the web; D<12 also gets the Aegir Drush 8 FULL
-      // bootstrap tail in the caller.
+      // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container by
+      // core itself (no Drush) in this re-patched state as the last container
+      // write, so the stock install-time container never stays the one the web
+      // serves; D<12 also gets the Aegir Drush 8 FULL bootstrap tail in the
+      // caller.
       if ($lock_unlock) {
         provision_check_codebase_status();
         if (!d()->isConsolePatched || !d()->isCorePatched) {
@@ -550,10 +556,12 @@ function drush_provision_drupal_post_provision_install() {
   // If Drupal profile was installed, rebuild drupal caches and save enabled packages for aegir.
   if (d()->install_method == 'profile' && drush_get_option('profile_installed', FALSE, 'site')) {
     if (drush_drupal_major_version() >= 10) {
-      // D10+: working container + cache rebuild via the site-local Drush; the
-      // in-process _provision_drupal_rebuild_caches() no-ops on D10+ (it needs an
-      // Aegir Drush 8 FULL bootstrap the site cannot satisfy). The helper
-      // self-manages the vendor/drush lock window. Non-fatal.
+      // D10+: working container + cache rebuild by core itself in a Drush-free
+      // subprocess, the last container write after the re-lock above; the
+      // in-process _provision_drupal_rebuild_caches() must not recompile a D10+
+      // container inside Aegir Drush 8 (version-mismatched; its FULL bootstrap
+      // here is read-only introspection on a locked platform, f9466d37).
+      // Non-fatal, never silent.
       _provision_drupal_rebuild_d8plus();
     }
     elseif (drush_drupal_major_version() < 12) {
@@ -663,7 +671,8 @@ function _provision_d11_ini_to_mb($value) {
 function _provision_d11_install_memory($appRoot) {
   $out = array();
   $rc = 1;
-  exec('cd ' . escapeshellarg($appRoot) . ' && php -d display_errors=0 -r ' . escapeshellarg('echo ini_get("memory_limit");') . ' 2>/dev/null', $out, $rc);
+  $ini = _provision_site_local_php_ini();
+  exec('cd ' . escapeshellarg($appRoot) . ' && ' . escapeshellarg(_provision_site_local_php()) . (($ini !== '') ? ' -c ' . escapeshellarg($ini) : '') . ' -d display_errors=0 -r ' . escapeshellarg('echo ini_get("memory_limit");') . ' 2>/dev/null', $out, $rc);
   $current = ($rc === 0 && !empty($out)) ? trim(end($out)) : '';
   $current_mb = _provision_d11_ini_to_mb($current);
   $ret = array(

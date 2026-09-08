@@ -793,32 +793,158 @@ function _provision_drupal_rebuild_caches() {
 }
 
 /**
+ * The shell line for one site-local Drush call, run by the backend's own PHP.
+ *
+ *   exec '<php>' 'vendor/drush/drush/drush.php' '<arg>' ...
+ *
+ * from the app root. Two shells run this line the same way: websh, BOA's
+ * /bin/sh, execs a quoted absolute argv[0] verbatim (its fast lane for a
+ * caller that already resolved the binary), and plain dash, which BOA leaves
+ * as /bin/sh for the length of a Barracuda pass, runs the exec as written.
+ * The bare launcher form ('vendor/drush/drush/drush.php ...') depends on
+ * websh rewriting it with the account's PHP: under dash it is executed as a
+ * file, and Drush 11's drush.php carries no shebang, so the line died as a
+ * shell script ("cannot open ?php") whenever a task ran during a pass.
+ * Measured on a BOA box, 2026-09-08.
+ *
+ * The interpreter is the one this backend runs under: the account's pinned
+ * CLI PHP, chosen by websh when it launched Aegir's Drush 8, the same one it
+ * would choose for the site-local Drush (_provision_site_local_php()), and
+ * it runs on that interpreter's own php.ini (-c, _provision_site_local_php_ini()):
+ * a modern Drush refuses to start under any non-empty open_basedir, and the
+ * account's ~/.drush/php.ini for Aegir's Drush 8 carries one, so the ini
+ * must never be left to the environment (PHPRC) of whatever shell or
+ * launcher stands between this backend and the child. Every
+ * argument is escaped here; the caller passes the string to
+ * drush_shell_cd_and_exec() as ONE argument (no sprintf, so a '%' in an
+ * argument is safe), or prefixes it with its own 'cd <dir> && ' when it
+ * needs the exit status from exec().
+ *
+ * @param array $args      Drush arguments and options, unescaped.
+ * @param array $php_opts  Interpreter options placed before the launcher
+ *                         (the D11+ site-install's -d ini settings), unescaped.
+ * @return string
+ */
+function _provision_site_local_drush_cmd($args, $php_opts = array()) {
+  return _provision_php_script_cmd('vendor/drush/drush/drush.php', $args, $php_opts);
+}
+
+/**
+ * Command line running any PHP script on the backend's own interpreter and
+ * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
+ *
+ * The shell's own ini policy never reaches the child: websh hands every
+ * account launch the account's Drush 8 php.ini (PHPRC), whose open_basedir
+ * every modern Drush refuses at preflight, so a launcher line such as
+ * `drush10 ...` run through the shell dies before it does anything, while
+ * this form runs the same script on the stock ini. -c beats PHPRC.
+ */
+function _provision_php_script_cmd($script, $args, $php_opts = array()) {
+  $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
+  $ini = _provision_site_local_php_ini();
+  if ($ini !== '') {
+    $cmd .= ' -c ' . escapeshellarg($ini);
+  }
+  foreach ((array) $php_opts as $opt) {
+    $cmd .= ' ' . escapeshellarg((string) $opt);
+  }
+  $cmd .= ' ' . escapeshellarg((string) $script);
+  foreach ((array) $args as $arg) {
+    $cmd .= ' ' . escapeshellarg((string) $arg);
+  }
+  return $cmd;
+}
+
+/**
+ * The account's Drush 10 launcher as a script path for _provision_php_script_cmd():
+ * /usr/bin/drush10 resolves to a PHP script (vendor/bin/drush) on a BOA box;
+ * empty when no such launcher exists.
+ */
+function _provision_drush10_script() {
+  $launcher = '/usr/bin/drush10';
+  if (is_link($launcher)) {
+    $target = realpath($launcher);
+    if ($target !== FALSE && is_file($target)) {
+      return $target;
+    }
+  }
+  elseif (is_file($launcher)) {
+    return $launcher;
+  }
+  return '';
+}
+
+/**
+ * The PHP interpreter every site-local subprocess of this backend runs under.
+ *
+ * PHP_BINARY is the interpreter of this very process: the account's pinned
+ * CLI PHP, which websh selected when it launched Aegir's Drush 8. 'php' only
+ * when the constant is unusable (never on a real box).
+ *
+ * @return string
+ */
+function _provision_site_local_php() {
+  return (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
+}
+
+/**
+ * The php.ini a site-local subprocess runs on: the interpreter's own.
+ *
+ * BOA installs each PHP under /opt/phpNN with its php.ini at
+ * /opt/phpNN/lib/php.ini; that file is what the web and the box's CLI run on,
+ * and it carries no open_basedir. Empty when the interpreter is not laid out
+ * that way (the caller then adds no -c and the child inherits the environment).
+ *
+ * @return string
+ */
+function _provision_site_local_php_ini() {
+  $php = _provision_site_local_php();
+  if (preg_match('#^(/opt/php[0-9]+)/bin/php$#', $php, $m) && is_file($m[1] . '/lib/php.ini')) {
+    return $m[1] . '/lib/php.ini';
+  }
+  return '';
+}
+
+/**
  * Rebuild the Drupal 8+ service container and flush all caches.
  *
  * The D8+ analog of the D<8 'registry-rebuild' + cache-clear that the deploy,
- * verify and install paths run for older sites. 'drush cr' (cache:rebuild, a
- * stable alias across Drush 8..13) calls drupal_rebuild(), which recompiles the
- * service container and flushes every cache bin.
+ * verify and install paths run for older sites, and the body of the
+ * hosting_tasks_extra 'Flush all caches' / 'Rebuild registry' tasks on D8+.
  *
- * D10+ MUST be driven by the SITE-LOCAL Drush: Aegir's own Drush 8 cannot
- * bootstrap a D10/D11 site, so provision_backend_invoke(..., 'cache-rebuild')
- * silently no-ops there — the historical gap this closes. The in-process
- * drupal_flush_all_caches() in _provision_drupal_rebuild_caches() has the same
- * problem, as it depends on a FULL bootstrap that fails on D10+. Site-local
- * 'cr' also works on D12+, where the Aegir-Drush-8 paths are skipped entirely.
- * D8/D9 can still be driven by Aegir Drush 8, so they use 'cache-rebuild'.
+ * D10+ is rebuilt by CORE ITSELF, in a subprocess with no Drush loaded:
+ * platform/drupal/rebuild_d8plus.php runs drupal_rebuild() (the core/rebuild.php
+ * path) as the site owner, from the docroot, under the same PHP that runs this
+ * backend. Two facts decide that shape, both measured on a BOA box under
+ * PHP 8:
  *
- * Locking: on D10+ the rebuild needs vendor/drush executable. BOA keeps the
- * site-local Drush locked (chmod 0400) on some paths and unlocked on others, so
- * this snapshots the current state, unlocks only if it was locked, runs 'cr',
- * then restores the exact prior lock state — never changing the at-rest posture
- * (so it is safe to call from deploy's already-unlocked window, from verify,
- * install, or a front-end task). A genuinely degraded codebase (vendor missing)
- * still skips, logging only; no @alias / Aegir Drush 8 fallback on D10+, per
- * platform policy.
+ * - A LOCKED D10/D11 platform and a running site-local Drush exclude each
+ *   other: the lock de-types the abstract Symfony Console Output while
+ *   StreamOutput stays typed, and swaps in a psr/log v1 overlay that modern
+ *   Drush's Consolidation\Log\Logger is typed against v3 for -- so ANY
+ *   vendor/drush/drush/drush.php invocation fatals at class load, whatever the
+ *   exec bits say. The former chmod-only exec window opened the bits and
+ *   nothing else; its 'cr' exited 255 into a task log that showed only the
+ *   window's own EXEC/CMD/RELOCK lines. No chmod can bridge that.
+ * - Aegir's Drush 8 must not be the compiler either: it binds psr/log v1 at
+ *   preflight, its FULL bootstrap is for read-only introspection on a locked
+ *   platform, and its container would carry Drush 8 service definitions.
  *
- * Non-fatal by design: logs and continues, never drush_set_error() — a cache
- * rebuild must not fail a deploy/verify/install/task.
+ * Core, patched to the same overlay the web serves in, loads on a locked
+ * platform exactly as index.php does; on an unlocked (stock) platform it loads
+ * as stock. Either way the compiled container is the web's own -- no
+ * logger.drupaltodrush, no Drush command services -- so this is safe as the
+ * LAST container write after any Drush-driven work in the stock state (the
+ * deploy updatedb window, the D11+ site-install), and safe from verify,
+ * install, a front-end task, or the developer account's unlock window.
+ * D8/D9 keep Aegir Drush 8 'cache-rebuild', which still bootstraps them.
+ *
+ * Non-fatal by design: logs and continues, never drush_set_error() -- a cache
+ * rebuild must not fail a deploy/verify/install/task. But never silent: a
+ * subprocess that does not exit 0 is logged as a WARNING with its output
+ * (the script reports a class-load fatal itself, independent of the
+ * account's php.ini), so a rebuild that did not happen is visible in the
+ * task log.
  */
 function _provision_drupal_rebuild_d8plus() {
   // D7 and hostmaster have no D8+ container; nothing to rebuild here.
@@ -827,58 +953,45 @@ function _provision_drupal_rebuild_d8plus() {
   }
 
   if (drush_drupal_major_version() >= 10) {
-    // D10+: site-local Drush only. Never @alias / Aegir Drush 8 on D10+.
-    $appRoot = findAppRoot(d()->root);
-    $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
+    // D10+: core's own rebuild in a Drush-free subprocess (see above).
+    $root = d()->root;
+    if (!is_file($root . '/core/includes/utility.inc')) {
+      // A site context registered on the composer root rather than the
+      // docroot (the verify post hook corrects this itself; other callers may
+      // not have).
+      $root = provision_auto_fix_platform_root($root);
+    }
+    $uri = d()->uri;
+    $script = dirname(__FILE__) . '/drupal/rebuild_d8plus.php';
+    // The interpreter this backend runs under is the account's pinned CLI
+    // PHP, the one every site-local tool of this account runs under too.
+    $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
 
-    // Force a known-good window without changing the at-rest lock posture:
-    // unlock only if currently locked, and relock afterwards to match.
-    $was_executable = is_executable($drushAbsolutePath);
-    if (!$was_executable) {
-      // Make the site-local Drush runnable WITHOUT reverting the Aegir
-      // core/console/validator/psr-log patches (which is what
-      // provision_unlock_drush_local_vnd() does for the other Aegir tasks). The
-      // web serves in the PATCHED state, so the container must be compiled in
-      // that same state: reverting the patches first makes this 'cr' compile
-      // against stock Drupal, where Drush's tagged 'logger.drupaltodrush'
-      // (Drush\Log\DrushLog) becomes a valid logger and is baked into the
-      // persisted service container -- the patched web then fatals resolving it
-      // (a circular reference through logger.factory, or "Class
-      // Drush\Log\DrushLog not found" once vendor/drush is relocked 0400).
-      // Flipping only the exec bits keeps the patches applied and never poisons
-      // the container.
-      drush_log(dt('REBUILD/LOCAL/DRUSH/EXEC chmod-only exec window (patches kept applied) for cr'), 'info');
-      _provision_drupal_chmod_drush_vnd_for_cr($appRoot, TRUE);
+    if (!is_file($script) || !is_file($root . '/core/includes/utility.inc') || $uri === '') {
+      drush_log(dt('REBUILD/CORE/SKIP no core rebuild possible for @uri (script @script, docroot @root); container and caches left to the next request', array('@uri' => $uri, '@script' => $script, '@root' => $root)), 'warning');
+      return;
     }
 
-    if (is_executable($drushAbsolutePath)) {
-      $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
-      // SECURITY: $dnameten derives from d()->name (Drush alias name), which is
-      // not validated against shell-unsafe characters at the Hostmaster UI
-      // layer. Escape before shell interpolation. 'cr' is a fixed literal. No
-      // extra args are passed to drush_shell_cd_and_exec(), so the command is
-      // NOT run through sprintf() (no '%' hazard). (string) cast guards the PHP
-      // 8.1+ null-to-escapeshellarg deprecation if preg_replace() returns null.
-      drush_log(dt('REBUILD/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten cr in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-      // Cloaked credentials reach the site-local Drush only through the real
-      // environment; harmless when credentials are not cloaked.
-      provision_prepare_environment_subprocess();
-      drush_shell_cd_and_exec($appRoot, 'vendor/drush/drush/drush.php ' . escapeshellarg((string) $dnameten) . ' cr');
-      provision_clear_environment_subprocess();
-      foreach (drush_shell_exec_output() as $line) {
+    drush_log(dt('REBUILD/CORE/CMD @php rebuild_d8plus.php @root @uri (core drupal_rebuild, no Drush)', array('@php' => $php, '@root' => $root, '@uri' => $uri)), 'info');
+    // Cloaked credentials reach the subprocess only through the real
+    // environment; harmless when credentials are not cloaked. Every argument
+    // is passed through the sprintf form, which escapeshellarg()s each one;
+    // stderr is captured with stdout by drush_shell_exec().
+    provision_prepare_environment_subprocess();
+    $ok = drush_shell_cd_and_exec($root, '%s %s %s %s', $php, $script, $root, $uri);
+    provision_clear_environment_subprocess();
+    $output = drush_shell_exec_output();
+    if ($ok) {
+      foreach ($output as $line) {
         drush_log($line, 'notice');
       }
+      drush_log(dt('REBUILD/CORE/OK service container and caches rebuilt for @uri', array('@uri' => $uri)), 'ok');
     }
     else {
-      // Degraded codebase (no site-local Drush). Do not fall back to @alias /
-      // Aegir Drush 8 on D10+, per platform policy; log and skip. The container
-      // is then rebuilt lazily on the next request.
-      drush_log(dt('REBUILD/LOCAL/DRUSH/SKIP site-local Drush not executable at @path; container/cache rebuild left to the next request', array('@path' => $drushAbsolutePath)), 'warning');
-    }
-
-    if (!$was_executable) {
-      drush_log(dt('REBUILD/LOCAL/DRUSH/RELOCK chmod-only 0400 (patches untouched)'), 'info');
-      _provision_drupal_chmod_drush_vnd_for_cr($appRoot, FALSE);
+      drush_log(dt('REBUILD/CORE/FAIL the core rebuild for @uri did not complete; container and caches left to the next request', array('@uri' => $uri)), 'warning');
+      foreach ($output as $line) {
+        drush_log($line, 'warning');
+      }
     }
   }
   else {
@@ -891,56 +1004,6 @@ function _provision_drupal_rebuild_d8plus() {
     $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
     provision_backend_invoke(d()->name, 'cache-rebuild');
     drush_set_context('DRUSH_ERROR_CODE', $pre_error);
-  }
-}
-
-/**
- * Open (or close) a chmod-only executable window on the site-local Drush.
- *
- * Companion to _provision_drupal_rebuild_d8plus(): it flips ONLY the
- * exec/traverse bits on vendor/drush and the two Symfony Console dirs the lock
- * guards, deliberately NOT reverting the Aegir core/console/validator/psr-log
- * patches the way provision_unlock_drush_local_vnd() does. The site-local 'cr'
- * must compile the D8+ service container in the SAME patched state the web
- * serves in; compiling it against stock (reverted) Drupal makes Drush's tagged
- * 'logger.drupaltodrush' (Drush\Log\DrushLog) a valid logger that gets baked
- * into the persisted container, which then fatals the web. Keeping the patches
- * applied avoids poisoning the container in the first place.
- *
- * $appRoot is the Composer root from findAppRoot(), so the '/../' variants that
- * provision_(un)lock_drush_local_vnd() carry are not needed here.
- *
- * @param string $appRoot         Composer root (findAppRoot(d()->root)).
- * @param bool   $make_executable TRUE opens the window (0775), FALSE relocks (0400).
- */
-function _provision_drupal_chmod_drush_vnd_for_cr($appRoot, $make_executable) {
-  $dirs = array(
-    $appRoot . '/vendor/drush',
-    $appRoot . '/vendor/symfony/console/Input',
-    $appRoot . '/vendor/symfony/console/Style',
-  );
-  $perm = $make_executable ? 0775 : 0400;
-  foreach ($dirs as $path) {
-    if (provision_file()->exists($path)->status()) {
-      provision_file()->chmod($path, $perm)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
-    }
-  }
-  // The Drush entrypoints need the exec bit only while the window is open;
-  // relocking the parent dir to 0400 above already makes them unreachable.
-  if ($make_executable) {
-    $bins = array(
-      $appRoot . '/vendor/drush/drush/drush.php',
-      $appRoot . '/vendor/drush/drush/drush',
-    );
-    foreach ($bins as $path) {
-      if (provision_file()->exists($path)->status()) {
-        provision_file()->chmod($path, 0775)
-        ->succeed('Changed permissions of <code>@path</code> to @perm')
-        ->fail('Could not change permissions of <code>@path</code> to @perm');
-      }
-    }
   }
 }
 
