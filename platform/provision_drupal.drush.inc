@@ -595,10 +595,17 @@ function _provision_drupal_native_symlink($url, $force_unshare = FALSE, $account
  * runs BEFORE the alias is removed because the wrapper proves ownership
  * through it. No-op without a store, outside Octopus accounts, or without
  * the wrapper.
+ * $prefix names the task in the log lines: DELETE for the site delete,
+ * RENAME for a migrate under a new name, whose old-name store is left
+ * behind the same way once the target has its own copy.
  */
-function _provision_drupal_archive_static_store($url) {
+function _provision_drupal_archive_static_store($url, $prefix = 'DELETE') {
   if (empty($url) || $url == 'all') {
     return;
+  }
+  $prefix = preg_replace('/[^A-Z]/', '', strtoupper((string) $prefix));
+  if ($prefix === '') {
+    $prefix = 'DELETE';
   }
   $aegir_root = d('@server_master')->aegir_root;
   if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
@@ -608,29 +615,29 @@ function _provision_drupal_archive_static_store($url) {
     return;
   }
   if (!preg_match('/^[a-z0-9][a-z0-9._-]*$/i', $url) || strpos($url, '..') !== FALSE) {
-    drush_log(dt('DELETE/STORE/SKIP unexpected site token @url', array('@url' => $url)), 'warning');
+    drush_log(dt($prefix . '/STORE/SKIP unexpected site token @url', array('@url' => $url)), 'warning');
     return;
   }
   $store = $aegir_root . '/static/files/' . $url;
   if (!is_dir($store) && !is_link($store)) {
-    drush_log(dt('DELETE/STORE/NONE no per-account static store at @store', array('@store' => $store)), 'info');
+    drush_log(dt($prefix . '/STORE/NONE no per-account static store at @store', array('@store' => $store)), 'info');
     return;
   }
   // The operator's switch for report-only orphan handling holds this hand
   // too: the store stays at its live name, and the task says so.
   if (is_file('/data/conf/disable_orphan_store_archiving.cnf')) {
-    drush_log(dt('DELETE/STORE/KEPT @url: store left at @store (operator switch /data/conf/disable_orphan_store_archiving.cnf)', array('@url' => $url, '@store' => $store)), 'info');
+    drush_log(dt($prefix . '/STORE/KEPT @url: store left at @store (operator switch /data/conf/disable_orphan_store_archiving.cnf)', array('@url' => $url, '@store' => $store)), 'info');
     return;
   }
   $account = basename($aegir_root);
-  drush_log(dt('DELETE/STORE/ARCHIVE setting @store aside under static/files/.archived (the wrapper, as root)', array('@store' => $store)), 'info');
+  drush_log(dt($prefix . '/STORE/ARCHIVE setting @store aside under static/files/.archived (the wrapper, as root)', array('@store' => $store)), 'info');
   $ok = drush_shell_exec('sudo --non-interactive /usr/local/bin/fix-drupal-site-symlinks.sh --site=%s --account=%s --archive-store', $url, $account);
   clearstatcache();
   if ($ok && !is_dir($store) && !is_link($store)) {
-    drush_log(dt('DELETE/STORE/ARCHIVED @url: store set aside under @arch, nothing deleted', array('@url' => $url, '@arch' => $aegir_root . '/static/files/.archived/')), 'success');
+    drush_log(dt($prefix . '/STORE/ARCHIVED @url: store set aside under @arch, nothing deleted', array('@url' => $url, '@arch' => $aegir_root . '/static/files/.archived/')), 'success');
   }
   else {
-    drush_log(dt('DELETE/STORE/LEFT @url: store still at @store (the wrapper declined or failed; see /var/log/boa/autosymlink.log); the nightly sweep archives it, or review by hand', array('@url' => $url, '@store' => $store)), 'warning');
+    drush_log(dt($prefix . '/STORE/LEFT @url: store still at @store (the wrapper declined or failed; see /var/log/boa/autosymlink.log); the nightly sweep archives it, or review by hand', array('@url' => $url, '@store' => $store)), 'warning');
   }
 }
 
