@@ -628,6 +628,10 @@ function provision_unlock_drush_local_vnd() {
         }
       }
 
+      // D10 has no validator patch, but the name is still concatenated into the
+      // template paths below; define it so a D10 pass does not log an
+      // undefined-variable notice (the apply sites are gated on == 11 first).
+      $validator_patch_fname = '';
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
@@ -949,6 +953,10 @@ function provision_lock_drush_local_vnd() {
         }
       }
 
+      // D10 has no validator patch, but the name is still concatenated into the
+      // template paths below; define it so a D10 pass does not log an
+      // undefined-variable notice (the apply sites are gated on == 11 first).
+      $validator_patch_fname = '';
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
