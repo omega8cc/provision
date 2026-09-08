@@ -278,11 +278,27 @@ function drush_provision_drupal_post_provision_deploy() {
           }
         }
 
-        // Update Drush 10+ Aliases
-        drush_log(dt('DRUSH/TEN/ALIASES/UPDATE drush10 site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
-        $result = drush_shell_cd_and_exec($aegir_root, 'drush10 site:alias-convert ~/.drush/sites --yes');
+        // Update Drush 10+ Aliases -- on the backend's own interpreter and ini
+        // (see _provision_php_script_cmd()): the bare `drush10` launcher runs on
+        // whatever ini the shell exports, and the account's Drush 8 ini is
+        // refused by every modern Drush, after which no yml alias exists for a
+        // new site. Never silent: a failed conversion is a warning.
+        $drush10 = _provision_drush10_script();
+        if ($drush10 !== '') {
+          $alias_cmd = _provision_php_script_cmd($drush10, array('site:alias-convert', $aegir_root . '/.drush/sites', '--yes'));
+        }
+        else {
+          $alias_cmd = 'drush10 site:alias-convert ~/.drush/sites --yes';
+        }
+        drush_log(dt('DRUSH/TEN/ALIASES/UPDATE site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
+        $result = drush_shell_cd_and_exec($aegir_root, $alias_cmd);
         $output = implode('', drush_shell_exec_output());
-        drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+        if (!$result || preg_match('/\[(preflight|error)\]/i', $output)) {
+          drush_log("DRUSH/TEN/ALIASES/FAIL " . $output, 'warning');
+        }
+        else {
+          drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+        }
 
         // Find The App Root Directory
         $appRoot = findAppRoot(d()->root);
@@ -358,20 +374,21 @@ function drush_provision_drupal_post_provision_deploy() {
           drush_log("DEPLOY7/LOCAL/DRUSH/VERSION " . $output);
           // Tell How-To Skip Drush updatedb
           drush_log(dt('DEPLOY8/LOCAL/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
-          // Figure Out The Drush 10+ Compatible Site Alias
-          $dnameten = preg_replace('/\.(?![^.]*$)/', '-', d()->name);
-          // Call The Drush updatedb Command with Site-Local Drush
-          drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php @dnameten updatedb in @appRoot', array('@dnameten' => $dnameten, '@appRoot' => $appRoot)), 'info');
-          // SECURITY: $dnameten derives from d()->name (Drush alias name),
-          // which is not validated against shell-unsafe characters at the
-          // Hostmaster UI layer; _provision_site_local_drush_cmd() escapes
-          // every argument before shell interpolation. (string) cast guards
-          // against PHP 8.1+ null-to-escapeshellarg deprecation if
-          // preg_replace() ever returns null upstream.
+          // Call The Drush updatedb Command with Site-Local Drush, addressed
+          // by --root/--uri like the update_fetch_task clear and the install
+          // path's user:login: the option form bootstraps the site in-process
+          // from its settings, while the @alias form depends on the yml alias
+          // the conversion above writes (a site whose alias is missing answered
+          // "[preflight] The alias ... could not be found" and skipped every
+          // schema update with the task still SUCCESSFUL).
+          drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php updatedb --root=@root --uri=@uri in @appRoot', array('@root' => d()->root, '@uri' => d()->uri, '@appRoot' => $appRoot)), 'info');
+          // _provision_site_local_drush_cmd() escapes every argument before
+          // shell interpolation; the (string) casts guard the PHP 8.1+
+          // null-to-escapeshellarg deprecation.
           // Cloaked credentials reach the site-local Drush only through the
           // real environment; harmless when credentials are not cloaked.
           provision_prepare_environment_subprocess();
-          $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array((string) $dnameten, 'updatedb', '-y')));
+          $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('updatedb', '-y', '--root=' . (string) d()->root, '--uri=' . (string) d()->uri)));
           provision_clear_environment_subprocess();
           // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line
           // log status from it ($success was previously used here but never set,
@@ -386,6 +403,12 @@ function drush_provision_drupal_post_provision_deploy() {
               $line_status = $index+1 == count($output) ? 'success' : 'notice';
             }
             drush_log($line, $line_status);
+          }
+          // A schema update that did not run is never a notice: the task
+          // would otherwise end SUCCESSFUL over a site whose database is
+          // behind its code.
+          if (!$success || preg_match('/\[(preflight|error)\]/i', implode("\n", $output))) {
+            drush_log(dt('DEPLOY9/LOCAL/DRUSH/FAIL updatedb did not run to completion (see the lines above); apply the pending database updates by hand'), 'warning');
           }
           // Break the Update-module fetch-task deadlock introduced by the DB
           // import (clone/migrate/restore), while the site-local Drush still

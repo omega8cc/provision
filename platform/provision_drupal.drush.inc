@@ -826,6 +826,20 @@ function _provision_drupal_rebuild_caches() {
  * @return string
  */
 function _provision_site_local_drush_cmd($args, $php_opts = array()) {
+  return _provision_php_script_cmd('vendor/drush/drush/drush.php', $args, $php_opts);
+}
+
+/**
+ * Command line running any PHP script on the backend's own interpreter and
+ * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
+ *
+ * The shell's own ini policy never reaches the child: websh hands every
+ * account launch the account's Drush 8 php.ini (PHPRC), whose open_basedir
+ * every modern Drush refuses at preflight, so a launcher line such as
+ * `drush10 ...` run through the shell dies before it does anything, while
+ * this form runs the same script on the stock ini. -c beats PHPRC.
+ */
+function _provision_php_script_cmd($script, $args, $php_opts = array()) {
   $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
   $ini = _provision_site_local_php_ini();
   if ($ini !== '') {
@@ -834,11 +848,30 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
   foreach ((array) $php_opts as $opt) {
     $cmd .= ' ' . escapeshellarg((string) $opt);
   }
-  $cmd .= ' ' . escapeshellarg('vendor/drush/drush/drush.php');
+  $cmd .= ' ' . escapeshellarg((string) $script);
   foreach ((array) $args as $arg) {
     $cmd .= ' ' . escapeshellarg((string) $arg);
   }
   return $cmd;
+}
+
+/**
+ * The account's Drush 10 launcher as a script path for _provision_php_script_cmd():
+ * /usr/bin/drush10 resolves to a PHP script (vendor/bin/drush) on a BOA box;
+ * empty when no such launcher exists.
+ */
+function _provision_drush10_script() {
+  $launcher = '/usr/bin/drush10';
+  if (is_link($launcher)) {
+    $target = realpath($launcher);
+    if ($target !== FALSE && is_file($target)) {
+      return $target;
+    }
+  }
+  elseif (is_file($launcher)) {
+    return $launcher;
+  }
+  return '';
 }
 
 /**
