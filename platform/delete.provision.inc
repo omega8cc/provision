@@ -63,6 +63,12 @@ function drush_provision_drupal_provision_delete() {
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
+    // Set the site's per-account static store aside BEFORE its alias goes:
+    // the privileged wrapper proves the caller owns the site through that
+    // alias, and the final backup keeps files/private as symlinks, so the
+    // store holds the only copy (archived, never deleted).
+    _provision_drupal_archive_static_store(d()->uri);
+
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {
       drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
@@ -71,6 +77,11 @@ function drush_provision_drupal_provision_delete() {
     // Do not automatically save the drushrc at the end of the command.
     drush_set_option('provision_save_config', false);
 
+    // A site deleted before its first Verify still carries the installer's
+    // read-only site directory (0555): unlink() inside it fails and the
+    // directory stays on the platform with its settings.php. Owner-writable
+    // first, then the recursive delete.
+    _provision_drupal_make_tree_writable(d()->site_path);
     _provision_recursive_delete(d()->site_path);
     // we remove the aliases even if redirection is enabled as a precaution
     // if redirection is enabled, keep silent about errors

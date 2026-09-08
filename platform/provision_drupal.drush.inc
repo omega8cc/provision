@@ -584,6 +584,84 @@ function _provision_drupal_native_symlink($url, $force_unshare = FALSE, $account
 }
 
 /**
+ * Set a site's per-account static store aside at delete time.
+ *
+ * The Delete task removes the site directory and its two links, never the
+ * store (<account>/static/files/<uri>), which is root-managed; until now the
+ * leftover waited for the nightly autosymlink sweep (an opt-in on self-hosted
+ * boxes), and a site recreated under the same name found it archived aside
+ * only then. This asks the same privileged wrapper for the same move now:
+ * static/files/.archived/<stamp>/<uri>/, never a deletion. Warn-not-fail;
+ * runs BEFORE the alias is removed because the wrapper proves ownership
+ * through it. No-op without a store, outside Octopus accounts, or without
+ * the wrapper.
+ */
+function _provision_drupal_archive_static_store($url) {
+  if (empty($url) || $url == 'all') {
+    return;
+  }
+  $aegir_root = d('@server_master')->aegir_root;
+  if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
+    return;
+  }
+  if (!is_file('/usr/local/bin/fix-drupal-site-symlinks.sh')) {
+    return;
+  }
+  if (!preg_match('/^[a-z0-9][a-z0-9._-]*$/i', $url) || strpos($url, '..') !== FALSE) {
+    drush_log(dt('DELETE/STORE/SKIP unexpected site token @url', array('@url' => $url)), 'warning');
+    return;
+  }
+  $store = $aegir_root . '/static/files/' . $url;
+  if (!is_dir($store) && !is_link($store)) {
+    drush_log(dt('DELETE/STORE/NONE no per-account static store at @store', array('@store' => $store)), 'info');
+    return;
+  }
+  $account = basename($aegir_root);
+  drush_log(dt('DELETE/STORE/ARCHIVE setting @store aside under static/files/.archived (the wrapper, as root)', array('@store' => $store)), 'info');
+  $ok = drush_shell_exec('sudo --non-interactive /usr/local/bin/fix-drupal-site-symlinks.sh --site=%s --account=%s --archive-store', $url, $account);
+  clearstatcache();
+  if ($ok && !is_dir($store) && !is_link($store)) {
+    drush_log(dt('DELETE/STORE/ARCHIVED @url: store set aside under @arch, nothing deleted', array('@url' => $url, '@arch' => $aegir_root . '/static/files/.archived/')), 'success');
+  }
+  else {
+    drush_log(dt('DELETE/STORE/LEFT @url: store still at @store (the wrapper declined or failed; see /var/log/boa/autosymlink.log); the nightly sweep archives it, or review by hand', array('@url' => $url, '@store' => $store)), 'warning');
+  }
+}
+
+/**
+ * Make a directory tree owner-writable so a recursive delete can proceed.
+ *
+ * Drupal's installer leaves a fresh site directory without write bits
+ * (measured 0555 on a site deleted before its first Verify; a Verify sets
+ * 0755); unlink() of anything inside then fails and the directory survives
+ * the Delete task with its settings.php. Directories only, symlinks never
+ * followed, best effort (chmod needs ownership, not write permission).
+ */
+function _provision_drupal_make_tree_writable($path) {
+  if (!is_dir($path) || is_link($path)) {
+    return;
+  }
+  $perms = @fileperms($path);
+  if ($perms !== FALSE && (($perms & 0700) != 0700)) {
+    @chmod($path, ($perms & 0777) | 0700);
+  }
+  $d = @dir($path);
+  if (empty($d)) {
+    return;
+  }
+  while (($entry = $d->read()) !== FALSE) {
+    if ($entry == '.' || $entry == '..') {
+      continue;
+    }
+    $entry_path = $path . '/' . $entry;
+    if (is_dir($entry_path) && !is_link($entry_path)) {
+      _provision_drupal_make_tree_writable($entry_path);
+    }
+  }
+  $d->close();
+}
+
+/**
  * Re-establish native files symlinking after a restore.
  *
  * A files-carrying archive extracts files/private as populated real dirs, so
