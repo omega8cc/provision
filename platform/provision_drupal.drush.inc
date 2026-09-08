@@ -616,6 +616,12 @@ function _provision_drupal_archive_static_store($url) {
     drush_log(dt('DELETE/STORE/NONE no per-account static store at @store', array('@store' => $store)), 'info');
     return;
   }
+  // The operator's switch for report-only orphan handling holds this hand
+  // too: the store stays at its live name, and the task says so.
+  if (is_file('/data/conf/disable_orphan_store_archiving.cnf')) {
+    drush_log(dt('DELETE/STORE/KEPT @url: store left at @store (operator switch /data/conf/disable_orphan_store_archiving.cnf)', array('@url' => $url, '@store' => $store)), 'info');
+    return;
+  }
   $account = basename($aegir_root);
   drush_log(dt('DELETE/STORE/ARCHIVE setting @store aside under static/files/.archived (the wrapper, as root)', array('@store' => $store)), 'info');
   $ok = drush_shell_exec('sudo --non-interactive /usr/local/bin/fix-drupal-site-symlinks.sh --site=%s --account=%s --archive-store', $url, $account);
