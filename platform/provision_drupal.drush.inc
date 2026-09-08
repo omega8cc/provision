@@ -637,7 +637,7 @@ function _provision_drupal_archive_static_store($url, $prefix = 'DELETE') {
     drush_log(dt($prefix . '/STORE/ARCHIVED @url: store set aside under @arch, nothing deleted', array('@url' => $url, '@arch' => $aegir_root . '/static/files/.archived/')), 'success');
   }
   else {
-    drush_log(dt($prefix . '/STORE/LEFT @url: store still at @store (the wrapper declined or failed; see /var/log/boa/autosymlink.log); the nightly sweep archives it, or review by hand', array('@url' => $url, '@store' => $store)), 'warning');
+    drush_log(dt($prefix . '/STORE/LEFT @url: store still at @store (the wrapper declined or failed; see /var/log/boa/autosymlink.log): a share names it, a live site still reads it through its link, or the move failed; review by hand, the nightly sweep takes it only once nothing reads it', array('@url' => $url, '@store' => $store)), 'warning');
   }
 }
 
