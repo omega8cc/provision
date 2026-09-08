@@ -383,7 +383,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     // Fetch all host entries for the user
-    $hosts_result = $this->query("SELECT host FROM mysql.user WHERE user = '%s'", $username);
+    $hosts_result = $this->query("SELECT Host FROM mysql.user WHERE User = '%s'", $username);
 
     if (!$hosts_result) {
       // The host lookup itself failed, so the state is unknown: fail closed.
@@ -411,7 +411,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
 
     while ($row = $hosts_result->fetch()) {
-      $host = $row['host'];
+      $host = $row['Host'];
 
       // Skip desired hosts; handle them separately if needed
       if (in_array($host, $desired_hosts)) {
@@ -796,10 +796,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
-        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
-        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
-        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
+        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
+        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
+        $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
@@ -840,8 +840,8 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $local_description = 'Adding Pre-DB-Import Flag-File import_dump mysql.php';
       if (!provision_file()->exists($pre_import_flag)->status()) {
         provision_file()->file_put_contents($pre_import_flag, $pre_import_flag_blank)
-      	->succeed('Generated blank ' . $local_description)
-      	->fail('Could not generate ' . $local_description);
+          ->succeed('Generated blank ' . $local_description)
+          ->fail('Could not generate ' . $local_description);
       }
 
       if (is_dir($oct_db_dirx) &&
@@ -935,15 +935,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           ->succeed('Remove Pre-DB-Import Flag-File')
           ->fail('Could not remove Pre-DB-Import Flag-File');
 
-		// Create post-db-import flag file.
-		$post_import_flag = $backup_path . '/.post_import_flag.pid';
-		$post_import_flag_blank = "Post-DB-Import \n";
-		$local_description = 'Adding Post-DB-Import Flag-File import_dump mysql.php';
-		if (!provision_file()->exists($post_import_flag)->status()) {
-		  provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
-			->succeed('Generated blank ' . $local_description)
-			->fail('Could not generate ' . $local_description);
-		}
+        // Create post-db-import flag file.
+        $post_import_flag = $backup_path . '/.post_import_flag.pid';
+        $post_import_flag_blank = "Post-DB-Import \n";
+        $local_description = 'Adding Post-DB-Import Flag-File import_dump mysql.php';
+        if (!provision_file()->exists($post_import_flag)->status()) {
+          provision_file()->file_put_contents($post_import_flag, $post_import_flag_blank)
+            ->succeed('Generated blank ' . $local_description)
+            ->fail('Could not generate ' . $local_description);
+        }
       }
     }
     else {
@@ -1174,10 +1174,10 @@ port=%s
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($oct_db_user) ? $db_user : $oct_db_user;
-        $oct_db_pass = empty($oct_db_pass) ? $db_passwd : $oct_db_pass;
-        $oct_db_host = empty($oct_db_host) ? $db_host : $oct_db_host;
-        $oct_db_port = empty($oct_db_port) ? $db_port : $oct_db_port;
+        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
+        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
+        $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
         if ($this->server->db_port == '6033') {
           if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
