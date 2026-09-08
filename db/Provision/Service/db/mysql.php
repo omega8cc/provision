@@ -382,7 +382,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $desired_hosts = ['127.0.0.1', 'localhost'];
     }
 
-    // Fetch all host entries for the user
+    // Fetch all host entries for the user. The column is spelled the way the
+    // table defines it on purpose: on MariaDB 10.4+ mysql.user is a view, and
+    // a view labels an unaliased column by its own definition, so a lower-case
+    // "SELECT host" comes back keyed 'Host' there and $row['host'] is NULL,
+    // which lets every stray host row survive the revoke. MySQL and Percona
+    // label by the identifier as typed, so 'Host' reads back as 'Host' on all
+    // of them. Keep the spelling and the $row['Host'] read below in step.
     $hosts_result = $this->query("SELECT Host FROM mysql.user WHERE User = '%s'", $username);
 
     if (!$hosts_result) {
@@ -781,23 +787,35 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
-      $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-      drush_log(dt("MyQuick import_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
       $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
       drush_log(dt("MyQuick import_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
     }
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
-      if (provision_file()->exists($pass_php_inc)->status()) {
-        include_once($pass_php_inc);
-      }
-
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
-        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        // mydumper and myloader connect with the admin credentials of the db
+        // server THIS site subscribes to, taken from that server's master_db
+        // ($this->creds): the identity every other database operation on this
+        // service object already uses. The instance's .oN.pass.php used to be
+        // read here instead; it always describes the master box's own server,
+        // so a site on an additional db server had its dump taken from, and
+        // its import loaded into, the wrong server. User and password are
+        // resolved as a pair: a master_db missing either half falls back to
+        // the site's own credentials together, never to an admin user with a
+        // site password. The port comes from the server property rather than
+        // from master_db, which the master password rotation rewrites without
+        // a port.
+        if (!empty($this->creds['user']) && !empty($this->creds['pass'])) {
+          $oct_db_user = $this->creds['user'];
+          $oct_db_pass = $this->creds['pass'];
+        }
+        else {
+          $oct_db_user = $db_user;
+          $oct_db_pass = $db_passwd;
+        }
         $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
         $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
@@ -1149,10 +1167,6 @@ port=%s
       $aegir_root = d('@server_master')->aegir_root;
       $backup_path = d('@server_master')->backup_path;
       $oct_db_dirx = $backup_path . '/tmp_expim';
-      $pass_php_inc = $aegir_root . '/.' . $script_user . '.pass.php';
-      if (provision_file()->exists($myquick_creds_log)->status()) {
-        drush_log(dt("MyQuick generate_dump mysql.php pass_php_inc @var", array('@var' => $pass_php_inc)), 'info');
-      }
       $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
       drush_log(dt("MyQuick generate_dump mysql.php enable_myquick @var", array('@var' => $enable_myquick)), 'info');
     }
@@ -1167,15 +1181,29 @@ port=%s
         drush_log(dt("MyQuick wait 10s for prev db-dump cleanup x @var times (max 6) in generate_dump", array('@var' => $count)), 'info');
       }
 
-      if (provision_file()->exists($pass_php_inc)->status()) {
-        include_once($pass_php_inc);
-      }
-
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
-        $oct_db_user = empty($this->creds['user']) ? $db_user : $this->creds['user'];
-        $oct_db_pass = empty($this->creds['pass']) ? $db_passwd : $this->creds['pass'];
+        // mydumper and myloader connect with the admin credentials of the db
+        // server THIS site subscribes to, taken from that server's master_db
+        // ($this->creds): the identity every other database operation on this
+        // service object already uses. The instance's .oN.pass.php used to be
+        // read here instead; it always describes the master box's own server,
+        // so a site on an additional db server had its dump taken from, and
+        // its import loaded into, the wrong server. User and password are
+        // resolved as a pair: a master_db missing either half falls back to
+        // the site's own credentials together, never to an admin user with a
+        // site password. The port comes from the server property rather than
+        // from master_db, which the master password rotation rewrites without
+        // a port.
+        if (!empty($this->creds['user']) && !empty($this->creds['pass'])) {
+          $oct_db_user = $this->creds['user'];
+          $oct_db_pass = $this->creds['pass'];
+        }
+        else {
+          $oct_db_user = $db_user;
+          $oct_db_pass = $db_passwd;
+        }
         $oct_db_host = empty($this->creds['host']) ? $db_host : $this->creds['host'];
         $oct_db_port = empty($this->server->db_port) ? $db_port : $this->server->db_port;
 
