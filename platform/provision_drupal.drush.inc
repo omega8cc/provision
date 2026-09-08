@@ -809,20 +809,67 @@ function _provision_drupal_rebuild_caches() {
  *
  * The interpreter is the one this backend runs under: the account's pinned
  * CLI PHP, chosen by websh when it launched Aegir's Drush 8, the same one it
- * would choose for the site-local Drush. Every argument is escaped here; the
- * caller passes the string to drush_shell_cd_and_exec() as ONE argument (no
- * sprintf, so a '%' in an argument is safe).
+ * would choose for the site-local Drush (_provision_site_local_php()), and
+ * it runs on that interpreter's own php.ini (-c, _provision_site_local_php_ini()):
+ * a modern Drush refuses to start under any non-empty open_basedir, and the
+ * account's ~/.drush/php.ini for Aegir's Drush 8 carries one, so the ini
+ * must never be left to the environment (PHPRC) of whatever shell or
+ * launcher stands between this backend and the child. Every
+ * argument is escaped here; the caller passes the string to
+ * drush_shell_cd_and_exec() as ONE argument (no sprintf, so a '%' in an
+ * argument is safe), or prefixes it with its own 'cd <dir> && ' when it
+ * needs the exit status from exec().
  *
- * @param array $args  Drush arguments and options, unescaped.
+ * @param array $args      Drush arguments and options, unescaped.
+ * @param array $php_opts  Interpreter options placed before the launcher
+ *                         (the D11+ site-install's -d ini settings), unescaped.
  * @return string
  */
-function _provision_site_local_drush_cmd($args) {
-  $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
-  $cmd = 'exec ' . escapeshellarg($php) . ' ' . escapeshellarg('vendor/drush/drush/drush.php');
+function _provision_site_local_drush_cmd($args, $php_opts = array()) {
+  $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
+  $ini = _provision_site_local_php_ini();
+  if ($ini !== '') {
+    $cmd .= ' -c ' . escapeshellarg($ini);
+  }
+  foreach ((array) $php_opts as $opt) {
+    $cmd .= ' ' . escapeshellarg((string) $opt);
+  }
+  $cmd .= ' ' . escapeshellarg('vendor/drush/drush/drush.php');
   foreach ((array) $args as $arg) {
     $cmd .= ' ' . escapeshellarg((string) $arg);
   }
   return $cmd;
+}
+
+/**
+ * The PHP interpreter every site-local subprocess of this backend runs under.
+ *
+ * PHP_BINARY is the interpreter of this very process: the account's pinned
+ * CLI PHP, which websh selected when it launched Aegir's Drush 8. 'php' only
+ * when the constant is unusable (never on a real box).
+ *
+ * @return string
+ */
+function _provision_site_local_php() {
+  return (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
+}
+
+/**
+ * The php.ini a site-local subprocess runs on: the interpreter's own.
+ *
+ * BOA installs each PHP under /opt/phpNN with its php.ini at
+ * /opt/phpNN/lib/php.ini; that file is what the web and the box's CLI run on,
+ * and it carries no open_basedir. Empty when the interpreter is not laid out
+ * that way (the caller then adds no -c and the child inherits the environment).
+ *
+ * @return string
+ */
+function _provision_site_local_php_ini() {
+  $php = _provision_site_local_php();
+  if (preg_match('#^(/opt/php[0-9]+)/bin/php$#', $php, $m) && is_file($m[1] . '/lib/php.ini')) {
+    return $m[1] . '/lib/php.ini';
+  }
+  return '';
 }
 
 /**
