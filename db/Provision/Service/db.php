@@ -172,6 +172,36 @@ class Provision_Service_db extends Provision_Service {
   }
 
 
+  /**
+   * A secret's fingerprint for a debug log line: its length and eight hex
+   * characters of its hash, enough to tell two credentials apart, never the
+   * value itself. The MyQuick debug switch used to log the admin password
+   * of whatever server the site uses into the task log, which the panel
+   * shows to the site owner.
+   *
+   * PHP 5.6-safe.
+   */
+  function secret_hint($secret) {
+    $secret = (string) $secret;
+    if ($secret === '') {
+      return '(empty)';
+    }
+    return strlen($secret) . ' chars, sha256 ' . substr(hash('sha256', $secret), 0, 8);
+  }
+
+  /**
+   * A command line with one secret's shell-escaped form masked, for a debug
+   * log line. Exact string replacement, so any character in the secret is
+   * covered.
+   */
+  function masked_command($command, $secret) {
+    $secret = (string) $secret;
+    if ($secret === '') {
+      return $command;
+    }
+    return str_replace(escapeshellarg($secret), "'***'", $command);
+  }
+
   function import_site_database($dump_file = null, $creds = array()) {
     if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
@@ -269,7 +299,7 @@ class Provision_Service_db extends Provision_Service {
       drush_log(dt("MyQuick import_site_database db.php db_name @var", array('@var' => $db_name)), 'info');
       if (provision_file()->exists($myquick_creds_log)->status()) {
         drush_log(dt("MyQuick import_site_database db.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-        drush_log(dt("MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+        drush_log(dt("MyQuick import_site_database db.php oct_db_pass @var", array('@var' => $this->secret_hint($oct_db_pass))), 'info');
         drush_log(dt("MyQuick import_site_database db.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
         drush_log(dt("MyQuick import_site_database db.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
       }
@@ -366,7 +396,7 @@ class Provision_Service_db extends Provision_Service {
             . ' --threads=' . escapeshellarg($threads)
             . ' --drop-table=DROP --verbose=2';
           if (provision_file()->exists($myquick_creds_log)->status()) {
-            drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $command)), 'info');
+            drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
           $success = drush_shell_exec($command);
 
