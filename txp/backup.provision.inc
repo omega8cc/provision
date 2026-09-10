@@ -122,8 +122,11 @@ function drush_provision_txp_provision_backup() {
   $backup_file = drush_get_option('backup_file');
   drush_log(dt("Adding sites directory to !backup_file", array('!backup_file' => $backup_file)), 'backup');
 
-  // Sync all filesystem changes back from the remote server.
-  provision_drupal_fetch_site();
+  // No remote web tier on BOA: the Drupal-layer helper that syncs a site's
+  // files back from a remote web server (provision_drupal_fetch_site) syncs
+  // the Drupal-shaped paths, none of which a Textpattern site has, so it is
+  // not called here. Remote web servers are out of scope for foreign-CMS
+  // sites; the archive is built from this box.
 
   $olddir = getcwd();
   if (!chdir(d()->site_path)) {
