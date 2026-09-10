@@ -69,8 +69,11 @@ function drush_provision_txp_provision_verify() {
       array('@short_name' => 'Textpattern', '@version' => _provision_txp_get_version())), 'info');
     drush_set_option('packages', _scrub_object(provision_txp_find_packages()), 'drupal');
 
-    // The TXP signal the front end keys on.
-    drush_set_option('txp', _provision_txp_get_version(), 'drupal');
+    // The TXP signal the front end keys on: an empty string reads as "not
+    // a TXP platform" there and drops the marker, so a platform the
+    // detector accepted but whose version could not be read says so.
+    $txp_version = _provision_txp_get_version();
+    drush_set_option('txp', ($txp_version !== '' ? $txp_version : 'unknown'), 'drupal');
 
     provision_drupal_push_site();
   }

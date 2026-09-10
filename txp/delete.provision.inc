@@ -71,7 +71,7 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
     // round-2 shape -- skipped the final safety backup for exactly the
     // force-flagged deletes that most need one.
     drush_set_option('force', TRUE, 'process');
-    if (!empty($backup_file) && !strpos($backup_file, '/')) {
+    if (!empty($backup_file) && substr($backup_file, 0, 1) !== '/') {
       drush_unset_option('force', 'process');
       return drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE',
         dt('The passed backup name is a relative path; storing the final backup inside the site directory that is about to be deleted is probably not intended. Use an absolute name, or none to let one be generated.'));

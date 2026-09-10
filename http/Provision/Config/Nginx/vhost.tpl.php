@@ -121,6 +121,7 @@ if ($this->redirection || !$this->redirection) {
       print "  set \$ai_evasive_allow 0;\n";
       print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n";
       print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
+      print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port);
       print "}\n";
     }
   }
@@ -223,6 +224,7 @@ if ($this->redirection || $ssl_redirection) {
     print "  set \$ai_evasive_allow 0;\n";
     print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n";
     print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
+    print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port);
   }
 }
 else {
@@ -232,6 +234,7 @@ else {
   print "  set \$ai_evasive_allow 0;\n";
   print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n";
   print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
+  print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port);
 }
 $if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
 if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {

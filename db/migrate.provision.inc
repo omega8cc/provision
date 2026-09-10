@@ -1,6 +1,12 @@
 <?php
 
 function drush_db_provision_migrate_validate() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   d()->service('db')->connect();
 }
 
@@ -19,6 +25,12 @@ function drush_db_provision_migrate_validate() {
  * to drop a database and revoke its user, so it is not kept.
  */
 function drush_db_pre_provision_migrate() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   provision_reload_config('site', d()->site_path . '/drushrc.php');
   $source = d()->service('db')->fetch_site_credentials();
   if (!empty($source['db_name'])) {
@@ -31,6 +43,12 @@ function drush_db_pre_provision_migrate() {
 
 // Deletes the old database credentials
 function drush_db_post_provision_migrate() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   provision_reload_config('site', d()->site_path . '/drushrc.php');
   $source = drush_get_option('provision_migrate_source_db', array());
   if (is_array($source) && !empty($source['db_name'])) {

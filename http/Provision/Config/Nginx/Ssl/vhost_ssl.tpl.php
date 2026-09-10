@@ -215,6 +215,7 @@ server {
   set $ai_evasive_allow 0;
   include  <?php print $server->include_path; ?>/ai_policy/<?php print $this->uri; ?>.conf*;
   include  <?php print $server->include_path; ?>/nginx_vhost_common.conf;
+<?php print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port); ?>
 }
 
 <?php endif; ?>

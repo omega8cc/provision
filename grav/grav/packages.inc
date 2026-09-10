@@ -18,13 +18,16 @@
  * Build the packages structure for a Grav platform (and, unchanged, the
  * site-level map -- Grav has nothing site-enabled to report beyond the core).
  */
-function _provision_grav_packages() {
-  $version = _provision_grav_get_version();
+function _provision_grav_packages($root = NULL) {
+  if (is_null($root)) {
+    $root = d()->root;
+  }
+  $version = _provision_grav_get_version($root);
 
   $profile = new stdClass();
   $profile->name = 'grav';
   $profile->short_name = 'grav';
-  $profile->filename = d()->root . '/system/defines.php';
+  $profile->filename = $root . '/system/defines.php';
   $profile->project = 'grav';
   $profile->version = $version;
   $profile->info = array(
