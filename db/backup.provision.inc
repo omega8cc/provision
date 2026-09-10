@@ -1,6 +1,12 @@
 <?php
 
 function drush_db_pre_provision_backup() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   // The files-only mode promises "without any DB": skip the dump entirely
   // (classic database.sql and the MyQuick tmp_expim path alike). The mode is
   // latched by the backup validate before this pre hook runs. Never skip for
@@ -17,12 +23,24 @@ function drush_db_pre_provision_backup() {
 }
 
 function drush_db_pre_provision_backup_rollback() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   provision_file()->unlink(d()->site_path . '/database.sql')
     ->succeed('Deleted mysql dump from sites directory')
     ->fail('Could not delete mysql dump from sites directory');
 }
 
 function drush_db_post_provision_backup() {
+  if (provision_platform_is_grav(d())) {
+    // A Grav capsule is DB-less whichever db_server the site was attached
+    // to: with a real MySQL node the deploy took the MyQuick import path
+    // and failed on the dump a files-only backup never wrote.
+    return;
+  }
   drush_db_pre_provision_backup_rollback();
 }
 
