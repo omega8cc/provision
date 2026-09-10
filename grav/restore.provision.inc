@@ -44,6 +44,11 @@ function drush_provision_grav_pre_provision_restore($restore_file) {
   }
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
+  // Render it: Grav has no in-tree offline flag, so the disabled vhost is
+  // the window (the twins write a settings file here). Without this the
+  // flag lived in memory only and the site served all through the swap.
+  d()->service('http')->create_config('site');
+  d()->service('http')->parse_configs();
 
   // The safety copy is registered in the panel as a real backup of this site,
   // so it must honour the backup contract for what this site IS: a DB-less

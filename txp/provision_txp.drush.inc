@@ -367,6 +367,11 @@ function _provision_txp_create_directories() {
     elseif (is_file($path) && !is_link($path)) {
       provision_file()->unlink($path);
     }
+    elseif (is_link($path) && (@readlink($path) !== $target || !file_exists($path))) {
+      // Dangling, or pointing at another depth: the provisioner is the
+      // only repair path (the FPM pools disable symlink()).
+      provision_file()->unlink($path);
+    }
     if (!is_link($path)) {
       provision_file()->symlink($target, $path)
         ->succeed('Created symlink @path to @target')
