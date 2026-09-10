@@ -385,6 +385,22 @@ function drush_provision_drupal_provision_install() {
           @unlink($php_hook);
         }
 
+        // Core's installer hardens the site directory on its way out
+        // (SiteConfigureForm: drupal_install_fix_file(site_path,
+        // FILE_NOT_WRITABLE), measured 0555 on every site the site-local
+        // site:install produced; the in-process D6-D10 path ends at 0755).
+        // Restore the owner write bit here, before the exit hook runs:
+        // provision_save_site_data() writes sites/<uri>/drushrc.php only into
+        // a writable directory, and that write is what records the 'installed'
+        // option -- without it the site stays "not installed" to every
+        // backup-first task (backup, clone, migrate abort with "Site was not
+        // found") until its first Verify sets 0755 and rewrites the file. A
+        // Delete before that Verify already had to make the tree writable for
+        // the same reason (_provision_drupal_make_tree_writable).
+        provision_file()->chmod(d()->site_path, 0755)
+          ->succeed('D11/INSTALL/SITEDIR restored @path to @perm after the installer hardened it')
+          ->fail('D11/INSTALL/SITEDIR could not restore @path to @perm');
+
         // Generate the one-time admin login link with the site-local modern
         // Drush, inside the still-open chmod-only exec window. On the D6-D10
         // path login_link comes from the provision-install-backend context
