@@ -1275,7 +1275,8 @@ port=%s
         $rows_opt = ' --rows=-1';
         if (drush_shell_exec($mydumper_path . ' --version')) {
           $md_banner = implode("\n", drush_shell_exec_output());
-          if (preg_match('/^mydumper v?([0-9]+)\./m', $md_banner, $md_m) && intval($md_m[1]) >= 1) {
+          // The same test as the nightly dump's (mysql_backup.sh): 'v' required.
+          if (preg_match('/^mydumper v([0-9]+)\./m', $md_banner, $md_m) && intval($md_m[1]) >= 1) {
             $rows_opt = '';
           }
         }
