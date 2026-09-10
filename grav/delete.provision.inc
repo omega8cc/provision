@@ -54,7 +54,7 @@ function drush_provision_grav_pre_provision_delete($backup_file = NULL) {
       unlink(AEGIR_BACKUP_MODE_CTRL);
     }
     drush_set_option('force', true, 'process');
-    if (!empty($backup_file) && !strpos($backup_file, '/')) {
+    if (!empty($backup_file) && substr($backup_file, 0, 1) !== '/') {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
     }
     else {
