@@ -847,7 +847,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       drush_log(dt("MyQuick import_dump mysql.php db_name second @var", array('@var' => $db_name)), 'info');
       if (provision_file()->exists($myquick_creds_log)->status()) {
         drush_log(dt("MyQuick import_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-        drush_log(dt("MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+        drush_log(dt("MyQuick import_dump mysql.php oct_db_pass @var", array('@var' => $this->secret_hint($oct_db_pass))), 'info');
         drush_log(dt("MyQuick import_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
         drush_log(dt("MyQuick import_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
       }
@@ -938,7 +938,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             . ' --threads=' . escapeshellarg($threads)
             . ' --drop-table=DROP --verbose=2';
           if (provision_file()->exists($myquick_creds_log)->status()) {
-            drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+            drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
           $success = drush_shell_exec($command);
 
@@ -1243,7 +1243,7 @@ port=%s
       drush_log(dt("MyQuick generate_dump mysql.php db_name @var", array('@var' => $db_name)), 'info');
       if (provision_file()->exists($myquick_creds_log)->status()) {
         drush_log(dt("MyQuick generate_dump mysql.php oct_db_user @var", array('@var' => $oct_db_user)), 'info');
-        drush_log(dt("MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $oct_db_pass)), 'info');
+        drush_log(dt("MyQuick generate_dump mysql.php oct_db_pass @var", array('@var' => $this->secret_hint($oct_db_pass))), 'info');
         drush_log(dt("MyQuick generate_dump mysql.php oct_db_host @var", array('@var' => $oct_db_host)), 'info');
         drush_log(dt("MyQuick generate_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
       }
@@ -1292,7 +1292,7 @@ port=%s
           . $rows_opt . ' --build-empty-files --threads=' . escapeshellarg($threads)
           . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
-          drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $command)), 'info');
+          drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
         }
         $success = drush_shell_exec($command);
 
