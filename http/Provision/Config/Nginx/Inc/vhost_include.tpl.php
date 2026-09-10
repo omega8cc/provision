@@ -91,6 +91,22 @@ if (!$satellite_mode && $server->satellite_mode) {
   $satellite_mode = $server->satellite_mode;
 }
 ?>
+
+###
+### The site's database credentials as variables. Declared empty here and
+### set by the vhost right after this include (set directives apply in
+### textual order), for the locations below that declare their own
+### fastcgi_param set: nginx inherits the server level params only into a
+### location that declares none, so those requests reached PHP without the
+### db_* params, and the cloaked settings.php then defined no database.
+###
+set $boa_db_type "";
+set $boa_db_name "";
+set $boa_db_user "";
+set $boa_db_passwd "";
+set $boa_db_host "";
+set $boa_db_port "";
+set $boa_db_creds_urlencoded "";
 #######################################################
 ###  nginx.conf site level extended vhost include start
 #######################################################
@@ -630,6 +646,13 @@ location ^~ /cron/ {
 location @modern_cron {
   auth_basic off;
   include fastcgi_params;
+  fastcgi_param db_type   $boa_db_type;
+  fastcgi_param db_name   $boa_db_name;
+  fastcgi_param db_user   $boa_db_user;
+  fastcgi_param db_passwd $boa_db_passwd;
+  fastcgi_param db_host   $boa_db_host;
+  fastcgi_param db_port   $boa_db_port;
+  fastcgi_param db_creds_urlencoded $boa_db_creds_urlencoded;
   fastcgi_index index.php;
   fastcgi_param SCRIPT_FILENAME $document_root/index.php;
   fastcgi_param SCRIPT_NAME  /index.php;
@@ -1664,6 +1687,13 @@ location ~ ^/(?<esi>esi/.*)"$ {
   ### This location declares its own minimal param set (no fastcgi_params
   ### include, no inheritance), so the scheme must be passed explicitly.
   fastcgi_param REQUEST_SCHEME $scheme;
+  fastcgi_param db_type   $boa_db_type;
+  fastcgi_param db_name   $boa_db_name;
+  fastcgi_param db_user   $boa_db_user;
+  fastcgi_param db_passwd $boa_db_passwd;
+  fastcgi_param db_host   $boa_db_host;
+  fastcgi_param db_port   $boa_db_port;
+  fastcgi_param db_creds_urlencoded $boa_db_creds_urlencoded;
 <?php if ($satellite_mode == 'boa'): ?>
   fastcgi_pass  unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -2061,6 +2091,13 @@ location @allowupdate {
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   fastcgi_intercept_errors on;
   include fastcgi_params;
+  fastcgi_param db_type   $boa_db_type;
+  fastcgi_param db_name   $boa_db_name;
+  fastcgi_param db_user   $boa_db_user;
+  fastcgi_param db_passwd $boa_db_passwd;
+  fastcgi_param db_host   $boa_db_host;
+  fastcgi_param db_port   $boa_db_port;
+  fastcgi_param db_creds_urlencoded $boa_db_creds_urlencoded;
   fastcgi_param HTTP_HOST $host;
   fastcgi_param REQUEST_SCHEME $scheme;
   limit_conn limreq 8;
@@ -2082,6 +2119,13 @@ location @allowauthorize {
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   fastcgi_intercept_errors on;
   include fastcgi_params;
+  fastcgi_param db_type   $boa_db_type;
+  fastcgi_param db_name   $boa_db_name;
+  fastcgi_param db_user   $boa_db_user;
+  fastcgi_param db_passwd $boa_db_passwd;
+  fastcgi_param db_host   $boa_db_host;
+  fastcgi_param db_port   $boa_db_port;
+  fastcgi_param db_creds_urlencoded $boa_db_creds_urlencoded;
   fastcgi_param HTTP_HOST $host;
   fastcgi_param REQUEST_SCHEME $scheme;
   limit_conn limreq 8;
