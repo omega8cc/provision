@@ -294,6 +294,16 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
+ * Where an unlock parks the de-typed psr/log overlay: a date-stamped,
+ * random-suffixed dir under the given parent (the account's ~/.tmp), so its
+ * age is readable from the name and the ltd worker's weekly prune can key
+ * on the mtime the caller refreshes after the move.
+ */
+function provision_psr_log_stash_path($parent) {
+  return $parent . '/psr-log-' . date('Ymd') . '-' . genRandStrUnlock(24);
+}
+
+/**
  * Custom helper function findAppRoot
  */
 function findAppRoot($startDir) {
@@ -561,13 +571,20 @@ function provision_unlock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
+      // The de-typed psr/log overlay is parked under the account's ~/.tmp,
+      // not beside its site archives under backups/: nothing ever reads the
+      // stash back (the re-lock re-applies the overlay from $psr_tpl), and
+      // one dir per unlock used to stay under backups/ forever, listed with
+      // the real archives. The ltd worker removes ~/.tmp/psr-log-* older
+      // than a week on every run; the dir is touched after the move because
+      // mv and cp -a carry the overlay's old mtime.
       if ($this_user == 'aegir' ) {
         $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
-        $psr_bak = '/var/aegir/backups';
+        $psr_bak = '/var/aegir/.tmp';
       }
       else {
         $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
-        $psr_bak = '/data/disk/' . $this_user . '/backups';
+        $psr_bak = '/data/disk/' . $this_user . '/.tmp';
       }
 
       if (provision_file()->exists($psr_tpl)->status()) {
@@ -584,18 +601,18 @@ function provision_unlock_drush_local_vnd() {
         if (provision_file()->exists($dru_vnd_psr_local)->status()) {
           if (provision_file()->exists($psr_good_local)->status()) {
             if (provision_file()->exists($vnd_psr_log_orig_local)->status()) {
-              $randstr = genRandStrUnlock(24);
-              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $psrback = provision_psr_log_stash_path($psr_bak);
               $command = "mv -f $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
               $command = "mv -f $vnd_psr_log_orig_local $dru_vnd_psr_local";
               $success = drush_shell_exec($command);
+              $success = drush_shell_exec("touch $psrback");
             }
             else {
-              $randstr = genRandStrUnlock(24);
-              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $psrback = provision_psr_log_stash_path($psr_bak);
               $command = "cp -a $dru_vnd_psr_local $psrback";
               $success = drush_shell_exec($command);
+              $success = drush_shell_exec("touch $psrback");
               $approot = d()->root;
               $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
               $output = implode('', drush_shell_exec_output());
@@ -607,18 +624,18 @@ function provision_unlock_drush_local_vnd() {
         if (provision_file()->exists($dru_vnd_psr_above)->status()) {
           if (provision_file()->exists($psr_good_above)->status()) {
             if (provision_file()->exists($vnd_psr_log_orig_above)->status()) {
-              $randstr = genRandStrUnlock(24);
-              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $psrback = provision_psr_log_stash_path($psr_bak);
               $command = "mv -f $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
               $command = "mv -f $vnd_psr_log_orig_above $dru_vnd_psr_above";
               $success = drush_shell_exec($command);
+              $success = drush_shell_exec("touch $psrback");
             }
             else {
-              $randstr = genRandStrUnlock(24);
-              $psrback = $psr_bak . "/psr-log-" . $randstr;
+              $psrback = provision_psr_log_stash_path($psr_bak);
               $command = "cp -a $dru_vnd_psr_above $psrback";
               $success = drush_shell_exec($command);
+              $success = drush_shell_exec("touch $psrback");
               $approot = d()->root . "/../";
               $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
               $output = implode('', drush_shell_exec_output());
