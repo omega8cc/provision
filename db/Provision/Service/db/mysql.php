@@ -1306,7 +1306,16 @@ port=%s
     }
     else {
       // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
-      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
+      //
+      // A MySQL 8 client dumps column statistics by asking the server for
+      // information_schema.COLUMN_STATISTICS, which exists only on MySQL 8;
+      // against a MariaDB 11 server (which reports a version above that gate)
+      // the whole dump fails with "Unknown table 'COLUMN_STATISTICS'". The
+      // loose- prefix turns the option into a warning on the 5.7 client, which
+      // does not know it, so the same command line works on both. The only
+      // thing lost is the ANALYZE TABLE ... UPDATE HISTOGRAM statements, which
+      // nothing here depends on.
+      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
 
       // Fail if db file already exists.
       $dump_file = fopen(d()->site_path . '/database.sql', 'x');
