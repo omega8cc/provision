@@ -380,10 +380,7 @@ function _provision_grav_create_directories() {
       ->fail('Could not change group ownership of <code>@path</code> to @gid');
   }
   foreach (_provision_grav_writable_dirs() as $dir) {
-    $path = $site_path . '/' . $dir;
-    provision_file()->chmod($path, 02775, TRUE)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    _provision_grav_chmod_tree($site_path . '/' . $dir);
   }
 
   // AFTER the generic writable pass (which would re-widen them): the secret
@@ -577,9 +574,40 @@ function provision_grav_find_packages() {
 }
 
 /**
- * The site-level package map (Grav: core version only, nothing enabled to map).
+ * The site-level package map: the capsule's own core version. Under the
+ * capsule model each site is an independent copy upgraded in place, so the
+ * platform seed's version is not the site's.
  */
 function provision_grav_system_map() {
   drush_include_engine('grav', 'packages');
-  return _provision_grav_packages();
+  return _provision_grav_packages(d()->site_path);
+}
+
+/**
+ * The writable-tree mode pass: directories 02775, regular files 0664.
+ *
+ * provision_file()->chmod(..., TRUE) applies one mode to every entry it
+ * walks, so 02775 landed on the files too: user content world-executable
+ * and setgid after every verify. Links are left alone (chmod follows them).
+ */
+function _provision_grav_chmod_tree($path) {
+  if (!is_dir($path) || is_link($path)) {
+    return;
+  }
+  $it = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::CHILD_FIRST);
+  foreach ($it as $entry) {
+    if ($entry->isLink()) {
+      continue;
+    }
+    if ($entry->isDir()) {
+      @chmod($entry->getPathname(), 02775);
+    }
+    elseif ($entry->isFile()) {
+      @chmod($entry->getPathname(), 0664);
+    }
+  }
+  @chmod($path, 02775);
+  drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
 }

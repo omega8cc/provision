@@ -82,9 +82,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
     foreach (_provision_grav_writable_dirs() as $dir) {
-      provision_file()->chmod($extract_path . '/' . $dir, 02775, TRUE)
-        ->succeed('Changed permissions of <code>@path</code> to @perm')
-        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      _provision_grav_chmod_tree($extract_path . '/' . $dir);
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {

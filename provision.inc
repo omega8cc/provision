@@ -209,6 +209,32 @@ function provision_platform_is_txp($context = NULL) {
  * lives at sites/<uri>/ inside it), which is itself a Grav tree -- one ->root
  * test covers both context types.
  */
+/**
+ * The site's database credentials as nginx variables, for the shared
+ * vhost include: locations there that declare their own fastcgi_param set
+ * (which cancels the inheritance of the server level fastcgi_param lines)
+ * read them back through these. urlencode()d exactly as the server level
+ * lines are, so the cloaked settings.php decodes one source. The include
+ * declares the variables empty and the vhost sets them after the include,
+ * since set directives apply in their textual order.
+ */
+function provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port) {
+  $values = array(
+    'db_type' => urlencode($db_type),
+    'db_name' => urlencode($db_name),
+    'db_user' => implode('@', array_map('urlencode', explode('@', $db_user))),
+    'db_passwd' => urlencode($db_passwd),
+    'db_host' => urlencode($db_host),
+    'db_port' => urlencode($db_port),
+  );
+  $out = '';
+  foreach ($values as $key => $value) {
+    $out .= "  set \$boa_" . $key . " \"" . $value . "\";\n";
+  }
+  $out .= "  set \$boa_db_creds_urlencoded \"1\";\n";
+  return $out;
+}
+
 function provision_platform_is_grav($context = NULL) {
   static $cache = array();
   if (is_null($context)) {

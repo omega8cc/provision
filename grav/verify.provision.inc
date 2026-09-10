@@ -82,7 +82,9 @@ function drush_provision_grav_provision_verify() {
     drush_set_option('packages', _scrub_object(provision_grav_find_packages()), 'drupal');
 
     // The Grav signal the front end keys on.
-    drush_set_option('grav', _provision_grav_get_version(), 'drupal');
+    // An empty string reads as "not a Grav platform" in the front end.
+    $grav_version = _provision_grav_get_version();
+    drush_set_option('grav', ($grav_version !== '' ? $grav_version : 'unknown'), 'drupal');
 
     provision_drupal_push_site();
   }
