@@ -276,8 +276,16 @@ function drush_provision_drupal_provision_install() {
         $command[] = '--yes';
         $command[] = '-vvv';
 
-        // Display The Drush site-install Command
-        drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $command), '@appRoot' => $appRoot)), 'info');
+        // Display The Drush site-install Command, its password masked: the
+        // task log is shown to the site owner, and with cloaking on the
+        // settings.php no longer carries it.
+        $shown = $command;
+        foreach ($shown as $i => $arg) {
+          if (strpos($arg, '--db-url=') === 0) {
+            $shown[$i] = '--db-url=' . preg_replace('#://([^:/@]*):[^@]*@#', '://$1:***@', substr($arg, 9));
+          }
+        }
+        drush_log(dt('D11/INSTALL/LOCAL5/DRUSH/CMD @cmd in @appRoot', array('@cmd' => implode(' ', $shown), '@appRoot' => $appRoot)), 'info');
 
         // Validate the command items
         foreach ($command as $i => $arg) {
@@ -712,6 +720,11 @@ function _provision_d11_install_memory($appRoot) {
   }
   if ($current_mb === 0) {
     $ret['why'] = 'unlimited in php.ini';
+    return $ret;
+  }
+  if ($current_mb < 0) {
+    // -1 is "could not read", not "below the floor".
+    $ret['why'] = 'child memory_limit unreadable; left unchanged';
     return $ret;
   }
   $floor = 0;
