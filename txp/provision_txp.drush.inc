@@ -246,6 +246,186 @@ function _provision_txp_drushrc_creds($drushrc) {
 }
 
 /**
+ * Does this table exist in the connected database?
+ *
+ * A probe that cannot fail OPEN: '_' is a single-character LIKE wildcard, so
+ * SHOW TABLES LIKE 'txp_token' can match more than one table and a
+ * num_rows === 1 test would silently skip the work the caller gates on it.
+ */
+function _provision_txp_table_exists($mysqli, $table) {
+  $stmt = $mysqli->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+  $stmt->bind_param('s', $table);
+  $stmt->execute();
+  $stmt->bind_result($count);
+  $stmt->fetch();
+  $stmt->close();
+  return (int) $count === 1;
+}
+
+/**
+ * Clear the three session-bearing tables.
+ *
+ * Shared by the deploy engine and the rename command. txp_token, txp_log and
+ * txp_discuss_nonce are stale at best and live-and-dangerous at worst on any
+ * site that has just moved; nothing in them is content. blog_uid, txp_image
+ * ids and every AUTO_INCREMENT are untouched: identity and content are not
+ * what moves.
+ */
+function _provision_txp_truncate_sessions($mysqli, $prefix = '') {
+  foreach (array('txp_token', 'txp_log', 'txp_discuss_nonce') as $name) {
+    $table = $prefix . $name;
+    if (_provision_txp_table_exists($mysqli, $table)) {
+      $mysqli->query("TRUNCATE TABLE `" . $mysqli->real_escape_string($table) . "`");
+    }
+  }
+}
+
+/**
+ * Rotate every user's session nonce; returns the number of rows rotated.
+ *
+ * A live login cookie authenticates against the STORED nonce (txp_auth.php),
+ * so a site that now answers at another name -- or a copy of it that answers
+ * anywhere at all -- must invalidate every cookie minted against the old one.
+ * Passwords are not touched: the nonce is the session salt, not the secret.
+ */
+function _provision_txp_rotate_nonces($mysqli, $prefix = '') {
+  $users = $prefix . 'txp_users';
+  if (!_provision_txp_table_exists($mysqli, $users)) {
+    return 0;
+  }
+  $quoted = '`' . $mysqli->real_escape_string($users) . '`';
+  $rs = $mysqli->query("SELECT user_id FROM " . $quoted);
+  if ($rs === FALSE) {
+    return 0;
+  }
+  $ids = array();
+  while ($row = $rs->fetch_row()) {
+    $ids[] = (int) $row[0];
+  }
+  $rotated = 0;
+  $stmt = $mysqli->prepare("UPDATE " . $quoted . " SET nonce = ? WHERE user_id = ?");
+  foreach ($ids as $id) {
+    $nonce = md5(uniqid(mt_rand(), TRUE));
+    $stmt->bind_param('si', $nonce, $id);
+    $stmt->execute();
+    $rotated++;
+  }
+  $stmt->close();
+  return $rotated;
+}
+
+/**
+ * Re-point every uri-bound and path-bound preference at THIS site.
+ *
+ * Shared by the deploy engine (clone/restore/rename/upgrade) and the rename
+ * command, which must produce byte-identical results: a site that answers at a
+ * new name or from a new directory has exactly these six rows to move, and two
+ * writers drifting apart is how one of them silently stops moving a row.
+ *
+ * A missing row updates nothing and is NOT an error to mysqli; Textpattern's
+ * checkPrefsIntegrity() would then recreate it from defaults on the next admin
+ * login -- and the siteurl default is the ADMIN hostname, i.e. the site would
+ * start composing links to the wrong host. Missing rows are therefore created
+ * here with core's own metadata (core.prefs: type, event, html, position;
+ * collection and user_name are '' for all six, which is what makes them global
+ * prefs rather than per-user overrides).
+ *
+ * Returns array('created' => array(), 'missing' => array()) -- 'missing' being
+ * the rows that could be neither updated nor created. The caller logs; this
+ * helper never writes to the task log, so both callers keep their own wording.
+ */
+function _provision_txp_repoint_uri($mysqli, $uri, $site_path, $prefix = '') {
+  $out = array('created' => array(), 'missing' => array());
+  $prefs = array(
+    'siteurl' => $uri,
+    'path_to_site' => $site_path . '/public',
+    'file_base_path' => $site_path . '/public/files',
+    'tempdir' => $site_path . '/tmp',
+    // Source-bound and PHP is include()d from it on every public request.
+    'plugin_cache_dir' => '',
+    // Never inherit a debug/testing status: it publishes trace + SQL detail.
+    'production_status' => 'live',
+  );
+  $pref_meta = array(
+    'siteurl' => array(0, 'site', 'text_input', 40),
+    'path_to_site' => array(2, 'publish', 'text_input', 0),
+    'file_base_path' => array(0, 'admin', 'text_input', 40),
+    'tempdir' => array(0, 'admin', 'text_input', 80),
+    'plugin_cache_dir' => array(0, 'admin', 'text_input', 100),
+    'production_status' => array(0, 'site', 'prod_levels', 80),
+  );
+  $table = $prefix . 'txp_prefs';
+  $quoted = '`' . $mysqli->real_escape_string($table) . '`';
+
+  $upd = $mysqli->prepare("UPDATE " . $quoted . " SET val = ? WHERE name = ?");
+  $missing = array();
+  foreach ($prefs as $name => $val) {
+    $upd->bind_param('ss', $val, $name);
+    $upd->execute();
+    if ($mysqli->affected_rows === 0) {
+      $rs = $mysqli->query("SELECT COUNT(*) FROM " . $quoted . " WHERE name = '" . $mysqli->real_escape_string($name) . "'");
+      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
+      if ((int) $row[0] === 0) {
+        $missing[] = $name;
+      }
+    }
+  }
+
+  if (!empty($missing)) {
+    // A schema this block does not understand (an adopted site whose
+    // txp_prefs predates the collection column) must degrade to the caller's
+    // report, never fail: mysqli throws on a statement that will not prepare.
+    $ins = NULL;
+    try {
+      $ins = $mysqli->prepare("INSERT INTO " . $quoted . " (name, val, type, event, collection, html, position, user_name) VALUES (?, ?, ?, ?, '', ?, ?, '')");
+    }
+    catch (Exception $e) {
+      $ins = NULL;
+    }
+    $unfixable = array();
+    foreach ($missing as $name) {
+      if (!isset($pref_meta[$name]) || !is_object($ins)) {
+        $unfixable[] = $name;
+        continue;
+      }
+      $val = $prefs[$name];
+      $type = (int) $pref_meta[$name][0];
+      $event = $pref_meta[$name][1];
+      $html = $pref_meta[$name][2];
+      $position = (int) $pref_meta[$name][3];
+      try {
+        $ins->bind_param('ssissi', $name, $val, $type, $event, $html, $position);
+        $ins->execute();
+      }
+      catch (Exception $e) {
+        // Swallowed on purpose: the existence test below is the verdict. A row
+        // created in the meantime (TXP's integrity check racing this helper)
+        // fails the INSERT on the primary key and is still exactly the state
+        // this block wants.
+      }
+      // Re-assert the value whatever the INSERT did.
+      $upd->bind_param('ss', $val, $name);
+      $upd->execute();
+      $rs = $mysqli->query("SELECT COUNT(*) FROM " . $quoted . " WHERE name = '" . $mysqli->real_escape_string($name) . "'");
+      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
+      if ((int) $row[0] > 0) {
+        $out['created'][] = $name;
+      }
+      else {
+        $unfixable[] = $name;
+      }
+    }
+    if (is_object($ins)) {
+      $ins->close();
+    }
+    $missing = $unfixable;
+  }
+  $upd->close();
+  $out['missing'] = $missing;
+  return $out;
+}
+
+/**
  * Generate the per-site private/config.php from the settings template.
  */
 function _provision_txp_create_settings_file() {
