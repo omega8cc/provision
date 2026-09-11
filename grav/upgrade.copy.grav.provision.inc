@@ -83,6 +83,39 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
     return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_TARGET',
       dt('The new uri must differ from the source uri (the source keeps serving until you retire it).'));
   }
+  // Conservative hostname shape check; the frontend already ran its FQDN
+  // validator, this catches a mangled hand-run invocation before a context is
+  // saved and a directory is created from the value.
+  if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $new_uri)
+    || strpos($new_uri, '..') !== FALSE) {
+    return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_TARGET',
+      dt('The new uri !uri is not a plausible domain name (lower-case letters, digits, dots and hyphens only).',
+      array('!uri' => $new_uri)));
+  }
+  if (strtolower($new_uri) === 'hostmaster'
+    || strtolower($new_uri) === strtolower(d('@hostmaster')->uri)) {
+    return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_TARGET',
+      dt('Refusing to take the hosting front-end\'s name.'));
+  }
+  // provision-save has no validate of its own and writes whatever alias it is
+  // given, so an occupied name would silently re-point a live site's context
+  // at this platform. Refuse on a context that still resolves to a site
+  // directory. A leftover alias whose recorded directory is gone is a
+  // rolled-back rename's own debris: log it and carry on, the same tolerance
+  // the cutover carries, so our own leftover never blocks a retry.
+  if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
+    $leftover = d('@' . $new_uri);
+    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
+      ? $leftover->site_path : '';
+    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+      return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_TARGET_EXISTS',
+        dt('A backend context already holds @uri; choose another name.',
+        array('@uri' => $new_uri)));
+    }
+    drush_log(dt('A stale @uri alias with no site directory is left over (a rolled-back rename); the copy overwrites it.',
+      array('@uri' => $new_uri)), 'info');
+  }
+
   // The deploy keys its replace path on directory existence: a target that
   // already carries a capsule would be swapped out as if this were a restore
   // of that site.
