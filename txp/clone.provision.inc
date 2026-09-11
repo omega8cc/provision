@@ -41,6 +41,43 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }
+
+  // Clone copies a database onto a codebase; the two must agree about which
+  // release they are. A copy whose recorded version is BELOW the target core
+  // runs Textpattern's update chain uncontrolled on its first admin request
+  // (no backup taken by us, no proof of the result, and the chain is not
+  // idempotent), and one ABOVE it runs a newer schema under older code.
+  // Neither is a clone, and both have a supported task: Upgrade.
+  //
+  // Both readings are bootstrap-free: the source's from its own database (the
+  // value the chain compares), the target's from the target codebase. Either
+  // reading being unavailable is deliberately NOT a refusal -- clone has
+  // always worked without them, and a site with an unreadable version row has
+  // a broken preferences table, which is a different problem from this one.
+  $source_version = '';
+  $connect_error = '';
+  $mysqli = _provision_txp_db_connect(_provision_txp_site_creds(), $connect_error);
+  if ($mysqli !== FALSE) {
+    $source_version = _provision_txp_db_version($mysqli, _provision_txp_config_prefix(d()->site_path . '/private/config.php'));
+    $mysqli->close();
+  }
+  $target_root = '';
+  if (!empty($platform)) {
+    $target = d($platform);
+    if (is_object($target) && isset($target->root)) {
+      $target_root = $target->root;
+    }
+  }
+  if ($target_root === '') {
+    $target_root = d()->root;
+  }
+  $target_version = _provision_txp_get_version($target_root);
+  if ($source_version !== '' && $target_version !== '' && $source_version !== $target_version) {
+    return drush_set_error('PROVISION_TXP_CLONE_VERSION_MISMATCH',
+      dt('This site records Textpattern !source and the target platform carries !target; clone requires the same release on both sides. Use the Upgrade task to move the site onto a newer core — it copies the site, runs the update chain on the copy and proves the result. If the platform is already the newer one, let the site finish its own pending update (log in to its admin) before cloning it.',
+      array('!source' => $source_version, '!target' => $target_version)));
+  }
+
   // Clear a stale frontend backup-mode ctrl file before the internal safety
   // backup runs: inheriting a dead task's mode would build the clone source
   // archive in e.g. "database only" mode and deploy a files-less copy that

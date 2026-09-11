@@ -46,6 +46,68 @@ function provision_txp_drush_init() {
 }
 
 /**
+ * Implements hook_drush_command().
+ *
+ * The TXP lifecycle verbs that have no shared analogue: the release upgrade
+ * (a move onto a newer-core platform plus Textpattern's own update chain, run
+ * on the COPY), the same-platform rename, and the deliberate same-URI cutover
+ * that chains the two. Registered HERE (the owned TXP layer), not in
+ * provision.drush.inc, so the whole feature stays additive.
+ *
+ * Hook functions live in the reversed-dotted command includes Drush resolves
+ * beside this file (provision-txp-upgrade => upgrade.txp.provision.inc); Drush
+ * COLLAPSES the commandfile prefix out of the validate/command/rollback hook
+ * names because the command name starts with it, while the pre/post variations
+ * keep the doubled form (includes/command.inc:405 in the Drush 8 fork).
+ */
+function provision_txp_drush_command() {
+  $items = array();
+  $items['provision-txp-upgrade'] = array(
+    'description' => 'Upgrade a Textpattern site to a newer core release as a NEW site on a newer Textpattern platform (copy-preserving: the source keeps serving untouched; the copy runs the CMS update chain).',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the new site (a new, unused uri).'),
+      '@platform_name' => dt('The Drush alias of the target Textpattern platform; its core must be NEWER than the source site\'s database version.'),
+    ),
+    'options' => array(
+      'new_db_server' => dt('Optional db server alias for the copy.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @txpsite provision-txp-upgrade @newsite @platform_txp' => 'Copy the site onto the newer Textpattern platform under the new uri and run the update chain on the copy.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-txp-rename'] = array(
+    'description' => 'Rename a Textpattern site in place on its own platform: move the site directory, re-point every uri-bound surface and serve the new name. Identity (blog_uid, images, content) is preserved.',
+    'arguments' => array(
+      'new_name' => dt('The new uri for this site (a free name on the same platform).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @txpsite provision-txp-rename new.example' => 'Serve this site at the new uri and retire the old one.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-txp-cutover'] = array(
+    'description' => 'Make this Textpattern site answer at a domain currently held by another site (typically its upgrade source): retire that site (backup first), then rename this site to the freed domain.',
+    'arguments' => array(
+      'target_domain' => dt('The domain to take over (usually the upgrade source\'s original domain).'),
+    ),
+    'options' => array(
+      'cutover_source' => dt('Context name of the site currently holding the domain (resolved by the frontend at execution time; omitted when the domain is free).'),
+      'cutover_platform_nid' => dt('Frontend node id of this site\'s platform (accepted for frontend parity; the rename leg moves no platform).'),
+      'cutover_db_server_nid' => dt('Frontend node id of this site\'s db server (accepted for frontend parity; the rename leg moves no database).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @new.example provision-txp-cutover example.tld' => 'Retire the site at example.tld (backed up first) and rename this site to it.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  return $items;
+}
+
+/**
  * Implements hook_bootstrap_candidates().
  *
  * The BackdropBoot pattern: the boot class ships HERE (zero drush-fork
@@ -80,6 +142,28 @@ function provision_txp_drush_help($section) {
       return dt('The platform ships no sites/site1 multisite skeleton; cannot materialise the site tree.');
     case 'error:PROVISION_TXP_SITES_EXIST' :
       return dt('Textpattern sites still exist on this platform; delete them first.');
+    case 'error:PROVISION_TXP_UPGRADE_BAD_SOURCE' :
+      return dt('The source of a Textpattern upgrade must be a Textpattern site context.');
+    case 'error:PROVISION_TXP_UPGRADE_BAD_TARGET' :
+      return dt('The target of a Textpattern upgrade must be a Textpattern platform carrying a newer core, with the new uri free on it.');
+    case 'error:PROVISION_TXP_UPGRADE_VERSION_UNREADABLE' :
+      return dt('The source site database carries no readable version preference; the update chain would replay every historical step.');
+    case 'error:PROVISION_TXP_UPGRADE_VERSION_TOO_OLD' :
+      return dt('The source site is older than the supported upgrade floor (4.7.2).');
+    case 'error:PROVISION_TXP_UPGRADE_LAYOUT' :
+      return dt('The source site is not laid out as a multisite site the update chain can be run against safely.');
+    case 'error:PROVISION_TXP_UPGRADE_CUSTOM_STEPS' :
+      return dt('The target core carries third-party post-update scripts; they are not part of a supported upgrade.');
+    case 'error:PROVISION_TXP_UPGRADE_CHAIN_FAILED' :
+      return dt('Textpattern\'s own update chain failed on the copy.');
+    case 'error:PROVISION_TXP_UPGRADE_STRUCTURE' :
+      return dt('The upgraded copy\'s schema does not carry every table, column and index the target core declares.');
+    case 'error:PROVISION_TXP_RENAME_BAD_NAME' :
+      return dt('The new uri for a Textpattern rename must be a free, plausible host name on the same platform.');
+    case 'error:PROVISION_TXP_RENAME_FAILED' :
+      return dt('Could not rename the Textpattern site.');
+    case 'error:PROVISION_TXP_CLONE_VERSION_MISMATCH' :
+      return dt('Clone requires the same Textpattern release on both sides; use the Upgrade task to move a site onto a newer core.');
   }
 }
 
@@ -423,6 +507,118 @@ function _provision_txp_repoint_uri($mysqli, $uri, $site_path, $prefix = '') {
   $upd->close();
   $out['missing'] = $missing;
   return $out;
+}
+
+/**
+ * The running site context's db credentials, ready for a mysqli connect.
+ *
+ * The same five values every TXP engine reads (install/verify/deploy), in one
+ * place: the persisted values are urlencoded, so they are decoded here and
+ * never re-decoded by the caller.
+ */
+function _provision_txp_site_creds() {
+  _provision_txp_ensure_db_creds_loaded();
+  return array(
+    'db_user' => urldecode(drush_get_option('db_user', '', 'site')),
+    'db_passwd' => urldecode(drush_get_option('db_passwd', '', 'site')),
+    'db_host' => drush_get_option('db_host', 'localhost', 'site'),
+    'db_port' => drush_get_option('db_port', '', 'site'),
+    'db_name' => drush_get_option('db_name', '', 'site'),
+  );
+}
+
+/**
+ * The same five values read out of ANOTHER site's persisted drushrc.php.
+ *
+ * For the flows that must act on a site which is not the running context (the
+ * upgrade copy, whose credentials must never be written into this process's
+ * 'site' context -- that context still holds the SOURCE's, and a rollback
+ * reading it would drop the source's database).
+ */
+function _provision_txp_creds_from_drushrc($drushrc) {
+  $raw = _provision_txp_drushrc_creds($drushrc);
+  if (empty($raw['db_name']) || empty($raw['db_user'])) {
+    return array();
+  }
+  return array(
+    'db_user' => urldecode($raw['db_user']),
+    'db_passwd' => isset($raw['db_passwd']) ? urldecode($raw['db_passwd']) : '',
+    'db_host' => isset($raw['db_host']) && $raw['db_host'] !== '' ? $raw['db_host'] : 'localhost',
+    'db_port' => isset($raw['db_port']) ? $raw['db_port'] : '',
+    'db_name' => $raw['db_name'],
+  );
+}
+
+/**
+ * Open a mysqli connection to a TXP site database, or return FALSE.
+ *
+ * The layer's DB idiom in one function: exception mode (so a dead connection
+ * is never a silently FALSE query handle), utf8mb4, and the driver message
+ * handed back through $error for the caller to phrase. Bootstrap-free -- no
+ * CMS code and no drush bootstrap is involved in any TXP DB read.
+ */
+function _provision_txp_db_connect($creds, &$error) {
+  $error = '';
+  if (empty($creds['db_name']) || empty($creds['db_user'])) {
+    $error = dt('no database credentials');
+    return FALSE;
+  }
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+  try {
+    $mysqli = mysqli_init();
+    $mysqli->real_connect(
+      $creds['db_host'],
+      $creds['db_user'],
+      $creds['db_passwd'],
+      $creds['db_name'],
+      empty($creds['db_port']) ? 3306 : (int) $creds['db_port']
+    );
+    $mysqli->set_charset('utf8mb4');
+  }
+  catch (Exception $e) {
+    $error = $e->getMessage();
+    return FALSE;
+  }
+  return $mysqli;
+}
+
+/**
+ * The Textpattern version recorded in a site's database, or '' when absent.
+ *
+ * The global 'version' pref (user_name = '') is what Textpattern's own update
+ * chain compares against the codebase's $thisversion, so it -- never the
+ * platform's core version -- is the site's real schema level.
+ */
+function _provision_txp_db_version($mysqli, $prefix = '') {
+  $table = $prefix . 'txp_prefs';
+  if (!_provision_txp_table_exists($mysqli, $table)) {
+    return '';
+  }
+  $version = '';
+  $result = $mysqli->query("SELECT val FROM `" . $mysqli->real_escape_string($table) . "` WHERE name = 'version' AND user_name = ''");
+  if ($result !== FALSE && ($row = $result->fetch_row())) {
+    $version = trim((string) $row[0]);
+  }
+  return $version;
+}
+
+/**
+ * The table prefix a site's config.php declares, '' when it declares none.
+ *
+ * Regex, never an include: config.php opens a database connection at include
+ * time. The provision settings writer always emits an empty prefix, but an
+ * adopted site may carry one and every schema read has to honour it.
+ */
+function _provision_txp_config_prefix($config_php) {
+  if (!is_readable($config_php)) {
+    return '';
+  }
+  $body = file_get_contents($config_php);
+  if ($body !== FALSE
+    && preg_match('/\\$txpcfg\\s*\\[\\s*[\'"]table_prefix[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+    return $m[1];
+  }
+  return '';
 }
 
 /**
