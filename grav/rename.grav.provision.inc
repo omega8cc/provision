@@ -207,9 +207,12 @@ function drush_provision_grav_rename_rollback($new_name = NULL) {
   }
 
   // The old name serves again: its vhost is re-created the way the migrate
-  // rollback does, from the context that still describes it.
-  d()->service('http')->create_config('site');
-  d('@server_master')->service('http')->parse_configs();
+  // rollback does, from the context that still describes it. Only when the
+  // capsule actually moved -- a failure before that removed nothing.
+  if (drush_get_option('grav_rename_moved', FALSE)) {
+    d()->service('http')->create_config('site');
+    d('@server_master')->service('http')->parse_configs();
+  }
 
   // Whatever the new name acquired (its vhost, its context) goes; the capsule
   // is back at the old path, so the helper finds nothing to remove there.

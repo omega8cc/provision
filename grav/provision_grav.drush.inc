@@ -711,6 +711,11 @@ function _provision_grav_secure_secrets($site_path) {
  * otherwise fork per-host config), plus a provenance header. Foreign root
  * files survive Grav core upgrades (spike-proven: the installer replaces only
  * entries the package ships).
+ *
+ * $site_path/$uri name a capsule OTHER than the context's own: the rename
+ * command writes the new name's .env the moment the directory lands there,
+ * so the capsule is never live with a GRAV_ENVIRONMENT pointing at an
+ * overlay directory that no longer exists. Both default to the context.
  */
 function _provision_grav_write_env($site_path = NULL, $uri = NULL) {
   if (is_null($site_path) || $site_path === '') {
@@ -1123,10 +1128,11 @@ function _provision_grav_bundle_tmpdir($site_path) {
  * 022-created directory fatals the next web save).
  */
 function _provision_grav_copy_tree($source, $target) {
+  $old_umask = umask(02);
   if (!is_dir($target) && !@mkdir($target, 02775, TRUE)) {
+    umask($old_umask);
     return FALSE;
   }
-  $old_umask = umask(02);
   $result = drush_shell_exec('tar -C %s -cf - . | tar -C %s -xf -', $source, $target);
   umask($old_umask);
   return $result;
@@ -1324,7 +1330,7 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
   if (!$ran) {
     // The CLI seam already logged the command and its output.
     return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
-      dt('gpm direct-install failed for !site; the pre-upgrade safety copy is registered and restorable.',
+      dt('gpm direct-install failed for !site; the capsule was not upgraded.',
       array('!site' => $site_path)));
   }
   // The installer's own account of what it did, in the task log at a healthy
@@ -1338,7 +1344,7 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
   $errors = _provision_grav_install_output_errors($output);
   if (!empty($errors)) {
     return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
-      dt('The Grav installer reported a failure for !site while exiting 0 (it always does): !lines. The pre-upgrade safety copy is registered and restorable.',
+      dt('The Grav installer reported a failure for !site while exiting 0 (it always does): !lines',
       array('!site' => $site_path, '!lines' => implode(' / ', $errors))));
   }
 
@@ -1347,7 +1353,7 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
   $after = _provision_grav_get_version($site_path);
   if ($after !== $artefact_version) {
     return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
-      dt('Capsule !site reports Grav @after after installing the @wanted artefact (it was @before); the upgrade did not take. The pre-upgrade safety copy is registered and restorable.',
+      dt('Capsule !site reports Grav @after after installing the @wanted artefact (it was @before); the upgrade did not take.',
       array('!site' => $site_path, '@after' => ($after === '' ? dt('nothing readable') : $after), '@wanted' => $artefact_version, '@before' => $before)));
   }
   drush_log(dt('Capsule !site now runs Grav @after (was @before).',
