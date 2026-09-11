@@ -300,6 +300,13 @@ function drush_provision_txp_rename($new_name = NULL) {
  * any point a rollback can reach (the retirement is the last step and is not
  * fatal), so restoring the site is a move back plus a re-save; the new name's
  * half-built context and vhost are discarded.
+ *
+ * Discarded only once the tree is demonstrably back at the old path, though.
+ * A move-back that failed leaves the site's only directory under the NEW name:
+ * removing that name's context and vhost as well would leave the data with no
+ * context at all while the old one names a directory that does not exist, and
+ * neither name would resolve to the site. So that case keeps everything and
+ * says where both halves are.
  */
 function drush_provision_txp_rename_rollback($new_name = NULL) {
   $old_name = d()->name;
@@ -309,23 +316,30 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
   $new_path = ($new_uri === '') ? '' : d()->root . '/sites/' . $new_uri;
   $alias_file = ($new_uri === '') ? '' : drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
 
-  // Any vhost the verify leg managed to write for the new name.
+  $restored = FALSE;
+  if (!drush_get_option('txp_rename_moved', FALSE) || (is_dir($old_path) && !is_dir($new_path))) {
+    // Nothing moved, or it is already back.
+    $restored = TRUE;
+  }
+  elseif ($new_path !== '' && is_dir($new_path) && !file_exists($old_path) && @rename($new_path, $old_path)) {
+    $restored = TRUE;
+    drush_log(dt('Moved the site directory back to !old.', array('!old' => $old_path)), 'ok');
+    _provision_txp_rename_rollback_repoint($old_uri, $old_path);
+  }
+
+  if (!$restored) {
+    return drush_set_error('PROVISION_TXP_RENAME_FAILED',
+      dt('The rename failed and the site directory could not be moved back: it is at !new while the context that describes it names !old. Nothing has been deleted — the new name keeps its context and its vhost, so the data stays reachable. Move the directory back by hand and run Verify on !old, or finish the rename by re-running it.',
+      array('!new' => $new_path, '!old' => $old_path)));
+  }
+
+  // Only now: the site is back at the old path, so whatever the new name
+  // acquired is a half-built name and never the only route to the data.
   if ($alias_file !== '' && is_file($alias_file)) {
     $new_context = d('@' . $new_uri);
     if (is_object($new_context)) {
       $new_context->service('http')->delete_config('site');
       $new_context->service('http')->parse_configs();
-    }
-  }
-
-  if (drush_get_option('txp_rename_moved', FALSE) && $new_path !== '' && is_dir($new_path) && !is_dir($old_path)) {
-    if (@rename($new_path, $old_path)) {
-      drush_log(dt('Moved the site directory back to !old.', array('!old' => $old_path)), 'ok');
-      _provision_txp_rename_rollback_repoint($old_uri, $old_path);
-    }
-    else {
-      drush_log(dt('Could not move !new back to !old; the site is on disk under the NEW path and its old context still names the old one. Move it back by hand, then run Verify.',
-        array('!new' => $new_path, '!old' => $old_path)), 'warning');
     }
   }
 
