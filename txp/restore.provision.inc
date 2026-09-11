@@ -92,6 +92,11 @@ function drush_provision_txp_provision_restore($restore_file) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
+  // Name the class outright, after the alter, so the deploy engine never has
+  // to infer identity-preservation from the URIs: a restore keeps blog_uid and
+  // must not rewrite the site's contact data.
+  $deploy_options['deploy_class'] = 'restore';
+
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');

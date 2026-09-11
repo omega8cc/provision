@@ -167,6 +167,18 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
   }
 
+  // Name the deploy class outright instead of leaving the engine to infer it
+  // from old_uri: the copy's identity scrub (blog_uid, mail block, contact
+  // rewrite) must never fire on a restore, and must always fire on a clone.
+  // client_email travels with it because the clone runs on the SOURCE alias --
+  // the front end hands the new site's contact address to THIS process, while
+  // the deploy is a separate backend process that would otherwise never see
+  // it and would have to leave the copy mailing the source's people. Both are
+  // set AFTER the alter for the same reason selected_backup_mode is: a
+  // contributed alter must not be able to drop them.
+  $deploy_options['deploy_class'] = 'clone';
+  $deploy_options['client_email'] = drush_get_option('client_email', '');
+
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 
   if (!drush_get_error()) {
