@@ -477,8 +477,9 @@ function drush_provision_txp_upgrade_rollback($new_name = NULL, $platform = NULL
  * against the target core's own declarations, and the update stamp (written as
  * the LAST act inside the chain's try block, so a failed step never reaches it)
  * must be from this run. A copy that passes both is complete; the diagnostic
- * stays on the task as a warning, because something did go wrong even though
- * the result is sound.
+ * still goes on the task, as an advisory, because something did go wrong even
+ * though the result is sound -- which is also why the chain's rows are held
+ * back until the proofs have spoken and then levelled by what they said.
  */
 function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $source_version, $target_version) {
   $php_bin = _provision_txp_php_bin();
@@ -500,12 +501,18 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
     $php_bin, $shim, $config_php, $target_root . '/textpattern', $new_uri);
   $output = (array) drush_shell_exec_output();
   $tail = array();
+  $rows = array();
   foreach ($output as $line) {
-    // 'ok' so the conversion record is visible in a normal task log, not only
-    // under --verbose; 'warning' only when the run really reported something.
-    drush_log('TXP/UPDATE ' . $line, $chain_ok ? 'ok' : 'warning');
+    $rows[] = 'TXP/UPDATE ' . $line;
     if (preg_match('/^([A-Z_]+)=(.*)$/', trim($line), $m)) {
       $tail[$m[1]] = $m[2];
+    }
+  }
+  if ($chain_ok) {
+    // 'ok' so the conversion record is visible in a normal task log, not only
+    // under --verbose. A clean chain has nothing to hold back.
+    foreach ($rows as $row) {
+      drush_log($row, 'ok');
     }
   }
 
@@ -527,13 +534,26 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
   }
   $mysqli->close();
 
+  if (!$chain_ok) {
+    // Held back until the two proofs had spoken, because the chain's exit code
+    // is not the verdict: its own land mine reports a diagnostic on a run whose
+    // schema work completed. Where that is what happened, these rows are an
+    // operator note on a task that succeeded -- levelling them 'warning' would
+    // colour a completed upgrade yellow and teach operators to ignore the
+    // colour. Where a proof failed, the error is already set and they are part
+    // of the explanation.
+    $level = $proved ? 'advisory' : 'warning';
+    foreach ($rows as $row) {
+      drush_log($row, $level);
+    }
+  }
   if (!$proved) {
     // The assertion or the reconcile has already set the error and said what
     // it saw; a chain that also reported a diagnostic is now explained by it.
     return FALSE;
   }
   if (!$chain_ok) {
-    drush_log(dt('The update chain reported the diagnostic above and did not finish its own bookkeeping. The copy\'s schema has been proved independently against the target core and its version row written here, so the upgrade is complete — read the rows above before cutting over to it.'), 'warning');
+    drush_log(dt('The update chain reported the diagnostic above and did not finish its own bookkeeping. The copy\'s schema has been proved independently against the target core and its version row written here, so the upgrade is complete — read the rows above before cutting over to it.'), 'advisory');
   }
   return TRUE;
 }
