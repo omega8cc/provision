@@ -230,11 +230,7 @@ function drush_provision_txp_rename($new_name = NULL) {
       array('!list' => implode(', ', $repointed['missing']))), 'warning');
   }
 
-  // 6. The per-account static store, when this site's writable trees are
-  // symlinked into one.
-  _provision_txp_rename_repoint_store($new_path, $old_uri, $new_uri);
-
-  // 7. Serve the new name: verify renders its vhost and runs the tree repair
+  // 6. Serve the new name: verify renders its vhost and runs the tree repair
   // (_provision_txp_create_directories: the four admin symlinks, the copy set
   // and the ownership model) in the new context's own process, which is the
   // only place that helper can resolve the moved site.
@@ -244,6 +240,18 @@ function drush_provision_txp_rename($new_name = NULL) {
       dt('Verify failed on the renamed site !uri; the old context is still in place.', array('!uri' => $new_uri)));
   }
 
+  // 7. The per-account static file store follows the name, the way a migrate
+  // under a new name does it. The store is root-managed, so both halves go
+  // through the privileged wrapper: the first gives the new name its OWN store
+  // (the old name's content is copied into it and the in-site links are
+  // re-pointed), the second sets the old name's store aside under
+  // static/files/.archived. Position is load-bearing on both sides -- the
+  // wrapper resolves the account from the vhost the verify above just wrote,
+  // and it proves ownership of the old store through the alias that is deleted
+  // in step 8. Warn-not-fail: a store that could not follow leaves the site
+  // serving from the one it has.
+  _provision_drupal_native_symlink($new_uri, TRUE);
+
   // 8. Retire the old name. Deliberately last, and deliberately not fatal: at
   // this point the site is serving under its new name, and a leftover vhost or
   // alias is a tidiness problem, never a reason to roll a working rename back.
@@ -251,6 +259,7 @@ function drush_provision_txp_rename($new_name = NULL) {
     ->succeed('Deleted the old site configuration file')
     ->fail('Failed to delete the old site configuration file');
   d()->service('http')->parse_configs();
+  _provision_drupal_archive_static_store($old_uri, 'RENAME');
   drush_invoke_process('@none', 'provision-save', array($old_name), array('delete' => TRUE));
   foreach (d()->drush_aliases as $alias) {
     drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
@@ -315,52 +324,4 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
 
   drush_log(dt('The rename failed and the site has been returned to !old. Its database still holds the values this task wrote before failing — run Verify on !old to re-assert them.',
     array('!old' => $old_name)), 'warning');
-}
-
-/**
- * Re-point the per-account static store links a renamed site carries.
- *
- * On BOA boxes a site's writable trees can live in the root-managed per-account
- * store (<account>/static/files/<uri>/...) with symlinks in their place inside
- * the site directory. Those links are absolute and name the OLD uri, so a
- * renamed site keeps reading and writing the old name's store: it serves
- * correctly, but the store and the site disagree about their name.
- *
- * The store itself is root-owned, so this layer can only re-point a link whose
- * new-name target already exists; where it does not, the link is deliberately
- * LEFT ALONE (the site keeps serving from the store it has) and one advisory
- * row names the path, because a broken link here would take the site's files
- * away for a naming nicety.
- */
-function _provision_txp_rename_repoint_store($site_path, $old_uri, $new_uri) {
-  $aegir_root = d('@server_master')->aegir_root;
-  if (empty($aegir_root)) {
-    return;
-  }
-  $old_store = $aegir_root . '/static/files/' . $old_uri;
-  $new_store = $aegir_root . '/static/files/' . $new_uri;
-  $stale = array();
-  foreach (array('/private', '/public/files', '/public/images') as $sub) {
-    $path = $site_path . $sub;
-    if (!is_link($path)) {
-      continue;
-    }
-    $target = @readlink($path);
-    if ($target === FALSE || strpos($target, $old_store . '/') !== 0) {
-      continue;
-    }
-    $wanted = $new_store . substr($target, strlen($old_store));
-    if (!is_dir($wanted)) {
-      $stale[] = $path;
-      continue;
-    }
-    provision_file()->unlink($path);
-    provision_file()->symlink($wanted, $path)
-      ->succeed('Re-pointed @path at the store for the new name')
-      ->fail('Could not re-point @path at the store for the new name');
-  }
-  if (!empty($stale)) {
-    drush_log(dt('The site still reads its files through the per-account store of its OLD name (!list). It serves correctly from there; the store is root-managed and is re-homed by the nightly sweep.',
-      array('!list' => implode(', ', $stale))), 'advisory');
-  }
 }
