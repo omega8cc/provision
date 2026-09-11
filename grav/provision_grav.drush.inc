@@ -45,12 +45,15 @@ function provision_grav_drush_init() {
 /**
  * Implements hook_drush_command().
  *
- * The mirror-fed Grav core+bundle upgrade command. Registered here (the owned
- * Grav layer), not in provision.drush.inc, so the whole feature stays
- * additive. Hook functions live in upgrade.grav.provision.inc (the
- * reversed-dotted include Drush resolves for provision-grav-upgrade); Drush
- * collapses the commandfile prefix out of the hook names because the command
- * name starts with it.
+ * The mirror-fed Grav upgrade, copy-upgrade, rename and cutover commands.
+ * Registered here (the owned Grav layer), not in provision.drush.inc, so the
+ * whole feature stays additive. Hook functions live in the reversed-dotted
+ * include Drush resolves for each command name (provision-grav-upgrade =>
+ * upgrade.grav.provision.inc, provision-grav-copy-upgrade =>
+ * upgrade.copy.grav.provision.inc, and so on); Drush collapses the
+ * commandfile prefix out of the validate/command/rollback hook names because
+ * the command name starts with it, while the pre/post variations keep the
+ * doubled form.
  */
 function provision_grav_drush_command() {
   $items = array();
@@ -62,6 +65,49 @@ function provision_grav_drush_command() {
     'allow-additional-options' => TRUE,
     'examples' => array(
       'drush @gravsite provision-grav-upgrade' => 'Upgrade the capsule to the newest staged official release.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-grav-copy-upgrade'] = array(
+    'description' => 'Upgrade a COPY of a Grav site: copy the capsule to a NEW uri on a target Grav platform, upgrade the copy to a staged official release, and leave the source serving untouched.',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the copy (a new, unused uri).'),
+      '@platform_name' => dt('The Drush alias of the target Grav platform.'),
+    ),
+    'options' => array(
+      'new_db_server' => dt('Ignored for Grav: a capsule has no database and the copy keeps the source\'s "none" server. Accepted so the frontend dialog can pass its usual option set.'),
+      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged under <aegir_root>/static/grav-releases/.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @gravsite provision-grav-copy-upgrade @newsite @platform_grav' => 'Copy the capsule onto the target platform under the new uri and upgrade the copy.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-grav-rename'] = array(
+    'description' => 'Rename a Grav site on its own platform: move the capsule to the new uri, re-point the uri-bound surfaces, render the new vhost and retire the old context. Identity (keys, accounts, content) is preserved.',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the new name (a new, unused uri on this platform).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @gravsite provision-grav-rename @newname' => 'Move the capsule to the new uri on the same platform.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-grav-cutover'] = array(
+    'description' => 'Make this Grav site answer at a domain currently held by another site (typically its upgrade source): retire that site (backup first), then rename this site to the freed domain. Runs on the upgraded copy; hook functions in cutover.grav.provision.inc.',
+    'arguments' => array(
+      'target_domain' => dt('The domain to take over (usually the upgrade source\'s original domain).'),
+    ),
+    'options' => array(
+      'cutover_source' => dt('Context name of the site currently holding the domain (resolved by the frontend at execution time; omitted when the domain is free).'),
+      'cutover_platform_nid' => dt('Frontend node id of this site\'s platform (carried for parity with the other cutover commands and checked as a frontend/backend agreement).'),
+      'cutover_db_server_nid' => dt('Frontend node id of this site\'s db server (same).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @copy.example.com provision-grav-cutover example.com' => 'Retire the site at example.com (backed up first) and rename this Grav site to it.',
     ),
     'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
   );
@@ -122,6 +168,18 @@ function provision_grav_drush_help($section) {
       return dt('Grav sites still exist on this platform; delete them first.');
     case 'error:PROVISION_GRAV_CAPSULE_FAILED' :
       return dt('Could not materialise the Grav site capsule from the platform seed.');
+    case 'error:PROVISION_GRAV_NO_ARTEFACT' :
+      return dt('No readable official grav-admin-v*.zip was staged or named.');
+    case 'error:PROVISION_GRAV_ARTEFACT_UNREADABLE' :
+      return dt('The staged artefact\'s own GRAV_VERSION could not be read; an upgrade without it has no verdict.');
+    case 'error:PROVISION_GRAV_ARTEFACT_MISMATCH' :
+      return dt('The staged artefact\'s file name and its GRAV_VERSION disagree.');
+    case 'error:PROVISION_GRAV_ARTEFACT_NOT_NEWER' :
+      return dt('The staged artefact is not newer than the capsule; nothing to upgrade to.');
+    case 'error:PROVISION_GRAV_UPGRADE_FAILED' :
+      return dt('The Grav upgrade did not take; the pre-upgrade safety copy is restorable.');
+    case 'error:PROVISION_GRAV_RENAME_FAILED' :
+      return dt('Could not rename the Grav site.');
   }
 }
 
@@ -654,11 +712,16 @@ function _provision_grav_secure_secrets($site_path) {
  * files survive Grav core upgrades (spike-proven: the installer replaces only
  * entries the package ships).
  */
-function _provision_grav_write_env() {
-  $site_path = d()->site_path;
+function _provision_grav_write_env($site_path = NULL, $uri = NULL) {
+  if (is_null($site_path) || $site_path === '') {
+    $site_path = d()->site_path;
+  }
+  if (is_null($uri) || $uri === '') {
+    $uri = d()->uri;
+  }
   $lines = array(
     '# Written by provision (hosting framework); do not edit -- re-rendered on verify.',
-    'GRAV_ENVIRONMENT=' . d()->uri,
+    'GRAV_ENVIRONMENT=' . $uri,
     '',
   );
   $data = implode("\n", $lines);
@@ -687,9 +750,16 @@ function _provision_grav_write_env() {
  * symlink-from-local-checkout mode). Never root -- the backend already runs
  * as the instance user. $tool is 'grav', 'gpm' or 'plugin'; $args is ONE
  * pre-escaped argument string built by the caller with escapeshellarg().
+ *
+ * $site_path targets a capsule OTHER than the context's own (the copy an
+ * upgrade just deployed on another platform): the seam is one function for
+ * both, so a capsule reached through the copy path runs under exactly the
+ * same guards as one reached in place. Defaults to the context's capsule.
  */
-function _provision_grav_cli($tool, $args) {
-  $site_path = d()->site_path;
+function _provision_grav_cli($tool, $args, $site_path = NULL) {
+  if (is_null($site_path) || $site_path === '') {
+    $site_path = d()->site_path;
+  }
   $bin = _provision_grav_php_bin();
   if ($bin === FALSE) {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
@@ -810,7 +880,7 @@ function provision_grav_system_map() {
  * walks, so 02775 landed on the files too: user content world-executable
  * and setgid after every verify. Links are left alone (chmod follows them).
  */
-function _provision_grav_chmod_tree($path) {
+function _provision_grav_chmod_tree($path, $log = TRUE) {
   if (!is_dir($path) || is_link($path)) {
     return;
   }
@@ -829,5 +899,644 @@ function _provision_grav_chmod_tree($path) {
     }
   }
   @chmod($path, 02775);
-  drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
+  if ($log) {
+    drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
+  }
+}
+
+/**
+ * Resolve the Grav schema string (e.g. "1.7.0") for a given root.
+ *
+ * The twin of _provision_grav_get_version(): GRAV_SCHEMA is the version the
+ * update scripts under system/src/Grav/Installer/updates/ are selected
+ * against, and it is what a minted user/config/versions.yaml records.
+ */
+function _provision_grav_get_schema($root = NULL) {
+  if (is_null($root)) {
+    $root = d()->root;
+  }
+  $schema = '';
+  $defines = $root . '/system/defines.php';
+  if (is_readable($defines)) {
+    $data = file_get_contents($defines);
+    if (preg_match('/define\\s*\\(\\s*[\'"]GRAV_SCHEMA[\'"]\\s*,\\s*[\'"]([^\'"]+)[\'"]/', $data, $match)) {
+      $schema = $match[1];
+    }
+  }
+  return $schema;
+}
+
+/**
+ * Read GRAV_VERSION and GRAV_SCHEMA out of an artefact WITHOUT unpacking it.
+ *
+ * The artefact's own claim about itself, which is what every verdict on an
+ * upgrade is measured against: the file name is a label anybody can rename,
+ * the constants inside system/defines.php are the release. `unzip -p` streams
+ * the single member to stdout; where the box has no unzip binary the PHP
+ * extension reads the same member. Grav code is never executed to learn this.
+ *
+ * Returns array('version' => string, 'schema' => string); '' for anything
+ * that could not be read, so callers fail closed on an empty version.
+ */
+function _provision_grav_artefact_defines($artefact) {
+  $defines = array('version' => '', 'schema' => '');
+  if (!is_string($artefact) || $artefact === '' || !is_readable($artefact)) {
+    return $defines;
+  }
+  $data = '';
+  if (drush_shell_exec('unzip -p %s %s', $artefact, '*/system/defines.php')) {
+    $data = implode("\n", (array) drush_shell_exec_output());
+  }
+  if ($data === '' && class_exists('ZipArchive')) {
+    $zip = new ZipArchive();
+    if ($zip->open($artefact) === TRUE) {
+      for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entry = $zip->getNameIndex($i);
+        if (is_string($entry) && preg_match('#(^|/)system/defines\\.php$#', $entry)) {
+          $data = $zip->getFromIndex($i);
+          break;
+        }
+      }
+      $zip->close();
+    }
+  }
+  if (!is_string($data) || $data === '') {
+    return $defines;
+  }
+  if (preg_match('/define\\s*\\(\\s*[\'"]GRAV_VERSION[\'"]\\s*,\\s*[\'"]([^\'"]+)[\'"]/', $data, $match)) {
+    $defines['version'] = $match[1];
+  }
+  if (preg_match('/define\\s*\\(\\s*[\'"]GRAV_SCHEMA[\'"]\\s*,\\s*[\'"]([^\'"]+)[\'"]/', $data, $match)) {
+    $defines['schema'] = $match[1];
+  }
+  return $defines;
+}
+
+/**
+ * The version an official artefact's FILE NAME claims (grav-admin-v<V>.zip).
+ */
+function _provision_grav_artefact_filename_version($artefact) {
+  if (!is_string($artefact) || $artefact === '') {
+    return '';
+  }
+  if (preg_match('/^grav-admin-v([0-9][0-9a-zA-Z._-]*)\\.zip$/', basename($artefact), $match)) {
+    return $match[1];
+  }
+  return '';
+}
+
+/**
+ * Both readings of an artefact's version must agree before it is installed.
+ *
+ * The file name is the label the mirror channel staged; system/defines.php is
+ * what the archive will actually install. A disagreement means the staged
+ * file is not what it says it is -- refuse rather than upgrade to an unknown
+ * release. Returns the agreed version, or '' after setting the error.
+ */
+function _provision_grav_artefact_version($artefact) {
+  $named = _provision_grav_artefact_filename_version($artefact);
+  $defines = _provision_grav_artefact_defines($artefact);
+  if ($named === '') {
+    drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
+      dt('Artefact @file is not named like an official release (grav-admin-v<version>.zip).',
+      array('@file' => basename($artefact))));
+    return '';
+  }
+  if ($defines['version'] === '') {
+    drush_set_error('PROVISION_GRAV_ARTEFACT_UNREADABLE',
+      dt('Could not read GRAV_VERSION from system/defines.php inside @file; without it the upgrade has no verdict to check itself against.',
+      array('@file' => basename($artefact))));
+    return '';
+  }
+  if ($named !== $defines['version']) {
+    drush_set_error('PROVISION_GRAV_ARTEFACT_MISMATCH',
+      dt('Artefact @file is named for Grav @named but carries Grav @inside; refusing to install an archive that is not what it claims to be.',
+      array('@file' => basename($artefact), '@named' => $named, '@inside' => $defines['version'])));
+    return '';
+  }
+  return $defines['version'];
+}
+
+/**
+ * Mint user/config/versions.yaml for a capsule that has none.
+ *
+ * Grav's VersionUpdater replays every system/src/Grav/Installer/updates/*.php
+ * newer than the schema recorded in versions.yaml. The file is minted by the
+ * first WEB request, so a capsule that has only ever been installed, cloned
+ * and upgraded from the CLI has none -- and the first upgrade then replays
+ * the whole historical chain, including the 1.7-era script that writes 1.7
+ * compatibility flags into a 2.x site. Writing the same content the web tier
+ * would have written, before the install, keeps the replay to the steps that
+ * really are new.
+ *
+ * Instance-user owned, group web, 0664: the web tier rewrites it through the
+ * group on the next update it performs itself.
+ */
+function _provision_grav_seed_versions_yaml($site_path, $uri) {
+  $config_dir = $site_path . '/user/config';
+  $overlay_dir = _provision_grav_config_dir($site_path, $uri);
+  if (is_file($config_dir . '/versions.yaml')
+    || ($overlay_dir !== $config_dir && is_file($overlay_dir . '/versions.yaml'))) {
+    return TRUE;
+  }
+  $version = _provision_grav_get_version($site_path);
+  $schema = _provision_grav_get_schema($site_path);
+  if ($version === '' || $schema === '') {
+    drush_log(dt('Capsule @site carries no versions.yaml and its GRAV_VERSION/GRAV_SCHEMA could not be read; the update scripts will be selected by Grav alone.',
+      array('@site' => $site_path)), 'advisory');
+    return FALSE;
+  }
+  if (!is_dir($config_dir)) {
+    provision_file()->mkdir($config_dir)
+      ->succeed('Created <code>@path</code>')
+      ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+  }
+  $contents = "# Written by provision before an upgrade; the version this capsule was at.\n"
+    . "core:\n"
+    . "  grav:\n"
+    . "    version: '" . $version . "'\n"
+    . "    schema: '" . $schema . "'\n";
+  $written = provision_file()->file_put_contents($config_dir . '/versions.yaml', $contents)
+    ->succeed('Generated config file <code>@path</code>')
+    ->fail('Could not generate config file <code>@path</code>')
+    ->status();
+  if (!$written) {
+    return FALSE;
+  }
+  provision_file()->chgrp($config_dir . '/versions.yaml', d('@server_master')->web_group);
+  provision_file()->chmod($config_dir . '/versions.yaml', 0664);
+  drush_log(dt('Seeded versions.yaml for @site at Grav @version (schema @schema), so the upgrade replays only the steps newer than it.',
+    array('@site' => $site_path, '@version' => $version, '@schema' => $schema)), 'ok');
+  return TRUE;
+}
+
+/**
+ * The `version:` a Grav package's blueprints.yaml declares, or ''.
+ *
+ * Anchored at column 0 with /m so only the package's own top-level key is
+ * read, never a nested one from a form field or a dependency block.
+ */
+function _provision_grav_blueprint_version($dir) {
+  $file = $dir . '/blueprints.yaml';
+  if (!is_readable($file)) {
+    return '';
+  }
+  $data = file_get_contents($file);
+  if (!is_string($data)) {
+    return '';
+  }
+  if (preg_match('/^version:\\s*[\'"]?([0-9][^\'"\\s]*)/m', $data, $match)) {
+    return $match[1];
+  }
+  return '';
+}
+
+/**
+ * A private extraction directory for the bundle refresh, or '' when none can
+ * be made. The capsule's own tmp/ first (excluded from every backup, on the
+ * capsule's filesystem so the swap below is a rename), the instance's tmp
+ * next; 0700, so an extracted bundle is never readable by the web tier.
+ */
+function _provision_grav_bundle_tmpdir($site_path) {
+  $bases = array($site_path . '/tmp');
+  $aegir_root = d('@server_master')->aegir_root;
+  if (!empty($aegir_root)) {
+    $bases[] = $aegir_root . '/tmp';
+  }
+  foreach ($bases as $base) {
+    if (!is_dir($base)) {
+      continue;
+    }
+    $dir = $base . '/provision-grav-bundle-' . getmypid() . '-' . date('Ymd.His');
+    if (@mkdir($dir, 0700)) {
+      return $dir;
+    }
+  }
+  return '';
+}
+
+/**
+ * Copy a directory tree as the instance user, group-writable.
+ *
+ * The tar pipe the capsule materialisation already uses: modes and symlinks
+ * survive, and umask 0002 keeps the group write bit a Grav tree needs (a
+ * 022-created directory fatals the next web save).
+ */
+function _provision_grav_copy_tree($source, $target) {
+  if (!is_dir($target) && !@mkdir($target, 02775, TRUE)) {
+    return FALSE;
+  }
+  $old_umask = umask(02);
+  $result = drush_shell_exec('tar -C %s -cf - . | tar -C %s -xf -', $source, $target);
+  umask($old_umask);
+  return $result;
+}
+
+/**
+ * Refresh the capsule's bundled plugins and themes from the staged artefact.
+ *
+ * Grav's own installer ignores user/ entirely (Install::$ignores), so a core
+ * upgrade leaves the admin bundle's plugins and theme at the version the
+ * capsule was born with -- indefinitely, since this box never talks to the
+ * package repository. This is the offline half: everything comes out of the
+ * SAME official archive the core came from, so the pair the release ships is
+ * the pair the capsule ends up with.
+ *
+ * Rules, in order of importance:
+ *  - never downgrade: a slug is replaced only when the bundle's
+ *    blueprints.yaml `version:` is strictly newer than the capsule's;
+ *  - never guess: a version that cannot be read on either side leaves the
+ *    capsule's copy alone (an advisory row says which);
+ *  - a slug the bundle ships and the capsule lacks is installed (it is part
+ *    of the managed set);
+ *  - only user/plugins and user/themes are touched. user/config,
+ *    user/accounts, user/pages and user/data are the site's own content and
+ *    are never opened here;
+ *  - the old directory is moved into the private tmp dir before the new one
+ *    lands, so a failed copy is put back rather than left half-written;
+ *  - the group/mode model is re-applied per replaced directory, and the cache
+ *    is cleared in a separate CLI process at the end (one install per process
+ *    is a hard Grav constraint, and the same applies to a tree that changed
+ *    under a warm cache).
+ */
+function _provision_grav_refresh_bundle($site_path, $artefact) {
+  $web_group = d('@server_master')->web_group;
+  $tmp = _provision_grav_bundle_tmpdir($site_path);
+  if ($tmp === '') {
+    drush_log(dt('Could not create a private extraction directory for the bundle refresh; the capsule keeps the plugins and theme it had.'), 'warning');
+    _provision_grav_cli('grav', 'clearcache -n', $site_path);
+    return FALSE;
+  }
+
+  $old_umask = umask(02);
+  $extracted = drush_shell_exec('unzip -q -o %s -d %s', $artefact, $tmp);
+  umask($old_umask);
+  $bundle = '';
+  if ($extracted) {
+    $tops = glob($tmp . '/*', GLOB_ONLYDIR);
+    foreach ((array) $tops as $candidate) {
+      if (is_dir($candidate . '/user/plugins') || is_dir($candidate . '/user/themes')) {
+        $bundle = $candidate;
+        break;
+      }
+    }
+    if ($bundle === '' && (is_dir($tmp . '/user/plugins') || is_dir($tmp . '/user/themes'))) {
+      $bundle = $tmp;
+    }
+  }
+  if ($bundle === '') {
+    _provision_grav_recursive_delete($tmp);
+    drush_log(dt('Could not read the bundled plugins and themes out of @file; the capsule keeps the ones it had.',
+      array('@file' => basename($artefact))), 'warning');
+    _provision_grav_cli('grav', 'clearcache -n', $site_path);
+    return FALSE;
+  }
+
+  $replaced = 0;
+  $installed = 0;
+  $kept = 0;
+  $failed = 0;
+  foreach (array('plugins', 'themes') as $kind) {
+    $sources = glob($bundle . '/user/' . $kind . '/*', GLOB_ONLYDIR);
+    foreach ((array) $sources as $source) {
+      $slug = basename($source);
+      $target = $site_path . '/user/' . $kind . '/' . $slug;
+      $new_version = _provision_grav_blueprint_version($source);
+
+      if (is_link($target)) {
+        drush_log(dt('Bundle refresh: @kind @slug is a symlink on this capsule and was left alone.',
+          array('@kind' => $kind, '@slug' => $slug)), 'advisory');
+        $kept++;
+        continue;
+      }
+      if (is_dir($target)) {
+        $old_version = _provision_grav_blueprint_version($target);
+        if ($new_version === '' || $old_version === '') {
+          drush_log(dt('Bundle refresh: @kind @slug has no readable blueprints version on one side (bundle "@new", capsule "@old"); left as it is.',
+            array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'advisory');
+          $kept++;
+          continue;
+        }
+        if (!version_compare($new_version, $old_version, '>')) {
+          $kept++;
+          continue;
+        }
+        $stash = $tmp . '/replaced-' . $kind . '-' . $slug;
+        if (!@rename($target, $stash)) {
+          // Web-owned entries inside the package dir: the heal hands the
+          // capsule back, then the move is retried exactly once.
+          _provision_grav_root_heal($site_path);
+          if (!@rename($target, $stash)) {
+            drush_log(dt('Bundle refresh: could not set @kind @slug aside; it keeps version @old.',
+              array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version)), 'warning');
+            $failed++;
+            continue;
+          }
+        }
+        if (!_provision_grav_copy_tree($source, $target)) {
+          _provision_grav_recursive_delete($target);
+          @rename($stash, $target);
+          drush_log(dt('Bundle refresh: copying @kind @slug @new into the capsule failed; the previous @old is back in place.',
+            array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'warning');
+          $failed++;
+          continue;
+        }
+        provision_file()->chgrp($target, $web_group, TRUE);
+        _provision_grav_chmod_tree($target, FALSE);
+        drush_log(dt('Bundle refresh: @kind @slug @old -> @new.',
+          array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version, '@new' => $new_version)), 'ok');
+        $replaced++;
+        continue;
+      }
+
+      // Absent from the capsule: part of the managed bundle, so install it.
+      if (!_provision_grav_copy_tree($source, $target)) {
+        _provision_grav_recursive_delete($target);
+        drush_log(dt('Bundle refresh: could not install the bundled @kind @slug.',
+          array('@kind' => $kind, '@slug' => $slug)), 'warning');
+        $failed++;
+        continue;
+      }
+      provision_file()->chgrp($target, $web_group, TRUE);
+      _provision_grav_chmod_tree($target, FALSE);
+      drush_log(dt('Bundle refresh: @kind @slug installed at @new (shipped by the bundle, absent from the capsule).',
+        array('@kind' => $kind, '@slug' => $slug, '@new' => ($new_version === '' ? dt('unknown') : $new_version))), 'ok');
+      $installed++;
+    }
+  }
+
+  _provision_grav_recursive_delete($tmp);
+  drush_log(dt('Bundle refresh from @file: @replaced replaced, @installed installed, @kept already current or newer.',
+    array('@file' => basename($artefact), '@replaced' => $replaced, '@installed' => $installed, '@kept' => $kept)), 'ok');
+  if ($failed > 0) {
+    drush_log(dt('Bundle refresh left @failed package(s) unchanged after a failed replacement; the capsule is consistent but not fully refreshed.',
+      array('@failed' => $failed)), 'warning');
+  }
+
+  // One install per CLI process is a hard Grav constraint, and a tree that
+  // changed under a warm cache needs the same separation: always a new
+  // process, always after every write above.
+  _provision_grav_cli('grav', 'clearcache -n', $site_path);
+  return ($failed === 0);
+}
+
+/**
+ * Did the Grav installer report a failure in the output it printed?
+ *
+ * DirectInstallCommand::serve() returns 0 even when the install FAILED -- the
+ * failure is only printed, in red, from Installer::lastErrorMsg(). So the
+ * exit code is never the verdict: the printed lines are read, and the
+ * capsule's own version is checked afterwards. Returns the offending lines.
+ */
+function _provision_grav_install_output_errors($output) {
+  $errors = array();
+  foreach ((array) $output as $line) {
+    if (!is_string($line)) {
+      continue;
+    }
+    if (preg_match('/error|failed|not a valid/i', $line)) {
+      $errors[] = trim($line);
+    }
+  }
+  return $errors;
+}
+
+/**
+ * Install a staged official artefact into a capsule and prove it took.
+ *
+ * The one sequence both upgrade paths run, so an upgrade in place and an
+ * upgrade of a copy can never drift apart: seed versions.yaml, direct-install
+ * the core, read the printed output, REQUIRE the capsule's own GRAV_VERSION
+ * to equal the artefact's afterwards, then refresh the bundled plugins and
+ * themes out of the same archive and clear the cache.
+ *
+ * $artefact_version is the agreed version from _provision_grav_artefact_version().
+ * Returns TRUE, or FALSE with the error already set.
+ */
+function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_version) {
+  $before = _provision_grav_get_version($site_path);
+
+  // Before the install: a capsule that never served a web request has no
+  // versions.yaml, and the updater would replay every historical step.
+  _provision_grav_seed_versions_yaml($site_path, $uri);
+
+  $ran = _provision_grav_cli('gpm', 'direct-install -y -n ' . escapeshellarg($artefact), $site_path);
+  if (!$ran) {
+    // The CLI seam already logged the command and its output.
+    return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
+      dt('gpm direct-install failed for !site; the pre-upgrade safety copy is registered and restorable.',
+      array('!site' => $site_path)));
+  }
+  // The installer's own account of what it did, in the task log at a healthy
+  // level: this is the only place a failure shows up before the version check.
+  $output = (array) drush_shell_exec_output();
+  foreach ($output as $line) {
+    if (is_string($line) && trim($line) !== '') {
+      drush_log('GRAV/INSTALL ' . trim($line), 'ok');
+    }
+  }
+  $errors = _provision_grav_install_output_errors($output);
+  if (!empty($errors)) {
+    return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
+      dt('The Grav installer reported a failure for !site while exiting 0 (it always does): !lines. The pre-upgrade safety copy is registered and restorable.',
+      array('!site' => $site_path, '!lines' => implode(' / ', $errors))));
+  }
+
+  // The verdict. The exit code lies, the printed output can be quiet, so the
+  // capsule itself is asked what it now is.
+  $after = _provision_grav_get_version($site_path);
+  if ($after !== $artefact_version) {
+    return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
+      dt('Capsule !site reports Grav @after after installing the @wanted artefact (it was @before); the upgrade did not take. The pre-upgrade safety copy is registered and restorable.',
+      array('!site' => $site_path, '@after' => ($after === '' ? dt('nothing readable') : $after), '@wanted' => $artefact_version, '@before' => $before)));
+  }
+  drush_log(dt('Capsule !site now runs Grav @after (was @before).',
+    array('!site' => $site_path, '@after' => $after, '@before' => $before)), 'success');
+
+  // The bundled plugins and themes the core install deliberately ignores,
+  // out of the same archive; it clears the cache as its last step.
+  _provision_grav_refresh_bundle($site_path, $artefact);
+  return TRUE;
+}
+
+/**
+ * Move a capsule's uri-bound surfaces onto a new uri (identity preserved).
+ *
+ * Grav resolves environment:// to user/env/<GRAV_ENVIRONMENT> (or user/<..>
+ * in the 1.6 shape) and REFUSES to register a directory that does not exist:
+ * a capsule whose overlay still carries the old name silently loses every
+ * per-host config, blueprint and language override. Nothing else in a capsule
+ * is keyed by uri -- the secrets, accounts, pages and licences are the site's
+ * identity and are deliberately untouched here.
+ */
+function _provision_grav_repoint_uri($site_path, $old_uri, $new_uri) {
+  if (!is_string($old_uri) || !is_string($new_uri)
+    || $old_uri === '' || $new_uri === '' || $old_uri === $new_uri) {
+    return TRUE;
+  }
+  $ok = TRUE;
+  foreach (array($site_path . '/user/env', $site_path . '/user') as $base) {
+    $old_env = $base . '/' . $old_uri;
+    $new_env = $base . '/' . $new_uri;
+    if (!is_dir($old_env) || is_link($old_env)) {
+      continue;
+    }
+    if (is_dir($new_env)) {
+      drush_log(dt('Both @old and @new exist on this capsule; neither overlay was moved -- merge them by hand.',
+        array('@old' => $old_env, '@new' => $new_env)), 'advisory');
+      continue;
+    }
+    if (@rename($old_env, $new_env)) {
+      drush_log(dt('Moved the environment overlay @old to @new so the site keeps its per-host overrides.',
+        array('@old' => $old_env, '@new' => $new_env)), 'ok');
+    }
+    else {
+      drush_log(dt('Could not move the environment overlay @old to @new; the site will ignore it until it is renamed by hand.',
+        array('@old' => $old_env, '@new' => $new_env)), 'warning');
+      $ok = FALSE;
+    }
+  }
+  return $ok;
+}
+
+/**
+ * The context options for a COPY of this site at a new uri.
+ *
+ * One authority for both copy commands (clone and copy-upgrade): the two must
+ * ship the copy identically dark, or the difference is only ever found on a
+ * live site. $label names the caller in the Encryption row.
+ */
+function _provision_grav_copy_options($new_name, $platform = NULL, $label = 'clone') {
+  $options = d()->options;
+  $new_uri = ltrim($new_name, '@');
+  $options['uri'] = $new_uri;
+  $hash_name = drush_get_option('#name') ? '#name' : 'name';
+  $options[$hash_name] = $new_name;
+  $options['platform'] = (isset($platform)) ? $platform : $options['platform'];
+  $options['root'] = d($options['platform'])->root;
+  $options['aliases'] = array();
+  $options['redirection'] = 0;
+
+  // Encryption auto-disable on the copy (SSL keys are source-name-bound).
+  $options['ssl_enabled'] = 0;
+  unset($options['ssl_key']);
+  drush_log(dt('[!label] Encryption disabled for new site @name before final verify',
+    array('!label' => $label, '@name' => $new_name)), 'info');
+
+  // Do not copy CDN aliases to the copy.
+  unset($options['cdn']);
+
+  // A migration-source association is the source site's history, never the
+  // copy's (latent while migrate is fail-closed; must be here before it).
+  unset($options['migrate_source_db']);
+  unset($options['migrate_source_uri']);
+  unset($options['migrate_source_wired']);
+
+  if ($profile = drush_get_option('profile', FALSE)) {
+    $options['profile'] = $profile;
+  }
+
+  // DB-less pin: the copy keeps the source's database server (the 'none'
+  // null service the validate hook asserted). A different server named by
+  // the task would make the copy's deploy provision a database and grants
+  // for a site that has none, so it is deliberately not honoured; said once
+  // here rather than silently dropped. Gated on the source's service being
+  // the null one, so database-backed Grav (the coming cart) is unaffected.
+  $new_db_server = drush_get_option('new_db_server', FALSE);
+  if ($new_db_server && isset($options['db_server'])
+    && ltrim($new_db_server, '@') !== ltrim($options['db_server'], '@')) {
+    drush_log(dt('The database server @server requested for the copy is ignored: a Grav capsule has no database and keeps the source\'s "none" server.',
+      array('@server' => $new_db_server)), 'ok');
+  }
+
+  return $options;
+}
+
+/**
+ * Remove a half-built copy: its capsule (parked if web-owned residue
+ * survives), its vhost and its context. Without this a failed copy leaves a
+ * capsule the platform-delete guard counts as a live site and a context the
+ * front end never registered. Shared by the clone and copy-upgrade rollbacks
+ * so both discard exactly the same set.
+ */
+function _provision_grav_discard_copy($new_name, $platform = NULL) {
+  $new_uri = ltrim($new_name, '@');
+  if ($new_uri === '' || $new_uri === d()->uri) {
+    return;
+  }
+  $target_root = d()->root;
+  if (!empty($platform)) {
+    $target = d($platform, FALSE, FALSE);
+    if (is_object($target) && isset($target->root) && $target->root !== '') {
+      $target_root = $target->root;
+    }
+  }
+
+  $capsule = $target_root . '/sites/' . $new_uri;
+  if (is_dir($capsule) && !is_link($capsule)) {
+    // The helper reports its own outcome (deleted silently, parked in one
+    // row, or a cleanup error); only a tree that is really gone is "removed".
+    if (_provision_grav_remove_tree_or_park($capsule, $new_uri . '-copy-failed') && !is_dir($capsule)) {
+      drush_log(dt('Removed the half-built copy at @path.', array('@path' => $capsule)), 'ok');
+    }
+  }
+
+  $vhost = d('@server_master')->http_vhostd_path . '/' . $new_uri;
+  if (is_file($vhost)) {
+    provision_file()->unlink($vhost)
+      ->succeed('Removed the vhost of the half-built copy @path')
+      ->fail('Could not remove the vhost of the half-built copy @path');
+    d('@server_master')->service('http')->parse_configs();
+  }
+
+  // The alias record, not d(): loading a context that does not exist logs
+  // an error row of its own, and a copy that failed before provision-save
+  // has none.
+  $record = provision_sitealias_get_record($new_name);
+  if (!empty($record)) {
+    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
+    drush_log(dt('Removed the context of the half-built copy @name.', array('@name' => $new_name)), 'ok');
+  }
+}
+
+/**
+ * Resolve and vet the artefact an upgrade is about to install.
+ *
+ * Fail-closed, and the whole verdict is formed BEFORE anything is written:
+ * the file exists and is named like an official release, its file name and
+ * its own GRAV_VERSION agree, and that version is strictly newer than the
+ * capsule's. "Nothing newer is staged" is a refusal, not a no-op that reports
+ * success. Returns array('artefact' => path, 'version' => version) or FALSE
+ * with the error already set.
+ */
+function _provision_grav_resolve_artefact($capsule_version, $artefact = NULL) {
+  if (empty($artefact)) {
+    $artefact = _provision_grav_newest_artefact();
+    if ($artefact === FALSE) {
+      drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
+        dt('No staged official release found under <aegir_root>/static/grav-releases/ and no artefact argument given.'));
+      return FALSE;
+    }
+  }
+  if (!is_readable($artefact) || !preg_match('/grav-admin-v[0-9][^\\/]*\\.zip$/', basename($artefact))) {
+    drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
+      dt('Artefact @file is not a readable official grav-admin-v*.zip.', array('@file' => $artefact)));
+    return FALSE;
+  }
+  $version = _provision_grav_artefact_version($artefact);
+  if ($version === '') {
+    return FALSE;
+  }
+  if (!is_string($capsule_version) || $capsule_version === '') {
+    drush_set_error('PROVISION_GRAV_SEED_INVALID',
+      dt('Could not read the capsule\'s own GRAV_VERSION; run Verify on the site before upgrading it.'));
+    return FALSE;
+  }
+  if (!version_compare($version, $capsule_version, '>')) {
+    drush_set_error('PROVISION_GRAV_ARTEFACT_NOT_NEWER',
+      dt('Nothing newer is staged: the capsule runs Grav @capsule and the staged artefact @file carries Grav @artefact.',
+      array('@capsule' => $capsule_version, '@file' => basename($artefact), '@artefact' => $version)));
+    return FALSE;
+  }
+  return array('artefact' => $artefact, 'version' => $version);
 }

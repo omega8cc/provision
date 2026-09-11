@@ -11,6 +11,14 @@
  * `official_gpm_only` stays enforced because the artefact is a LOCAL file —
  * this box never talks to getgrav.org (D-004 mirror-first; D-006: the admin
  * bundle carries the managed plugin set, the long tail stays client-side).
+ *
+ * Two consequences of that same installer shape drive everything below.
+ * DirectInstallCommand::serve() returns 0 after a FAILED core install (the
+ * failure is only printed, in red), so the exit code is never the verdict:
+ * the printed output is read AND the capsule is asked afterwards what version
+ * it now is. And Install::$ignores skips user/ entirely, so the core install
+ * leaves the bundled plugins and theme at the version the capsule was born
+ * with — the bundle refresh takes them from the same archive.
  */
 
 /**
@@ -33,19 +41,20 @@ function drush_provision_grav_upgrade_validate($artefact = NULL) {
     return drush_set_error('PROVISION_GRAV_SITE_NOT_FOUND',
       dt('No Grav capsule found at !site.', array('!site' => d()->site_path)));
   }
+  // Clear a stale frontend backup-mode ctrl file before the safety copy runs:
+  // a dead task's database-only mode would make the grav backup refuse.
+  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
+    unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
 
-  if (empty($artefact)) {
-    $artefact = _provision_grav_newest_artefact();
-    if ($artefact === FALSE) {
-      return drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
-        dt('No staged official release found under <aegir_root>/static/grav-releases/ and no artefact argument given.'));
-    }
+  // The whole verdict before anything is written: the artefact is what its
+  // name says it is, and it is newer than this capsule.
+  $resolved = _provision_grav_resolve_artefact(_provision_grav_get_version(d()->site_path), $artefact);
+  if ($resolved === FALSE) {
+    return FALSE;
   }
-  if (!is_readable($artefact) || !preg_match('/grav-admin-v[0-9][^\/]*\.zip$/', basename($artefact))) {
-    return drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
-      dt('Artefact @file is not a readable official grav-admin-v*.zip.', array('@file' => $artefact)));
-  }
-  drush_set_option('grav_upgrade_artefact', $artefact);
+  drush_set_option('grav_upgrade_artefact', $resolved['artefact']);
+  drush_set_option('grav_upgrade_artefact_version', $resolved['version']);
 }
 
 /**
@@ -66,31 +75,33 @@ function drush_provision_grav_pre_provision_grav_upgrade($artefact = NULL) {
  */
 function drush_provision_grav_upgrade($artefact = NULL) {
   $artefact = drush_get_option('grav_upgrade_artefact');
-  $before = _provision_grav_get_version(d()->site_path);
+  $version = drush_get_option('grav_upgrade_artefact_version');
 
-  drush_log(dt('Upgrading capsule !site from Grav @before using @artefact',
-    array('!site' => d()->site_path, '@before' => $before, '@artefact' => basename($artefact))), 'ok');
+  drush_log(dt('Upgrading capsule !site from Grav @before to Grav @after using @artefact',
+    array(
+      '!site' => d()->site_path,
+      '@before' => _provision_grav_get_version(d()->site_path),
+      '@after' => $version,
+      '@artefact' => basename($artefact),
+    )), 'ok');
 
-  if (!_provision_grav_cli('gpm', 'direct-install -y -n ' . escapeshellarg($artefact))) {
-    return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
-      dt('gpm direct-install failed for !site; the pre-upgrade safety copy is registered and restorable.',
-      array('!site' => d()->site_path)));
-  }
+  // Seed, install, prove, refresh the bundle, clear the cache — the same
+  // sequence the copy upgrade runs, so the two can never drift apart.
+  return _provision_grav_apply_artefact(d()->site_path, d()->uri, $artefact, $version);
+}
 
-  // NEVER chain a second install in the same CLI process (Install::prepare()
-  // throws on a loaded Grav\Installer class) -- the cache warm below is a
-  // separate invocation by construction.
-  _provision_grav_cli('grav', 'clearcache -n');
-
-  $after = _provision_grav_get_version(d()->site_path);
-  if ($after === '') {
-    return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
-      dt('Post-upgrade capsule at !site has no readable GRAV_VERSION; restore the safety copy.',
-      array('!site' => d()->site_path)));
-  }
-  drush_log(dt('Capsule !site now runs Grav @after (was @before).',
-    array('!site' => d()->site_path, '@after' => $after, '@before' => $before)),
-    $after === $before ? 'info' : 'success');
+/**
+ * Implements drush_hook_COMMAND_rollback() (collapsed name).
+ *
+ * Deliberately non-mutating. The capsule is upgraded IN PLACE, so there is no
+ * copy to discard and no safe automatic reverse: a half-installed tree is
+ * recovered from the pre-upgrade safety copy, which is registered in the
+ * front end and restorable through the ordinary Restore task. Say exactly
+ * that, at the level operator notes are logged at, and touch nothing.
+ */
+function drush_provision_grav_upgrade_rollback($artefact = NULL) {
+  drush_log(dt('provision-grav-upgrade failed on !site. The capsule was not reverted automatically: the recovery is the "Pre-upgrade backup" registered on this site just before the install — restore it from the site\'s Backups tab. The capsule is left exactly as the failed install left it so that backup can be compared against it.',
+    array('!site' => d()->site_path)), 'advisory');
 }
 
 /**
