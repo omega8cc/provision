@@ -523,6 +523,13 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
   $creds = _provision_txp_creds_from_drushrc($copy_path . '/drushrc.php');
   $mysqli = _provision_txp_db_connect($creds, $connect_error);
   if ($mysqli === FALSE) {
+    // No proof can be taken, so the held-back rows are released as what they
+    // are on an unproved copy: part of the explanation for a failing task.
+    if (!$chain_ok) {
+      foreach ($rows as $row) {
+        drush_log($row, 'warning');
+      }
+    }
     return drush_set_error('PROVISION_TXP_UPGRADE_CHAIN_FAILED',
       dt('Could not reach the copy\'s database after the update chain (!msg). The source is untouched.',
       array('!msg' => $connect_error)));
