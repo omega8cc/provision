@@ -19,6 +19,16 @@ function drush_provision_grav_provision_restore_validate($restore_file = null) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
+  // A Grav capsule carries no database yet, so its archives are files-only.
+  // Attached to a real database server (the panel's default; hosting_grav
+  // provides the 'none' server) the deploy this restore drives would look
+  // for a database dump the backup never wrote and fail half-way; refuse
+  // up front with the way out. Database-backed Grav restores arrive with
+  // database support (the coming cart).
+  if (!(d()->service('db') instanceof Provision_Service_null)) {
+    return drush_set_error('PROVISION_GRAV_RESTORE_DB_SERVER',
+      dt('This Grav site is attached to a database server, and its files-only archive cannot be restored through the database deploy. Attach the site to the "none" database server (hosting_grav) and retry.'));
+  }
   // Backup mode ctrl file cleanup: on the serial queue any file present at
   // task start is a dead leftover by definition (same rationale as the
   // Drupal flow); the safety copy below force-defines its own mode.
