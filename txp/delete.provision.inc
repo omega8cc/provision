@@ -92,6 +92,13 @@ function drush_provision_txp_provision_delete() {
   if (d()->type === 'site') {
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
+    // Set the site's per-account static store aside BEFORE its alias goes,
+    // as the Drupal delete does: the privileged wrapper proves the caller
+    // owns the site through that alias, and once the nightly has linked
+    // private/ into the store the store holds the only copy of config.php
+    // (archived under static/files/.archived, never deleted).
+    _provision_drupal_archive_static_store(d()->uri);
+
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {
       drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
