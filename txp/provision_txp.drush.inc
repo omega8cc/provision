@@ -608,6 +608,13 @@ function _provision_txp_db_version($mysqli, $prefix = '') {
  * Regex, never an include: config.php opens a database connection at include
  * time. The provision settings writer always emits an empty prefix, but an
  * adopted site may carry one and every schema read has to honour it.
+ *
+ * The value is the one thing in this layer that becomes part of an SQL
+ * identifier while coming from a file rather than from code, and identifiers
+ * are backtick-quoted -- which real_escape_string does not neutralise. So the
+ * seam that reads it is also the seam that refuses anything but a plain
+ * identifier: on a mismatch the task is failed and '' is returned, so no caller
+ * can interpolate the value it was refused.
  */
 function _provision_txp_config_prefix($config_php) {
   if (!is_readable($config_php)) {
@@ -616,6 +623,12 @@ function _provision_txp_config_prefix($config_php) {
   $body = file_get_contents($config_php);
   if ($body !== FALSE
     && preg_match('/\\$txpcfg\\s*\\[\\s*[\'"]table_prefix[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+    if (!preg_match('/^[A-Za-z0-9_]*$/', $m[1])) {
+      drush_set_error('PROVISION_TXP_BAD_PREFIX',
+        dt('The table prefix declared in !file is not a plain identifier ("!prefix"); every query this layer builds from it would name something else. Correct table_prefix before running this task.',
+        array('!file' => $config_php, '!prefix' => $m[1])));
+      return '';
+    }
     return $m[1];
   }
   return '';
