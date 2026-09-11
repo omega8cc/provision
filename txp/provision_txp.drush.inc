@@ -255,19 +255,29 @@ function _provision_txp_site_exists() {
 /**
  * Resolve the Textpattern core version string (e.g. "4.9.1").
  *
- * Parses $thisversion out of the shared core's lib/constants.php -- a codebase
- * fact, no DB and no CMS bootstrap needed, valid for platform contexts.
+ * Parses $thisversion out of the shared core -- a codebase fact, no DB and no
+ * CMS bootstrap needed, valid for platform contexts. The 4.9 line declares it
+ * in lib/constants.php; the 4.8 line (an adopted site's core, or an older
+ * platform staged as an upgrade source) declares it in textpattern/index.php,
+ * so that file is read when constants.php carries no version.
  */
 function _provision_txp_get_version($root = NULL) {
   if (is_null($root)) {
     $root = d()->root;
   }
   $version = '';
-  $constants = $root . '/textpattern/lib/constants.php';
-  if (is_readable($constants)) {
-    $data = file_get_contents($constants);
+  $candidates = array(
+    $root . '/textpattern/lib/constants.php',
+    $root . '/textpattern/index.php',
+  );
+  foreach ($candidates as $file) {
+    if (!is_readable($file)) {
+      continue;
+    }
+    $data = file_get_contents($file);
     if (preg_match("/\\\$thisversion\\s*=\\s*'([^']+)'/", $data, $match)) {
       $version = $match[1];
+      break;
     }
   }
   return $version;
