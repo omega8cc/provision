@@ -1034,14 +1034,19 @@ function _provision_grav_artefact_version($artefact) {
  * would have written, before the install, keeps the replay to the steps that
  * really are new.
  *
+ * The path is fixed. Unlike the secret files, which Grav resolves through
+ * the config:// stream and therefore through the environment overlay, this
+ * file is a literal in the installer (Versions::instance() and the schema
+ * lookup in Install::install()) and in the web tier's InitializeProcessor:
+ * user/config/versions.yaml and nowhere else. A copy in an overlay is not
+ * the file Grav reads, so it must not stand in for a missing one here.
+ *
  * Instance-user owned, group web, 0664: the web tier rewrites it through the
  * group on the next update it performs itself.
  */
-function _provision_grav_seed_versions_yaml($site_path, $uri) {
+function _provision_grav_seed_versions_yaml($site_path) {
   $config_dir = $site_path . '/user/config';
-  $overlay_dir = _provision_grav_config_dir($site_path, $uri);
-  if (is_file($config_dir . '/versions.yaml')
-    || ($overlay_dir !== $config_dir && is_file($overlay_dir . '/versions.yaml'))) {
+  if (is_file($config_dir . '/versions.yaml')) {
     return TRUE;
   }
   $version = _provision_grav_get_version($site_path);
@@ -1324,7 +1329,7 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
 
   // Before the install: a capsule that never served a web request has no
   // versions.yaml, and the updater would replay every historical step.
-  _provision_grav_seed_versions_yaml($site_path, $uri);
+  _provision_grav_seed_versions_yaml($site_path);
 
   $ran = _provision_grav_cli('gpm', 'direct-install -y -n ' . escapeshellarg($artefact), $site_path);
   if (!$ran) {
