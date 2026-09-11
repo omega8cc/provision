@@ -6,10 +6,12 @@
  * Verify is the operator's heal action, so a dead DB never fails the task:
  * the checks DEGRADE (version 'unknown', a warning) while the tree/config
  * repair in the calling hook has already run. With the DB up: assert the
- * schema anchor table, read the installed version, and RE-ASSERT the
- * backup-scope prefs (file_base_path/tempdir/path_to_site are operator-editable
- * in the TXP admin -- install-time seeding guarantees nothing; drifted values
- * put runtime writes outside sites/<uri>/ and silently outside every backup).
+ * schema anchor table, read the installed version, and RE-ASSERT the prefs that
+ * bind the site to its own name and directory. They are operator-editable in
+ * the TXP admin and a task that fails mid-way can leave one behind, so
+ * install-time seeding guarantees nothing: a drifted path puts runtime writes
+ * outside sites/<uri>/ and silently outside every backup, and a drifted siteurl
+ * publishes every link against a host that is not this site's.
  */
 
 $uri = d()->uri;
@@ -56,8 +58,15 @@ try {
   drush_set_option('txp_site_version', $version, 'site');
   drush_log(dt('Textpattern site schema present, version !v.', array('!v' => $version)), 'ok');
 
-  // Backup-scope law re-assertion.
+  // The uri-bound and path-bound law, re-asserted. The three paths are the
+  // backup scope (operator-editable in the TXP admin; a drifted value puts
+  // runtime writes outside sites/<uri>/ and silently outside every backup).
+  // siteurl is here because publish.php composes every permalink, asset URL,
+  // feed URL and redirect from it: a site whose siteurl names another host
+  // publishes links nobody can follow, and Verify is where an operator is told
+  // to go after a task left the row on the wrong name.
   $canonical = array(
+    'siteurl' => $uri,
     'path_to_site' => $site_path . '/public',
     'file_base_path' => $site_path . '/public/files',
     'tempdir' => $site_path . '/tmp',
@@ -78,10 +87,14 @@ try {
     // composes the other, and a literal string test then "heals" the row on
     // every verify, forever -- a permanent yellow task on a site that is not
     // drifted at all. Compare the resolved paths whenever both sides exist.
-    $have_real = @realpath((string) $have);
-    $want_real = @realpath($want);
-    if ($have_real !== FALSE && $want_real !== FALSE && $have_real === $want_real) {
-      continue;
+    // Paths only: a host name is not a path, and resolving one against the
+    // working directory is how a value would be compared to the wrong thing.
+    if (strpos($want, '/') === 0) {
+      $have_real = @realpath((string) $have);
+      $want_real = @realpath($want);
+      if ($have_real !== FALSE && $want_real !== FALSE && $have_real === $want_real) {
+        continue;
+      }
     }
     $upd->bind_param('ss', $want, $name);
     // mysqli is in exception mode here: a failed UPDATE throws rather than
@@ -94,14 +107,14 @@ try {
       $healed = FALSE;
     }
     if (!$healed) {
-      drush_log(dt('Could not heal pref !name: "!have" is outside the backup scope and the update failed. Runtime writes stay outside every backup until it is corrected.',
+      drush_log(dt('Could not heal pref !name: "!have" is not this site\'s value and the update failed. Until it is corrected the site keeps writing (or publishing) against it.',
         array('!name' => $name, '!have' => $have)), 'warning');
     }
     else {
       // A completed self-heal is a success, not a warning: verify exists to
       // fix exactly this, and colouring the task yellow for doing its job
       // teaches operators to ignore the colour.
-      drush_log(dt('Healed pref !name: "!have" -> "!want" (backup-scope law).',
+      drush_log(dt('Healed pref !name: "!have" -> "!want".',
         array('!name' => $name, '!have' => $have, '!want' => $want)), 'ok');
     }
   }

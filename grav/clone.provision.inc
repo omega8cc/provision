@@ -113,46 +113,11 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   }
   drush_set_option('old_platform', d()->platform->name);
 
-  $options = d()->options;
-  $new_uri = ltrim($new_name, '@');
-  $options['uri'] = $new_uri;
-  $hash_name = drush_get_option('#name') ? '#name' : 'name';
-  $options[$hash_name] = $new_name;
-  $options['platform'] = (isset($platform)) ? $platform : $options['platform'];
-  $options['root'] = d($options['platform'])->root;
-  $options['aliases'] = array();
-  $options['redirection'] = 0;
-
-  // Encryption auto-disable on the clone (SSL keys are source-name-bound).
-  $options['ssl_enabled'] = 0;
-  unset($options['ssl_key']);
-  drush_log(dt('[clone] Encryption disabled for new site @name before final verify', array('@name' => $new_name)), 'info');
-
-  // Do not copy CDN aliases to the clone.
-  unset($options['cdn']);
-
-  // A migration-source association is the source site's history, never the
-  // copy's (latent while migrate is fail-closed; must be here before it).
-  unset($options['migrate_source_db']);
-  unset($options['migrate_source_uri']);
-  unset($options['migrate_source_wired']);
-
-  if ($profile = drush_get_option('profile', FALSE)) {
-    $options['profile'] = $profile;
-  }
-
-  // DB-less pin: the copy keeps the source's database server (the 'none'
-  // null service the validate hook asserted). A different server named by
-  // the task would make the copy's deploy provision a database and grants
-  // for a site that has none, so it is deliberately not honoured; said once
-  // here rather than silently dropped. Gated on the source's service being
-  // the null one, so database-backed Grav (the coming cart) is unaffected.
-  $new_db_server = drush_get_option('new_db_server', FALSE);
-  if ($new_db_server && isset($options['db_server'])
-    && ltrim($new_db_server, '@') !== ltrim($options['db_server'], '@')) {
-    drush_log(dt('The database server @server requested for the copy is ignored: a Grav capsule has no database and keeps the source\'s "none" server.',
-      array('@server' => $new_db_server)), 'ok');
-  }
+  // One authority for both copy commands (clone and copy-upgrade): the new
+  // uri and name, the target platform, no aliases, no redirection, no
+  // Encryption, no CDN, no inherited migration source, and the DB-less pin
+  // that keeps the copy on the source's 'none' server.
+  $options = _provision_grav_copy_options($new_name, $platform, 'clone');
 
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
@@ -183,50 +148,13 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
 }
 
 /**
- * Remove a half-built copy: its capsule (parked if web-owned residue
- * survives), its vhost and its context. Without this a failed clone leaves a
- * capsule the platform-delete guard counts as a live site and a context the
- * front end never registered.
+ * Remove the half-built copy (capsule, vhost, context) -- see
+ * _provision_grav_discard_copy(), shared with the copy-upgrade rollback.
  */
 function drush_provision_grav_provision_clone_rollback($new_name, $platform = NULL) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
-  $new_uri = ltrim($new_name, '@');
-  if ($new_uri === '' || $new_uri === d()->uri) {
-    return;
-  }
-  $target_root = d()->root;
-  if (!empty($platform)) {
-    $target = d($platform, FALSE, FALSE);
-    if (is_object($target) && isset($target->root) && $target->root !== '') {
-      $target_root = $target->root;
-    }
-  }
-
-  $capsule = $target_root . '/sites/' . $new_uri;
-  if (is_dir($capsule) && !is_link($capsule)) {
-    // The helper reports its own outcome (deleted silently, parked in one
-    // row, or a cleanup error); only a tree that is really gone is "removed".
-    if (_provision_grav_remove_tree_or_park($capsule, $new_uri . '-clone-failed') && !is_dir($capsule)) {
-      drush_log(dt('Removed the half-built copy at @path.', array('@path' => $capsule)), 'ok');
-    }
-  }
-
-  $vhost = d('@server_master')->http_vhostd_path . '/' . $new_uri;
-  if (is_file($vhost)) {
-    provision_file()->unlink($vhost)
-      ->succeed('Removed the vhost of the half-built copy @path')
-      ->fail('Could not remove the vhost of the half-built copy @path');
-    d('@server_master')->service('http')->parse_configs();
-  }
-
-  // The alias record, not d(): loading a context that does not exist logs
-  // an error row of its own, and a clone that failed before provision-save
-  // has none.
-  $record = provision_sitealias_get_record($new_name);
-  if (!empty($record)) {
-    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
-    drush_log(dt('Removed the context of the half-built copy @name.', array('@name' => $new_name)), 'ok');
-  }
+  // The same set a failed copy-upgrade discards: capsule, vhost, context.
+  _provision_grav_discard_copy($new_name, $platform);
 }
