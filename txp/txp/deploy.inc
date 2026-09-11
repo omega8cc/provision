@@ -214,11 +214,21 @@ try {
       'plugin_cache_dir' => array(0, 'admin', 'text_input', 100),
       'production_status' => array(0, 'site', 'prod_levels', 80),
     );
-    $ins = $mysqli->prepare("INSERT INTO txp_prefs (name, val, type, event, collection, html, position, user_name) VALUES (?, ?, ?, ?, '', ?, ?, '')");
+    // A schema this block does not understand (an adopted site whose
+    // txp_prefs predates the collection column) must degrade to the
+    // pre-existing warning below, never fail the deploy: mysqli throws on a
+    // statement that will not prepare.
+    $ins = NULL;
+    try {
+      $ins = $mysqli->prepare("INSERT INTO txp_prefs (name, val, type, event, collection, html, position, user_name) VALUES (?, ?, ?, ?, '', ?, ?, '')");
+    }
+    catch (Exception $e) {
+      $ins = NULL;
+    }
     $inserted = array();
     $unfixable = array();
     foreach ($missing as $name) {
-      if (!isset($pref_meta[$name])) {
+      if (!isset($pref_meta[$name]) || !is_object($ins)) {
         $unfixable[] = $name;
         continue;
       }
@@ -249,7 +259,9 @@ try {
         $unfixable[] = $name;
       }
     }
-    $ins->close();
+    if (is_object($ins)) {
+      $ins->close();
+    }
     if (!empty($inserted)) {
       drush_log(dt('These prefs rows were absent and have been recreated with core metadata and the deployed values: !list.',
         array('!list' => implode(', ', $inserted))), 'ok');

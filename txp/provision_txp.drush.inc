@@ -517,7 +517,8 @@ function _provision_txp_send_welcome_mail($client_email, $login_link) {
     . $login_link . "\n";
   $headers = 'From: noreply@' . $host;
   if (@mail($client_email, $subject, $body, $headers)) {
-    drush_log(dt('Welcome mail sent to @to.', array('@to' => $client_email)), 'ok');
+    // The recipient stays out of the task log: it is the client's address.
+    drush_log(dt('Welcome mail sent for !uri.', array('!uri' => $uri)), 'ok');
   }
   else {
     drush_log(dt('Welcome mail could not be sent (no MTA/relay on this box?) — the login link is recorded on the task instead.'), 'notice');

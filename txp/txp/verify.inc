@@ -84,7 +84,16 @@ try {
       continue;
     }
     $upd->bind_param('ss', $want, $name);
-    if ($upd->execute() === FALSE) {
+    // mysqli is in exception mode here: a failed UPDATE throws rather than
+    // returning FALSE, so catch it per pref and keep checking the others.
+    $healed = FALSE;
+    try {
+      $healed = ($upd->execute() !== FALSE);
+    }
+    catch (Exception $e) {
+      $healed = FALSE;
+    }
+    if (!$healed) {
       drush_log(dt('Could not heal pref !name: "!have" is outside the backup scope and the update failed. Runtime writes stay outside every backup until it is corrected.',
         array('!name' => $name, '!have' => $have)), 'warning');
     }
