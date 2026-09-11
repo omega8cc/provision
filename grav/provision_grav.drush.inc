@@ -1470,6 +1470,8 @@ function _provision_grav_discard_copy($new_name, $platform = NULL) {
   if ($new_uri === '' || $new_uri === d()->uri) {
     return;
   }
+  // Context names carry the leading @ whatever the caller was handed.
+  $new_name = '@' . $new_uri;
   $target_root = d()->root;
   if (!empty($platform)) {
     $target = d($platform, FALSE, FALSE);

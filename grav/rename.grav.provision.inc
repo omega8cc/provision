@@ -102,7 +102,10 @@ function drush_provision_grav_pre_provision_grav_rename($new_name = NULL) {
  * Implements drush_hook_COMMAND() (collapsed name).
  */
 function drush_provision_grav_rename($new_name = NULL) {
+  // Context names carry the leading @; a frontend that passes the bare uri
+  // would otherwise have a context saved under a name nothing resolves.
   $new_uri = strtolower(ltrim($new_name, '@'));
+  $new_name = '@' . $new_uri;
   $old_uri = d()->uri;
   $old_name = d()->name;
   $old_path = d()->site_path;
@@ -181,6 +184,7 @@ function drush_provision_grav_rename($new_name = NULL) {
  */
 function drush_provision_grav_rename_rollback($new_name = NULL) {
   $new_uri = strtolower(ltrim($new_name, '@'));
+  $new_name = '@' . $new_uri;
   $old_uri = d()->uri;
   $old_path = d()->site_path;
   $new_path = d()->root . '/sites/' . $new_uri;

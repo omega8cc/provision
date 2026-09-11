@@ -150,7 +150,10 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   drush_set_option('old_platform', d()->platform->name);
   $artefact = drush_get_option('grav_upgrade_artefact');
   $version = drush_get_option('grav_upgrade_artefact_version');
+  // Context names carry the leading @; a frontend that passes the bare uri
+  // would otherwise have a context saved under a name nothing resolves.
   $new_uri = ltrim($new_name, '@');
+  $new_name = '@' . $new_uri;
 
   // The clone's option handling, verbatim: one authority for both copy
   // commands, so the two can never ship the copy differently.
