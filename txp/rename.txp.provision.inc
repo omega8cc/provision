@@ -79,9 +79,23 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
       dt('sites/@uri already exists on this platform.', array('@uri' => $new_uri)));
   }
+  // A context that already holds the name is refused -- unless it demonstrably
+  // serves nothing, its recorded site directory being gone. That leftover is
+  // exactly what a rolled-back rename leaves behind (the early provision-save
+  // mints the new-name alias; the rollback removes it only when it can see
+  // it), and the cutover's documented recovery is to re-run, whose second leg
+  // is this very rename. Refusing on our own debris would make that recovery
+  // impossible; the rename's own provision-save overwrites the file.
   if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
-    return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
-      dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
+    $leftover = d('@' . $new_uri);
+    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
+      ? $leftover->site_path : '';
+    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+      return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
+        dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
+    }
+    drush_log(dt('A stale !uri alias with no site directory is left over (a rolled-back rename); this rename overwrites it.',
+      array('!uri' => $new_uri)), 'info');
   }
 }
 
