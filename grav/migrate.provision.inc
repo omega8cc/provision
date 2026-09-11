@@ -3,12 +3,15 @@
  * @file
  * Provision hooks for the provision migrate command (Grav layer).
  *
- * FAIL-CLOSED. Migrate (platform move / rename) is deferred past phase 1
- * (D-002: Clone/Migrate/Rename later), and with the shared Drupal hooks
- * union-guarded away an unimplemented migrate would SILENTLY NO-OP -- a task
- * that reports success having moved nothing (the silent-success class the
- * cross-track round-2 review confirmed live on the TXP side). Refuse loudly
- * instead until the real engine lands.
+ * FAIL-CLOSED. The GENERIC migrate is Drupal-shaped end to end (sites.php
+ * records, a database move, the native files store) and none of it applies to
+ * a self-contained capsule, so it is not implemented here -- and with the
+ * shared Drupal hooks union-guarded away an unimplemented migrate would
+ * SILENTLY NO-OP: a task that reports success having moved nothing. Refuse
+ * loudly, and name the Grav commands that do the two jobs an operator
+ * actually reaches for migrate to do: provision-grav-rename moves a site to a
+ * new name on its own platform, provision-grav-copy-upgrade places an
+ * upgraded copy on another Grav platform.
  */
 
 function drush_provision_grav_provision_migrate_validate($platform = NULL) {
@@ -35,5 +38,5 @@ function drush_provision_grav_provision_migrate_validate($platform = NULL) {
     return;
   }
   return drush_set_error('PROVISION_GRAV_MIGRATE_UNSUPPORTED',
-    dt('Migrate/rename is not implemented for Grav sites/platforms yet; refusing rather than silently doing nothing or migrating a Drupal site onto a foreign-CMS platform. A capsule can be copied to a new URI via Backup on the source and Restore on a site created at the new name (spike-4-proven).'));
+    dt('The generic migrate does not apply to Grav sites/platforms; refusing rather than silently doing nothing or migrating a Drupal site onto a foreign-CMS platform. Use the Rename task to move this site to a new name on its own platform, or Upgrade a copy to place an upgraded copy on another Grav platform.'));
 }

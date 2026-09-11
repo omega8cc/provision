@@ -16,19 +16,29 @@
  *    cookie from the source authenticates on the copy otherwise, whenever the
  *    two share a cookie domain), and every stored contact address re-pointed
  *    at the copy's own admin address.
- *  - IDENTITY-PRESERVING ('restore', same URI): blog_uid is KEPT -- regenerating
- *    it would churn every feed GUID for no security gain, since there is no
- *    second site to share the salt with -- and nothing about the site's
- *    contact data is touched: it is the same site, coming back.
- *  - Any other class (a future 'rename', which changes the name but not the
- *    owner) gets the session rotation and the truncations, but neither the
- *    identity regeneration nor the contact rewrite.
+ *  - IDENTITY-PRESERVING, same site ('restore', same URI): blog_uid is KEPT --
+ *    regenerating it would churn every feed GUID for no security gain, since
+ *    there is no second site to share the salt with -- and nothing about the
+ *    site's contact data is touched: it is the same site, coming back.
+ *  - IDENTITY-PRESERVING, new name ('rename' and 'upgrade'): the publication,
+ *    its owner and its people are unchanged; only the name or the codebase
+ *    under it moves. Both get the session rotation (a cookie minted against
+ *    the old name must not authenticate) and the truncations, and NEITHER gets
+ *    blog_uid regeneration (feed GUIDs must survive a rename and an upgrade)
+ *    nor the contact rewrite (there is no new owner to re-point mail at).
+ *    They are named here rather than left to fall through the default because
+ *    silence about a class is how one of them later acquires the wrong half of
+ *    a copy's treatment.
+ *  - Any other class is treated as a copy: that is the safe way round, since a
+ *    copy treated as a restore keeps the source's secrets.
  *
- * EVERY class: re-point every stored path/URL pref, normalise
- * production_status to 'live' (a site restored/cloned from a debug-mode source
- * would otherwise serve trace + SQL detail publicly), and truncate txp_token /
- * txp_log / txp_discuss_nonce (stale on a restore, live-and-dangerous on a
- * copy).
+ * EVERY class: re-point every stored path/URL pref (the shared
+ * _provision_txp_repoint_uri(), which the rename command calls too -- two
+ * writers of the same six rows drifting apart is how one of them silently
+ * stops moving a row), normalise production_status to 'live' (a site
+ * restored/cloned from a debug-mode source would otherwise serve trace + SQL
+ * detail publicly), and truncate txp_token / txp_log / txp_discuss_nonce
+ * (stale on a restore, live-and-dangerous on a copy).
  *
  * Ordering: the security half runs FIRST. A connection loss mid-sequence then
  * leaves a copy that is scrubbed but not yet re-pointed (inconvenient), never
@@ -53,6 +63,8 @@ if (!is_string($deploy_class) || $deploy_class === '') {
 }
 $is_restore = ($deploy_class === 'restore');
 $is_clone = ($deploy_class === 'clone');
+// The two classes that move a site without changing who owns it.
+$is_same_identity = ($deploy_class === 'rename' || $deploy_class === 'upgrade');
 
 // The copy's OWN contact address, resolved exactly the way the install engine
 // resolves it (txp/install.inc): the address the front end sent when it is a
@@ -87,26 +99,8 @@ try {
       dt('The deployed database carries no TXP schema (anchor table missing).'));
   }
 
-  // A table-existence probe that cannot fail OPEN: '_' is a single-character
-  // LIKE wildcard, so a plain LIKE 'txp_token' can match more than one table
-  // and a num_rows === 1 test would silently skip the TRUNCATE while the tail
-  // of this engine reports success.
-  $table_exists = function ($mysqli, $table) {
-    $stmt = $mysqli->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
-    $stmt->bind_param('s', $table);
-    $stmt->execute();
-    $stmt->bind_result($count);
-    $stmt->fetch();
-    $stmt->close();
-    return (int) $count === 1;
-  };
-
   // ---- security half (first) ----
-  foreach (array('txp_token', 'txp_log', 'txp_discuss_nonce') as $table) {
-    if ($table_exists($mysqli, $table)) {
-      $mysqli->query("TRUNCATE TABLE `" . $table . "`");
-    }
-  }
+  _provision_txp_truncate_sessions($mysqli);
 
   $upd = $mysqli->prepare("UPDATE txp_prefs SET val = ? WHERE name = ?");
   $scrub = array();
@@ -134,29 +128,13 @@ try {
     $upd->execute();
   }
 
-  if (!$is_restore && $table_exists($mysqli, 'txp_users')) {
-    // Rotate every user's nonce: invalidates login cookies cloned along with
-    // the database (txp_auth.php checks the stored nonce).
-    $rotated = 0;
-    $rs = $mysqli->query("SELECT user_id FROM txp_users");
-    if ($rs !== FALSE) {
-      $ids = array();
-      while ($row = $rs->fetch_row()) {
-        $ids[] = (int) $row[0];
-      }
-      $nonce_stmt = $mysqli->prepare("UPDATE txp_users SET nonce = ? WHERE user_id = ?");
-      foreach ($ids as $id) {
-        $nonce = md5(uniqid(mt_rand(), TRUE));
-        $nonce_stmt->bind_param('si', $nonce, $id);
-        $nonce_stmt->execute();
-        $rotated++;
-      }
-      $nonce_stmt->close();
-    }
+  if (!$is_restore) {
+    // Invalidates login cookies that travelled with the database.
+    $rotated = _provision_txp_rotate_nonces($mysqli);
     drush_log(dt('Rotated the session nonce of !n user row(s) on the copy.', array('!n' => $rotated)), 'ok');
   }
 
-  if ($is_clone && $table_exists($mysqli, 'txp_users')) {
+  if ($is_clone && _provision_txp_table_exists($mysqli, 'txp_users')) {
     // Textpattern core mails txp_users.email on every public comment and on
     // every password reset, so a copy that keeps the source's addresses mails
     // the source's people from a site they do not know they own. Re-point them
@@ -173,108 +151,27 @@ try {
       array('!n' => $repointed)), 'ok');
   }
 
-  // ---- re-point half ----
-  $prefs = array(
-    'siteurl' => $uri,
-    'path_to_site' => $site_path . '/public',
-    'file_base_path' => $site_path . '/public/files',
-    'tempdir' => $site_path . '/tmp',
-    // Source-bound and PHP is include()d from it on every public request.
-    'plugin_cache_dir' => '',
-    // Never inherit a debug/testing status: it publishes trace + SQL detail.
-    'production_status' => 'live',
-  );
-  $missing = array();
-  foreach ($prefs as $name => $val) {
-    $upd->bind_param('ss', $val, $name);
-    $upd->execute();
-    // A missing pref row updates nothing and is NOT an error to mysqli; TXP's
-    // checkPrefsIntegrity() would then recreate it from defaults on the next
-    // admin login -- and the siteurl default is the ADMIN hostname, i.e. the
-    // deployed site would start composing links to the wrong host. Collect it
-    // and create it below rather than leaving it to that default.
-    if ($mysqli->affected_rows === 0) {
-      $rs = $mysqli->query("SELECT COUNT(*) FROM txp_prefs WHERE name = '" . $mysqli->real_escape_string($name) . "'");
-      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
-      if ((int) $row[0] === 0) {
-        $missing[] = $name;
-      }
-    }
-  }
-
-  if (!empty($missing)) {
-    // Core's own metadata for each of these rows (core.prefs): type, event,
-    // html, position. collection and user_name are '' for all six, which is
-    // what makes them global prefs rather than per-user overrides.
-    $pref_meta = array(
-      'siteurl' => array(0, 'site', 'text_input', 40),
-      'path_to_site' => array(2, 'publish', 'text_input', 0),
-      'file_base_path' => array(0, 'admin', 'text_input', 40),
-      'tempdir' => array(0, 'admin', 'text_input', 80),
-      'plugin_cache_dir' => array(0, 'admin', 'text_input', 100),
-      'production_status' => array(0, 'site', 'prod_levels', 80),
-    );
-    // A schema this block does not understand (an adopted site whose
-    // txp_prefs predates the collection column) must degrade to the
-    // pre-existing warning below, never fail the deploy: mysqli throws on a
-    // statement that will not prepare.
-    $ins = NULL;
-    try {
-      $ins = $mysqli->prepare("INSERT INTO txp_prefs (name, val, type, event, collection, html, position, user_name) VALUES (?, ?, ?, ?, '', ?, ?, '')");
-    }
-    catch (Exception $e) {
-      $ins = NULL;
-    }
-    $inserted = array();
-    $unfixable = array();
-    foreach ($missing as $name) {
-      if (!isset($pref_meta[$name]) || !is_object($ins)) {
-        $unfixable[] = $name;
-        continue;
-      }
-      $val = $prefs[$name];
-      $type = (int) $pref_meta[$name][0];
-      $event = $pref_meta[$name][1];
-      $html = $pref_meta[$name][2];
-      $position = (int) $pref_meta[$name][3];
-      try {
-        $ins->bind_param('ssissi', $name, $val, $type, $event, $html, $position);
-        $ins->execute();
-      }
-      catch (Exception $e) {
-        // Swallowed on purpose: the existence test below is the verdict. A row
-        // created in the meantime (TXP's integrity check racing this engine)
-        // fails the INSERT on the primary key and is still exactly the state
-        // this block wants.
-      }
-      // Re-assert the value whatever the INSERT did.
-      $upd->bind_param('ss', $val, $name);
-      $upd->execute();
-      $rs = $mysqli->query("SELECT COUNT(*) FROM txp_prefs WHERE name = '" . $mysqli->real_escape_string($name) . "'");
-      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
-      if ((int) $row[0] > 0) {
-        $inserted[] = $name;
-      }
-      else {
-        $unfixable[] = $name;
-      }
-    }
-    if (is_object($ins)) {
-      $ins->close();
-    }
-    if (!empty($inserted)) {
-      drush_log(dt('These prefs rows were absent and have been recreated with core metadata and the deployed values: !list.',
-        array('!list' => implode(', ', $inserted))), 'ok');
-    }
-    $missing = $unfixable;
-  }
   $upd->close();
+
+  // ---- re-point half ----
+  // The six uri-bound and path-bound rows, through the helper the rename
+  // command calls too: one writer of that set, so the two flows cannot drift.
+  $repointed_prefs = _provision_txp_repoint_uri($mysqli, $uri, $site_path);
+  $missing = $repointed_prefs['missing'];
+  if (!empty($repointed_prefs['created'])) {
+    drush_log(dt('These prefs rows were absent and have been recreated with core metadata and the deployed values: !list.',
+      array('!list' => implode(', ', $repointed_prefs['created']))), 'ok');
+  }
 
   // Which contact/mail metadata did the copy actually inherit? Probed here,
   // while the connection is open, so the advisory below can name what is
-  // really set instead of firing on every single copy.
+  // really set instead of firing on every single copy. Only a 'clone' is
+  // probed: it is the one class that rewrites contact data, so it is the only
+  // class where anything still set is a leftover. On a rename or an upgrade
+  // the same addresses belong to the same owner and finding them is the
+  // expected, healthy outcome -- an advisory row there would be noise.
   $inherited = array();
-  if (!$is_restore) {
+  if ($is_clone) {
     $probe = array('publisher_email', 'smtp_from', 'smtp_host', 'smtp_user');
     foreach ($probe as $pref_name) {
       $rs = $mysqli->query("SELECT val FROM txp_prefs WHERE name = '" . $mysqli->real_escape_string($pref_name) . "'");
@@ -282,7 +179,7 @@ try {
         $inherited[] = $pref_name;
       }
     }
-    if ($table_exists($mysqli, 'txp_users')) {
+    if (_provision_txp_table_exists($mysqli, 'txp_users')) {
       // Anything that is neither empty nor the copy's own address is, by
       // definition, an address the copy did not get from this deploy.
       $rs = $mysqli->query("SELECT COUNT(*) FROM txp_users WHERE email <> '' AND email <> '" . $mysqli->real_escape_string($client_email) . "'");
@@ -311,6 +208,10 @@ else {
   if ($is_clone) {
     drush_log(dt('Deployed TXP copy re-pointed at !uri; blog_uid + user nonces regenerated, contact data pointed at the copy, mail settings back to defaults, tokens/logs/nonces truncated.', array('!uri' => $uri)), 'ok');
   }
+  elseif ($is_same_identity) {
+    drush_log(dt('Deployed TXP site re-pointed at !uri (deploy class: !class — same publication, new name); user nonces rotated and tokens/logs/nonces truncated, while blog_uid, image ids and every contact address are kept.',
+      array('!uri' => $uri, '!class' => $deploy_class)), 'ok');
+  }
   else {
     drush_log(dt('Deployed TXP site re-pointed at !uri (deploy class: !class); user nonces rotated, tokens/logs/nonces truncated; identity and contact data left as they were.',
       array('!uri' => $uri, '!class' => $deploy_class)), 'ok');
@@ -323,12 +224,16 @@ else {
   // their shipped defaults, which is what a fresh install would carry -- so
   // this probe should come back empty and simply confirm it. It stays as the
   // defensive half: if something IS still set, say so in a colour that draws
-  // the eye without claiming the deploy went wrong.
-  if (!empty($inherited)) {
-    drush_log(dt('NOTE: the copy still carries contact metadata from the source (!list). Review it in the Preferences and Users panels before the copy sends mail.',
-      array('!list' => implode(', ', $inherited))), 'advisory');
-  }
-  else {
-    drush_log(dt('Contact metadata check: the copy carries no publisher/SMTP address and no inherited user email address.'), 'ok');
+  // the eye without claiming the deploy went wrong. A rename or an upgrade is
+  // not probed at all (nothing was rewritten there), so it must not be given
+  // this verdict either way.
+  if ($is_clone) {
+    if (!empty($inherited)) {
+      drush_log(dt('NOTE: the copy still carries contact metadata from the source (!list). Review it in the Preferences and Users panels before the copy sends mail.',
+        array('!list' => implode(', ', $inherited))), 'advisory');
+    }
+    else {
+      drush_log(dt('Contact metadata check: the copy carries no publisher/SMTP address and no inherited user email address.'), 'ok');
+    }
   }
 }

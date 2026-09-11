@@ -46,6 +46,68 @@ function provision_txp_drush_init() {
 }
 
 /**
+ * Implements hook_drush_command().
+ *
+ * The TXP lifecycle verbs that have no shared analogue: the release upgrade
+ * (a move onto a newer-core platform plus Textpattern's own update chain, run
+ * on the COPY), the same-platform rename, and the deliberate same-URI cutover
+ * that chains the two. Registered HERE (the owned TXP layer), not in
+ * provision.drush.inc, so the whole feature stays additive.
+ *
+ * Hook functions live in the reversed-dotted command includes Drush resolves
+ * beside this file (provision-txp-upgrade => upgrade.txp.provision.inc); Drush
+ * COLLAPSES the commandfile prefix out of the validate/command/rollback hook
+ * names because the command name starts with it, while the pre/post variations
+ * keep the doubled form (includes/command.inc:405 in the Drush 8 fork).
+ */
+function provision_txp_drush_command() {
+  $items = array();
+  $items['provision-txp-upgrade'] = array(
+    'description' => 'Upgrade a Textpattern site to a newer core release as a NEW site on a newer Textpattern platform (copy-preserving: the source keeps serving untouched; the copy runs the CMS update chain).',
+    'arguments' => array(
+      '@new_site' => dt('The Drush alias of the new site (a new, unused uri).'),
+      '@platform_name' => dt('The Drush alias of the target Textpattern platform; its core must be NEWER than the source site\'s database version.'),
+    ),
+    'options' => array(
+      'new_db_server' => dt('Optional db server alias for the copy.'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @txpsite provision-txp-upgrade @newsite @platform_txp' => 'Copy the site onto the newer Textpattern platform under the new uri and run the update chain on the copy.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-txp-rename'] = array(
+    'description' => 'Rename a Textpattern site in place on its own platform: move the site directory, re-point every uri-bound surface and serve the new name. Identity (blog_uid, images, content) is preserved.',
+    'arguments' => array(
+      'new_name' => dt('The new uri for this site (a free name on the same platform).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @txpsite provision-txp-rename new.example' => 'Serve this site at the new uri and retire the old one.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  $items['provision-txp-cutover'] = array(
+    'description' => 'Make this Textpattern site answer at a domain currently held by another site (typically its upgrade source): retire that site (backup first), then rename this site to the freed domain.',
+    'arguments' => array(
+      'target_domain' => dt('The domain to take over (usually the upgrade source\'s original domain).'),
+    ),
+    'options' => array(
+      'cutover_source' => dt('Context name of the site currently holding the domain (resolved by the frontend at execution time; omitted when the domain is free).'),
+      'cutover_platform_nid' => dt('Frontend node id of this site\'s platform (accepted for frontend parity; the rename leg moves no platform).'),
+      'cutover_db_server_nid' => dt('Frontend node id of this site\'s db server (accepted for frontend parity; the rename leg moves no database).'),
+    ),
+    'allow-additional-options' => TRUE,
+    'examples' => array(
+      'drush @new.example provision-txp-cutover example.tld' => 'Retire the site at example.tld (backed up first) and rename this site to it.',
+    ),
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT,
+  );
+  return $items;
+}
+
+/**
  * Implements hook_bootstrap_candidates().
  *
  * The BackdropBoot pattern: the boot class ships HERE (zero drush-fork
@@ -80,6 +142,28 @@ function provision_txp_drush_help($section) {
       return dt('The platform ships no sites/site1 multisite skeleton; cannot materialise the site tree.');
     case 'error:PROVISION_TXP_SITES_EXIST' :
       return dt('Textpattern sites still exist on this platform; delete them first.');
+    case 'error:PROVISION_TXP_UPGRADE_BAD_SOURCE' :
+      return dt('The source of a Textpattern upgrade must be a Textpattern site context.');
+    case 'error:PROVISION_TXP_UPGRADE_BAD_TARGET' :
+      return dt('The target of a Textpattern upgrade must be a Textpattern platform carrying a newer core, with the new uri free on it.');
+    case 'error:PROVISION_TXP_UPGRADE_VERSION_UNREADABLE' :
+      return dt('The source site database carries no readable version preference; the update chain would replay every historical step.');
+    case 'error:PROVISION_TXP_UPGRADE_VERSION_TOO_OLD' :
+      return dt('The source site is older than the supported upgrade floor (4.7.2).');
+    case 'error:PROVISION_TXP_UPGRADE_LAYOUT' :
+      return dt('The source site is not laid out as a multisite site the update chain can be run against safely.');
+    case 'error:PROVISION_TXP_UPGRADE_CUSTOM_STEPS' :
+      return dt('The target core carries third-party post-update scripts; they are not part of a supported upgrade.');
+    case 'error:PROVISION_TXP_UPGRADE_CHAIN_FAILED' :
+      return dt('Textpattern\'s own update chain failed on the copy.');
+    case 'error:PROVISION_TXP_UPGRADE_STRUCTURE' :
+      return dt('The upgraded copy\'s schema does not carry every table, column and index the target core declares.');
+    case 'error:PROVISION_TXP_RENAME_BAD_NAME' :
+      return dt('The new uri for a Textpattern rename must be a free, plausible host name on the same platform.');
+    case 'error:PROVISION_TXP_RENAME_FAILED' :
+      return dt('Could not rename the Textpattern site.');
+    case 'error:PROVISION_TXP_CLONE_VERSION_MISMATCH' :
+      return dt('Clone requires the same Textpattern release on both sides; use the Upgrade task to move a site onto a newer core.');
   }
 }
 
@@ -171,19 +255,29 @@ function _provision_txp_site_exists() {
 /**
  * Resolve the Textpattern core version string (e.g. "4.9.1").
  *
- * Parses $thisversion out of the shared core's lib/constants.php -- a codebase
- * fact, no DB and no CMS bootstrap needed, valid for platform contexts.
+ * Parses $thisversion out of the shared core -- a codebase fact, no DB and no
+ * CMS bootstrap needed, valid for platform contexts. The 4.9 line declares it
+ * in lib/constants.php; the 4.8 line (an adopted site's core, or an older
+ * platform staged as an upgrade source) declares it in textpattern/index.php,
+ * so that file is read when constants.php carries no version.
  */
 function _provision_txp_get_version($root = NULL) {
   if (is_null($root)) {
     $root = d()->root;
   }
   $version = '';
-  $constants = $root . '/textpattern/lib/constants.php';
-  if (is_readable($constants)) {
-    $data = file_get_contents($constants);
+  $candidates = array(
+    $root . '/textpattern/lib/constants.php',
+    $root . '/textpattern/index.php',
+  );
+  foreach ($candidates as $file) {
+    if (!is_readable($file)) {
+      continue;
+    }
+    $data = file_get_contents($file);
     if (preg_match("/\\\$thisversion\\s*=\\s*'([^']+)'/", $data, $match)) {
       $version = $match[1];
+      break;
     }
   }
   return $version;
@@ -243,6 +337,311 @@ function _provision_txp_drushrc_creds($drushrc) {
     }
   }
   return $creds;
+}
+
+/**
+ * Does this table exist in the connected database?
+ *
+ * A probe that cannot fail OPEN: '_' is a single-character LIKE wildcard, so
+ * SHOW TABLES LIKE 'txp_token' can match more than one table and a
+ * num_rows === 1 test would silently skip the work the caller gates on it.
+ */
+function _provision_txp_table_exists($mysqli, $table) {
+  $stmt = $mysqli->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+  $stmt->bind_param('s', $table);
+  $stmt->execute();
+  $stmt->bind_result($count);
+  $stmt->fetch();
+  $stmt->close();
+  return (int) $count === 1;
+}
+
+/**
+ * Clear the three session-bearing tables.
+ *
+ * Shared by the deploy engine and the rename command. txp_token, txp_log and
+ * txp_discuss_nonce are stale at best and live-and-dangerous at worst on any
+ * site that has just moved; nothing in them is content. blog_uid, txp_image
+ * ids and every AUTO_INCREMENT are untouched: identity and content are not
+ * what moves.
+ */
+function _provision_txp_truncate_sessions($mysqli, $prefix = '') {
+  foreach (array('txp_token', 'txp_log', 'txp_discuss_nonce') as $name) {
+    $table = $prefix . $name;
+    if (_provision_txp_table_exists($mysqli, $table)) {
+      $mysqli->query("TRUNCATE TABLE `" . $mysqli->real_escape_string($table) . "`");
+    }
+  }
+}
+
+/**
+ * Rotate every user's session nonce; returns the number of rows rotated.
+ *
+ * A live login cookie authenticates against the STORED nonce (txp_auth.php),
+ * so a site that now answers at another name -- or a copy of it that answers
+ * anywhere at all -- must invalidate every cookie minted against the old one.
+ * Passwords are not touched: the nonce is the session salt, not the secret.
+ */
+function _provision_txp_rotate_nonces($mysqli, $prefix = '') {
+  $users = $prefix . 'txp_users';
+  if (!_provision_txp_table_exists($mysqli, $users)) {
+    return 0;
+  }
+  $quoted = '`' . $mysqli->real_escape_string($users) . '`';
+  $rs = $mysqli->query("SELECT user_id FROM " . $quoted);
+  if ($rs === FALSE) {
+    return 0;
+  }
+  $ids = array();
+  while ($row = $rs->fetch_row()) {
+    $ids[] = (int) $row[0];
+  }
+  $rotated = 0;
+  $stmt = $mysqli->prepare("UPDATE " . $quoted . " SET nonce = ? WHERE user_id = ?");
+  foreach ($ids as $id) {
+    $nonce = md5(uniqid(mt_rand(), TRUE));
+    $stmt->bind_param('si', $nonce, $id);
+    $stmt->execute();
+    $rotated++;
+  }
+  $stmt->close();
+  return $rotated;
+}
+
+/**
+ * Re-point every uri-bound and path-bound preference at THIS site.
+ *
+ * Shared by the deploy engine (clone/restore/rename/upgrade) and the rename
+ * command, which must produce byte-identical results: a site that answers at a
+ * new name or from a new directory has exactly these six rows to move, and two
+ * writers drifting apart is how one of them silently stops moving a row.
+ *
+ * A missing row updates nothing and is NOT an error to mysqli; Textpattern's
+ * checkPrefsIntegrity() would then recreate it from defaults on the next admin
+ * login -- and the siteurl default is the ADMIN hostname, i.e. the site would
+ * start composing links to the wrong host. Missing rows are therefore created
+ * here with core's own metadata (core.prefs: type, event, html, position;
+ * collection and user_name are '' for all six, which is what makes them global
+ * prefs rather than per-user overrides).
+ *
+ * Returns array('created' => array(), 'missing' => array()) -- 'missing' being
+ * the rows that could be neither updated nor created. The caller logs; this
+ * helper never writes to the task log, so both callers keep their own wording.
+ */
+function _provision_txp_repoint_uri($mysqli, $uri, $site_path, $prefix = '') {
+  $out = array('created' => array(), 'missing' => array());
+  $prefs = array(
+    'siteurl' => $uri,
+    'path_to_site' => $site_path . '/public',
+    'file_base_path' => $site_path . '/public/files',
+    'tempdir' => $site_path . '/tmp',
+    // Source-bound and PHP is include()d from it on every public request.
+    'plugin_cache_dir' => '',
+    // Never inherit a debug/testing status: it publishes trace + SQL detail.
+    'production_status' => 'live',
+  );
+  $pref_meta = array(
+    'siteurl' => array(0, 'site', 'text_input', 40),
+    'path_to_site' => array(2, 'publish', 'text_input', 0),
+    'file_base_path' => array(0, 'admin', 'text_input', 40),
+    'tempdir' => array(0, 'admin', 'text_input', 80),
+    'plugin_cache_dir' => array(0, 'admin', 'text_input', 100),
+    'production_status' => array(0, 'site', 'prod_levels', 80),
+  );
+  $table = $prefix . 'txp_prefs';
+  $quoted = '`' . $mysqli->real_escape_string($table) . '`';
+
+  $upd = $mysqli->prepare("UPDATE " . $quoted . " SET val = ? WHERE name = ?");
+  $missing = array();
+  foreach ($prefs as $name => $val) {
+    $upd->bind_param('ss', $val, $name);
+    $upd->execute();
+    if ($mysqli->affected_rows === 0) {
+      $rs = $mysqli->query("SELECT COUNT(*) FROM " . $quoted . " WHERE name = '" . $mysqli->real_escape_string($name) . "'");
+      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
+      if ((int) $row[0] === 0) {
+        $missing[] = $name;
+      }
+    }
+  }
+
+  if (!empty($missing)) {
+    // A schema this block does not understand (an adopted site whose
+    // txp_prefs predates the collection column) must degrade to the caller's
+    // report, never fail: mysqli throws on a statement that will not prepare.
+    $ins = NULL;
+    try {
+      $ins = $mysqli->prepare("INSERT INTO " . $quoted . " (name, val, type, event, collection, html, position, user_name) VALUES (?, ?, ?, ?, '', ?, ?, '')");
+    }
+    catch (Exception $e) {
+      $ins = NULL;
+    }
+    $unfixable = array();
+    foreach ($missing as $name) {
+      if (!isset($pref_meta[$name]) || !is_object($ins)) {
+        $unfixable[] = $name;
+        continue;
+      }
+      $val = $prefs[$name];
+      $type = (int) $pref_meta[$name][0];
+      $event = $pref_meta[$name][1];
+      $html = $pref_meta[$name][2];
+      $position = (int) $pref_meta[$name][3];
+      try {
+        $ins->bind_param('ssissi', $name, $val, $type, $event, $html, $position);
+        $ins->execute();
+      }
+      catch (Exception $e) {
+        // Swallowed on purpose: the existence test below is the verdict. A row
+        // created in the meantime (TXP's integrity check racing this helper)
+        // fails the INSERT on the primary key and is still exactly the state
+        // this block wants.
+      }
+      // Re-assert the value whatever the INSERT did.
+      $upd->bind_param('ss', $val, $name);
+      $upd->execute();
+      $rs = $mysqli->query("SELECT COUNT(*) FROM " . $quoted . " WHERE name = '" . $mysqli->real_escape_string($name) . "'");
+      $row = ($rs !== FALSE) ? $rs->fetch_row() : array(0);
+      if ((int) $row[0] > 0) {
+        $out['created'][] = $name;
+      }
+      else {
+        $unfixable[] = $name;
+      }
+    }
+    if (is_object($ins)) {
+      $ins->close();
+    }
+    $missing = $unfixable;
+  }
+  $upd->close();
+  $out['missing'] = $missing;
+  return $out;
+}
+
+/**
+ * The running site context's db credentials, ready for a mysqli connect.
+ *
+ * The same five values every TXP engine reads (install/verify/deploy), in one
+ * place: the persisted values are urlencoded, so they are decoded here and
+ * never re-decoded by the caller.
+ */
+function _provision_txp_site_creds() {
+  _provision_txp_ensure_db_creds_loaded();
+  return array(
+    'db_user' => urldecode(drush_get_option('db_user', '', 'site')),
+    'db_passwd' => urldecode(drush_get_option('db_passwd', '', 'site')),
+    'db_host' => drush_get_option('db_host', 'localhost', 'site'),
+    'db_port' => drush_get_option('db_port', '', 'site'),
+    'db_name' => drush_get_option('db_name', '', 'site'),
+  );
+}
+
+/**
+ * The same five values read out of ANOTHER site's persisted drushrc.php.
+ *
+ * For the flows that must act on a site which is not the running context (the
+ * upgrade copy, whose credentials must never be written into this process's
+ * 'site' context -- that context still holds the SOURCE's, and a rollback
+ * reading it would drop the source's database).
+ */
+function _provision_txp_creds_from_drushrc($drushrc) {
+  $raw = _provision_txp_drushrc_creds($drushrc);
+  if (empty($raw['db_name']) || empty($raw['db_user'])) {
+    return array();
+  }
+  return array(
+    'db_user' => urldecode($raw['db_user']),
+    'db_passwd' => isset($raw['db_passwd']) ? urldecode($raw['db_passwd']) : '',
+    'db_host' => isset($raw['db_host']) && $raw['db_host'] !== '' ? $raw['db_host'] : 'localhost',
+    'db_port' => isset($raw['db_port']) ? $raw['db_port'] : '',
+    'db_name' => $raw['db_name'],
+  );
+}
+
+/**
+ * Open a mysqli connection to a TXP site database, or return FALSE.
+ *
+ * The layer's DB idiom in one function: exception mode (so a dead connection
+ * is never a silently FALSE query handle), utf8mb4, and the driver message
+ * handed back through $error for the caller to phrase. Bootstrap-free -- no
+ * CMS code and no drush bootstrap is involved in any TXP DB read.
+ */
+function _provision_txp_db_connect($creds, &$error) {
+  $error = '';
+  if (empty($creds['db_name']) || empty($creds['db_user'])) {
+    $error = dt('no database credentials');
+    return FALSE;
+  }
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+  try {
+    $mysqli = mysqli_init();
+    $mysqli->real_connect(
+      $creds['db_host'],
+      $creds['db_user'],
+      $creds['db_passwd'],
+      $creds['db_name'],
+      empty($creds['db_port']) ? 3306 : (int) $creds['db_port']
+    );
+    $mysqli->set_charset('utf8mb4');
+  }
+  catch (Exception $e) {
+    $error = $e->getMessage();
+    return FALSE;
+  }
+  return $mysqli;
+}
+
+/**
+ * The Textpattern version recorded in a site's database, or '' when absent.
+ *
+ * The global 'version' pref (user_name = '') is what Textpattern's own update
+ * chain compares against the codebase's $thisversion, so it -- never the
+ * platform's core version -- is the site's real schema level.
+ */
+function _provision_txp_db_version($mysqli, $prefix = '') {
+  $table = $prefix . 'txp_prefs';
+  if (!_provision_txp_table_exists($mysqli, $table)) {
+    return '';
+  }
+  $version = '';
+  $result = $mysqli->query("SELECT val FROM `" . $mysqli->real_escape_string($table) . "` WHERE name = 'version' AND user_name = ''");
+  if ($result !== FALSE && ($row = $result->fetch_row())) {
+    $version = trim((string) $row[0]);
+  }
+  return $version;
+}
+
+/**
+ * The table prefix a site's config.php declares, '' when it declares none.
+ *
+ * Regex, never an include: config.php opens a database connection at include
+ * time. The provision settings writer always emits an empty prefix, but an
+ * adopted site may carry one and every schema read has to honour it.
+ *
+ * The value is the one thing in this layer that becomes part of an SQL
+ * identifier while coming from a file rather than from code, and identifiers
+ * are backtick-quoted -- which real_escape_string does not neutralise. So the
+ * seam that reads it is also the seam that refuses anything but a plain
+ * identifier: on a mismatch the task is failed and '' is returned, so no caller
+ * can interpolate the value it was refused.
+ */
+function _provision_txp_config_prefix($config_php) {
+  if (!is_readable($config_php)) {
+    return '';
+  }
+  $body = file_get_contents($config_php);
+  if ($body !== FALSE
+    && preg_match('/\\$txpcfg\\s*\\[\\s*[\'"]table_prefix[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+    if (!preg_match('/^[A-Za-z0-9_]*$/', $m[1])) {
+      drush_set_error('PROVISION_TXP_BAD_PREFIX',
+        dt('The table prefix declared in !file is not a plain identifier ("!prefix"); every query this layer builds from it would name something else. Correct table_prefix before running this task.',
+        array('!file' => $config_php, '!prefix' => $m[1])));
+      return '';
+    }
+    return $m[1];
+  }
+  return '';
 }
 
 /**

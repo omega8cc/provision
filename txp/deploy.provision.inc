@@ -65,6 +65,21 @@ function drush_provision_txp_pre_provision_deploy($backup_file) {
     ->status();
 
   if ($extracted) {
+    // Before anything writes into the extracted tree: a copy landing at a new
+    // uri must not inherit the source's file-store link as its private/ (see
+    // the helper).
+    $deploy_class = drush_get_option('deploy_class', '');
+    if (!is_string($deploy_class) || $deploy_class === '') {
+      $old_uri = drush_get_option('old_uri', '');
+      $deploy_class = (drush_get_option('is_restore', FALSE) || ($old_uri !== '' && $old_uri === d()->uri)) ? 'restore' : 'clone';
+    }
+    if ($deploy_class !== 'restore') {
+      _provision_txp_deploy_materialise_private(drush_get_option('extract_path'));
+      if (drush_get_error()) {
+        return FALSE;
+      }
+    }
+
     // Web-group access for the per-site writable set of the extracted tree.
     $web_group = d('@server_master')->web_group;
     foreach (array('/public/files', '/public/images', '/public/themes', '/admin/plugins', '/tmp', '/private') as $sub) {
@@ -186,4 +201,85 @@ function drush_provision_txp_post_provision_deploy() {
       }
     }
   }
+}
+
+/**
+ * Give the extracted copy a private/ directory of its own.
+ *
+ * The site archive preserves symlinks on purpose (see the file header of
+ * txp/backup.provision.inc), so a source whose private/ was moved into the
+ * per-account static file store and replaced by a link arrives here as that
+ * same ABSOLUTE link, naming the SOURCE's store. Everything the deploy does
+ * next then writes through it: the web-group pass follows it, and the settings
+ * writer renders THIS copy's database credentials into the source's
+ * private/config.php -- after which the source reads the copy's database and
+ * the two sites share one private directory.
+ *
+ * So a private/ that is a link resolving OUTSIDE the tree being deployed is
+ * replaced by a real directory of this site's own, carrying the regular files
+ * the link pointed at when they are readable; an unreadable store still leaves
+ * a correct empty directory, because the settings writer re-renders config.php
+ * a few lines further down. A link that resolves inside the extracted tree is
+ * the site's own and is left alone.
+ *
+ * Never called for 'restore': a restore re-deploys the same site at the same
+ * uri, so the archived link names that site's own store and must survive.
+ */
+function _provision_txp_deploy_materialise_private($extract_path) {
+  $private = $extract_path . '/private';
+  if (!is_link($private)) {
+    return;
+  }
+  $extract_real = realpath($extract_path);
+  $target = realpath($private);
+  if ($target !== FALSE && $extract_real !== FALSE
+    && strpos($target . '/', $extract_real . '/') === 0) {
+    return;
+  }
+  $named = ($target === FALSE) ? dt('an unresolvable path') : $target;
+
+  // Gathered before the link goes. Regular files only: a nested link would
+  // point out of the copy again, and a directory under private/ is not part of
+  // what this layer puts there.
+  $carry = array();
+  if ($target !== FALSE && is_dir($target)) {
+    $handle = @dir($target);
+    if (!empty($handle)) {
+      while (($entry = $handle->read()) !== FALSE) {
+        if ($entry === '.' || $entry === '..') {
+          continue;
+        }
+        $file = $target . '/' . $entry;
+        if (is_file($file) && !is_link($file) && is_readable($file)) {
+          $carry[$entry] = $file;
+        }
+      }
+      $handle->close();
+    }
+  }
+
+  provision_file()->unlink($private)
+    ->fail('Could not remove <code>@path</code>');
+  clearstatcache();
+  if (is_link($private) || file_exists($private)) {
+    return drush_set_error('PROVISION_TXP_DEPLOY_PRIVATE_STORE',
+      dt('!path is a link into !target and could not be replaced. Deploying through it would write this copy\'s database credentials into another site\'s file store.',
+      array('!path' => $private, '!target' => $named)));
+  }
+  provision_file()->mkdir($private)
+    ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+  if (!is_dir($private)) {
+    return;
+  }
+  foreach ($carry as $name => $file) {
+    provision_file()->copy($file, $private . '/' . $name)
+      ->fail('Could not copy <code>@source</code> to <code>@destination</code>');
+  }
+  provision_file()->chgrp($private, d('@server_master')->web_group)
+    ->fail('Could not change group ownership of <code>@path</code> to @gid');
+  provision_file()->chmod($private, 0750)
+    ->fail('Could not change permissions of <code>@path</code> to @perm');
+
+  drush_log(dt('Materialised private/ for this copy: the archive carried a link into !target, replaced here by a directory of this site\'s own with !n file(s) carried over.',
+    array('!target' => $named, '!n' => count($carry))), 'ok');
 }
