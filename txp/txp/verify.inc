@@ -70,11 +70,30 @@ try {
     $stmt->bind_result($have);
     $found = $stmt->fetch();
     $stmt->free_result();
-    if ($found && $have !== $want) {
-      $upd->bind_param('ss', $want, $name);
-      $upd->execute();
+    if (!$found || $have === $want) {
+      continue;
+    }
+    // Two different strings can name the SAME directory: a platform root
+    // reached through a symlink stores one spelling while the canonical value
+    // composes the other, and a literal string test then "heals" the row on
+    // every verify, forever -- a permanent yellow task on a site that is not
+    // drifted at all. Compare the resolved paths whenever both sides exist.
+    $have_real = @realpath((string) $have);
+    $want_real = @realpath($want);
+    if ($have_real !== FALSE && $want_real !== FALSE && $have_real === $want_real) {
+      continue;
+    }
+    $upd->bind_param('ss', $want, $name);
+    if ($upd->execute() === FALSE) {
+      drush_log(dt('Could not heal pref !name: "!have" is outside the backup scope and the update failed. Runtime writes stay outside every backup until it is corrected.',
+        array('!name' => $name, '!have' => $have)), 'warning');
+    }
+    else {
+      // A completed self-heal is a success, not a warning: verify exists to
+      // fix exactly this, and colouring the task yellow for doing its job
+      // teaches operators to ignore the colour.
       drush_log(dt('Healed pref !name: "!have" -> "!want" (backup-scope law).',
-        array('!name' => $name, '!have' => $have, '!want' => $want)), 'warning');
+        array('!name' => $name, '!have' => $have, '!want' => $want)), 'ok');
     }
   }
   $stmt->close();

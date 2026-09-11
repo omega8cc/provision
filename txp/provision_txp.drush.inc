@@ -362,7 +362,9 @@ function _provision_txp_create_directories() {
     if (is_dir($path) && !is_link($path)) {
       // A dereferenced restore baked a real copy; rebuild the link.
       _provision_recursive_delete($path);
-      drush_log(dt('Removed dereferenced copy at @path (symlink expected).', array('@path' => $path)), 'warning');
+      // 'ok': the copy is gone and the link is rebuilt two lines down. If the
+      // rebuild does not happen, the ->fail() below is what reports it.
+      drush_log(dt('Removed dereferenced copy at @path (symlink expected).', array('@path' => $path)), 'ok');
     }
     elseif (is_file($path) && !is_link($path)) {
       provision_file()->unlink($path);
@@ -470,7 +472,11 @@ function _provision_txp_mint_login_link() {
     $php_bin, $shim, $txpath, $config_php, 'admin');
   $output = (array) drush_shell_exec_output();
   if (!$result || empty($output)) {
-    drush_log(dt('Token shim failed: !out', array('!out' => implode("\n", $output))), 'warning');
+    // 'advisory': visible, but it must not colour the task. Every caller
+    // handles the FALSE -- install substitutes a plain admin link in the
+    // welcome mail, and reset-login escalates one frame up, where the failure
+    // really is the task's result.
+    drush_log(dt('Token shim failed: !out', array('!out' => implode("\n", $output))), 'advisory');
     return FALSE;
   }
   // The shim prints exactly one line: CONFIRM=<token>
@@ -481,7 +487,7 @@ function _provision_txp_mint_login_link() {
     }
   }
   if ($confirm === '') {
-    drush_log(dt('Token shim returned no confirmation code: !out', array('!out' => implode("\n", $output))), 'warning');
+    drush_log(dt('Token shim returned no confirmation code: !out', array('!out' => implode("\n", $output))), 'advisory');
     return FALSE;
   }
   return 'https://' . d()->uri . '/' . PROVISION_TXP_ADMIN_PATH . '/index.php?lang=en-gb&confirm=' . rawurlencode($confirm);

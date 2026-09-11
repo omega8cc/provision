@@ -47,7 +47,13 @@ function drush_provision_txp_pre_provision_verify() {
         array('@path' => d()->root)));
     }
     if (!is_dir(d()->root . '/sites/site1')) {
-      drush_log(dt('Platform ships no sites/site1 skeleton; site installs on it will refuse (use the .tar.gz/.tar.xz archives -- the .zip has no /sites).'), 'warning');
+      // A platform without the skeleton can host no NEW site. Whether that is
+      // a fault or merely a limit depends on what it already carries: with no
+      // sites on it the platform can do nothing at all (warning), while one
+      // still serving sites is verifying perfectly well and only has installs
+      // closed to it (advisory -- visible, but it must not colour the task).
+      $level = provision_txp_find_sites() ? 'advisory' : 'warning';
+      drush_log(dt('Platform ships no sites/site1 skeleton; site installs on it will refuse (use the .tar.gz/.tar.xz archives -- the .zip has no /sites).'), $level);
     }
   }
 }
@@ -74,6 +80,12 @@ function drush_provision_txp_provision_verify() {
     // detector accepted but whose version could not be read says so.
     $txp_version = _provision_txp_get_version();
     drush_set_option('txp', ($txp_version !== '' ? $txp_version : 'unknown'), 'drupal');
+
+    // Publish the skeleton condition as STATE, not only as a log line: a log
+    // row is read once, when the task runs, while the front end needs to know
+    // at any later moment that this platform cannot take a new site (and the
+    // pre-hook row above is deliberately not always a warning).
+    drush_set_option('txp_skeleton_missing', !is_dir(d()->root . '/sites/site1'), 'drupal');
 
     provision_drupal_push_site();
   }

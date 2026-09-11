@@ -113,7 +113,10 @@ function drush_provision_txp_provision_restore($restore_file) {
     d()->site_enabled = TRUE;
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
-    drush_log(dt('Restore failed; the original site tree, credentials and vhost have been put back.'), 'warning');
+    // 'ok': this row reports a SUCCESSFUL recovery. The deploy child's own
+    // error is what makes the task red -- levelling the recovery line as a
+    // warning only blurred which half of the task actually went wrong.
+    drush_log(dt('Restore failed; the original site tree, credentials and vhost have been put back.'), 'ok');
   }
 
   // Always clear the flag, success or failure (a leftover one silently ends
