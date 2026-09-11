@@ -89,6 +89,12 @@ function drush_provision_grav_provision_verify() {
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
+    // Verify is the operator's heal action: hand every web-owned entry (the
+    // FPM-minted secrets, atomically rewritten account files, cache subdirs)
+    // back to the instance user first, then the unprivileged repair below can
+    // actually touch them.
+    _provision_grav_root_heal(d()->site_path);
+
     // Capsule tree/perms repair + .env re-render -- always runs (verify is the
     // operator's heal action).
     _provision_grav_create_directories();

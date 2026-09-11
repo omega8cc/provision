@@ -155,6 +155,17 @@ function drush_provision_grav_provision_backup() {
 
   $backup_mode = provision_backup_mode_resolve();
 
+  // Anything the instance user cannot read is a file the web tier created
+  // (a key minted before the seeder ran, an account file rewritten by the
+  // login plugin). Hand the tree back through the root heal before tar
+  // walks it, so the archive is complete and the SECRETS row below is left
+  // for a genuine fault.
+  if (drush_shell_exec('find . -type f ! -readable 2>/dev/null')) {
+    if (count(array_filter((array) drush_shell_exec_output()))) {
+      _provision_grav_root_heal(d()->site_path);
+    }
+  }
+
   // Tag the excluded directories with exclude.tag markers for tar, per
   // existing directory only; stale tags are cleared first (a leftover tag
   // makes tar skip that directory in every future backup).
@@ -173,7 +184,12 @@ function drush_provision_grav_provision_backup() {
     }
   }
   if (!empty($failed_tags)) {
-    drush_log(dt('Could not write the backup exclusion tags (@tags); the archive may include directories that are normally excluded', array('@tags' => implode(', ', $failed_tags))), 'warning');
+    // An archive that silently carries the volatile trees is not the one
+    // the operator asked for; a tag state this user cannot write is a real
+    // fault on the capsule, so fail the task instead of colouring it.
+    chdir($olddir);
+    return drush_set_error('PROVISION_BACKUP_FAILED',
+      dt('Could not write the backup exclusion tags (@tags); the capsule needs a Verify before it can be backed up.', array('@tags' => implode(', ', $failed_tags))));
   }
 
   // Strip stray special files at the source (a non-root tar -pxf on
@@ -286,14 +302,18 @@ function drush_provision_grav_provision_backup() {
       $stale_tags[] = $exclusion_tag;
     }
   }
-  if (!empty($stale_tags)) {
-    drush_log(dt('Could not remove the backup exclusion tags (@tags) - a stale tag would silently shrink later backups; remove exclude.tag by hand', array('@tags' => implode(', ', $stale_tags))), 'warning');
-  }
-
   $size = filesize($backup_file);
   drush_set_option('backup_file_size', $size);
 
   chdir($olddir);
+
+  if (!empty($stale_tags)) {
+    // A leftover tag makes tar skip that directory in every later archive
+    // without a word; for a capsule that can be vendor/ -- a backup that
+    // restores a site that does not boot. This one goes UP, never down.
+    return drush_set_error('PROVISION_BACKUP_FAILED',
+      dt('Could not remove the backup exclusion tags (@tags); a stale tag would silently shrink every later backup -- remove exclude.tag by hand.', array('@tags' => implode(', ', $stale_tags))));
+  }
 
   if (!$result && !drush_get_option('force', false)) {
     drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up the Grav site capsule"));

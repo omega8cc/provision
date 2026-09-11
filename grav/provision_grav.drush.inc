@@ -135,6 +135,7 @@ function provision_grav_drush_engine_type_info() {
 function provision_grav_drush_engine_grav() {
   $engines = array();
   $engines['clear'] = array();
+  $engines['deploy'] = array();
   $engines['install'] = array();
   $engines['packages'] = array();
   $engines['verify'] = array();
@@ -281,28 +282,225 @@ function provision_grav_find_sites($root = NULL) {
  *
  * The web process creates cache subdirs at 0755 owned by the per-version web
  * user (FPM umask 022), and the CLI owner can neither delete their contents
- * nor chmod them -- a plain recursive delete leaves web-owned residue behind
- * (proven on the restore leg). Until the sudo fix-ownership scripts learn
- * foreign roots (the queued boa-*-src item), the honest fallback is a RENAME
- * out of the live tree into the instance backup path (rename needs only the
- * parent-dir write we do have), loudly labelled for cleanup.
+ * nor chmod them, so a plain recursive delete leaves web-owned residue
+ * behind (proven on the restore leg). The root heal (the sudo fix scripts,
+ * which know the capsule model) hands the whole tree back to the instance
+ * user first, so the delete then succeeds outright. Where the heal is
+ * unavailable or something still survives, the fallback is a RENAME out of
+ * the live tree into <backup_path>/pending-cleanup/ (rename needs only the
+ * parent-dir write we do have), reported in ONE row: the residue is a
+ * leftover of a completed task, not a failure of it, and the parked tree
+ * ages out with the account's backup retention sweep.
  */
 function _provision_grav_remove_tree_or_park($path, $label) {
+  if (!is_dir($path) || is_link($path)) {
+    return TRUE;
+  }
+  _provision_grav_root_heal($path);
+  _provision_grav_recursive_delete($path);
   if (!is_dir($path)) {
     return TRUE;
   }
-  _provision_recursive_delete($path);
-  if (!is_dir($path)) {
-    return TRUE;
+  $park_dir = d('@server_master')->backup_path . '/pending-cleanup';
+  if (!is_dir($park_dir)) {
+    @mkdir($park_dir, 0750);
   }
-  $park = d('@server_master')->backup_path . '/pending-cleanup-' . $label . '-' . date('Ymd.His');
+  $park = $park_dir . '/' . $label . '-' . date('Ymd.His');
   if (@rename($path, $park)) {
-    drush_log(dt('Could not fully delete @path (web-owned residue); PARKED at @park for root-side cleanup.',
-      array('@path' => $path, '@park' => $park)), 'warning');
+    drush_log(dt('Web-owned residue survived the delete of @path; parked at @park (removed by the backups retention sweep, or by hand).',
+      array('@path' => $path, '@park' => $park)), 'ok');
     return TRUE;
   }
   return drush_set_error('PROVISION_GRAV_CLEANUP_FAILED',
     dt('Could not delete or park @path; remove it by hand.', array('@path' => $path)));
+}
+
+/**
+ * Silent recursive delete: the shared helper logs a warning per inode it
+ * cannot remove, which on a web-owned cache tree is an unbounded cascade
+ * that colours the task for a condition the caller handles itself.
+ * Symlinks are unlinked, never followed.
+ */
+function _provision_grav_recursive_delete($path) {
+  $ok = TRUE;
+  if (is_dir($path) && !is_link($path)) {
+    $entries = @scandir($path);
+    if (is_array($entries)) {
+      foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..') {
+          continue;
+        }
+        $ok = _provision_grav_recursive_delete($path . '/' . $entry) && $ok;
+      }
+    }
+    return @rmdir($path) && $ok;
+  }
+  return @unlink($path);
+}
+
+/**
+ * Hand a capsule tree back to the instance user through the root fix scripts.
+ *
+ * The web tier writes into the capsule as the per-version FPM user (nonce
+ * key at 0600, account files, cache subdirs at 0755), and the instance user
+ * that runs every task is only a group member: it can neither read nor
+ * chmod nor delete those entries. The two sudo wrappers already know the
+ * capsule model and are granted NOPASSWD to every instance user; this is
+ * the same seam the Drupal platform verify uses for its own tree.
+ *
+ * Returns TRUE when both scripts ran clean, FALSE when one failed, NULL when
+ * the seam is unavailable (a non-BOA host, an account outside /data/disk,
+ * or a path this helper refuses to hand to a root tool).
+ */
+function _provision_grav_root_heal($path) {
+  $aegir_root = d('@server_master')->aegir_root;
+  if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
+    return NULL;
+  }
+  $ownership = '/usr/local/bin/fix-drupal-site-ownership.sh';
+  $permissions = '/usr/local/bin/fix-drupal-site-permissions.sh';
+  if (!is_file($ownership) || !is_file($permissions)) {
+    return NULL;
+  }
+  // Fail-closed validation before the value reaches a root tool: a real
+  // directory under this account's tree, one path component below a
+  // platform's sites/ directory (a capsule or its .restore/.original
+  // sibling), no traversal.
+  if (!is_string($path) || $path === '' || !is_dir($path) || is_link($path)
+    || strpos($path, '..') !== FALSE
+    || strpos($path, $aegir_root . '/') !== 0
+    || !preg_match('#/sites/[a-z0-9][a-z0-9._-]*$#i', $path)) {
+    return NULL;
+  }
+  $user = d('@server_master')->script_user;
+  $group = d('@server_master')->web_group;
+  if (empty($user) || empty($group)) {
+    return NULL;
+  }
+  $ok = drush_shell_exec('sudo --non-interactive %s --site-path=%s --script-user=%s --web-group=%s',
+    $ownership, $path, $user, $group);
+  if ($ok) {
+    $ok = drush_shell_exec('sudo --non-interactive %s --site-path=%s', $permissions, $path);
+  }
+  if ($ok) {
+    drush_log(dt('Ownership and modes of @path re-asserted through the root heal.', array('@path' => $path)), 'info');
+    return TRUE;
+  }
+  $output = implode("\n", (array) drush_shell_exec_output());
+  drush_log(dt('The root heal of @path failed: !out', array('@path' => $path, '!out' => $output)), 'warning');
+  return FALSE;
+}
+
+/**
+ * The per-site environment overlay directory, if the capsule has one.
+ *
+ * Grav resolves environment:// to user/env/<GRAV_ENVIRONMENT> when user/env
+ * exists on disk, else to user/<GRAV_ENVIRONMENT> (the 1.6 shape); .env
+ * pins GRAV_ENVIRONMENT to the site uri. Returns the existing directory or
+ * '' when the site carries no overlay (the stock capsule shape).
+ */
+function _provision_grav_env_dir($site_path, $uri) {
+  if (is_dir($site_path . '/user/env')) {
+    $candidate = $site_path . '/user/env/' . $uri;
+  }
+  else {
+    $candidate = $site_path . '/user/' . $uri;
+  }
+  return (is_dir($candidate) && !is_link($candidate)) ? $candidate : '';
+}
+
+/**
+ * The directory Grav reads config:// from for this capsule: the environment
+ * overlay's config/ when the overlay exists, else user/config. Both secret
+ * files (core nonce key, api plugin JWT secret) are keyed off it.
+ */
+function _provision_grav_config_dir($site_path, $uri) {
+  $env = _provision_grav_env_dir($site_path, $uri);
+  if ($env !== '' && is_dir($env . '/config')) {
+    return $env . '/config';
+  }
+  return $site_path . '/user/config';
+}
+
+/**
+ * Write one private-secret file in the shape Grav's own writers use.
+ *
+ * Grav mints user/config/security-private.php (CSRF nonce key, admin
+ * rate-limit hash) and the api plugin mints config/plugins/api-private.php
+ * (JWT signing secret) lazily from the FIRST process that needs them, which
+ * is the web tier: the file then lands owned by the per-version FPM user at
+ * an explicit 0600, unreadable by the instance user, so every backup skips
+ * it and every safety copy warns. Seeding it here, as the instance user,
+ * keeps the CLI owner on the file: 0660 with the web group so FPM reads it
+ * via the group, and both readers short-circuit on an existing non-empty
+ * file and never re-chmod. An existing file is left alone unless $rotate
+ * (a clone must not share the source's keys); an existing file this user
+ * cannot read is left for the root heal, never overwritten blind.
+ */
+function _provision_grav_seed_secret($file, $rotate = FALSE) {
+  if (!$rotate && is_file($file)) {
+    return is_readable($file) ? TRUE : NULL;
+  }
+  $dir = dirname($file);
+  if (!is_dir($dir)) {
+    if (!@mkdir($dir, 02770, TRUE)) {
+      return FALSE;
+    }
+    @chgrp($dir, d('@server_master')->web_group);
+  }
+  if (function_exists('random_bytes')) {
+    $value = bin2hex(random_bytes(32));
+  }
+  else {
+    $value = bin2hex(openssl_random_pseudo_bytes(32));
+  }
+  $contents = "<?php\n\n"
+    . "// Auto-generated private secret. Do NOT commit to version control.\n"
+    . "// Seeded by the hosting framework so the site owner can read it (backups);\n"
+    . "// the web tier reads it through the group. Delete to rotate.\n\n"
+    . 'return ' . var_export($value, TRUE) . ";\n";
+  $tmp = $file . '.provision-tmp';
+  if (@file_put_contents($tmp, $contents, LOCK_EX) === FALSE) {
+    return FALSE;
+  }
+  @chmod($tmp, 0660);
+  @chgrp($tmp, d('@server_master')->web_group);
+  if (!@rename($tmp, $file)) {
+    @unlink($tmp);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Seed the capsule's private secrets: the core nonce key always, the api
+ * plugin's JWT secret when the plugin is present. Runs on every install,
+ * deploy and verify (create_directories) so a rotation by deletion is
+ * re-seeded by the next task instead of by the web tier. With $rotate the
+ * files are replaced: the identity half of a clone.
+ */
+function _provision_grav_seed_secrets($site_path, $uri, $rotate = FALSE) {
+  $config = _provision_grav_config_dir($site_path, $uri);
+  $targets = array($config . '/security-private.php');
+  if (is_dir($site_path . '/user/plugins/api')) {
+    $targets[] = $config . '/plugins/api-private.php';
+  }
+  $ok = 0;
+  foreach ($targets as $file) {
+    $result = _provision_grav_seed_secret($file, $rotate);
+    if ($result === FALSE) {
+      drush_log(dt('Could not seed the private secret @file; the web tier will mint it on first use.',
+        array('@file' => $file)), 'warning');
+    }
+    elseif ($result === TRUE) {
+      $ok++;
+    }
+  }
+  if ($rotate && $ok === count($targets)) {
+    drush_log(dt('Rotated the private secrets of the copy (@n file(s)): it signs its own nonces and tokens.',
+      array('@n' => $ok)), 'ok');
+  }
+  return $ok;
 }
 
 /**
@@ -386,6 +584,11 @@ function _provision_grav_create_directories() {
   // AFTER the generic writable pass (which would re-widen them): the secret
   // subtrees drop their world bits (boa-grav D-008).
   _provision_grav_secure_secrets($site_path);
+
+  // The private secrets exist before the web tier ever needs them, owned by
+  // the instance user: a web-minted key is 0600 to the FPM user and every
+  // later backup would have to skip it.
+  _provision_grav_seed_secrets($site_path, d()->uri);
 
   _provision_grav_write_env();
 }
@@ -547,9 +750,21 @@ function _provision_grav_create_admin_account($username, $email) {
     '',
   );
   $yaml = $accounts . '/' . $username . '.yaml';
-  provision_file()->file_put_contents($yaml, implode("\n", $lines))
+  // The login plugin rewrites this file atomically from FPM (a reset token,
+  // a profile save), leaving it owned by the web user: the write below would
+  // then fail and the caller would hand out a password that does not work.
+  // Hand the tree back first; the heal is the operator's own verify action.
+  if (is_file($yaml) && !is_writable($yaml)) {
+    _provision_grav_root_heal($site_path);
+  }
+  $written = provision_file()->file_put_contents($yaml, implode("\n", $lines))
     ->succeed('Generated config file <code>@path</code>')
-    ->fail('Could not generate config file <code>@path</code>');
+    ->fail('Could not generate config file <code>@path</code>')
+    ->status();
+  if (!$written) {
+    return drush_set_error('PROVISION_GRAV_INSTALL_FAILED',
+      dt('Could not write the account file !yaml; run Verify on this site first.', array('!yaml' => $yaml)));
+  }
   $web_group = d('@server_master')->web_group;
   provision_file()->chgrp($yaml, $web_group);
   // 0660, not 0640: the login plugin WRITES here from FPM (reset tokens,
