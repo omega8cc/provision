@@ -274,10 +274,10 @@ function drush_provision_txp_rename($new_name = NULL) {
     ->fail('Failed to delete the old site configuration file');
   d()->service('http')->parse_configs();
   _provision_drupal_archive_static_store($old_uri, 'RENAME');
+  // The old name's own record only. The extra Drush aliases are not retired
+  // with it: they name the SITE, and the new context's provision-save above
+  // already rewrote their alias files to resolve at the new uri.
   drush_invoke_process('@none', 'provision-save', array($old_name), array('delete' => TRUE));
-  foreach (d()->drush_aliases as $alias) {
-    drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
-  }
   // The old context is gone; nothing may re-save it on the way out.
   drush_set_option('provision_save_config', FALSE);
 
@@ -341,6 +341,14 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
       $new_context->service('http')->delete_config('site');
       $new_context->service('http')->parse_configs();
     }
+  }
+
+  // The extra Drush aliases are the new context's now (its provision-save
+  // rewrote their files at the new uri) and the new context is being
+  // discarded, so they go with it -- before the old context is re-asserted,
+  // which mints them again pointing at the restored site.
+  foreach (d()->drush_aliases as $alias) {
+    drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
   }
 
   // Re-assert the old alias from its own persisted record (the no-option
