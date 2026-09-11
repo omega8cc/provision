@@ -95,13 +95,25 @@ function drush_provision_grav_upgrade($artefact = NULL) {
  *
  * Deliberately non-mutating. The capsule is upgraded IN PLACE, so there is no
  * copy to discard and no safe automatic reverse: a half-installed tree is
- * recovered from the pre-upgrade safety copy, which is registered in the
- * front end and restorable through the ordinary Restore task. Say exactly
- * that, at the level operator notes are logged at, and touch nothing.
+ * recovered from the pre-upgrade safety copy the pre hook took.
+ *
+ * Name that archive by its ON-DISK path. Registering it against the site node
+ * is the front end's post-task step, and a task that errored never reaches
+ * its post hooks, so the path is the only pointer that is true on every
+ * failure; the front end may still register it from the task rollback, which
+ * is why the Backups tab is offered as a possibility and not as the recovery.
+ * Say exactly that, at the level operator notes are logged at, and touch
+ * nothing.
  */
 function drush_provision_grav_upgrade_rollback($artefact = NULL) {
-  drush_log(dt('provision-grav-upgrade failed on !site. The capsule was not reverted automatically: the recovery is the "Pre-upgrade backup" registered on this site just before the install — restore it from the site\'s Backups tab. The capsule is left exactly as the failed install left it so that backup can be compared against it.',
-    array('!site' => d()->site_path)), 'advisory');
+  $archive = drush_get_option('backup_file', '');
+  if (!is_string($archive) || $archive === '') {
+    drush_log(dt('provision-grav-upgrade failed on !site. The capsule was not reverted automatically and is left exactly as the failed install left it. The pre-upgrade safety copy is the archive named in the backup rows above, under this account\'s backups directory.',
+      array('!site' => d()->site_path)), 'advisory');
+    return;
+  }
+  drush_log(dt('provision-grav-upgrade failed on !site. The capsule was not reverted automatically and is left exactly as the failed install left it, so it can be compared against the pre-upgrade safety copy at !archive. That archive is registered on the site, and listed on its Backups tab, when the task succeeds; on this path it may also appear there if the front end registers it from the task rollback. Restore it from the Backups tab when it is listed, and from the path above when it is not.',
+    array('!site' => d()->site_path, '!archive' => $archive)), 'advisory');
 }
 
 /**
