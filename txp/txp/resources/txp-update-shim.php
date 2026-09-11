@@ -28,7 +28,8 @@
  *    schema work but BEFORE the version pref is rewritten. That is a real
  *    outcome, not a crash: the caller reconciles the version row itself once it
  *    has proved the schema, and this shim's machine-readable tail is what tells
- *    it which case it is in.
+ *    it which case it is in. The throw only happens when the handler can pick
+ *    an output format, which is why an Accept header is announced below.
  *  - The step selection compares the DATABASE's version, so the chain is a
  *    no-op on a site already at the codebase version.
  *
@@ -80,6 +81,20 @@ define('MSG_ERROR', '[ERROR]');
 
 error_reporting(E_ALL);
 @ini_set('display_errors', '1');
+
+// The chain's error handler (updateErrorHandler) hands the diagnostic to
+// adminErrorHandler and throws afterwards -- but adminErrorHandler only ever
+// RETURNS when it can pick an output format, and it picks one by asking
+// http_accept_format(), i.e. by reading HTTP_ACCEPT. Under CLI that header does
+// not exist, no format matches, and adminErrorHandler ends in txp_die(): the
+// process dies inside the handler, the throw never happens, and the caller gets
+// no verdict at all. Announcing HTML restores the control flow this shim is
+// written for -- the diagnostic is echoed into the buffer below and the throw
+// reaches the catch. Set before any include: the function caches the parsed
+// header in a static on its first call.
+if (!isset($_SERVER['HTTP_ACCEPT']) || $_SERVER['HTTP_ACCEPT'] === '') {
+    $_SERVER['HTTP_ACCEPT'] = 'text/html';
+}
 
 // $txpcfg must land at GLOBAL scope: txplib_db.php reads it at include time
 // (PFX and the immediate connection), and _update.php reads
@@ -184,9 +199,40 @@ if (empty($txp_user)) {
     exit(128);
 }
 
+/**
+ * Read one marker pref straight from the still-open connection.
+ *
+ * The die path has no in-process globals worth trusting (the chain rewrites the
+ * rows and then the process ends inside someone else's handler), so the two
+ * markers the caller reconciles on are re-read from the database. A diagnostic
+ * raised while reading must not reach the chain's error handler, which throws:
+ * a swallowing handler holds the door for the duration.
+ */
+function txp_update_shim_marker($name)
+{
+    if (empty($GLOBALS['connected']) || !function_exists('safe_field')) {
+        return '';
+    }
+    $name = preg_replace('/[^a-z_]/', '', $name);
+    set_error_handler(function () {
+        return true;
+    });
+    $value = '';
+    try {
+        $value = (string) safe_field('val', 'txp_prefs', "name = '" . $name . "' AND user_name = ''");
+    } catch (\Throwable $e) {
+        $value = '';
+    }
+    restore_error_handler();
+
+    return $value;
+}
+
 // A fatal inside the chain would otherwise exit silently with the output buffer
 // discarded; this hands the caller the same machine-readable verdict every
-// other exit path produces.
+// other exit path produces -- including the two markers, re-read from the
+// database, because a chain that died after its schema work still leaves a
+// reconcilable state and reporting it as empty would throw that copy away.
 $txp_update_done = false;
 register_shutdown_function(function () use (&$txp_update_done) {
     if ($txp_update_done) {
@@ -204,8 +250,8 @@ register_shutdown_function(function () use (&$txp_update_done) {
         . ($error === null ? 'unknown fatal' : $error['message'] . ' in ' . $error['file'] . ':' . $error['line']) . "\n");
     echo "THROWN=fatal\n";
     echo "VERSION_BEFORE=" . (isset($GLOBALS['version_before']) ? $GLOBALS['version_before'] : '') . "\n";
-    echo "VERSION_AFTER=\n";
-    echo "DBUPDATETIME=\n";
+    echo "VERSION_AFTER=" . txp_update_shim_marker('version') . "\n";
+    echo "DBUPDATETIME=" . txp_update_shim_marker('dbupdatetime') . "\n";
     echo "OUTPUT_BYTES=" . strlen($buffered) . "\n";
     exit(128);
 });
