@@ -25,6 +25,15 @@ function drush_provision_grav_provision_install_validate() {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
       dt('No PHP >= 8.3 binary found; Grav tasks refuse to run below the enforced floor.'));
   }
+  // A Grav capsule carries no database yet (the coming cart brings one, and
+  // with it the database backup/restore contract). The panel offers the
+  // MySQL node by default while hosting_grav provides the 'none' server:
+  // a site attached to a real database server installs, but its files-only
+  // archives cannot be restored through the database deploy until then.
+  // Said once, here, where the operator reads it.
+  if (!(d()->service('db') instanceof Provision_Service_null)) {
+    drush_log(dt('This Grav site is attached to a database server, but Grav carries no database yet: its backups are files-only and cannot be restored until database support ships. Attach Grav sites to the "none" database server (hosting_grav) for now.'), 'warning');
+  }
   if (_provision_grav_site_exists()) {
 
     if (drush_get_option('force-reinstall', FALSE)) {
