@@ -22,7 +22,9 @@ function drush_provision_grav_provision_migrate_validate($platform = NULL) {
   // validate hook fires on every clone/migrate, so a union target test makes
   // this refusal swallow another CMS's supported task and answer with a
   // GRAV-flavoured message. Each CMS layer refuses its own platforms; the others refuse theirs.
-  $target_is_grav = FALSE;
+  // Defaults to the source's verdict, so an unresolvable target platform can
+  // never manufacture a refusal (the clone twin's shape).
+  $target_is_grav = $source_is_grav;
   if (!empty($platform)) {
     $target = d($platform);
     if (is_object($target) && isset($target->root)) {
