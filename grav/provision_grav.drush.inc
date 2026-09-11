@@ -1041,8 +1041,11 @@ function _provision_grav_artefact_version($artefact) {
  * user/config/versions.yaml and nowhere else. A copy in an overlay is not
  * the file Grav reads, so it must not stand in for a missing one here.
  *
- * Instance-user owned, group web, 0664: the web tier rewrites it through the
- * group on the next update it performs itself.
+ * Instance-user owned, group web, 0660: the web tier rewrites it through the
+ * group on the next update it performs itself, and 0660 is the mode the
+ * secret pass (boa-grav D-008) asserts on every regular file under
+ * user/config. A wider seed would simply be corrected by the verify that
+ * follows the upgrade, leaving two writers disagreeing about one file.
  */
 function _provision_grav_seed_versions_yaml($site_path) {
   $config_dir = $site_path . '/user/config';
@@ -1074,7 +1077,7 @@ function _provision_grav_seed_versions_yaml($site_path) {
     return FALSE;
   }
   provision_file()->chgrp($config_dir . '/versions.yaml', d('@server_master')->web_group);
-  provision_file()->chmod($config_dir . '/versions.yaml', 0664);
+  provision_file()->chmod($config_dir . '/versions.yaml', 0660);
   drush_log(dt('Seeded versions.yaml for @site at Grav @version (schema @schema), so the upgrade replays only the steps newer than it.',
     array('@site' => $site_path, '@version' => $version, '@schema' => $schema)), 'ok');
   return TRUE;
