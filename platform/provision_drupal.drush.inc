@@ -1037,6 +1037,52 @@ function _provision_site_local_php_ini() {
  * account's php.ini), so a rebuild that did not happen is visible in the
  * task log.
  */
+/**
+ * Open (or restore) the platform lock's chmod window for the core rebuild.
+ *
+ * Without $restore: raise the dirs the lock holds at 0400 to the lock's own
+ * 0775 window and return their previous modes. With $restore (the array
+ * returned by the opening call): put every dir back to the mode it had.
+ * Only dirs found at a mode other than the window are touched, so an
+ * unlocked platform is left alone. The verify runs as the account that owns
+ * the platform, so no sudo is involved.
+ */
+function _provision_drupal_rebuild_lock_window($root, $restore = NULL) {
+  $dirs = array(
+    $root . '/vendor/drush',
+    $root . '/../vendor/drush',
+    $root . '/vendor/symfony/console/Input',
+    $root . '/../vendor/symfony/console/Input',
+    $root . '/vendor/symfony/console/Style',
+    $root . '/../vendor/symfony/console/Style',
+  );
+  if (is_array($restore)) {
+    foreach ($restore as $dir => $mode) {
+      if (is_dir($dir)) {
+        @chmod($dir, $mode);
+      }
+    }
+    return array();
+  }
+  $previous = array();
+  foreach ($dirs as $dir) {
+    if (!is_dir($dir)) {
+      continue;
+    }
+    $mode = fileperms($dir) & 07777;
+    if ($mode === 0775) {
+      continue;
+    }
+    if (@chmod($dir, 0775)) {
+      $previous[$dir] = $mode;
+    }
+  }
+  if (!empty($previous)) {
+    drush_log(dt('REBUILD/CORE/WINDOW @n locked vendor dir(s) opened for the rebuild subprocess', array('@n' => count($previous))), 'info');
+  }
+  return $previous;
+}
+
 function _provision_drupal_rebuild_d8plus() {
   // D7 and hostmaster have no D8+ container; nothing to rebuild here.
   if (provision_is_hostmaster_site() || drush_drupal_major_version() < 8) {
@@ -1068,9 +1114,18 @@ function _provision_drupal_rebuild_d8plus() {
     // environment; harmless when credentials are not cloaked. Every argument
     // is passed through the sprintf form, which escapeshellarg()s each one;
     // stderr is captured with stdout by drush_shell_exec().
+    // The compile needs the locked vendor dirs readable: a contrib compiler
+    // pass that reflects every service class (symfony_mailer's MailerPass)
+    // autoloads a module's Drush command class, whose parent lives under
+    // vendor/drush -- unreadable while the platform lock holds it at 0400,
+    // so the whole rebuild failed on any platform shipping such a module
+    // (Varbase). Open the lock's own window for the subprocess and put the
+    // modes back exactly as found.
+    $window = _provision_drupal_rebuild_lock_window($root);
     provision_prepare_environment_subprocess();
     $ok = drush_shell_cd_and_exec($root, '%s %s %s %s', $php, $script, $root, $uri);
     provision_clear_environment_subprocess();
+    _provision_drupal_rebuild_lock_window($root, $window);
     $output = drush_shell_exec_output();
     if ($ok) {
       foreach ($output as $line) {

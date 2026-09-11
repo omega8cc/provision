@@ -92,6 +92,11 @@ function drush_provision_txp_provision_restore($restore_file) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
+  // Name the class outright, after the alter, so the deploy engine never has
+  // to infer identity-preservation from the URIs: a restore keeps blog_uid and
+  // must not rewrite the site's contact data.
+  $deploy_options['deploy_class'] = 'restore';
+
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
@@ -108,7 +113,10 @@ function drush_provision_txp_provision_restore($restore_file) {
     d()->site_enabled = TRUE;
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
-    drush_log(dt('Restore failed; the original site tree, credentials and vhost have been put back.'), 'warning');
+    // 'ok': this row reports a SUCCESSFUL recovery. The deploy child's own
+    // error is what makes the task red -- levelling the recovery line as a
+    // warning only blurred which half of the task actually went wrong.
+    drush_log(dt('Restore failed; the original site tree, credentials and vhost have been put back.'), 'ok');
   }
 
   // Always clear the flag, success or failure (a leftover one silently ends
