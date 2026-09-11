@@ -98,7 +98,8 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
       dt('No new site alias given.'));
   }
-  $new_uri = ltrim($new_name, '@');
+  $new_uri = strtolower(ltrim($new_name, '@'));
+  $new_name = '@' . $new_uri;
   if ($new_uri === d()->uri) {
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
       dt('The new uri must differ from the source uri (the source keeps serving until you cut over to the copy).'));
@@ -106,8 +107,8 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
   // The same refusals the rename carries, and for the same reason: the value
   // becomes a directory name, a vhost name and a context name, and
   // provision-save rewrites whichever alias file it lands on. The shape check
-  // is deliberately strict (the frontend hands down a cleaned, lower-cased
-  // domain) so a mangled hand-run stops here rather than three steps later.
+  // is deliberately strict (the value is lower-cased first, as the rename
+  // does) so a mangled hand-run stops here rather than three steps later.
   if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $new_uri)
     || strpos($new_uri, '..') !== FALSE) {
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
@@ -298,7 +299,8 @@ function drush_provision_txp_pre_provision_txp_upgrade_rollback($new_name = NULL
 function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
   drush_set_option('old_platform', d()->platform->name);
 
-  $new_uri = ltrim($new_name, '@');
+  $new_uri = strtolower(ltrim($new_name, '@'));
+  $new_name = '@' . $new_uri;
   $target_root = d($platform)->root;
   $copy_path = $target_root . '/sites/' . $new_uri;
   $target_version = drush_get_option('txp_upgrade_target_version', '');

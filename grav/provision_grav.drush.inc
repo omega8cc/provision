@@ -1308,8 +1308,16 @@ function _provision_grav_install_output_errors($output) {
     if (!is_string($line)) {
       continue;
     }
-    if (preg_match('/error|failed|not a valid/i', $line)) {
-      $errors[] = trim($line);
+    // The installer's own failure shapes, and nothing looser: an "ERROR"
+    // line (the package, symlink and name refusals), the extraction line
+    // reporting "failed", or the closing "'-" line carrying anything but
+    // "Success!" (the installer's last error message goes there). A loose
+    // word match would refuse a healthy install over a package name.
+    $clean = trim(preg_replace('/<\/?[a-z]+>/', '', $line));
+    if (preg_match('/(^|\s)ERROR\b/', $clean)
+      || preg_match('/Extracting package\.\.\.\s+failed/', $clean)
+      || (preg_match("/^'-\s/", $clean) && strpos($clean, 'Success!') === FALSE)) {
+      $errors[] = $clean;
     }
   }
   return $errors;
