@@ -289,6 +289,7 @@ function drush_provision_txp_rename($new_name = NULL) {
  */
 function drush_provision_txp_rename_rollback($new_name = NULL) {
   $old_name = d()->name;
+  $old_uri = d()->uri;
   $old_path = d()->site_path;
   $new_uri = is_string($new_name) ? strtolower(ltrim($new_name, '@')) : '';
   $new_path = ($new_uri === '') ? '' : d()->root . '/sites/' . $new_uri;
@@ -306,6 +307,7 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
   if (drush_get_option('txp_rename_moved', FALSE) && $new_path !== '' && is_dir($new_path) && !is_dir($old_path)) {
     if (@rename($new_path, $old_path)) {
       drush_log(dt('Moved the site directory back to !old.', array('!old' => $old_path)), 'ok');
+      _provision_txp_rename_rollback_repoint($old_uri, $old_path);
     }
     else {
       drush_log(dt('Could not move !new back to !old; the site is on disk under the NEW path and its old context still names the old one. Move it back by hand, then run Verify.',
@@ -322,6 +324,38 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
     drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
   }
 
-  drush_log(dt('The rename failed and the site has been returned to !old. Its database still holds the values this task wrote before failing — run Verify on !old to re-assert them.',
+  drush_log(dt('The rename failed and the site has been returned to !old.',
     array('!old' => $old_name)), 'warning');
+}
+
+/**
+ * Put the database back on the old uri after a rolled-back rename.
+ *
+ * The command re-points the uri-bound preference rows before the leg that can
+ * still fail, and siteurl is one of them: publish.php composes every permalink,
+ * asset URL, feed URL and redirect from it, so a site returned to its old
+ * directory while its database still names the interim host publishes a site
+ * whose every link points at a name that was never created. Nothing else puts
+ * that row back at rollback time, so this is where it happens: the same single
+ * writer the command uses, and idempotent.
+ */
+function _provision_txp_rename_rollback_repoint($old_uri, $old_path) {
+  $connect_error = '';
+  $mysqli = _provision_txp_db_connect(_provision_txp_site_creds(), $connect_error);
+  if ($mysqli === FALSE) {
+    drush_log(dt('Could not reach the site database to put it back on !uri (!msg). Until it is reachable the siteurl preference still names the uri this rename was taking and the site publishes links to a host that does not exist: run Verify on !uri, or correct siteurl in the Preferences panel.',
+      array('!uri' => $old_uri, '!msg' => $connect_error)), 'warning');
+    return;
+  }
+  $prefix = _provision_txp_config_prefix($old_path . '/private/config.php');
+  try {
+    _provision_txp_repoint_uri($mysqli, $old_uri, $old_path, $prefix);
+    $mysqli->close();
+  }
+  catch (Exception $e) {
+    drush_log(dt('Could not put the database back on !uri (!msg): the siteurl preference still names the uri this rename was taking. Run Verify on !uri, or correct it in the Preferences panel.',
+      array('!uri' => $old_uri, '!msg' => $e->getMessage())), 'warning');
+    return;
+  }
+  drush_log(dt('Re-pointed the database at !uri: the site publishes its own name again.', array('!uri' => $old_uri)), 'ok');
 }
