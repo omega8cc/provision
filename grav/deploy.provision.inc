@@ -168,6 +168,11 @@ function drush_provision_grav_post_provision_deploy() {
   // tree's integrity gate is the verify engine (vendor/ + index.php + version)
   // run by the restore flow's provision-verify.
 
+  // The identity engine (grav/grav/deploy.inc): a restore keeps the archive's
+  // keys and overlay, a clone gets its own. Before the .restore removal so a
+  // failure here leaves the swap-back path intact.
+  drush_include_engine('grav', 'deploy');
+
   // Remove the restore directory (or park web-owned residue).
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
     _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-restore');

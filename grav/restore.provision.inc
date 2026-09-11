@@ -93,8 +93,15 @@ function drush_provision_grav_provision_restore($restore_file) {
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
+    // Identity-preserving: the deploy engine keeps the archive's own keys
+    // and overlay (the twins carry the same flag).
+    'is_restore' => TRUE,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
+  // The explicit class, set AFTER the alter so nothing can drop it: the
+  // deploy scrub must never decide the identity outcome from which files
+  // happened to be readable at backup time.
+  $deploy_options['deploy_class'] = 'restore';
 
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {
@@ -112,6 +119,8 @@ function drush_provision_grav_provision_restore($restore_file) {
     d()->site_enabled = true;
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
-    drush_log(dt('Restore failed; the original site tree and vhost have been put back.'), 'warning');
+    // The deploy's own error already made the task red; this row reports
+    // the recovery that worked.
+    drush_log(dt('Restore failed; the original site tree and vhost have been put back.'), 'ok');
   }
 }
