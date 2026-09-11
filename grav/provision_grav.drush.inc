@@ -365,11 +365,16 @@ function _provision_grav_root_heal($path) {
   // Fail-closed validation before the value reaches a root tool: a real
   // directory under this account's tree, one path component below a
   // platform's sites/ directory (a capsule or its .restore/.original
-  // sibling), no traversal.
+  // sibling), no traversal, and a tree the wrappers recognise as a capsule
+  // (a partial extraction has no system/defines.php yet; handed to the
+  // wrapper it would be refused as "not a Drupal site", and the caller is
+  // about to delete it anyway).
   if (!is_string($path) || $path === '' || !is_dir($path) || is_link($path)
     || strpos($path, '..') !== FALSE
     || strpos($path, $aegir_root . '/') !== 0
-    || !preg_match('#/sites/[a-z0-9][a-z0-9._-]*$#i', $path)) {
+    || !preg_match('#/sites/[a-z0-9][a-z0-9._-]*$#i', $path)
+    || !is_file($path . '/system/defines.php')
+    || !is_file($path . '/bin/grav')) {
     return NULL;
   }
   $user = d('@server_master')->script_user;

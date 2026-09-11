@@ -206,8 +206,11 @@ function drush_provision_grav_provision_clone_rollback($new_name, $platform = NU
 
   $capsule = $target_root . '/sites/' . $new_uri;
   if (is_dir($capsule) && !is_link($capsule)) {
-    _provision_grav_remove_tree_or_park($capsule, $new_uri . '-clone-failed');
-    drush_log(dt('Removed the half-built copy at @path.', array('@path' => $capsule)), 'ok');
+    // The helper reports its own outcome (deleted silently, parked in one
+    // row, or a cleanup error); only a tree that is really gone is "removed".
+    if (_provision_grav_remove_tree_or_park($capsule, $new_uri . '-clone-failed') && !is_dir($capsule)) {
+      drush_log(dt('Removed the half-built copy at @path.', array('@path' => $capsule)), 'ok');
+    }
   }
 
   $vhost = d('@server_master')->http_vhostd_path . '/' . $new_uri;
@@ -218,8 +221,11 @@ function drush_provision_grav_provision_clone_rollback($new_name, $platform = NU
     d('@server_master')->service('http')->parse_configs();
   }
 
-  $context = d($new_name, FALSE, FALSE);
-  if (is_object($context)) {
+  // The alias record, not d(): loading a context that does not exist logs
+  // an error row of its own, and a clone that failed before provision-save
+  // has none.
+  $record = provision_sitealias_get_record($new_name);
+  if (!empty($record)) {
     drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
     drush_log(dt('Removed the context of the half-built copy @name.', array('@name' => $new_name)), 'ok');
   }

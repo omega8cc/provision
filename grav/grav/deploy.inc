@@ -182,9 +182,9 @@ foreach ($config_dirs as $config_dir) {
     $rewrite_targets[$config_dir . '/site.yaml'] = '/^(\s+email:\s*)(\S.*)$/';
   }
   if (is_file($config_dir . '/plugins/email.yaml')) {
-    // The plugin's default sender and recipient; the mailer block (host,
-    // port, credentials) is the box relay and is left alone.
-    $rewrite_targets[$config_dir . '/plugins/email.yaml'] = '/^((?:from|to):\s*)(\S.*)$/';
+    // The plugin's default sender and every default recipient; the mailer
+    // block (host, port, credentials) is the box relay and is left alone.
+    $rewrite_targets[$config_dir . '/plugins/email.yaml'] = '/^((?:from|to|cc|bcc|reply_to):\s*)(\S.*)$/';
   }
 }
 foreach ($rewrite_targets as $file => $pattern) {

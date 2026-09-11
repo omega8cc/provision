@@ -186,7 +186,14 @@ function drush_provision_grav_provision_backup() {
   if (!empty($failed_tags)) {
     // An archive that silently carries the volatile trees is not the one
     // the operator asked for; a tag state this user cannot write is a real
-    // fault on the capsule, so fail the task instead of colouring it.
+    // fault on the capsule, so fail the task instead of colouring it. The
+    // tags already written come out first: a refused backup leaves the
+    // capsule as it found it.
+    foreach ($exclusion_dirs as $exclusion_dir) {
+      if (is_file($exclusion_dir . '/exclude.tag')) {
+        @unlink($exclusion_dir . '/exclude.tag');
+      }
+    }
     chdir($olddir);
     return drush_set_error('PROVISION_BACKUP_FAILED',
       dt('Could not write the backup exclusion tags (@tags); the capsule needs a Verify before it can be backed up.', array('@tags' => implode(', ', $failed_tags))));
