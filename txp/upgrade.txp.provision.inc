@@ -103,6 +103,37 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
       dt('The new uri must differ from the source uri (the source keeps serving until you cut over to the copy).'));
   }
+  // The same refusals the rename carries, and for the same reason: the value
+  // becomes a directory name, a vhost name and a context name, and
+  // provision-save rewrites whichever alias file it lands on. The shape check
+  // is deliberately strict (the frontend hands down a cleaned, lower-cased
+  // domain) so a mangled hand-run stops here rather than three steps later.
+  if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $new_uri)
+    || strpos($new_uri, '..') !== FALSE) {
+    return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
+      dt('The new uri !uri is not a plausible host name.', array('!uri' => $new_uri)));
+  }
+  if ($new_uri === 'hostmaster' || $new_uri === strtolower(d('@hostmaster')->uri)) {
+    return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
+      dt('Refusing to take the hosting front-end\'s name.'));
+  }
+  // A context that already holds the name is refused: saving the copy over it
+  // would point a live site's alias at the target platform's root and orphan
+  // it from its own directory, with nothing to roll that back. The one
+  // tolerated case is the leftover that demonstrably serves nothing -- its
+  // recorded site directory is gone -- which is the same orphan the cutover
+  // tolerates, and which the copy's own provision-save overwrites.
+  if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
+    $leftover = d('@' . $new_uri);
+    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
+      ? $leftover->site_path : '';
+    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+      return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
+        dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
+    }
+    drush_log(dt('A stale !uri alias with no site directory is left over; the copy\'s own context overwrites it.',
+      array('!uri' => $new_uri)), 'info');
+  }
   if (is_dir($target_root . '/sites/' . $new_uri)) {
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
       dt('sites/@uri already exists on the target platform.', array('@uri' => $new_uri)));
