@@ -150,10 +150,10 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   location ~* ^/(composer\.(json|lock)|now\.json|CHANGELOG\.md|README\.md|SECURITY\.md|LICENSE\.txt|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md)$ { return 404; }
 
   # Grav internal trees. cache/logs/tmp/backup/bin/tests never serve;
-  # webserver-configs is upstream's own gap; modules/ is the BOA control-INI
-  # dir (no Grav route). system/ and vendor/ serve real assets, so those two
-  # deny by extension (upstream's own contract), as does user/ (page media
-  # must serve; sources must not).
+  # webserver-configs is upstream's own gap; modules/ is where an older
+  # release left a BOA control INI (no Grav route). system/ and vendor/ serve
+  # real assets, so those two deny by extension (upstream's own contract), as
+  # does user/ (page media must serve; sources must not).
   location ~* ^/(cache|bin|logs|backup|tmp|tests|modules|webserver-configs)/ { return 404; }
   location ~* ^/(system|vendor)/.*\.(txt|xml|md|html|json|yaml|yml|php|pl|py|cgi|twig|sh|bat)$ { return 404; }
   location ~* ^/user/(config|env|accounts|data)/ { return 404; }

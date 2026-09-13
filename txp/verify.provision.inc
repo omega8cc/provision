@@ -87,6 +87,16 @@ function drush_provision_txp_provision_verify() {
     // pre-hook row above is deliberately not always a warning).
     drush_set_option('txp_skeleton_missing', !is_dir(d()->root . '/sites/site1'), 'drupal');
 
+    // No BOA control INI on a Textpattern platform (boa-txp D-013), and none
+    // of the Drupal sites/all/{modules,themes,libraries} the nightly once laid
+    // into a platform with sites: clear them while they hold nothing else.
+    // sites/all/drush stays, the platform drushrc renders there.
+    if (!is_link(d()->root . '/sites') && !is_link(d()->root . '/sites/all')) {
+      _provision_txp_drop_boa_ini_dir(d()->root . '/sites/all/modules', 'boa_platform_control.ini');
+      _provision_txp_drop_boa_ini_dir(d()->root . '/sites/all/themes', '');
+      _provision_txp_drop_boa_ini_dir(d()->root . '/sites/all/libraries', '');
+    }
+
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
@@ -125,13 +135,5 @@ function drush_provision_txp_post_provision_verify() {
     // the files-only policy those accounts have on Drupal sites. Drop a link an
     // earlier release created; the sub-account's lshell path skips these too.
     _provision_client_delete_symlink();
-
-    // Per-site BOA control INI, exactly like every other CMS on the stack
-    // (sites/<uri>/modules is inert to TXP itself).
-    $iniFile = d()->site_path . '/modules/default.boa_site_control.ini';
-    $iniTpl = '/data/conf/default.boa_site_control.ini';
-    if (!provision_file()->exists($iniFile)->status() && provision_file()->exists($iniTpl)->status()) {
-      provision_file()->copy($iniTpl, $iniFile);
-    }
   }
 }
