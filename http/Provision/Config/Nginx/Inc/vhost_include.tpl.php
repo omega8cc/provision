@@ -264,6 +264,31 @@ if ($is_banned) {
   return 444;
 }
 
+<?php
+// The $boa_fleet_* maps are declared in the BOA-written http-scope zones file,
+// under the same render-gate contract as the amp-chain guard above, whose read
+// of that file is reused here; the fallback read runs only if that gate ever
+// moves below this one.
+if (!isset($boa_zones_body)) {
+  $boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $boa_zones_body = @is_file($boa_zones_file)
+    ? (string) @file_get_contents($boa_zones_file)
+    : '';
+}
+if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE):
+?>
+###
+### Refuse a declared distributed-crawler fleet fingerprint (see the
+### $boa_fleet_* maps in the BOA http-scope zones file).  429 because no IDS
+### scorer counts it; the maps exempt Referer-bearing and logged-in requests
+### for every non-crawler agent.  After the ban guard, so a banned address
+### still gets its 444.
+###
+if ($boa_fleet_block) {
+  return 429;
+}
+<?php endif; ?>
+
 ###
 ### Return 404 on special PHP URLs to avoid revealing version used,
 ### even indirectly. See also: https://drupal.org/node/2116387

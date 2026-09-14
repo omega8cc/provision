@@ -179,6 +179,23 @@ print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n"
   ### includes the per-site ai_policy fragment, but the ENFORCEMENT lives in
   ### the include, so without these lines the policy renders and is inert.
   ###
+  ### The IDS ban geo is declared by the master render, so it needs no gate.
+  if ($is_banned) { return 444; }
+<?php
+// The $boa_fleet_* maps live in the BOA-written zones file, so the guard
+// renders only when that file declares them.  The https template includes
+// this one after its own server block: reuse the body it already read.
+if (!isset($txp_zones_body)) {
+  $txp_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $txp_zones_body = @is_file($txp_zones_file)
+    ? (string) @file_get_contents($txp_zones_file)
+    : '';
+}
+if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE):
+?>
+  ### Declared crawler-fleet fingerprint: 429, which no IDS scorer counts.
+  if ($boa_fleet_block) { return 429; }
+<?php endif; ?>
   if ($is_ai_forged) { return 444; }
   set $ai_train_block $is_ai_training;
   if ($ai_train_allow) { set $ai_train_block ''; }

@@ -218,6 +218,22 @@ server {
   ### CMS-agnostic guards, including the AI-policy ENFORCEMENT the fragment
   ### above only configures, must be repeated here).
   ###
+  ### The IDS ban geo is declared by the master render, so it needs no gate.
+  if ($is_banned) { return 444; }
+<?php
+// Gated on the BOA zones file declaring the $boa_fleet_* maps, as in
+// vhost_txp.tpl.php; the http template included at the end reuses this body.
+if (!isset($txp_zones_body)) {
+  $txp_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $txp_zones_body = @is_file($txp_zones_file)
+    ? (string) @file_get_contents($txp_zones_file)
+    : '';
+}
+if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE):
+?>
+  ### Declared crawler-fleet fingerprint: 429, which no IDS scorer counts.
+  if ($boa_fleet_block) { return 429; }
+<?php endif; ?>
   if ($is_ai_forged) { return 444; }
   set $ai_train_block $is_ai_training;
   if ($ai_train_allow) { set $ai_train_block ''; }

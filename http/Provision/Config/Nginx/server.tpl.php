@@ -180,6 +180,9 @@ if ($nginx_has_gzip) {
   fastcgi_temp_file_write_size  512k;
   large_client_header_buffers 32 64k;
   map_hash_bucket_size           192;
+  # Generated BOA maps can hold thousands of exact keys; at the default max
+  # size every configtest and reload warns "could not build optimal map_hash".
+  map_hash_max_size            32768;
   request_pool_size               4k;
   server_names_hash_bucket_size  512;
   server_names_hash_max_size    8192;

@@ -33,11 +33,14 @@
 // reference on the zone actually being present in that file so no
 // BOA/provision delivery order can produce an undeclared-zone reference
 // (a box-wide nginx [emerg], on an upgrade path that restarts nginx
-// without a configtest).
-$grav_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
-$grav_zones_body = @is_file($grav_zones_file)
-  ? (string) @file_get_contents($grav_zones_file)
-  : '';
+// without a configtest).  The https template includes this file and then the
+// http template, which includes it again: read the zones file once per render.
+if (!isset($grav_zones_body)) {
+  $grav_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $grav_zones_body = @is_file($grav_zones_file)
+    ? (string) @file_get_contents($grav_zones_file)
+    : '';
+}
 $grav_zone_ok = strpos($grav_zones_body, 'zone=boa_grav_anon') !== FALSE;
 $grav_anon_conn = (int) drush_get_option('nginx_grav_anon_conn', 100);
 if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
@@ -58,6 +61,17 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   if ($is_banned) {
     return 444;
   }
+<?php if (strpos($grav_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE): ?>
+  ###
+  ### Refuse a declared crawler-fleet fingerprint (the $boa_fleet_* maps in
+  ### the BOA zones file, gated like boa_grav_anon above).  429, not 444:
+  ### no IDS scorer counts it, and a real visitor sharing the fingerprint
+  ### passes with a Referer or a Grav admin session.
+  ###
+  if ($boa_fleet_block) {
+    return 429;
+  }
+<?php endif; ?>
   if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
     return 404;
   }
