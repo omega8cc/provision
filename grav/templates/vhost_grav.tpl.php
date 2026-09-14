@@ -90,10 +90,14 @@ server {
   # fastcgi_param would cancel the whole inherited param set.
   fastcgi_param REQUEST_SCHEME $scheme;
 <?php
-$grav_fe_zones_body = @is_file('/etc/nginx/conf.d/limit-req-zones-boa.conf')
-  ? (string) @file_get_contents('/etc/nginx/conf.d/limit-req-zones-boa.conf')
-  : '';
-if (strpos($grav_fe_zones_body, '$boa_grav_fe_https') !== FALSE) {
+// Shares the zones body with grav_locations.tpl.php, which the https template
+// renders in the same scope: one read of the file per render.
+if (!isset($grav_zones_body)) {
+  $grav_zones_body = @is_file('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+    ? (string) @file_get_contents('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+    : '';
+}
+if (strpos($grav_zones_body, '$boa_grav_fe_https') !== FALSE) {
   print "  fastcgi_param HTTPS \$boa_grav_fe_https;\n";
 }
 ?>
