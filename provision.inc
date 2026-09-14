@@ -1799,3 +1799,23 @@ class provision {
 include_once('provision.context.inc');
 include_once('provision.service.inc');
 include_once('provision.file.inc');
+
+/**
+ * Name a leftover DisAutoUpDb control file, which no deploy honours any more.
+ *
+ * ~/static/control/DisAutoUpDb.info (every site) and <uri>_DisAutoUpDb.info
+ * (one site) once made the deploy skip its updatedb, for accounts that ran the
+ * updates by hand while they were unreliable in Aegir. Retired: the deploy
+ * always applies the database updates. A skipped update cannot survive a move
+ * onto newer core anyway -- the deploy's own cache rebuild meets the old
+ * schema (a Drupal 10 site moved onto 11.3 fails on router.alias) and the task
+ * rolls back. The file changes nothing; it is only named so it can go.
+ */
+function provision_report_retired_updatedb_controls($uri) {
+  $control = d('@server_master')->aegir_root . '/static/control/';
+  foreach (array($control . 'DisAutoUpDb.info', $control . $uri . '_DisAutoUpDb.info') as $path) {
+    if (is_file($path)) {
+      drush_log(dt('DRUSH/CTRL/UPDATEDB the retired control file @path is ignored: the deploy always runs the database updates, and the file can be deleted', array('@path' => $path)), 'notice');
+    }
+  }
+}
