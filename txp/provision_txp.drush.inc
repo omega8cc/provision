@@ -691,6 +691,56 @@ function _provision_txp_ensure_db_creds_loaded() {
 }
 
 /**
+ * Drop a BOA control INI from a Textpattern tree, and its dir while empty.
+ *
+ * Textpattern never reads boa_site_control.ini or boa_platform_control.ini
+ * (private/config.php loads none of BOA's global PHP), so BOA no longer seeds
+ * either (boa-txp D-013); this clears what an earlier release, the nightly or
+ * an old archive left. Both names go whatever they hold: nothing reads them
+ * here, and BOA's own nightly uncommented lines in them, so their content
+ * says nothing about intent. The directory goes only when that leaves it
+ * empty, so nothing else in it is ever lost.
+ * A link at the directory is left alone; a link at a file name goes as a link.
+ * Raw unlink()/rmdir() with ok/advisory rows on purpose: a provision_file()
+ * ->fail() logs a warning, and one warning row colours the whole task.
+ * Namespaced copy of the Grav layer's helper so the layers stay independent.
+ *
+ * @param string $dir
+ *   The directory (sites/<uri>/modules, sites/all/modules, ...).
+ * @param string $ini
+ *   boa_site_control.ini or boa_platform_control.ini; '' drops only an empty
+ *   directory.
+ */
+function _provision_txp_drop_boa_ini_dir($dir, $ini) {
+  if (is_link($dir) || !is_dir($dir) || is_link(dirname($dir))) {
+    return;
+  }
+  $files = ($ini === '') ? array() : array('default.' . $ini, $ini);
+  foreach ($files as $file) {
+    $path = $dir . '/' . $file;
+    if (!is_link($path) && !is_file($path)) {
+      continue;
+    }
+    if (@unlink($path)) {
+      drush_log(dt('Removed @path: Textpattern sites have no BOA control INI.', array('@path' => $path)), 'ok');
+    }
+    else {
+      drush_log(dt('Could not remove @path.', array('@path' => $path)), 'advisory');
+    }
+  }
+  clearstatcache();
+  $entries = @scandir($dir);
+  if (is_array($entries) && count($entries) === 2) {
+    if (@rmdir($dir)) {
+      drush_log(dt('Removed the empty @path.', array('@path' => $dir)), 'ok');
+    }
+    else {
+      drush_log(dt('Could not remove the empty @path.', array('@path' => $dir)), 'advisory');
+    }
+  }
+}
+
+/**
  * Materialise (or repair) the site tree: sites/<uri>/{admin,private,public,tmp}.
  *
  * Copies the platform's shipped sites/site1 skeleton on first run (symlinks
@@ -729,12 +779,13 @@ function _provision_txp_create_directories() {
 
   $web_group = d('@server_master')->web_group;
 
-  // The per-site tmp dir (the shared textpattern/tmp must never be used) and
-  // the BOA per-site control-INI dir (inert to TXP; keeps the fleet INI
-  // machinery uniform).
+  // No BOA control INI on a Textpattern site (boa-txp D-013): clear what an
+  // earlier release, the nightly or an old archive left in modules/.
+  _provision_txp_drop_boa_ini_dir($site_path . '/modules', 'boa_site_control.ini');
+
+  // The per-site tmp dir (the shared textpattern/tmp must never be used).
   $mkdirs = array(
     $site_path . '/tmp',
-    $site_path . '/modules',
     $site_path . '/public/files',
     $site_path . '/public/images',
     $site_path . '/public/images/thumb',
@@ -801,7 +852,6 @@ function _provision_txp_create_directories() {
   // Ownership model. chmod AFTER chgrp (chgrp strips setgid).
   $writable = array(
     $site_path . '/tmp',
-    $site_path . '/modules',
     $site_path . '/public/files',
     $site_path . '/public/images',
     $site_path . '/public/images/thumb',
