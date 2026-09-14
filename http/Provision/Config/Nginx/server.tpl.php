@@ -180,6 +180,9 @@ if ($nginx_has_gzip) {
   fastcgi_temp_file_write_size  512k;
   large_client_header_buffers 32 64k;
   map_hash_bucket_size           192;
+  # Generated BOA maps can hold thousands of exact keys; at the default max
+  # size every configtest and reload warns "could not build optimal map_hash".
+  map_hash_max_size            32768;
   request_pool_size               4k;
   server_names_hash_bucket_size  512;
   server_names_hash_max_size    8192;
@@ -807,27 +810,29 @@ map $http_user_agent $is_bot {
 ###
 ### Detect stale Chrome UA in a search context.
 ###
-### Chrome releases every ~4 weeks and auto-updates aggressively on all
-### platforms.  By May 2026, Chrome versions below ~124 are more than 12
-### months old; genuine consumer installations at those versions are extremely
-### rare.  Bots that fake a "moderately outdated but not obviously fake" Chrome
-### UA rely on this blind spot — they avoid the obviously-bogus Opera/8 or
-### MSIE/6 that trigger $is_bot, but their UA is still detectably stale.
+### Chrome auto-updates aggressively on all platforms, so a genuine consumer
+### installation more than 12 months behind is extremely rare.  Bots that fake
+### a "moderately outdated but not obviously fake" Chrome UA rely on this blind
+### spot — they avoid the obviously-bogus Opera/8 or MSIE/6 that trigger
+### $is_bot, but their UA is still detectably stale.
 ###
-### Regex covers Chrome/100–123 (major version 100 through 123):
-###   1([01][0-9]|2[0-3])  →  100–119 | 120–123
+### Regex covers Chrome/100–139: 1[0-3][0-9].  Chrome/139 reached stable on
+### 2025-08-05, so every version in the range is more than 12 months old.  The
+### bound used to stop at 131, and an observed search-amplification botnet
+### presenting Chrome/132 walked past both maps with ~16,000 fulltext searches
+### from ~14,700 addresses over two days on one hosted site, while legitimate
+### search traffic in the same sample carried no Chrome/132–139 at all.
 ###
-### Maintenance: review this threshold when the current Chrome major version
-### advances past ~148 (i.e. when Chrome/124 itself becomes > 12 months old).
-### Update the upper bound of the character class accordingly.
+### Maintenance: move the upper bound by release DATE, never by counting
+### versions.  Chrome shipped a major version every ~4 weeks until Chrome/153
+### (2026-09-08) and every ~2 weeks since, so a version number no longer maps
+### to a fixed age.  Widen to the newest major whose stable release is more
+### than 12 months old (chromiumdash.appspot.com/schedule lists the dates) and
+### keep $is_catalina_stale_chrome below on the same bound.
 ###
 map $http_user_agent $is_stale_chrome {
   default  0;
-  ~*Chrome/1([0-2][0-9]|3[01])\.  1;   # Chrome/100–131: > 12 months stale
-  # [0-2][0-9] → 100–129 | 3[01] → 130–131
-  # Chrome/131 released Nov 2024; by May 2026 it is ~18 months old.
-  # Maintenance: when Chrome/132 exceeds 12 months (≈ Feb 2027),
-  # widen to 3[0-2] and update this comment.
+  ~*Chrome/1[0-3][0-9]\.  1;   # Chrome/100–139: > 12 months stale
 }
 
 ###
@@ -841,17 +846,19 @@ map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
 }
 
 ###
-### Standalone: macOS Catalina (10.15.7, EOL Nov 2022) + stale Chrome.
-### All confirmed Solr search-amplification bots observed May 2026 use this exact
-### combination — no legitimate user in 2026 runs Catalina + Chrome ≤ 131.
-### Applied directly in the /search location blocks so no dependency on
-### $has_fulltext_search; the search location scope limits false-positive risk.
+### Standalone: Mac Chrome at a stale version, on the search paths only.
+### Chrome and Safari freeze the macOS platform token at "Mac OS X 10_15_7" on
+### every macOS release, so the token does not identify Catalina itself; it
+### narrows the stale-Chrome test to the Mac UA shape every confirmed Solr
+### search-amplification bot has presented (May 2026 below Chrome/132, and
+### Chrome/132 since).  Staleness is what makes it safe.  Applied directly in
+### the /search location blocks so no dependency on $has_fulltext_search; the
+### search location scope limits false-positive risk.  Keep the version bound
+### in step with $is_stale_chrome above.
 ###
 map $http_user_agent $is_catalina_stale_chrome {
   default  0;
-  "~*Mac OS X 10_15_7.*Chrome/1([0-2][0-9]|3[01])\."  1;
-  # Regex: macOS 10.15.7 (Catalina) + Chrome/100–131
-  # Maintenance: widen Chrome range alongside $is_stale_chrome as versions age.
+  "~*Mac OS X 10_15_7.*Chrome/1[0-3][0-9]\."  1;   # Mac Chrome/100–139
 }
 
 ###
