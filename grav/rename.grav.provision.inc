@@ -21,10 +21,10 @@
  * assumed: this layer never creates a native files store (it never calls
  * _provision_drupal_native_symlink, since a capsule keeps its own files) and
  * never creates a client symlink (install and verify actively delete one),
- * so a rename has neither to move. The per-site BOA control INI lives INSIDE
- * the capsule at sites/<uri>/modules/, so it rides the move untouched.
- * Backups already taken keep their old-name file names, as they do after any
- * rename: they are registered against the site node, not its uri.
+ * so a rename has neither to move, and a capsule carries no BOA control INI
+ * (boa-grav D-011). Backups already taken keep their old-name file names, as
+ * they do after any rename: they are registered against the site node, not
+ * its uri.
  *
  * Ordering is chosen for the shortest possible gap in service: the capsule
  * moves, the new context is saved and verified (which renders the new vhost),

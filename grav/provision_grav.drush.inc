@@ -578,14 +578,63 @@ function _provision_grav_writable_dirs() {
 }
 
 /**
+ * Drop a BOA control INI from a Grav tree, and its dir while empty.
+ *
+ * Grav never reads boa_site_control.ini or boa_platform_control.ini (the
+ * global.inc chain does not run for a capsule), so BOA no longer seeds either
+ * (boa-grav D-011); this clears what an earlier release, the nightly or an
+ * old archive left. Both names go whatever they hold: nothing reads them
+ * here, and BOA's own nightly uncommented lines in them, so their content
+ * says nothing about intent. The directory goes only when that leaves it
+ * empty, so nothing else in it is ever lost.
+ * A link at the directory is left alone; a link at a file name goes as a link.
+ * Raw unlink()/rmdir() with ok/advisory rows on purpose: a provision_file()
+ * ->fail() logs a warning, and one warning row colours the whole task.
+ *
+ * @param string $dir
+ *   The directory (sites/<uri>/modules, sites/all/modules, ...).
+ * @param string $ini
+ *   boa_site_control.ini or boa_platform_control.ini; '' drops only an empty
+ *   directory.
+ */
+function _provision_grav_drop_boa_ini_dir($dir, $ini) {
+  if (is_link($dir) || !is_dir($dir) || is_link(dirname($dir))) {
+    return;
+  }
+  $files = ($ini === '') ? array() : array('default.' . $ini, $ini);
+  foreach ($files as $file) {
+    $path = $dir . '/' . $file;
+    if (!is_link($path) && !is_file($path)) {
+      continue;
+    }
+    if (@unlink($path)) {
+      drush_log(dt('Removed @path: Grav sites have no BOA control INI.', array('@path' => $path)), 'ok');
+    }
+    else {
+      drush_log(dt('Could not remove @path.', array('@path' => $path)), 'advisory');
+    }
+  }
+  clearstatcache();
+  $entries = @scandir($dir);
+  if (is_array($entries) && count($entries) === 2) {
+    if (@rmdir($dir)) {
+      drush_log(dt('Removed the empty @path.', array('@path' => $dir)), 'ok');
+    }
+    else {
+      drush_log(dt('Could not remove the empty @path.', array('@path' => $dir)), 'advisory');
+    }
+  }
+}
+
+/**
  * Materialise (or repair) the site capsule from the platform seed.
  *
  * First run: copy the ENTIRE platform tree (a pristine admin-bundle release)
  * into sites/<uri>/, excluding sites/ itself (no recursion) and the seed's
  * own volatile dirs' contents. Every run: assert vendor/, enforce the
- * ownership model on the writable set, refresh the per-site .env, and keep
- * the capsule's modules/ dir (inert to Grav; the BOA per-site control-INI
- * home, and the nightly machinery mkdirs it anyway) in place.
+ * ownership model on the writable set and refresh the per-site .env. A
+ * capsule carries no BOA control INI (boa-grav D-011): whatever an earlier
+ * release or an old archive left in modules/ is cleared first.
  */
 function _provision_grav_create_directories() {
   if (d()->type !== 'site') {
@@ -619,8 +668,11 @@ function _provision_grav_create_directories() {
 
   $web_group = d('@server_master')->web_group;
 
-  // The BOA per-site control-INI dir (inert to Grav itself) + the writable set.
-  $mkdirs = array($site_path . '/modules');
+  // No BOA control INI in a capsule (boa-grav D-011): clear what an earlier
+  // release, the nightly or an old archive left, then lay down the writable
+  // set.
+  _provision_grav_drop_boa_ini_dir($site_path . '/modules', 'boa_site_control.ini');
+  $mkdirs = array();
   foreach (_provision_grav_writable_dirs() as $dir) {
     $mkdirs[] = $site_path . '/' . $dir;
   }
