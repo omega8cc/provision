@@ -156,6 +156,26 @@ if ($is_lang_chain) {
   return 404;
 }
 
+<?php
+// Gated on the BOA http-scope file declaring $is_amp_chain, exactly like the
+// full-domain vhost include: no delivery order can reference an undefined
+// variable (a whole-box nginx [emerg] on a restart without a configtest).
+$boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+$boa_zones_body = @is_file($boa_zones_file)
+  ? (string) @file_get_contents($boa_zones_file)
+  : '';
+if (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE):
+?>
+###
+### Drop HTML-entity "amp chain" query mutation spam (botnet typical abuse).
+### It keys on the query only, so a subdir site matches exactly like a full
+### domain.
+###
+if ($is_amp_chain) {
+  return 404;
+}
+<?php endif; ?>
+
 # $is_static_chain / $is_content_chain are intentionally NOT guarded on subdir
 # vhosts: a subdir site legitimately serves /<subdir>/sites/all/... assets, which
 # $is_static_chain matches as buried-under-content.  Both guards apply on
@@ -217,6 +237,35 @@ location ^~ /<?php print $subdir; ?> {
 
   set $nocache_details "Cache";
 
+  ###
+  ### Drop security-banned client IPs.  The standalone subdir server
+  ### (subdir_vhost.tpl.php) never pulls in the full-domain vhost include, so
+  ### the IDS ban and the fleet refusal below are restated for this location.
+  ###
+  if ($is_banned) {
+    return 444;
+  }
+
+<?php
+// Reuses the zones body read at the amp-chain gate above; the fallback read
+// runs only if that gate ever moves below this one.
+if (!isset($boa_zones_body)) {
+  $boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $boa_zones_body = @is_file($boa_zones_file)
+    ? (string) @file_get_contents($boa_zones_file)
+    : '';
+}
+if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE):
+?>
+  ###
+  ### Refuse a declared crawler-fleet fingerprint (see the $boa_fleet_* maps
+  ### in the BOA http-scope zones file).  429 because no IDS scorer counts it.
+  ###
+  if ($boa_fleet_block) {
+    return 429;
+  }
+
+<?php endif; ?>
   ###
   ### Deny crawlers.
   ###
