@@ -156,6 +156,26 @@ if ($is_lang_chain) {
   return 404;
 }
 
+<?php
+// Gated on the BOA http-scope file declaring $is_amp_chain, exactly like the
+// full-domain vhost include: no delivery order can reference an undefined
+// variable (a whole-box nginx [emerg] on a restart without a configtest).
+$boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+$boa_zones_body = @is_file($boa_zones_file)
+  ? (string) @file_get_contents($boa_zones_file)
+  : '';
+if (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE):
+?>
+###
+### Drop HTML-entity "amp chain" query mutation spam (botnet typical abuse).
+### It keys on the query only, so a subdir site matches exactly like a full
+### domain.
+###
+if ($is_amp_chain) {
+  return 404;
+}
+<?php endif; ?>
+
 # $is_static_chain / $is_content_chain are intentionally NOT guarded on subdir
 # vhosts: a subdir site legitimately serves /<subdir>/sites/all/... assets, which
 # $is_static_chain matches as buried-under-content.  Both guards apply on

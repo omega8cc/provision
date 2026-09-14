@@ -164,6 +164,32 @@ if ($is_content_chain) {
   return 404;
 }
 
+<?php
+// The $is_amp_chain map is declared in the BOA-written http-scope file, NOT in
+// the master render, and this guard renders only when that file declares it:
+// no delivery order can reference an undefined variable, which matters because
+// that is a whole-box nginx [emerg] and the upgrade path restarts nginx without
+// a configtest.  Read the file once here; the later gates in this template
+// reuse the same body.  An absent or unreadable file yields '', so every gate
+// is simply FALSE.
+$boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+$boa_zones_body = @is_file($boa_zones_file)
+  ? (string) @file_get_contents($boa_zones_file)
+  : '';
+if (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE):
+?>
+###
+### Block HTML-entity "amp chain" query mutation spam (see the $is_amp_chain
+### map in the BOA http-scope zones file).  404 (cheap, no php-fpm) like the
+### node/lang/content-chain siblings: the URL is a real content page carrying
+### a broken query, so a recoverable 404 keeps the blast radius small and
+### tells crawlers to drop the URL.
+###
+if ($is_amp_chain) {
+  return 404;
+}
+<?php endif; ?>
+
 ###
 ### Block the Referer-less /print* flood (see $is_print_path /
 ### $block_print_no_referer in server.tpl.php).  404, not 444: search crawlers
@@ -446,13 +472,15 @@ location ^~ /admin/httprl-test {
 // the expected zone: no delivery order can produce an undeclared-zone
 // reference, which matters because a missing zone is a whole-box nginx
 // [emerg] and the upgrade path restarts nginx without a configtest.
-// Read once here and reuse: more than one guardrail in this template gates on
-// this file, and a vhost render should not stat and slurp it per consumer.
+// The file body is read once, at the amp-chain gate above, and reused here and
+// by the later gates: a vhost render should not stat and slurp it per consumer.
 // An absent or unreadable file yields '', so every gate below is simply FALSE.
-$boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
-$boa_zones_body = @is_file($boa_zones_file)
-  ? (string) @file_get_contents($boa_zones_file)
-  : '';
+if (!isset($boa_zones_body)) {
+  $boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
+  $boa_zones_body = @is_file($boa_zones_file)
+    ? (string) @file_get_contents($boa_zones_file)
+    : '';
+}
 $bgp_zone_ok = strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE;
 if ($bgp_zone_ok):
 ?>
