@@ -115,18 +115,6 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
       dt('The @profile profile does not exist on the target platform.', array('@profile' => $profile)));
   }
 
-  // The deploy's own updatedb IS the D6 -> D7 core conversion; a DisAutoUpDb
-  // control file would skip it, leaving a still-D6 copy that wedges the rest
-  // of the deploy into a confusing rollback. Refuse up front instead.
-  $aegir_root = d('@server_master')->aegir_root;
-  $dis_auto_up_db_global = $aegir_root . '/static/control/DisAutoUpDb.info';
-  $dis_auto_up_db_site = $aegir_root . '/static/control/' . $new_uri . '_DisAutoUpDb.info';
-  if (is_file($dis_auto_up_db_global) || is_file($dis_auto_up_db_site)) {
-    return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_TARGET',
-      dt('A DisAutoUpDb control file is present (@global / @site); it would skip the updatedb this upgrade depends on. Remove it and retry.',
-      array('@global' => $dis_auto_up_db_global, '@site' => $dis_auto_up_db_site)));
-  }
-
   // The source schema must be Drupal 6 (a 6xxx system schema). Bootstrap-free
   // via the provision PDO with the source-db-qualified table name.
   $db_name = _provision_backdrop_site_db_name();

@@ -214,9 +214,6 @@ function drush_provision_backdrop_post_provision_deploy() {
     return;
   }
 
-  $aegir_root = d('@server_master')->aegir_root;
-  $dis_auto_up_db_global = $aegir_root . '/static/control/DisAutoUpDb.info';
-  $dis_auto_up_db_site = $aegir_root . '/static/control/' . d()->uri . '_DisAutoUpDb.info';
   if (provision_is_hostmaster_site()) {
     // Hostmaster is never a Backdrop site; kept for structural parity.
     drush_log(dt('AEGIR/DRUSH Invoking updatedb in drush_provision_backdrop_post_provision_deploy'), 'info');
@@ -231,15 +228,10 @@ function drush_provision_backdrop_post_provision_deploy() {
       // provision-backdrop-upgrade shells out to after this deploy.
       drush_log(dt('BACKDROP/UPGRADE Skipping backdrop-updatedb on a D7 -> Backdrop upgrade deploy; the standalone updater performs the conversion.'), 'info');
     }
-    elseif (is_file($dis_auto_up_db_global)) {
-      drush_log(dt('DRUSH/CTRL/UPDATEDB skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
-    }
-    elseif (is_file($dis_auto_up_db_site)) {
-      drush_log(dt('DRUSH/CTRL/UPDATEDB skipped due to the presence of a control file @path', array('@path' => $dis_auto_up_db_site)), 'info');
-    }
     else {
-      // Tell How-To Skip the DB update.
-      drush_log(dt('AEGIR/DRUSH/CTRL To skip updatedb please create an empty control file @path', array('@path' => $dis_auto_up_db_global)), 'info');
+      // No control file skips the database updates any more; a leftover
+      // DisAutoUpDb.info is named in the log and otherwise ignored.
+      provision_report_retired_updatedb_controls(d()->uri);
       // Apply pending schema updates with the backdrop-drush-extension verb,
       // driven by Aegir's own Drush 8 (BackdropBoot bootstraps the site).
       drush_log(dt('BACKDROP/DRUSH Invoking backdrop-updatedb in drush_provision_backdrop_post_provision_deploy'), 'info');

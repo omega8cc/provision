@@ -1036,6 +1036,11 @@ function _provision_site_local_php_ini() {
  * (the script reports a class-load fatal itself, independent of the
  * account's php.ini), so a rebuild that did not happen is visible in the
  * task log.
+ *
+ * Returns TRUE when the D10+ core rebuild completed and FALSE when it was
+ * skipped or failed, so a task whose whole job is this rebuild never reports
+ * success after the warning; NULL where no core rebuild applies (D7,
+ * hostmaster, and D8/D9, which Aegir Drush 8 rebuilds).
  */
 /**
  * Open (or restore) the platform lock's chmod window for the core rebuild.
@@ -1106,7 +1111,7 @@ function _provision_drupal_rebuild_d8plus() {
 
     if (!is_file($script) || !is_file($root . '/core/includes/utility.inc') || $uri === '') {
       drush_log(dt('REBUILD/CORE/SKIP no core rebuild possible for @uri (script @script, docroot @root); container and caches left to the next request', array('@uri' => $uri, '@script' => $script, '@root' => $root)), 'warning');
-      return;
+      return FALSE;
     }
 
     drush_log(dt('REBUILD/CORE/CMD @php rebuild_d8plus.php @root @uri (core drupal_rebuild, no Drush)', array('@php' => $php, '@root' => $root, '@uri' => $uri)), 'info');
@@ -1132,12 +1137,14 @@ function _provision_drupal_rebuild_d8plus() {
         drush_log($line, 'notice');
       }
       drush_log(dt('REBUILD/CORE/OK service container and caches rebuilt for @uri', array('@uri' => $uri)), 'ok');
+      return TRUE;
     }
     else {
       drush_log(dt('REBUILD/CORE/FAIL the core rebuild for @uri did not complete; container and caches left to the next request', array('@uri' => $uri)), 'warning');
       foreach ($output as $line) {
         drush_log($line, 'warning');
       }
+      return FALSE;
     }
   }
   else {
