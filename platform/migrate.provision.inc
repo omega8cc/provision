@@ -324,7 +324,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   // A rename's target context that exists before this migrate writes its own
   // is not this migrate's to remove on a failure (see the rollback below).
-  drush_set_option('migrate_target_preexisted', !empty(provision_sitealias_get_record($target)));
+  drush_set_option('migrate_target_preexisted', is_file(provision_context_alias_file($target)) ? 1 : 0);
   drush_invoke_process('@none', 'provision-save', array($target), $options);
 
   // Build an options array to pass to the deploy task. This allows injection
@@ -337,6 +337,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
   if (!drush_get_error()) {
+    // The deploy came through: a failure in a later step must not cost the
+    // built site its context (see provision_remove_unfinished_context()).
+    drush_set_option('migrate_target_deployed', TRUE);
     drush_log(dt("Bringing site out of maintenance"));
     d()->site_enabled = TRUE;
     drush_set_option('provision_save_config', FALSE);
@@ -414,7 +417,7 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   // the source's, never a pre-existing one, never one of the source's alias
   // names -- the provision-save above rewrote those pointer files).
   if (!is_null($new_name) && ($new_name != d()->name)) {
-    provision_remove_unfinished_context($new_name, 'migrate_target_preexisted');
+    provision_remove_unfinished_context($new_name, 'migrate_target_preexisted', 'migrate_target_deployed');
   }
 }
 

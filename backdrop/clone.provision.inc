@@ -102,7 +102,7 @@ function drush_provision_backdrop_provision_clone_rollback($new_name, $platform 
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  provision_remove_unfinished_context($new_name, 'clone_target_preexisted');
+  provision_remove_unfinished_context($new_name, 'clone_target_preexisted', 'clone_target_deployed');
 }
 
 /**
@@ -173,7 +173,7 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
 
   // A context of that name that exists before this clone writes its own is
   // not this clone's to remove on a failure (see the rollback below).
-  drush_set_option('clone_target_preexisted', !empty(provision_sitealias_get_record($new_name)));
+  drush_set_option('clone_target_preexisted', is_file(provision_context_alias_file($new_name)) ? 1 : 0);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   # note that we reset the aliases so they don't conflict with the original site
 
@@ -200,6 +200,9 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 
   if (!drush_get_error()) {
+    // The deploy came through: a failure in a later step must not cost the
+    // built site its context (see provision_remove_unfinished_context()).
+    drush_set_option('clone_target_deployed', TRUE);
     // Verify the newly cloned site.
     provision_backend_invoke($new_name, 'provision-verify');
 
