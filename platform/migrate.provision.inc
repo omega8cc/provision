@@ -322,6 +322,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
 
+  // A rename's target context that exists before this migrate writes its own
+  // is not this migrate's to remove on a failure (see the rollback below).
+  drush_set_option('migrate_target_preexisted', is_file(provision_context_alias_file($target)) ? 1 : 0);
   drush_invoke_process('@none', 'provision-save', array($target), $options);
 
   // Build an options array to pass to the deploy task. This allows injection
@@ -332,7 +335,16 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
-  provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  $deploy_result = provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  // The deploy came through: neither a failure in a later step nor an error
+  // raised BEFORE the deploy must cost the built site its context -- and
+  // drush_get_error() reports both alike, it is the process-wide sticky flag.
+  // Keyed to the deploy's own error_status (0 == success), so a failed
+  // pre-migrate platform verify cannot make the rollback delete a site that
+  // exists (see provision_remove_unfinished_context()).
+  if (is_array($deploy_result) && empty($deploy_result['error_status'])) {
+    drush_set_option('migrate_target_deployed', TRUE);
+  }
   if (!drush_get_error()) {
     drush_log(dt("Bringing site out of maintenance"));
     d()->site_enabled = TRUE;
@@ -406,6 +418,13 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
     _provision_drupal_maintain_aliases();
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
+  // A rename wrote the target's context before the deploy; the deploy's own
+  // rollback drops the half-built site, this drops the context it left (never
+  // the source's, never a pre-existing one, never one of the source's alias
+  // names -- the provision-save above rewrote those pointer files).
+  if (!is_null($new_name) && ($new_name != d()->name)) {
+    provision_remove_unfinished_context($new_name, 'migrate_target_preexisted', 'migrate_target_deployed');
+  }
 }
 
 /**
