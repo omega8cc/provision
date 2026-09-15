@@ -493,8 +493,8 @@ function provision_drush_local_lock_state() {
 function provision_unlock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -791,8 +791,8 @@ function provision_unlock_drush_local_vnd() {
 function provision_unlock_some_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -850,8 +850,8 @@ function provision_unlock_some_vnd() {
 function provision_unlock_drush_only() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_drush_only: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -881,8 +881,8 @@ function provision_unlock_drush_only() {
 function provision_lock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -1799,6 +1799,90 @@ class provision {
 include_once('provision.context.inc');
 include_once('provision.service.inc');
 include_once('provision.file.inc');
+
+/**
+ * The drushrc alias file a context's provision-save writes and --delete unlinks
+ * (Provision_Config_Drushrc_Alias::filename()).
+ *
+ * Tested directly rather than through provision_sitealias_get_record(): that
+ * wrapper caches a miss for the life of the process, and the callers below ask
+ * about a name BEFORE a subprocess writes it and again after.
+ */
+function provision_context_alias_file($name) {
+  return drush_server_home() . '/.drush/' . ltrim((string) $name, '@') . '.alias.drushrc.php';
+}
+
+/**
+ * Remove the context a failed clone or rename-migrate left behind.
+ *
+ * Both write the new site's context (provision-save) before they invoke the
+ * deploy on it; the deploy's own rollback drops the half-built site directory
+ * and database, but the context stayed behind, so a site that never came to
+ * be kept an alias in ~/.drush and, once the deploy had run site:alias-convert,
+ * a yml alias in ~/.drush/sites, until something else removed them. Called from
+ * the command rollbacks, which Drush runs on ANY error raised after the command
+ * hook completed; so this removes nothing unless the caller recorded, in the
+ * option named by $preexisted_option, that it probed the name (0: free, 1: a
+ * context of that name existed before the task, which is not ours to remove --
+ * the front end never lets a clone or rename target an existing site, a
+ * command-line run might), and nothing when the caller recorded in
+ * $deployed_option that its deploy came through (a later step failed; the site
+ * exists and keeps its context). Never the source site's own context, never one
+ * of the source's own alias names (their pointer files are the source's).
+ *
+ * The yml alias is the converted copy of the drushrc alias; the limited-shell
+ * worker regenerates the whole store from the drushrc aliases, but only on its
+ * own triggers, so the stale copy is removed here with its checksum.
+ */
+function provision_remove_unfinished_context($new_name, $preexisted_option, $deployed_option = '') {
+  $new_uri = ltrim((string) $new_name, '@');
+  // A context name is a hostname-like token; anything else never reaches the
+  // filesystem from here.
+  if ($new_uri === '' || !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $new_uri)) {
+    return;
+  }
+  if ($new_uri === d()->uri || '@' . $new_uri === d()->name) {
+    return;
+  }
+  // Unwritten: the task aborted before it probed the name and before its own
+  // provision-save, so whatever exists under that name is not its leftover.
+  $preexisted = drush_get_option($preexisted_option, NULL);
+  if ($preexisted === NULL) {
+    return;
+  }
+  if ($preexisted) {
+    drush_log(dt('The context @name existed before this task and is left in place.', array('@name' => '@' . $new_uri)), 'notice');
+    return;
+  }
+  if ($deployed_option !== '' && drush_get_option($deployed_option, FALSE)) {
+    drush_log(dt('The deploy of @name completed; its context is kept although a later step failed.', array('@name' => '@' . $new_uri)), 'notice');
+    return;
+  }
+  if (isset(d()->drush_aliases)) {
+    $own = d()->drush_aliases;
+    if (!is_array($own)) {
+      $own = preg_split('/[\s,]+/', (string) $own, -1, PREG_SPLIT_NO_EMPTY);
+    }
+    if (in_array($new_uri, $own, TRUE)) {
+      return;
+    }
+  }
+  $new_name = '@' . $new_uri;
+  if (is_file(provision_context_alias_file($new_name))) {
+    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
+    drush_log(dt('Removed the context @name of the site this task left unfinished.', array('@name' => $new_name)), 'ok');
+  }
+  // The same home the deploy's alias conversion writes into (site:alias-convert
+  // over $aegir_root/.drush/sites).
+  $sites = d('@server_master')->aegir_root . '/.drush/sites';
+  foreach (array($sites . '/' . $new_uri . '.site.yml', $sites . '/.checksums/' . $new_uri . '.site.md5') as $path) {
+    if (is_file($path)) {
+      provision_file()->unlink($path)
+        ->succeed('Removed @path of the unfinished site')
+        ->fail('Could not remove @path of the unfinished site');
+    }
+  }
+}
 
 /**
  * Name a leftover DisAutoUpDb control file, which no deploy honours any more.

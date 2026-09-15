@@ -262,16 +262,6 @@ function drush_provision_drupal_post_provision_deploy() {
     provision_report_retired_updatedb_controls(d()->uri);
     if (drush_drupal_major_version() >= 10) {
 
-      // Unlock Site-Local Drush In The Old Platform Too
-      // Otherwise Site-Local Drush In The New Platform Would Complain
-      if (!drush_get_option('deploy_replace_site', FALSE)) {
-        $old_platform = drush_get_option('old_platform', FALSE);
-        if ($old_platform) {
-          provision_backend_invoke($old_platform, 'provision-unlock');
-          sleep(5);
-        }
-      }
-
       // Update Drush 10+ Aliases -- on the backend's own interpreter and ini
       // (see _provision_php_script_cmd()): the bare `drush10` launcher runs on
       // whatever ini the shell exports, and the account's Drush 8 ini is
@@ -294,143 +284,29 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
       }
 
-      // Find The App Root Directory
-      $appRoot = findAppRoot(d()->root);
-
-      // Define Local Drush Path
-      $drushPath = 'vendor/drush/drush/drush.php';
-
-      // Check If The Local Drush Exists And Is Executable
-      $drushAbsolutePath = $appRoot . '/' . $drushPath;
-      drush_log(dt('DEPLOY3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
-
-      // updatedb needs the site-local Drush RUNNING, and on a LOCKED D10/D11
-      // platform no site-local Drush loads under PHP 8: the lock de-types the
-      // abstract Symfony Console Output against the still-typed StreamOutput
-      // and overlays psr/log v1 under a Drush typed for v3, so any
-      // vendor/drush/drush/drush.php fatals at class load whatever the exec
-      // bits say. Measured on a BOA box: the chmod-only window this replaces
-      // logged an empty DEPLOY7 version line and no updatedb output on every
-      // D11 migrate and restore, i.e. the schema updates never ran. So: a
-      // REAL unlock (patches reverted, psr/log v3 back, exec bits) when the
-      // platform is locked or partially locked, the site-local Drush work, a
-      // REAL re-lock, and only THEN the container rebuild -- core's own,
-      // Drush-free, in _provision_drupal_rebuild_d8plus() -- as the last
-      // container write: the container updatedb compiles in the stock state
-      // carries the site-local Drush's tagged logger.drupaltodrush, which the
-      // patched web cannot resolve, and must never stay the one the web
-      // serves. A platform found unlocked is left unlocked, as it was found;
-      // the trailing site verify re-locks it as it always did.
-      provision_check_codebase_status();
-      $unlocked_here = FALSE;
-      if (d()->isConsolePatched || d()->isCorePatched || !is_executable($drushAbsolutePath)) {
-        drush_log(dt('DEPLOY2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd (no site-local Drush runs on a locked platform)'), 'info');
-        provision_unlock_drush_local_vnd();
-        $unlocked_here = TRUE;
-      }
-
-      if (!is_executable($drushAbsolutePath)) {
-        // Log The Useful Info
-        drush_log(dt('DEPLOY4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'info');
-        // D10+ with no executable site-local Drush. Do NOT fall back to Aegir
-        // Drush 8: it is version-mismatched for D10+ and must never run
-        // updatedb or a container rebuild there (its FULL bootstrap is for
-        // read-only introspection on a locked platform only). Skip with a
-        // warning; the schema update must be applied manually (Unlock Local
-        // Drush, then 'vdrush @alias updb') or by repairing the site-local
-        // Drush. (D6/D7/D8/D9 keep using Aegir Drush 8 in the branch below — it
-        // is the version-matched Drush for them and bootstraps them fine.)
-        drush_log(dt('DEPLOY4b/LOCAL/DRUSH/SKIP updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@drush_path' => $drushAbsolutePath)), 'warning');
-        // Break the Update-module fetch-task deadlock introduced by the DB
-        // import (clone/migrate/restore). On this degraded D10+ path the
-        // site-local Drush is not executable, so the helper logs and skips
-        // (no Aegir Drush 8 fallback on D10+); the manual SQL workaround
-        // still applies. See
-        // https://www.drupal.org/project/drupal/issues/2920285
-        _provision_drupal_clear_update_fetch_tasks();
-        // Re-lock if we unlocked here (drush.php is genuinely missing, so
-        // this restores the at-rest posture only).
-        if ($unlocked_here) {
-          drush_log(dt('DEPLOY5/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
-        }
-        // The container and caches can still be rebuilt: core's own rebuild
-        // needs no Drush at all. Non-fatal, never silent.
-        _provision_drupal_rebuild_d8plus();
-      }
-      else {
-        // Log The Useful Info
-        drush_log(dt('DEPLOY6/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php --version in @appRoot', array('@appRoot' => $appRoot)), 'info');
-        // Check And Display Site-Local Drush Version (run by the backend's own
-        // PHP, see _provision_site_local_drush_cmd()).
-        $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('--version')));
-        $output = implode('', drush_shell_exec_output());
-        drush_log("DEPLOY7/LOCAL/DRUSH/VERSION " . $output);
-        // Call The Drush updatedb Command with Site-Local Drush, addressed
-        // by --root/--uri like the update_fetch_task clear and the install
-        // path's user:login: the option form bootstraps the site in-process
-        // from its settings, while the @alias form depends on the yml alias
-        // the conversion above writes (a site whose alias is missing answered
-        // "[preflight] The alias ... could not be found" and skipped every
-        // schema update with the task still SUCCESSFUL).
-        drush_log(dt('DEPLOY9/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php updatedb --root=@root --uri=@uri in @appRoot', array('@root' => d()->root, '@uri' => d()->uri, '@appRoot' => $appRoot)), 'info');
-        // _provision_site_local_drush_cmd() escapes every argument before
-        // shell interpolation; the (string) casts guard the PHP 8.1+
-        // null-to-escapeshellarg deprecation.
-        // Cloaked credentials reach the site-local Drush only through the
-        // real environment; harmless when credentials are not cloaked.
-        provision_prepare_environment_subprocess();
-        $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('updatedb', '-y', '--root=' . (string) d()->root, '--uri=' . (string) d()->uri)));
-        provision_clear_environment_subprocess();
-        // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line
-        // log status from it ($success was previously used here but never set,
-        // so every line was logged as 'notice', never 'success').
-        $success = $result;
-        $output = drush_shell_exec_output();
-        foreach ($output as $index => $line) {
-          if (!$success) { // Log the entire error as a notice.
-            $line_status = 'notice';
-          }
-          else { // Only log the last line as success.
-            $line_status = $index+1 == count($output) ? 'success' : 'notice';
-          }
-          drush_log($line, $line_status);
-        }
-        // A schema update that did not run is never a notice: the task
-        // would otherwise end SUCCESSFUL over a site whose database is
-        // behind its code.
-        if (!$success || preg_match('/\[(preflight|error)\]/i', implode("\n", $output))) {
-          drush_log(dt('DEPLOY9/LOCAL/DRUSH/FAIL updatedb did not run to completion (see the lines above); apply the pending database updates by hand'), 'warning');
-        }
-        // Break the Update-module fetch-task deadlock introduced by the DB
-        // import (clone/migrate/restore), while the site-local Drush still
-        // runs: the re-lock below returns vendor/drush to 0400 and the
-        // patches, after which no site-local Drush loads and the helper's
-        // is_executable() gate would fail anyway.
-        // See _provision_drupal_clear_update_fetch_tasks() and
-        // https://www.drupal.org/project/drupal/issues/2920285
-        _provision_drupal_clear_update_fetch_tasks();
-        // Re-lock if we unlocked here: patches re-applied, psr/log v1 overlay
-        // back, vendor/drush 0400 -- the at-rest posture the web serves in.
-        // Runs before the old-platform re-verify, matching the prior order.
-        if ($unlocked_here) {
-          drush_log(dt('DEPLOY10/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
-          provision_lock_drush_local_vnd();
-        }
-        // Rebuild the D8+ service container and flush all caches, the analog
-        // of the D<8 registry-rebuild above -- by core itself, Drush-free,
-        // AFTER the re-lock, so it is the last container write and the
-        // stock-state container updatedb left behind never stays the one the
-        // patched web serves (see the note above the unlock). Non-fatal,
-        // never silent.
-        _provision_drupal_rebuild_d8plus();
-        // Lock Site-Local Drush In The Old Platform Again Too
-        if (!drush_get_option('deploy_replace_site', FALSE)) {
-          $old_platform = drush_get_option('old_platform', FALSE);
-          if ($old_platform) {
-            provision_backend_invoke($old_platform, 'provision-verify');
-            sleep(5);
-          }
+      // The updatedb window itself -- a real unlock when the platform is
+      // locked, the site-local Drush updatedb by --root/--uri, the fetch-task
+      // clear, a real re-lock, then core's own container rebuild -- is the
+      // shared _provision_drupal_site_local_updatedb(), one path for the
+      // deploy (DEPLOY2 .. DEPLOY10) and the provision-update task. Its NULL
+      // (DEPLOY4b: no executable site-local Drush) and FALSE (DEPLOY9/FAIL:
+      // updatedb did not complete) are already a WARNING in the log, and the
+      // deploy goes on to the in-process tail below: a flush there over a
+      // schema left behind fails the task with the cause named right above
+      // the error.
+      $window = _provision_drupal_site_local_updatedb('DEPLOY');
+      // Verify The Old Platform Again Too (a migrate or clone across
+      // platforms), after a window that ran, as before; a skipped window
+      // (DEPLOY4b) has no old-platform verify, as before. The provision-unlock
+      // the old platform used to be sent first is gone: every layer's hook for
+      // that command is a documented no-op ("Nothing needs to happen in the
+      // backend"), so it only cost a backend process and a sleep(5) per D10+
+      // deploy.
+      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE)) {
+        $old_platform = drush_get_option('old_platform', FALSE);
+        if ($old_platform) {
+          provision_backend_invoke($old_platform, 'provision-verify');
+          sleep(5);
         }
       }
     }
@@ -475,8 +351,10 @@ function drush_provision_drupal_post_provision_deploy() {
   // pre-warms the container this bootstrap then reads). D12+ alone skip the
   // FULL bootstrap (Aegir Drush 8 cannot load them) and take the
   // CONFIGURATION-only branch below, relying on that core rebuild. If the
-  // bootstrap genuinely fails on D10/D11 it logs "could not bootstrap" and the
-  // 'packages' map is left untouched (no regression over the prior skip).
+  // bootstrap genuinely fails on D10/D11 it is a WARNING naming what this
+  // tail then skipped (the 'packages' map is left untouched, no regression
+  // over the prior skip) -- never a plain log line, which let a deploy whose
+  // tail did not run end SUCCESSFUL.
   if (drush_drupal_major_version() < 12) {
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
@@ -496,7 +374,12 @@ function drush_provision_drupal_post_provision_deploy() {
       }
     }
     else {
-      drush_log("could not bootstrap drupal after updatedb");
+      // A tail that did not run is never a notice: the task would otherwise
+      // end SUCCESSFUL while the packages map, the URL-rename deploy engine
+      // (the system.site name on a clone to a new URL) and the node access
+      // rebuild were all skipped -- and, on a replace-site deploy, the source
+      // database is dropped right below.
+      drush_log(dt('DEPLOY/BOOTSTRAP/FAIL could not bootstrap Drupal after updatedb: the packages map, the URL-rename deploy engine and the node access rebuild were skipped; run a Verify on the site once it bootstraps'), 'warning');
     }
   }
   else {
@@ -599,93 +482,3 @@ function _provision_drupal_deploy_quarantine_d6_modules($site_path) {
   }
 }
 
-/**
- * Clear the Update module's stale fetch-task tracker after a DB import.
- *
- * Drupal 8+ tracks "a release-history fetch is already queued for project X"
- * in the non-expirable {key_value} collection 'update_fetch_task'. The row is
- * only ever cleared by UpdateProcessor::processFetchTask(), which runs solely
- * when the matching 'update_fetch_tasks' queue item is processed. A clone or
- * migrate restores the durable {key_value} rows but does not preserve the
- * transient queue in lockstep, leaving tracker rows with no queue item.
- * Because UpdateProcessor::createFetchTask() refuses to enqueue when a row
- * exists, the site is then permanently stuck on "No available releases found",
- * with no recovery via cron or the manual check (refreshUpdateData() deletes
- * the available-releases data but never touches this collection).
- *
- * Upstream (still open): https://www.drupal.org/project/drupal/issues/2920285
- *
- * Drupal 7 kept the same tracker in the {cache_update} cache bin, which our
- * deploy already wipes, so this only affects D8+ sites.
- *
- * This is the Drupal-native equivalent of the documented workaround
- * (DELETE FROM key_value WHERE collection = 'update_fetch_task') and is safe
- * to run on every deploy: the next update-status check simply re-fetches.
- *
- * Callers must invoke this from each updatedb branch, right after updatedb and
- * BEFORE the site-local Drush is re-locked: provision_lock_drush_local_vnd()
- * chmods vendor/drush to 0400, after which the is_executable() gate below would
- * fail and the D10+ clear would silently skip. Failure is non-fatal by design
- * (logging only, never drush_set_error) — a cosmetic update-status reset must
- * never fail a deploy.
- */
-function _provision_drupal_clear_update_fetch_tasks() {
-  // D7 and hostmaster have no {key_value} table; nothing to clear. A
-  // non-hostmaster D7 site reaches the callers below, so this guard is required.
-  if (provision_is_hostmaster_site() || drush_drupal_major_version() < 8) {
-    return;
-  }
-
-  // Drupal-native equivalent of the SQL workaround. Double-quoted so "\\Drupal"
-  // collapses to the literal "\Drupal"; the single quotes around the collection
-  // name are safe inside a double-quoted PHP string.
-  $php = "\\Drupal::keyValue('update_fetch_task')->deleteAll();";
-
-  if (drush_drupal_major_version() >= 10) {
-    // D10+: site-local Drush only. Never use Aegir Drush 8 / @alias on D10+.
-    // Aliases were already converted in the updatedb branch (site:alias-convert)
-    // before this helper is called, so the site-local alias resolves.
-    $appRoot = findAppRoot(d()->root);
-    $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
-    if (is_executable($drushAbsolutePath)) {
-      // SECURITY: $appRoot/$uri derive from the alias context;
-      // _provision_site_local_drush_cmd() escapes every argument ($php is a
-      // fixed literal). No extra args are passed to drush_shell_cd_and_exec(),
-      // so the command is NOT run through sprintf() (no '%' hazard). Absolute
-      // --root/--uri instead of the @alias
-      // form: alias resolution redispatches through a shell where the
-      // parenthesised eval payload broke parsing (observed as a /bin/dash
-      // syntax error in the restore deploy), so the clear silently never ran;
-      // the option form executes in-process, same convention as the pm:list /
-      // pm:uninstall calls.
-      drush_log(dt('UPDFETCH/LOCAL/DRUSH/CMD vendor/drush/drush/drush.php ev (clear update_fetch_task) --root=@root --uri=@uri', array('@root' => d()->root, '@uri' => d()->uri)), 'info');
-      // Cloaked credentials reach the site-local Drush only through the real
-      // environment; harmless when credentials are not cloaked.
-      provision_prepare_environment_subprocess();
-      drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('ev', $php, '--root=' . (string) d()->root, '--uri=' . (string) d()->uri)));
-      provision_clear_environment_subprocess();
-      foreach (drush_shell_exec_output() as $line) {
-        drush_log($line, 'notice');
-      }
-    }
-    else {
-      // Degraded codebase (no site-local Drush). Do not fall back to @alias /
-      // Aegir Drush 8 on D10+, per platform policy; log and skip. The documented
-      // manual SQL workaround still applies.
-      drush_log(dt('UPDFETCH/LOCAL/DRUSH/SKIP site-local Drush not executable at @path; update_fetch_task left untouched', array('@path' => $drushAbsolutePath)), 'warning');
-    }
-  }
-  else {
-    // D8/D9: Aegir Drush 8 is acceptable. provision_backend_invoke passes the
-    // eval string as a command argument via the Drush backend, so no manual
-    // shell escaping is required here. That invoke runs with integrate => TRUE,
-    // which replays a child error into the parent's drush_get_error(); the
-    // deploy's restore-dir/old-DB cleanup is gated on !drush_get_error(), so a
-    // failed cosmetic clear could otherwise fail the deploy and leak the old
-    // database. Snapshot and restore the error code so this can never happen.
-    drush_log(dt('UPDFETCH/AEGIR/DRUSH Invoking ev (clear update_fetch_task) with Drush 8'), 'info');
-    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
-    provision_backend_invoke(d()->name, 'ev', array($php));
-    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
-  }
-}

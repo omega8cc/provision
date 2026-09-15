@@ -110,6 +110,23 @@ function drush_provision_drupal_pre_provision_clone_rollback($new_name, $platfor
 }
 
 /**
+ * Implements drush_hook_COMMAND_rollback().
+ *
+ * The clone writes the new site's context before it invokes the deploy; a
+ * failed deploy rolls its own site directory and database back but left that
+ * context behind (see provision_remove_unfinished_context()).
+ */
+function drush_provision_drupal_provision_clone_rollback($new_name, $platform = null) {
+  if (provision_platform_is_backdrop(d())) {
+    return;
+  }
+  if (provision_platform_is_foreign_cms(d())) {
+    return;
+  }
+  provision_remove_unfinished_context($new_name, 'clone_target_preexisted', 'clone_target_deployed');
+}
+
+/**
  * Switch the clone directories around now that we have the new db installed
  */
 function drush_provision_drupal_provision_clone($new_name, $platform = null) {
@@ -180,6 +197,9 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     $options['db_server'] = $db_server;
   }
 
+  // A context of that name that exists before this clone writes its own is
+  // not this clone's to remove on a failure (see the rollback below).
+  drush_set_option('clone_target_preexisted', is_file(provision_context_alias_file($new_name)) ? 1 : 0);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   # note that we reset the aliases so they don't conflict with the original site
 
@@ -204,7 +224,17 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
   }
 
-  provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+
+  // The deploy came through: neither a failure in a later step nor an error
+  // raised BEFORE the deploy must cost the built site its context -- and
+  // drush_get_error() reports both alike, it is the process-wide sticky flag.
+  // Keyed to the deploy's own error_status (0 == success), so a failed
+  // pre-clone verify cannot make the rollback delete a site that exists
+  // (see provision_remove_unfinished_context()).
+  if (is_array($deploy_result) && empty($deploy_result['error_status'])) {
+    drush_set_option('clone_target_deployed', TRUE);
+  }
 
   if (!drush_get_error()) {
     // Verify the newly cloned site.
