@@ -140,6 +140,20 @@ function drush_provision_txp_pre_provision_clone_rollback($new_name, $platform =
   }
 }
 
+/**
+ * Implements drush_hook_COMMAND_rollback().
+ *
+ * The clone writes the new site's context before it invokes the deploy; a
+ * failed deploy rolls its own site directory and database back but left that
+ * context behind (see provision_remove_unfinished_context()).
+ */
+function drush_provision_txp_provision_clone_rollback($new_name, $platform = NULL) {
+  if (!function_exists('provision_platform_is_txp') || !provision_platform_is_txp(d())) {
+    return;
+  }
+  provision_remove_unfinished_context($new_name, 'clone_target_preexisted');
+}
+
 function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
@@ -183,6 +197,9 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
     $options['db_server'] = $db_server;
   }
 
+  // A context of that name that exists before this clone writes its own is
+  // not this clone's to remove on a failure (see the rollback below).
+  drush_set_option('clone_target_preexisted', !empty(provision_sitealias_get_record($new_name)));
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   $deploy_options = array(

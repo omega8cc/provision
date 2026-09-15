@@ -322,6 +322,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
 
   drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
 
+  // A rename's target context that exists before this migrate writes its own
+  // is not this migrate's to remove on a failure (see the rollback below).
+  drush_set_option('migrate_target_preexisted', !empty(provision_sitealias_get_record($target)));
   drush_invoke_process('@none', 'provision-save', array($target), $options);
 
   // Build an options array to pass to the deploy task. This allows injection
@@ -406,6 +409,13 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
     _provision_drupal_maintain_aliases();
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
+  // A rename wrote the target's context before the deploy; the deploy's own
+  // rollback drops the half-built site, this drops the context it left (never
+  // the source's, never a pre-existing one, never one of the source's alias
+  // names -- the provision-save above rewrote those pointer files).
+  if (!is_null($new_name) && ($new_name != d()->name)) {
+    provision_remove_unfinished_context($new_name, 'migrate_target_preexisted');
+  }
 }
 
 /**

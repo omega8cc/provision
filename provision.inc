@@ -1801,6 +1801,56 @@ include_once('provision.service.inc');
 include_once('provision.file.inc');
 
 /**
+ * Remove the context a failed clone or rename-migrate left behind.
+ *
+ * Both write the new site's context (provision-save) before they invoke the
+ * deploy on it; the deploy's own rollback drops the half-built site directory
+ * and database, but the context stayed behind, so a site that never came to
+ * be kept an alias in ~/.drush and, once the deploy had run site:alias-convert,
+ * a yml alias in ~/.drush/sites, until something else removed them. Called from
+ * the command rollbacks. Never the source site's own context, never one of the
+ * source's own alias names (their pointer files are the source's), and never
+ * a context that existed before the task wrote its own: the caller records
+ * that in the option named by $preexisted_option before its provision-save
+ * (the front end never lets a clone or rename target an existing site; a
+ * command-line run might, and its context is then not this task's to remove).
+ *
+ * The yml alias is the converted copy of the drushrc alias; the limited-shell
+ * worker regenerates the whole store from the drushrc aliases, but only on its
+ * own triggers, so the stale copy is removed here with its checksum.
+ */
+function provision_remove_unfinished_context($new_name, $preexisted_option) {
+  $new_uri = ltrim((string) $new_name, '@');
+  if ($new_uri === '' || $new_uri === d()->uri || '@' . $new_uri === d()->name) {
+    return;
+  }
+  if (drush_get_option($preexisted_option, FALSE)) {
+    drush_log(dt('The context @name existed before this task and is left in place.', array('@name' => '@' . $new_uri)), 'notice');
+    return;
+  }
+  if (isset(d()->drush_aliases) && in_array($new_uri, (array) d()->drush_aliases, TRUE)) {
+    return;
+  }
+  $new_name = '@' . $new_uri;
+  // The alias record, not d(): loading a context that does not exist logs an
+  // error row of its own, and a task that failed before provision-save has
+  // none.
+  $record = provision_sitealias_get_record($new_name);
+  if (!empty($record)) {
+    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
+    drush_log(dt('Removed the context @name of the site this task left unfinished.', array('@name' => $new_name)), 'ok');
+  }
+  $sites = drush_server_home() . '/.drush/sites';
+  foreach (array($sites . '/' . $new_uri . '.site.yml', $sites . '/.checksums/' . $new_uri . '.site.md5') as $path) {
+    if (is_file($path)) {
+      provision_file()->unlink($path)
+        ->succeed('Removed @path of the unfinished site')
+        ->fail('Could not remove @path of the unfinished site');
+    }
+  }
+}
+
+/**
  * Name a leftover DisAutoUpDb control file, which no deploy honours any more.
  *
  * ~/static/control/DisAutoUpDb.info (every site) and <uri>_DisAutoUpDb.info
