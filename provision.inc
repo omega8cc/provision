@@ -493,8 +493,8 @@ function provision_drush_local_lock_state() {
 function provision_unlock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -791,8 +791,8 @@ function provision_unlock_drush_local_vnd() {
 function provision_unlock_some_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -850,8 +850,8 @@ function provision_unlock_some_vnd() {
 function provision_unlock_drush_only() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_drush_only: !vendor', array('!vendor' => d()->root)), 'message');
 
@@ -881,8 +881,8 @@ function provision_unlock_drush_only() {
 function provision_lock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
-    !preg_match("/\/aegir\/distro\//gi", d()->root) &&
-    !preg_match("/\/var\/aegir\//gi", d()->root)) {
+    !preg_match("/\/aegir\/distro\//i", d()->root) &&
+    !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
 
