@@ -1288,8 +1288,10 @@ function _provision_drupal_clear_update_fetch_tasks() {
  * and the site verify that follows a clone or migrate rebuilds by core again;
  * so within the window the core rebuild is the last write, and for the whole
  * task the last write is always a patched-state one. A platform found unlocked
- * is left unlocked, as it was found; the trailing site verify re-locks it as
- * it always did.
+ * with its site-local Drush executable is left unlocked, as it was found (the
+ * trailing site verify re-locks it as it always did); one found unlocked with
+ * NO executable site-local Drush is handled like a locked one, unlocked and
+ * re-locked to the at-rest posture around the skip, as the deploy always has.
  *
  * Aegir's own Drush 8 is never the fallback: it is version-mismatched for
  * D10+ and must not run updatedb or compile a container there (its FULL
@@ -1303,10 +1305,13 @@ function _provision_drupal_clear_update_fetch_tasks() {
  *   provision-update task.
  *
  * @return bool|null
- *   TRUE when updatedb ran to completion; FALSE when it did not run or did not
+ *   TRUE when updatedb ran to completion; FALSE when it ran but did not
  *   complete (the warning naming why is logged here, and the caches are still
- *   rebuilt); NULL where no site-local updatedb applies (hostmaster, and
- *   Drupal below 10).
+ *   rebuilt); NULL when it did not run at all: no site-local updatedb applies
+ *   (hostmaster, Drupal below 10), or no executable site-local Drush even
+ *   after the unlock (the 4b/LOCAL/DRUSH/SKIP warning is logged here). A task
+ *   that exists to apply the updates fails on anything but TRUE; the deploy
+ *   goes on either way and skips only the steps that need a window that ran.
  */
 function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   if (provision_is_hostmaster_site() || drush_drupal_major_version() < 10) {
@@ -1359,7 +1364,7 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
     // The container and caches can still be rebuilt: core's own rebuild
     // needs no Drush at all. Non-fatal, never silent.
     _provision_drupal_rebuild_d8plus();
-    return FALSE;
+    return NULL;
   }
 
   // Log The Useful Info
@@ -1381,12 +1386,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   provision_prepare_environment_subprocess();
   $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('updatedb', '-y', '--root=' . (string) d()->root, '--uri=' . (string) d()->uri)));
   provision_clear_environment_subprocess();
-  // drush_shell_cd_and_exec() returns TRUE on exit 0; drive the per-line log
-  // status from it.
-  $success = $result;
+  // drush_shell_cd_and_exec() returns TRUE on exit 0, and an exit 0 whose
+  // output carries a [preflight] or [error] row did not complete either: one
+  // verdict, taken before the lines are logged, so the last line is never
+  // logged as a success right above the FAIL warning.
   $output = drush_shell_exec_output();
+  $complete = $result && !preg_match('/\[(preflight|error)\]/i', implode("\n", $output));
   foreach ($output as $index => $line) {
-    if (!$success) { // Log the entire error as a notice.
+    if (!$complete) { // Log the entire error as a notice.
       $line_status = 'notice';
     }
     else { // Only log the last line as success.
@@ -1396,7 +1403,6 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   }
   // A schema update that did not run is never a notice: the task would
   // otherwise end SUCCESSFUL over a site whose database is behind its code.
-  $complete = $success && !preg_match('/\[(preflight|error)\]/i', implode("\n", $output));
   if (!$complete) {
     drush_log(dt('@p updatedb did not run to completion (see the lines above); apply the pending database updates by hand', array('@p' => $tag . '9/LOCAL/DRUSH/FAIL')), 'warning');
   }

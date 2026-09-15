@@ -197,12 +197,19 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
   }
 
-  provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+
+  // The deploy came through: neither a failure in a later step nor an error
+  // raised BEFORE the deploy must cost the built site its context -- and
+  // drush_get_error() reports both alike, it is the process-wide sticky flag.
+  // Keyed to the deploy's own error_status (0 == success), so a failed
+  // pre-clone verify cannot make the rollback delete a site that exists
+  // (see provision_remove_unfinished_context()).
+  if (is_array($deploy_result) && empty($deploy_result['error_status'])) {
+    drush_set_option('clone_target_deployed', TRUE);
+  }
 
   if (!drush_get_error()) {
-    // The deploy came through: a failure in a later step must not cost the
-    // built site its context (see provision_remove_unfinished_context()).
-    drush_set_option('clone_target_deployed', TRUE);
     // Verify the newly cloned site.
     provision_backend_invoke($new_name, 'provision-verify');
 

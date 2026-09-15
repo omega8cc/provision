@@ -372,11 +372,17 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
-  provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
-  if (!drush_get_error()) {
-    // The deploy came through: a failure in a later step must not cost the
-    // built site its context (see provision_remove_unfinished_context()).
+  $deploy_result = provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  // The deploy came through: neither a failure in a later step nor an error
+  // raised BEFORE the deploy must cost the built site its context -- and
+  // drush_get_error() reports both alike, it is the process-wide sticky flag.
+  // Keyed to the deploy's own error_status (0 == success), so a failed
+  // pre-migrate platform verify cannot make the rollback delete a site that
+  // exists (see provision_remove_unfinished_context()).
+  if (is_array($deploy_result) && empty($deploy_result['error_status'])) {
     drush_set_option('migrate_target_deployed', TRUE);
+  }
+  if (!drush_get_error()) {
     drush_log(dt("Bringing site out of maintenance"));
     d()->site_enabled = TRUE;
     drush_set_option('provision_save_config', FALSE);

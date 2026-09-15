@@ -288,20 +288,21 @@ function drush_provision_drupal_post_provision_deploy() {
       // locked, the site-local Drush updatedb by --root/--uri, the fetch-task
       // clear, a real re-lock, then core's own container rebuild -- is the
       // shared _provision_drupal_site_local_updatedb(), one path for the
-      // deploy (DEPLOY2 .. DEPLOY10) and the provision-update task. Its FALSE
-      // (DEPLOY4b: no executable site-local Drush; DEPLOY9/FAIL: updatedb did
-      // not complete) is already a WARNING in the log, and the deploy goes on
-      // to the in-process tail below: a flush there over a schema left behind
-      // fails the task with the cause named right above the error.
-      _provision_drupal_site_local_updatedb('DEPLOY');
+      // deploy (DEPLOY2 .. DEPLOY10) and the provision-update task. Its NULL
+      // (DEPLOY4b: no executable site-local Drush) and FALSE (DEPLOY9/FAIL:
+      // updatedb did not complete) are already a WARNING in the log, and the
+      // deploy goes on to the in-process tail below: a flush there over a
+      // schema left behind fails the task with the cause named right above
+      // the error.
+      $window = _provision_drupal_site_local_updatedb('DEPLOY');
       // Verify The Old Platform Again Too (a migrate or clone across
-      // platforms), as before the window. The provision-unlock the old
-      // platform used to be sent first is gone: every layer's hook for that
-      // command is a documented no-op ("Nothing needs to happen in the
+      // platforms), after a window that ran, as before; a skipped window
+      // (DEPLOY4b) has no old-platform verify, as before. The provision-unlock
+      // the old platform used to be sent first is gone: every layer's hook for
+      // that command is a documented no-op ("Nothing needs to happen in the
       // backend"), so it only cost a backend process and a sleep(5) per D10+
-      // deploy. This verify now also follows a skipped window (DEPLOY4b),
-      // where the old code had none; a platform verify is idempotent.
-      if (!drush_get_option('deploy_replace_site', FALSE)) {
+      // deploy.
+      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE)) {
         $old_platform = drush_get_option('old_platform', FALSE);
         if ($old_platform) {
           provision_backend_invoke($old_platform, 'provision-verify');
