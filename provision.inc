@@ -1045,48 +1045,10 @@ function provision_lock_drush_local_vnd() {
       $commandConsoleDry = sprintf('patch --dry-run -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
       $commandValidatorDry = sprintf('patch --dry-run -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
 
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
-        $contribDirMnx = d()->root . '/modules/contrib';
-        $contribDirWld = d()->root . '/sites/all/modules';
-        $contribWebfrm = d()->root . '/modules/contrib/webform';
-        $identifyCoreV = d()->root . '/core/modules/workspaces_ui';
-
-        if (is_dir($identifyCoreV) && is_dir($contribDirMnx)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN1 within modules/contrib'), 'info');
-          // Removing all .drush.inc files under modules/contrib
-          $commandIncClean = 'find ' . $contribDirMnx . ' -type f -name "*.drush.inc" -print -exec rm -f {} \;';
-          $success = drush_shell_exec($commandIncClean);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-            drush_log($line, $line_status);
-          }
-        }
-
-        if (is_dir($identifyCoreV) && is_dir($contribDirWld)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN2 within sites/*/modules'), 'info');
-          // Removing all .drush.inc files under sites/*/modules
-          $commandIncClean = 'find ' . d()->root . '/sites/*/modules -type f -name "*.drush.inc" -print -exec rm -f {} \;';
-          $success = drush_shell_exec($commandIncClean);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-            drush_log($line, $line_status);
-          }
-        }
-
-        if (is_dir($contribWebfrm)) {
-          drush_log(dt('WEB/DRUSH/INC/CLEAN3 within modules/contrib/webform'), 'info');
-          // Removing all .drush.inc files under modules/contrib/webform
-          $commandIncClean = 'find ' . $contribWebfrm . ' -type f -name "*.drush.inc" -print -exec rm -f {} \;';
-          $success = drush_shell_exec($commandIncClean);
-          $result = drush_shell_exec_output();
-          foreach ($result as $index => $line) {
-            $line_status = $success ? ($index + 1 == count($result) ? 'success' : 'notice') : 'warning';
-            drush_log($line, $line_status);
-          }
-        }
-      }
+      // Contributed *.drush.inc files stay in place. The BOA Drush 8 extension
+      // filter denies them for backend identities at discovery time, so a
+      // command file the backend cannot load can no longer break a task; the
+      // earlier sweep that deleted them on Drupal 11 and webform trees is gone.
 
       drush_log(dt('CORE/PATCH/IF1 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF1 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
