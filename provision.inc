@@ -1047,8 +1047,7 @@ function provision_lock_drush_local_vnd() {
 
       // Contributed *.drush.inc files stay in place. The BOA Drush 8 extension
       // filter denies them for backend identities at discovery time, so a
-      // command file the backend cannot load can no longer break a task; the
-      // earlier sweep that deleted them on Drupal 11 and webform trees is gone.
+      // command file the backend cannot load cannot break a task either.
 
       drush_log(dt('CORE/PATCH/IF1 --@isCorePatched-- in @webRoot', array('@isCorePatched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
       drush_log(dt('CONSOLE/PATCH/IF1 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
