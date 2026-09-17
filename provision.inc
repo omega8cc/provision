@@ -487,6 +487,101 @@ function provision_drush_local_lock_state() {
 }
 
 /**
+ * Bring the site-local Drush into a platform that ships without one.
+ *
+ * Runs composer require drush/drush in the codebase root, but only after
+ * composer's own check of the lock's platform requirements against THIS PHP
+ * passes. Measured 2026-09-17 on Opigno LMS 3.2.7 and Open Social 13.1.0
+ * platforms (no vendor/drush in the tarball) verified on an instance whose
+ * PHP CLI is 8.5 while the platforms' locks cap PHP at 8.4: composer-patches
+ * first deleted every patched package "so that it can be re-installed and
+ * re-patched", then the resolve failed on the PHP requirement and composer
+ * reverted composer.json and composer.lock only -- calendar and h5p
+ * (Opigno) and simple_oauth (Open Social) were gone from modules/contrib,
+ * and every Opigno site install died on "Required modules not found". A
+ * resolve the lock already rules out must therefore never start; that is
+ * what check-platform-reqs decides, with no operation and nothing removed.
+ * The plugins stay ON for the require itself: a require that succeeds with
+ * them off makes composer forget where composer/installers placed every
+ * drupal-* package, re-install those into vendor/ and point the autoloader
+ * there while the docroot keeps the old trees -- worse than the failure.
+ * A codebase that carries composer patches never gets the on-box require at
+ * all: measured on the same Opigno platform under a PHP the lock accepts, a
+ * SUCCESSFUL require re-installed the patched calendar and h5p packages and
+ * composer-patches then logged "Could not apply patch! Skipping" for every
+ * one of their patches -- the platform kept running on unpatched modules.
+ * The build box applies those patches; a box never can. Both skips are
+ * logged as advisories (the condition is permanent for that platform and
+ * must not turn every later task into a WARNING); a require that still
+ * fails is a warning carrying composer's own message.
+ */
+function _provision_require_site_local_drush($approot) {
+  if (_provision_codebase_has_composer_patches($approot)) {
+    drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase carries composer patches, and a resolve on this box would re-install the patched packages without their patches; it keeps no site-local Drush until it is built with one', array(
+      '@root' => $approot,
+    )), 'advisory');
+    return FALSE;
+  }
+  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
+  $check_output = implode('', drush_shell_exec_output());
+  if (!$check) {
+    drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
+      '@root' => $approot,
+      '@out' => $check_output,
+    )), 'advisory');
+    return FALSE;
+  }
+  $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+  $output = implode('', drush_shell_exec_output());
+  if ($result) {
+    drush_log("DRUSH/DRUSH " . $output);
+  }
+  else {
+    drush_log(dt('DRUSH/DRUSH composer require drush/drush failed in @root; it keeps no site-local Drush: @out', array(
+      '@root' => $approot,
+      '@out' => $output,
+    )), 'warning');
+  }
+  return $result;
+}
+
+/**
+ * Does this codebase carry composer patches?
+ *
+ * TRUE when composer.json declares extra.patches or extra.patches-file, or
+ * the lock installs cweagans/composer-patches. Read from disk, no composer
+ * run: this decides whether composer may run on the box at all.
+ */
+function _provision_codebase_has_composer_patches($approot) {
+  $approot = rtrim($approot, '/');
+  $json_path = $approot . '/composer.json';
+  if (is_readable($json_path)) {
+    $json = json_decode(file_get_contents($json_path), TRUE);
+    if (is_array($json) && isset($json['extra']) && is_array($json['extra'])) {
+      if (!empty($json['extra']['patches']) || !empty($json['extra']['patches-file'])) {
+        return TRUE;
+      }
+    }
+  }
+  $lock_path = $approot . '/composer.lock';
+  if (is_readable($lock_path)) {
+    $lock = json_decode(file_get_contents($lock_path), TRUE);
+    if (is_array($lock)) {
+      foreach (array('packages', 'packages-dev') as $key) {
+        if (!empty($lock[$key]) && is_array($lock[$key])) {
+          foreach ($lock[$key] as $package) {
+            if (isset($package['name']) && $package['name'] === 'cweagans/composer-patches') {
+              return TRUE;
+            }
+          }
+        }
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
  * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir tasks like updatedb.
  */
@@ -578,18 +673,12 @@ function provision_unlock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
-        $approot = d()->root;
-        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
-        $output = implode('', drush_shell_exec_output());
-        drush_log("DRUSH/DRUSH " . $output);
+        _provision_require_site_local_drush(d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
-        $approot = d()->root . "/../";
-        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
-        $output = implode('', drush_shell_exec_output());
-        drush_log("DRUSH/DRUSH " . $output);
+        _provision_require_site_local_drush(d()->root . "/../");
       }
     }
 
@@ -901,18 +990,12 @@ function provision_lock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
-        $approot = d()->root;
-        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
-        $output = implode('', drush_shell_exec_output());
-        drush_log("DRUSH/DRUSH " . $output);
+        _provision_require_site_local_drush(d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
-        $approot = d()->root . "/../";
-        $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
-        $output = implode('', drush_shell_exec_output());
-        drush_log("DRUSH/DRUSH " . $output);
+        _provision_require_site_local_drush(d()->root . "/../");
       }
     }
 

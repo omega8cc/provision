@@ -116,7 +116,15 @@ function provision_drush_command() {
       'force-reinstall' => dt('Delete the sites database and files, before attempting to install.'),
     ),
     'allow-additional-options' => TRUE,
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // Dispatch at the Drush level and bootstrap the platform root inside the
+    // validate hook (platform/install.provision.inc), as provision-verify,
+    // provision-dlock and provision-dunlock do. A root bootstrap at dispatch
+    // on a platform whose site-local Drush is unlocked loads the platform's
+    // typed symfony/console before Drush 8 declares its DrushInputAdapter,
+    // and the task dies with "getFirstArgument() must be compatible with
+    // InputInterface::getFirstArgument(): ?string" before any hook can
+    // re-lock the platform (omega8cc/boa#1943).
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-install-backend'] = array(

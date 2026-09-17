@@ -20,6 +20,26 @@ function drush_provision_backdrop_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
+
+  // provision-install dispatches at DRUSH_BOOTSTRAP_DRUSH (provision.drush.inc,
+  // omega8cc/boa#1943), so the Backdrop root is bootstrapped here, the way the
+  // Backdrop verify does in its validate hook: BackdropBoot's root phase is
+  // what chdir()s into the platform and sets the root context the rest of
+  // this command relies on.
+  drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+  drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
+  if (drush_get_error()) {
+    $errors = drush_get_error_log();
+    foreach ($errors as $type => &$error) {
+      $error = "$type: {$error[0]}";
+    }
+    return drush_set_error("DRUSH_INVALID_DRUPAL_ROOT",
+      dt("A Backdrop codebase was not found in @path. The errors were: @errors", array(
+        '@path' => d()->root,
+        '@errors' => implode('|', $errors),
+      )));
+  }
+
   if (_provision_drupal_site_exists()) {
 
     // If "force-reinstall" option is set, delete the database and files.

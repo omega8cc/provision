@@ -25,5 +25,5 @@ function drush_provision_drupal_provision_login_reset() {
   $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $uri, 'no-browser' => TRUE));
 
   drush_set_option('login_link', $result['output']);
-  drush_log(dt('Login url: !onetime', array('!onetime' => $result['output'])), 'success');
+  drush_log(dt('One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'success');
 }
