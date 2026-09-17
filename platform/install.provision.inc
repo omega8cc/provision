@@ -37,7 +37,12 @@ function drush_provision_drupal_provision_install_validate() {
   // hook ran, so the INSTALL1 re-lock in the command callback could never be
   // reached (omega8cc/boa#1943). Measured 2026-09-17 on a Drupal 11.4.7
   // platform: locked, dispatch fine; after provision-dunlock, that fatal;
-  // after provision-dlock, fine again.
+  // after provision-dlock, fine again. The Backdrop arm bootstraps its own
+  // root in its validate hook (backdrop/install.provision.inc); Grav and
+  // Textpattern installs never needed one. provision-install-backend, the
+  // child the D6-D10 path invokes, still bootstraps at dispatch and relies on
+  // the INSTALL1 re-lock having run in this process first.
+  d()->root = provision_auto_fix_platform_root(d()->root);
   drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
   if (drush_get_error()) {
