@@ -505,11 +505,23 @@ function provision_drush_local_lock_state() {
  * them off makes composer forget where composer/installers placed every
  * drupal-* package, re-install those into vendor/ and point the autoloader
  * there while the docroot keeps the old trees -- worse than the failure.
- * The skip is logged as an advisory (the condition is permanent for that
- * platform on that PHP and must not turn every later task into a WARNING);
- * a require that still fails is a warning carrying composer's own message.
+ * A codebase that carries composer patches never gets the on-box require at
+ * all: measured on the same Opigno platform under a PHP the lock accepts, a
+ * SUCCESSFUL require re-installed the patched calendar and h5p packages and
+ * composer-patches then logged "Could not apply patch! Skipping" for every
+ * one of their patches -- the platform kept running on unpatched modules.
+ * The build box applies those patches; a box never can. Both skips are
+ * logged as advisories (the condition is permanent for that platform and
+ * must not turn every later task into a WARNING); a require that still
+ * fails is a warning carrying composer's own message.
  */
 function _provision_require_site_local_drush($approot) {
+  if (_provision_codebase_has_composer_patches($approot)) {
+    drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase carries composer patches, and a resolve on this box would re-install the patched packages without their patches; it keeps no site-local Drush until it is built with one', array(
+      '@root' => $approot,
+    )), 'advisory');
+    return FALSE;
+  }
   $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
   $check_output = implode('', drush_shell_exec_output());
   if (!$check) {
@@ -531,6 +543,42 @@ function _provision_require_site_local_drush($approot) {
     )), 'warning');
   }
   return $result;
+}
+
+/**
+ * Does this codebase carry composer patches?
+ *
+ * TRUE when composer.json declares extra.patches or extra.patches-file, or
+ * the lock installs cweagans/composer-patches. Read from disk, no composer
+ * run: this decides whether composer may run on the box at all.
+ */
+function _provision_codebase_has_composer_patches($approot) {
+  $approot = rtrim($approot, '/');
+  $json_path = $approot . '/composer.json';
+  if (is_readable($json_path)) {
+    $json = json_decode(file_get_contents($json_path), TRUE);
+    if (is_array($json) && isset($json['extra']) && is_array($json['extra'])) {
+      if (!empty($json['extra']['patches']) || !empty($json['extra']['patches-file'])) {
+        return TRUE;
+      }
+    }
+  }
+  $lock_path = $approot . '/composer.lock';
+  if (is_readable($lock_path)) {
+    $lock = json_decode(file_get_contents($lock_path), TRUE);
+    if (is_array($lock)) {
+      foreach (array('packages', 'packages-dev') as $key) {
+        if (!empty($lock[$key]) && is_array($lock[$key])) {
+          foreach ($lock[$key] as $package) {
+            if (isset($package['name']) && $package['name'] === 'cweagans/composer-patches') {
+              return TRUE;
+            }
+          }
+        }
+      }
+    }
+  }
+  return FALSE;
 }
 
 /**
