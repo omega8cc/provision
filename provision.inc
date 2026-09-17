@@ -489,29 +489,43 @@ function provision_drush_local_lock_state() {
 /**
  * Bring the site-local Drush into a platform that ships without one.
  *
- * Runs composer require drush/drush in the codebase root with composer
- * plugins OFF. Measured 2026-09-17 on Opigno LMS 3.2.7 and Open Social
- * 13.1.0 platforms (no vendor/drush in the tarball) verified on an instance
- * whose PHP CLI is 8.5 while the platforms' locks cap PHP at 8.4: with the
- * plugins on, composer-patches first deleted every patched package "so that
- * it can be re-installed and re-patched", then the resolve failed on the PHP
- * requirement and composer reverted composer.json and composer.lock only --
- * calendar and h5p (Opigno) and simple_oauth (Open Social) were gone from
- * modules/contrib, and every Opigno site install died on "Required modules
- * not found". With the plugins off nothing is removed ahead of the resolve:
- * a failed require leaves the tree exactly as it was, a successful one adds
- * drush and its libraries under vendor/ (no drupal-* package rides with
- * drush, so composer/installers is not needed). A failure is logged as a
- * warning carrying composer's own message, so the task shows it.
+ * Runs composer require drush/drush in the codebase root, but only after
+ * composer's own check of the lock's platform requirements against THIS PHP
+ * passes. Measured 2026-09-17 on Opigno LMS 3.2.7 and Open Social 13.1.0
+ * platforms (no vendor/drush in the tarball) verified on an instance whose
+ * PHP CLI is 8.5 while the platforms' locks cap PHP at 8.4: composer-patches
+ * first deleted every patched package "so that it can be re-installed and
+ * re-patched", then the resolve failed on the PHP requirement and composer
+ * reverted composer.json and composer.lock only -- calendar and h5p
+ * (Opigno) and simple_oauth (Open Social) were gone from modules/contrib,
+ * and every Opigno site install died on "Required modules not found". A
+ * resolve the lock already rules out must therefore never start; that is
+ * what check-platform-reqs decides, with no operation and nothing removed.
+ * The plugins stay ON for the require itself: a require that succeeds with
+ * them off makes composer forget where composer/installers placed every
+ * drupal-* package, re-install those into vendor/ and point the autoloader
+ * there while the docroot keeps the old trees -- worse than the failure.
+ * The skip is logged as an advisory (the condition is permanent for that
+ * platform on that PHP and must not turn every later task into a WARNING);
+ * a require that still fails is a warning carrying composer's own message.
  */
 function _provision_require_site_local_drush($approot) {
-  $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-plugins --no-interaction --no-progress');
+  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
+  $check_output = implode('', drush_shell_exec_output());
+  if (!$check) {
+    drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
+      '@root' => $approot,
+      '@out' => $check_output,
+    )), 'advisory');
+    return FALSE;
+  }
+  $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
   $output = implode('', drush_shell_exec_output());
   if ($result) {
     drush_log("DRUSH/DRUSH " . $output);
   }
   else {
-    drush_log(dt('DRUSH/DRUSH composer require drush/drush failed in @root; the codebase is left as it was and keeps no site-local Drush: @out', array(
+    drush_log(dt('DRUSH/DRUSH composer require drush/drush failed in @root; it keeps no site-local Drush: @out', array(
       '@root' => $approot,
       '@out' => $output,
     )), 'warning');
