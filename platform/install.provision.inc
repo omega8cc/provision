@@ -25,6 +25,33 @@ function drush_provision_drupal_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
+
+  // provision-install dispatches at DRUSH_BOOTSTRAP_DRUSH (provision.drush.inc),
+  // so Drush 8's DrushInputAdapter is declared against Drush's own bundled
+  // symfony/console before anything of the platform loads. Bootstrap the
+  // platform root here, the way provision-dlock does in its callback. A root
+  // bootstrap at dispatch on a platform whose site-local Drush was unlocked
+  // (a dunlock without re-lock, a hand-registered codebase) loaded the
+  // platform's typed InputInterface first and the Install task died with
+  // "DrushInputAdapter::getFirstArgument() must be compatible" before any
+  // hook ran, so the INSTALL1 re-lock in the command callback could never be
+  // reached (omega8cc/boa#1943). Measured 2026-09-17 on a Drupal 11.4.7
+  // platform: locked, dispatch fine; after provision-dunlock, that fatal;
+  // after provision-dlock, fine again.
+  drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+  drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
+  if (drush_get_error()) {
+    $errors = drush_get_error_log();
+    foreach ($errors as $type => &$error) {
+      $error = "$type: {$error[0]}";
+    }
+    return drush_set_error("DRUSH_INVALID_DRUPAL_ROOT",
+      dt("A Drupal codebase was not found in @path. The errors were: @errors", array(
+        '@path' => d()->root,
+        '@errors' => implode('|', $errors),
+      )));
+  }
+
   if (_provision_drupal_site_exists()) {
 
     // If "force-reinstall" option is set, delete the database and files.
