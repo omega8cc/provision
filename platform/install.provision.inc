@@ -227,6 +227,20 @@ function drush_provision_drupal_provision_install() {
       // under PHP 8 no site-local Drush loads on a locked platform at all, so a
       // chmod-only window is never enough. Honour
       // _no_codebase_lock_unlock.ctrl ($lock_unlock).
+      // Drupal 11 needs MySQL 8. On a Percona 5.7 server the installer refuses
+      // ("database server version 5.7.x is less than the minimum required
+      // version 8.0") deep inside the unlock window below, and that reason is
+      // one notice among hundreds in the task log (omega8cc/boa#1943 came from
+      // such a box). Ask the database server first and stop with the one
+      // reason before the codebase is touched.
+      $d11_db_version = _provision_d11_db_server_version();
+      if ($d11_db_version !== FALSE && version_compare($d11_db_version, '8.0', '<')) {
+        return drush_set_error('PROVISION_DRUPAL_DB_TOO_OLD', dt('Drupal @major needs MySQL 8; this database server runs @version. Move the box to Percona 8.4 first (docs.boa.io: Percona 8 upgrade readiness), then run Install again. The codebase was not touched.', array(
+          '@major' => drush_drupal_major_version(),
+          '@version' => $d11_db_version,
+        )));
+      }
+
       if ($lock_unlock) {
         drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
         provision_unlock_drush_local_vnd();
@@ -654,6 +668,30 @@ function drush_provision_drupal_post_provision_install() {
  * @return string
  *   The db-url, or an empty string when the context carries no credentials.
  */
+/**
+ * The version string the site's database server reports, or FALSE.
+ *
+ * Asked through the site's own db service (already connected: the pre hook
+ * created the database). FALSE when the server cannot be asked; the caller
+ * then lets the installer decide, as before.
+ */
+function _provision_d11_db_server_version() {
+  $version = FALSE;
+  try {
+    $result = d()->service('db')->query("SELECT VERSION()");
+    if ($result) {
+      $version = $result->fetchColumn();
+    }
+  }
+  catch (Exception $e) {
+    $version = FALSE;
+  }
+  if (!is_string($version) || !preg_match('/^[0-9]+\.[0-9]+/', $version)) {
+    return FALSE;
+  }
+  return $version;
+}
+
 function _provision_install_db_url_from_context() {
   $type = drush_get_option('db_type', 'mysql', 'site');
   $user = drush_get_option('db_user', '', 'site');
