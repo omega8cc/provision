@@ -2109,3 +2109,403 @@ function provision_report_retired_updatedb_controls($uri) {
     }
   }
 }
+
+/**
+ * Report a failed tar run in tar's own words.
+ *
+ * Drush captures a command's output all along but prints it only under
+ * --debug, so every archive failure -- a backup's `tar c`, a deploy's `tar x`
+ * -- reached the task log as a bare "could not" line. "file changed as we
+ * read it", "Cannot open: Permission denied" and "No space left on device"
+ * each ask for a different remedy; a 442-second extraction that died on a
+ * full disk read exactly like a corrupt archive. Trimmed, empty lines and the
+ * closing "Exiting with failure status" summary dropped (the exit code said
+ * that already), capped so a disk-full run that fails every remaining member
+ * cannot flood the log.
+ *
+ * @param $output
+ *   The captured lines, drush_shell_exec_output() taken right after the run
+ *   (any later shell call overwrites that buffer).
+ * @param $prefix
+ *   Names the run in each logged line, e.g. 'Extraction error'.
+ * @param $type
+ *   The drush_log type, 'error' unless the caller tolerates the failure.
+ * @param $cap
+ *   Lines logged before the rest is summarised as a count.
+ *
+ * @return
+ *   The first reported line, for the failure message; '' when tar said nothing.
+ */
+function provision_log_tar_output($output, $prefix, $type = 'error', $cap = 20) {
+  $lines = array();
+  if (is_array($output)) {
+    foreach ($output as $line) {
+      $line = trim($line);
+      if ($line === '' || strpos($line, 'Exiting with failure status') !== FALSE) {
+        continue;
+      }
+      $lines[] = $line;
+    }
+  }
+  $shown = 0;
+  foreach ($lines as $line) {
+    if ($shown >= $cap) {
+      drush_log(dt('... and @n more lines from tar not shown', array('@n' => count($lines) - $shown)), $type);
+      break;
+    }
+    drush_log(dt('@prefix: @l', array('@prefix' => $prefix, '@l' => $line)), $type);
+    $shown++;
+  }
+  return empty($lines) ? '' : $lines[0];
+}
+
+/**
+ * Measure a site directory in bytes, following links when asked.
+ *
+ * With $follow_links the figure is what an archive made with tar's -h sees:
+ * the per-account store behind the files/private links, an attached mount,
+ * everything. Without it, what a link-preserving archive packs. Both come
+ * from one `du -s` (stat only, seconds even for a store of a few hundred
+ * thousand files), bounded by a timeout so a pathological tree cannot stall
+ * the task. Unreadable corners make du exit non-zero while it still prints
+ * its total, so the total is taken whatever the exit code.
+ *
+ * @return
+ *   Bytes, or FALSE when the directory could not be measured: the caller then
+ *   skips its check rather than refuse on a guess.
+ */
+function provision_site_bytes($site_path, $follow_links = TRUE) {
+  if (empty($site_path) || !is_dir($site_path)) {
+    return FALSE;
+  }
+  $command = $follow_links ? 'timeout 900 du -s -L --block-size=1 -- %s' : 'timeout 900 du -s --block-size=1 -- %s';
+  drush_shell_exec($command, $site_path);
+  $output = drush_shell_exec_output();
+  if (!is_array($output)) {
+    return FALSE;
+  }
+  $bytes = FALSE;
+  foreach ($output as $line) {
+    if (preg_match('/^(\d+)\s/', trim($line), $matches)) {
+      $bytes = (float) $matches[1];
+    }
+  }
+  return $bytes;
+}
+
+/**
+ * Refuse a copying task before it starts when its copies cannot fit.
+ *
+ * A clone, a migrate and a restore each make a safety copy of the site and
+ * unpack another copy, and a site whose files live in the per-account store
+ * is copied in full: a 74 GB site cloned onto a disk with less room than
+ * that filled it 44 minutes into the task, took nginx and mysqld down with
+ * ENOSPC for the whole box, and rolled back. Measured before a byte is
+ * written, refused with the numbers when it cannot fit. Estimates: the
+ * safety copy is counted at the site's full size (compression only helps),
+ * the unpacked copy at the same, and a renamed site's store copy at the
+ * store's size; a very compressible site may be refused with a little room
+ * to spare, which is the cheap side of that error.
+ *
+ * @param $task
+ *   'clone', 'migrate' or 'restore', the flow whose copies are counted.
+ * @param $platform
+ *   The target platform context name for a clone or migrate (NULL = same).
+ * @param $new_name
+ *   The target site context name of a clone or a migrate under a new name.
+ * @param $restore_file
+ *   The archive a restore unpacks.
+ *
+ * @return
+ *   TRUE when the copies fit or the question could not be judged; FALSE,
+ *   after drush_set_error(), when they cannot.
+ */
+function provision_copy_task_space_preflight($task, $platform = NULL, $new_name = NULL, $restore_file = NULL) {
+  // The operator's valve for an estimate that gets a box wrong.
+  if (is_file('/data/conf/disable_space_preflight.cnf')) {
+    return TRUE;
+  }
+  if (function_exists('provision_is_hostmaster_site') && provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $site_path = d()->site_path;
+  $backup_path = d('@server_master')->backup_path;
+  $aegir_root = d('@server_master')->aegir_root;
+  $store_root = $aegir_root . '/static/files';
+  $source_root = d()->platform->root;
+  $target_root = $source_root;
+  if (!empty($platform)) {
+    $target_platform = d($platform);
+    if (is_object($target_platform) && !empty($target_platform->root)) {
+      $target_root = $target_platform->root;
+    }
+  }
+  $what = ucfirst($task) . ' of ' . d()->uri;
+  $gb = 1073741824;
+  $full_bytes = provision_site_bytes($site_path, TRUE);
+  if ($full_bytes === FALSE) {
+    // Fail open, loudly: a refusal on a guess would be the worse error, and
+    // the extraction's own floor still stands.
+    drush_log(dt('SPACE/PREFLIGHT @what: @path could not be measured within the bound, so the space check is SKIPPED; make sure the copies fit (about twice the site\'s size following links)', array('@what' => $what, '@path' => $site_path)), 'warning');
+    return TRUE;
+  }
+  // The volatile cache directories are tagged out of every archive and so
+  // never unpacked either; for a site with gigabytes of image styles they
+  // are the difference between a fit and a false refusal.
+  $excluded_bytes = provision_site_excluded_bytes($site_path);
+  if ($excluded_bytes > 0 && $excluded_bytes < $full_bytes) {
+    $full_bytes -= $excluded_bytes;
+  }
+  // The database dump a restorable safety copy writes: uncompressed into the
+  // site directory first, then inside the archive, then unpacked again. For
+  // a database-heavy site it is the largest single new file of the task.
+  $db_bytes = provision_site_database_bytes();
+  $needs = array();
+  $detail = array();
+  $unpack_bytes = 0;
+  switch ($task) {
+    case 'clone':
+      // The safety copy is forced restorable (self-contained, links followed)
+      // and the deploy unpacks all of it beside the source; when the store
+      // sits on another filesystem than the platform, the unshare that moves
+      // the unpacked files into the store is a copy there as well.
+      $needs[] = array($backup_path, $full_bytes + $db_bytes);
+      $needs[] = array($target_root, $full_bytes + $db_bytes);
+      $needs[] = array($source_root, $db_bytes);
+      $unpack_bytes = $full_bytes + $db_bytes;
+      $detail[] = dt('a self-contained safety copy (@gb GB) and the unpacked clone (@gb GB)', array('@gb' => round(($full_bytes + $db_bytes) / $gb, 1)));
+      if (provision_path_device($store_root) !== provision_path_device($target_root)) {
+        $needs[] = array($store_root, $full_bytes);
+        $detail[] = dt('the clone\'s own store on its separate filesystem (@gb GB)', array('@gb' => round($full_bytes / $gb, 1)));
+      }
+      break;
+
+    case 'restore':
+      // Its safety copy is forced restorable too; the archive it unpacks
+      // holds a site about the size of the live one, and never less than
+      // the archive itself.
+      $archive_bytes = (!empty($restore_file) && is_file($restore_file)) ? (float) filesize($restore_file) : 0;
+      $unpack_bytes = max($archive_bytes, $full_bytes + $db_bytes);
+      $needs[] = array($backup_path, $full_bytes + $db_bytes);
+      $needs[] = array($target_root, $unpack_bytes);
+      $needs[] = array($source_root, $db_bytes);
+      $detail[] = dt('a self-contained safety copy (@gb GB) and the unpacked archive (about @ugb GB, a lower bound)', array('@gb' => round(($full_bytes + $db_bytes) / $gb, 1), '@ugb' => round($unpack_bytes / $gb, 1)));
+      break;
+
+    case 'migrate':
+      // The safety copy keeps links unless a files-carrying mode was asked
+      // for or the operator opted into dereferencing; a site renamed under a
+      // new name then gets its own copy of the store (the unshare), a
+      // same-name migrate keeps it.
+      $local_bytes = provision_site_bytes($site_path, FALSE);
+      if ($local_bytes === FALSE) {
+        $local_bytes = $full_bytes;
+      }
+      $asked_mode = function_exists('provision_backup_mode_sanitize') ? provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE)) : FALSE;
+      $dereference = ($asked_mode == 'site_files_with_mysqldump' || $asked_mode == 'site_files_without_db_backup')
+        || (is_file('/data/conf/dereference_backups.conf') && !is_file('/data/conf/force_symlinks.conf'));
+      $archive_bytes = $dereference ? $full_bytes : $local_bytes;
+      $unpack_bytes = $archive_bytes;
+      // The fast path dumps the database uncompressed into the backups
+      // directory's transient store, once.
+      $needs[] = array($backup_path, $archive_bytes + $db_bytes);
+      $needs[] = array($target_root, $archive_bytes);
+      $detail[] = dt('a safety copy (@gb GB, plus a @dgb GB database dump) and the unpacked site (@gb GB)', array('@gb' => round($archive_bytes / $gb, 1), '@dgb' => round($db_bytes / $gb, 1)));
+      $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
+      $store_bytes = $full_bytes - $local_bytes;
+      if ($renamed && $store_bytes > 0 && (is_link($site_path . '/files') || is_link($site_path . '/private'))) {
+        $needs[] = array($store_root, $store_bytes);
+        $detail[] = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+      }
+      break;
+
+    default:
+      return TRUE;
+  }
+  // Sum per filesystem: two copies on one device need room for both.
+  $by_device = array();
+  foreach ($needs as $need) {
+    list($path, $bytes) = $need;
+    if ($bytes <= 0 || empty($path)) {
+      continue;
+    }
+    $probe = provision_path_probe($path);
+    $device = provision_path_device($path);
+    if ($probe === FALSE || $device === FALSE) {
+      drush_log(dt('SPACE/PREFLIGHT @what: @path could not be examined, @gb GB of the estimate went unchecked', array('@what' => $what, '@path' => $path, '@gb' => round($bytes / $gb, 1))), 'warning');
+      continue;
+    }
+    if (!isset($by_device[$device])) {
+      $by_device[$device] = array('path' => $probe, 'need' => 0);
+    }
+    $by_device[$device]['need'] += $bytes;
+  }
+  drush_log(dt('SPACE/PREFLIGHT @what: the site measures @gb GB following links (cache directories left out); the task needs @detail', array(
+    '@what' => $what,
+    '@gb' => round($full_bytes / $gb, 1),
+    '@detail' => implode(dt(' and '), $detail),
+  )), 'info');
+  foreach ($by_device as $device) {
+    $free = @disk_free_space($device['path']);
+    if ($free === FALSE) {
+      drush_log(dt('SPACE/PREFLIGHT @what: the free space at @path could not be read, that filesystem went unchecked', array('@what' => $what, '@path' => $device['path'])), 'warning');
+      continue;
+    }
+    $margin = provision_space_margin($device['path']);
+    if ($free < $device['need'] + $margin) {
+      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need GB free on the filesystem holding @path (@margin GB of it headroom) but only @free GB is free: free space first, nothing was written (every copy is counted at the site\'s full size following links, or at the archive\'s size when that is larger; /data/conf/disable_space_preflight.cnf turns this check off)', array(
+        '@what' => $what,
+        '@need' => round(($device['need'] + $margin) / $gb, 1),
+        '@margin' => round($margin / $gb, 1),
+        '@path' => $device['path'],
+        '@free' => round($free / $gb, 1),
+      )));
+      return FALSE;
+    }
+  }
+  // For the re-check at the deploy seam, once the safety copy exists.
+  drush_set_option('space_preflight_unpack_bytes', $unpack_bytes);
+  drush_set_option('space_preflight_unpack_path', $target_root);
+  return TRUE;
+}
+
+/**
+ * The bytes of a site's tagged-out cache directories, following links.
+ *
+ * PROVISION_BACKUP_EXCLUDED_DIRECTORIES (the Drupal/Backdrop set) is what the
+ * archive's --exclude-tag skips; a lineage without the constant measures 0.
+ */
+function provision_site_excluded_bytes($site_path) {
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') || empty($site_path)) {
+    return 0;
+  }
+  $dirs = array();
+  foreach (PROVISION_BACKUP_EXCLUDED_DIRECTORIES as $excluded) {
+    $dir = $site_path . '/' . ltrim($excluded, './');
+    if (is_dir($dir)) {
+      $dirs[] = drush_escapeshellarg($dir);
+    }
+  }
+  if (empty($dirs)) {
+    return 0;
+  }
+  drush_shell_exec('timeout 300 du -s -L --block-size=1 -- ' . implode(' ', $dirs));
+  $output = drush_shell_exec_output();
+  $bytes = 0;
+  if (is_array($output)) {
+    foreach ($output as $line) {
+      if (preg_match('/^(\d+)\s/', trim($line), $matches)) {
+        $bytes += (float) $matches[1];
+      }
+    }
+  }
+  return $bytes;
+}
+
+/**
+ * The nearest existing directory at or above a path, FALSE when none.
+ */
+function provision_path_probe($path) {
+  $probe = (string) $path;
+  while ($probe !== '' && $probe !== '/' && $probe !== '.' && !is_dir($probe)) {
+    $probe = dirname($probe);
+  }
+  return is_dir($probe) ? $probe : FALSE;
+}
+
+/**
+ * The device a path lives on (as a string key), FALSE when unknown.
+ */
+function provision_path_device($path) {
+  $probe = provision_path_probe($path);
+  if ($probe === FALSE) {
+    return FALSE;
+  }
+  $stat = @stat($probe);
+  return ($stat === FALSE) ? FALSE : (string) $stat['dev'];
+}
+
+/**
+ * The headroom a copying task must leave on a filesystem: 2 GB, or 2% of
+ * the filesystem when that is more. A copy that lands the box at zero is
+ * the failure this exists to prevent, and BOA's own scripts stop at 90%.
+ */
+function provision_space_margin($path) {
+  $margin = 2.0 * 1073741824;
+  $total = @disk_total_space($path);
+  if ($total !== FALSE && $total * 0.02 > $margin) {
+    $margin = $total * 0.02;
+  }
+  return $margin;
+}
+
+/**
+ * Re-check the unpacked copy's room at the deploy seam.
+ *
+ * The pre-flight ran before the safety copy, which takes as long as gzipping
+ * the site takes -- 43 minutes for the incident's 74 GB -- and the room can
+ * go elsewhere meanwhile. The archive exists now, so the question is only
+ * whether the unpacked copy still fits with the same headroom; a refusal
+ * here rolls the task back like any other failure before the deploy, the
+ * archive included.
+ */
+function provision_copy_task_space_recheck($what) {
+  if (is_file('/data/conf/disable_space_preflight.cnf')) {
+    return TRUE;
+  }
+  $bytes = (float) drush_get_option('space_preflight_unpack_bytes', 0);
+  $path = drush_get_option('space_preflight_unpack_path', '');
+  if ($bytes <= 0 || empty($path)) {
+    return TRUE;
+  }
+  $probe = provision_path_probe($path);
+  if ($probe === FALSE) {
+    return TRUE;
+  }
+  $free = @disk_free_space($probe);
+  if ($free === FALSE) {
+    return TRUE;
+  }
+  $gb = 1073741824;
+  $margin = provision_space_margin($probe);
+  if ($free < $bytes + $margin) {
+    drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what: the safety copy is done, but only @free GB is free on the filesystem holding @path for the @need GB unpacked copy (@margin GB of it headroom); the room went elsewhere since the pre-flight, free space and retry', array(
+      '@what' => $what,
+      '@free' => round($free / $gb, 1),
+      '@path' => $probe,
+      '@need' => round(($bytes + $margin) / $gb, 1),
+      '@margin' => round($margin / $gb, 1),
+    )));
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * The site's database on disk, in bytes, as the safety copy's dump will
+ * roughly weigh: the data and index lengths of its tables, read through the
+ * database server's own connection. Zero when there is no database, the
+ * server cannot be asked, or the site carries no database name (a Grav
+ * capsule): the estimate then simply lacks the dump term.
+ */
+function provision_site_database_bytes() {
+  $db_name = isset(d()->db_name) ? d()->db_name : '';
+  if ($db_name === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db_name)) {
+    return 0;
+  }
+  try {
+    $db = d()->service('db');
+    if (!is_object($db) || !method_exists($db, 'query') || $db instanceof Provision_Service_null) {
+      return 0;
+    }
+    $result = $db->query("SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '%s'", $db_name);
+    if (!is_object($result) || !method_exists($result, 'fetch')) {
+      return 0;
+    }
+    $row = $result->fetch(PDO::FETCH_NUM);
+    return (is_array($row) && isset($row[0])) ? (float) $row[0] : 0;
+  }
+  catch (Exception $e) {
+    return 0;
+  }
+}

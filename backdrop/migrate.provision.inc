@@ -84,6 +84,13 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
   }
+  // Refuse a migrate that cannot fit before its safety copy starts (the D
+  // layer's pre-flight; the new name is the command's second positional).
+  $args = drush_get_arguments();
+  $new_name = isset($args[2]) ? $args[2] : NULL;
+  if (!provision_copy_task_space_preflight('migrate', $platform, $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -371,6 +378,11 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     'strict' => 0,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
+
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Migrate of ' . d()->uri)) {
+    return FALSE;
+  }
 
   $deploy_result = provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
   // The deploy came through: neither a failure in a later step nor an error

@@ -321,6 +321,8 @@ function drush_provision_drupal_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
+  // Captured now: any later shell call overwrites Drush's last-output buffer.
+  $tar_output = drush_shell_exec_output();
   // Leaving a tag behind silently truncates every FUTURE backup, so a tag
   // that exists but cannot be removed is worth a warning even though this
   // run succeeded. A tag that is already gone is not a failure.
@@ -347,8 +349,15 @@ function drush_provision_drupal_provision_backup() {
 
   _provision_drupal_recloak_after_backup();
 
-  if (!$result && !drush_get_option('force', false)) {
-    drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal"));
+  if (!$result) {
+    // tar's own words, the same way the deploy-side extraction reports them;
+    // a forced run tolerates the failure, so its lines are warnings.
+    $forced = drush_get_option('force', FALSE);
+    $first_line = provision_log_tar_output($tar_output, 'Backup archive error', $forced ? 'warning' : 'error');
+    if (!$forced) {
+      $reason = ($first_line === '') ? '' : dt(' (@first)', array('@first' => $first_line));
+      drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for drupal") . $reason);
+    }
   }
 }
 

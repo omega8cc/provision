@@ -31,6 +31,13 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
       provision_lock_drush_local_vnd();
     }
   }
+  // Refuse a clone that cannot fit before its safety copy starts: the copy
+  // follows the files/private links into the store and the deploy unpacks
+  // all of it again, so a large site needs twice its size free for the
+  // task's duration (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -222,6 +229,11 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
   $resolved_backup_mode = provision_backup_mode_resolve();
   if (!empty($resolved_backup_mode)) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
+  }
+
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
+    return FALSE;
   }
 
   $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
