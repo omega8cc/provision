@@ -61,5 +61,7 @@ function drush_provision_dlock() {
     drush_log(dt('Local Drush already locked in @root; nothing to do.', array('@root' => d()->root)), 'success');
     return;
   }
-  provision_lock_drush_local_vnd();
+  if (provision_lock_drush_local_vnd() === FALSE) {
+    return FALSE;
+  }
 }
