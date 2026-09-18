@@ -243,7 +243,15 @@ function drush_provision_drupal_provision_install() {
 
       if ($lock_unlock) {
         drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
-        provision_unlock_drush_local_vnd();
+        if (!provision_unlock_drush_local_vnd()) {
+          // The genuine psr/log could not be put back (the PSR/LOG lines say
+          // why), so the site-local Drush would die at class load. Restore
+          // the at-rest posture and stop here with the reason, instead of
+          // running it into that fatal.
+          drush_log(dt('D11/INSTALL2b/LOCAL/DRUSH/LOCK re-apply Aegir patches: the unlock could not restore the genuine psr/log, site-install not run'), 'info');
+          provision_lock_drush_local_vnd();
+          return drush_set_error('PROVISION_PSR_LOG_RESTORE_FAILED', dt('Drupal site-install not run for @uri: the codebase still carries the de-typed Aegir psr/log the site-local Drush cannot start against (see the PSR/LOG lines above)', array('@uri' => d()->uri)));
+        }
         sleep(5);
       }
 

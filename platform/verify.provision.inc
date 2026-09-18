@@ -30,10 +30,14 @@ function drush_provision_drupal_provision_verify_validate() {
     // which is already bound at preflight, so the full bootstrap below
     // fatals as soon as any logger class loads. Platforms are locked at
     // platform verify, but a dunlock without re-lock leaves them stock;
-    // heal here exactly like provision-import does.
+    // heal here exactly like provision-import does. The lock-state term
+    // covers what the patch flags cannot see: a codebase whose patches are
+    // on but whose psr/log is the genuine typed package again (an unlock
+    // window that died before its re-lock, a tenant composer run), which
+    // the lock converges the same way.
     if (drush_drupal_major_version() >= 8) {
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
+      if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
         drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -171,7 +175,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // Lock Site-Local Drush and some Vendor Libs Early if Unlocked
     if (drush_drupal_major_version() >= 8) {
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
+      if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
         drush_log(dt('EARLY/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -548,7 +552,7 @@ function drush_provision_drupal_post_provision_verify() {
   // Lock Site-Local Drush and some Vendor Libs if Unlocked
   if (drush_drupal_major_version() >= 8) {
     provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
+    if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
       drush_log(dt('POST/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }

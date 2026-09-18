@@ -1308,8 +1308,10 @@ function _provision_drupal_clear_update_fetch_tasks() {
  *   TRUE when updatedb ran to completion; FALSE when it ran but did not
  *   complete (the warning naming why is logged here, and the caches are still
  *   rebuilt); NULL when it did not run at all: no site-local updatedb applies
- *   (hostmaster, Drupal below 10), or no executable site-local Drush even
- *   after the unlock (the 4b/LOCAL/DRUSH/SKIP warning is logged here). A task
+ *   (hostmaster, Drupal below 10), no executable site-local Drush even
+ *   after the unlock (the 4b/LOCAL/DRUSH/SKIP warning is logged here), or an
+ *   unlock that could not restore the genuine psr/log (2b/LOCAL/DRUSH/SKIP,
+ *   after the PSR/LOG lines). A task
  *   that exists to apply the updates fails on anything but TRUE; the deploy
  *   goes on either way and skips only the steps that need a window that ran.
  */
@@ -1336,7 +1338,22 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   $unlocked_here = FALSE;
   if (d()->isConsolePatched || d()->isCorePatched || !is_executable($drushAbsolutePath)) {
     drush_log(dt('@p with provision_unlock_drush_local_vnd (no site-local Drush runs on a locked platform)', array('@p' => $tag . '2/LOCAL/DRUSH/UNLOCK')), 'info');
-    provision_unlock_drush_local_vnd();
+    if (!provision_unlock_drush_local_vnd()) {
+      // The genuine psr/log could not be put back (the PSR/LOG lines say
+      // why): no site-local Drush starts against the overlay, so this is
+      // the same degraded path as a missing site-local Drush -- warn, keep
+      // the at-rest posture, rebuild by core, never run it into the fatal.
+      drush_log(dt('@p updatedb skipped: the unlock could not restore the genuine psr/log in this codebase (see the PSR/LOG lines) and no site-local Drush starts against the Aegir overlay; apply the DB update manually', array('@p' => $tag . '2b/LOCAL/DRUSH/SKIP')), 'warning');
+      drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '2c/LOCAL/DRUSH/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+      // Only after the re-lock: the unlock had already opened the exec bits,
+      // and the helper's own executable test would otherwise send the
+      // site-local Drush into the very fatal this branch avoids. Locked, it
+      // logs its skip; the manual SQL workaround applies.
+      _provision_drupal_clear_update_fetch_tasks();
+      _provision_drupal_rebuild_d8plus();
+      return NULL;
+    }
     $unlocked_here = TRUE;
   }
 
