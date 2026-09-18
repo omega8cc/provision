@@ -60,5 +60,11 @@ function drush_provision_dunlock() {
     drush_log(dt('Local Drush already unlocked in @root; nothing to do.', array('@root' => d()->root)), 'success');
     return;
   }
-  provision_unlock_drush_local_vnd();
+  if (!provision_unlock_drush_local_vnd()) {
+    // The genuine psr/log could not be put back (the PSR/LOG lines say why):
+    // an unlock that leaves the overlay in place serves neither Drush, so
+    // restore the at-rest posture and fail with the reason.
+    provision_lock_drush_local_vnd();
+    return drush_set_error('PROVISION_PSR_LOG_RESTORE_FAILED', dt('Unlock aborted: the genuine psr/log could not be restored in @root (see the PSR/LOG lines above); the platform was re-locked.', array('@root' => d()->root)));
+  }
 }

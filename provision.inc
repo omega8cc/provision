@@ -320,13 +320,233 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
- * Where an unlock parks the de-typed psr/log overlay: a date-stamped,
- * random-suffixed dir under the given parent (the account's ~/.tmp), so its
- * age is readable from the name and the ltd worker's weekly prune can key
- * on the mtime the caller refreshes after the move.
+ * The codebase's psr/log package directory, resolved the way the lock and
+ * unlock bodies resolve every vendor path: <root>/vendor first, then the
+ * composer layout that keeps vendor/ above the docroot. '' when there is
+ * none.
  */
-function provision_psr_log_stash_path($parent) {
-  return $parent . '/psr-log-' . date('Ymd') . '-' . genRandStrUnlock(24);
+function _provision_psr_log_dir($root) {
+  return _provision_first_existing(array(
+    $root . '/vendor/psr/log',
+    $root . '/../vendor/psr/log',
+  ));
+}
+
+/**
+ * Whether a psr/log package directory carries the de-typed Aegir overlay.
+ *
+ * Read from the interface itself, never from a marker file: the overlay is
+ * Drush 8's psr/log v1 copied over src/, whose log() takes an untyped
+ * $message, while the psr/log v2/v3 a Drupal 10+ codebase ships declares
+ * string|\Stringable and ': void'. The old test looked for the overlay's
+ * Test/TestLogger.php instead, a file the copy may not deliver and any
+ * tests-stripping pass removes, and both the lock and the unlock then read
+ * the wrong state and skipped the package, silently.
+ *
+ * @return bool|null
+ *   TRUE = de-typed (overlay in place), FALSE = typed (genuine package),
+ *   NULL = no readable interface file.
+ */
+function _provision_psr_log_detyped($log_dir) {
+  $file = $log_dir . '/src/LoggerInterface.php';
+  if (!is_file($file) || !is_readable($file)) {
+    return NULL;
+  }
+  $content = file_get_contents($file);
+  if ($content === FALSE || strpos($content, 'function log(') === FALSE) {
+    return NULL;
+  }
+  return (strpos($content, 'Stringable') === FALSE);
+}
+
+/**
+ * Put the genuine psr/log back into a Drupal 10+ codebase, in place.
+ *
+ * Every step is judged by content and written to the task log. The pristine
+ * copy the lock keeps at vendor/psr/._orig_log is copied file by file over
+ * the overlaid src/, never renamed: the former restore moved the whole
+ * package directory to a stash and moved the copy back, and when the first
+ * move failed (a stash parent that was not there, a vendor/psr the backend
+ * user cannot write) the second one buried the pristine copy INSIDE the
+ * de-typed directory, every later unlock skipped the package, and the
+ * site-local Drush died on Consolidation\Log\Logger::log() at every install
+ * with nothing in the task log (omega8cc/boa#1943). A copy buried that way
+ * is recognised and used. With no usable pristine copy composer reinstalls
+ * the package. Whatever the route, the interface is read again afterwards:
+ * a codebase still de-typed is reported and the caller must not run the
+ * site-local Drush against it. The account's Drush 8 template plays no part
+ * here, so the restore runs on every unlock.
+ *
+ * @return bool
+ *   TRUE when the codebase carries the genuine psr/log now.
+ */
+function _provision_psr_log_restore($root) {
+  $log = _provision_psr_log_dir($root);
+  if ($log === '') {
+    return TRUE;
+  }
+  $who = provision_current_user();
+  $state = _provision_psr_log_detyped($log);
+  if ($state === FALSE) {
+    drush_log(dt('PSR/LOG genuine psr/log already in place in @dir', array('@dir' => $log)), 'info');
+    return TRUE;
+  }
+  if ($state === NULL) {
+    // No readable interface (an interrupted copy, a missing file): cannot
+    // tell, so put the genuine package back; the read-back below decides.
+    drush_log(dt('PSR/LOG cannot read @file to tell the Aegir overlay from the genuine psr/log; restoring the genuine package anyway', array('@file' => $log . '/src/LoggerInterface.php')), 'advisory');
+  }
+  $orig = dirname($log) . '/._orig_log';
+  $nested = $log . '/._orig_log';
+  $source = '';
+  if (is_dir($orig) && _provision_psr_log_detyped($orig) === FALSE) {
+    $source = $orig;
+  }
+  elseif (is_dir($nested) && _provision_psr_log_detyped($nested) === FALSE) {
+    // Buried inside the package by an earlier unlock whose stash move failed.
+    // Back beside the package when its parent lets the backend write (a
+    // stale copy already there gives way); used where it is otherwise, and
+    // left there as the only pristine copy.
+    if (is_dir($orig)) {
+      _provision_recursive_delete($orig);
+    }
+    if (!is_dir($orig) && drush_shell_exec('mv -f %s %s', $nested, $orig) && is_dir($orig)) {
+      drush_log(dt('PSR/LOG the pristine copy was buried at @nested by an earlier unlock; moved back to @orig', array('@nested' => $nested, '@orig' => $orig)), 'advisory');
+      $source = $orig;
+    }
+    else {
+      drush_log(dt('PSR/LOG the pristine copy was buried at @nested by an earlier unlock and could not be moved back beside the package (is @parent writable by @user?); using it from there', array('@nested' => $nested, '@parent' => dirname($log), '@user' => $who)), 'advisory');
+      $source = $nested;
+    }
+  }
+  if ($source !== '') {
+    drush_shell_exec('cp -af %s/. %s/', $source, $log);
+    if (is_dir($log . '/src/Test')) {
+      _provision_recursive_delete($log . '/src/Test');
+    }
+    if (_provision_psr_log_detyped($log) === FALSE) {
+      drush_log(dt('PSR/LOG genuine psr/log restored in @dir from @src', array('@dir' => $log, '@src' => $source)), 'success');
+      return TRUE;
+    }
+    drush_log(dt('PSR/LOG copying @src over @dir left it de-typed; reinstalling the package with composer', array('@src' => $source, '@dir' => $log)), 'warning');
+  }
+  else {
+    drush_log(dt('PSR/LOG no pristine copy at @orig; reinstalling the package with composer', array('@orig' => $orig)), 'advisory');
+  }
+  $approot = findAppRoot($root);
+  $output = '';
+  if (!empty($approot) && is_file($approot . '/composer.json')) {
+    drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
+    $output = trim(implode("\n", drush_shell_exec_output()));
+  }
+  drush_log(dt('PSR/LOG composer reinstall psr/log in @root: @out', array(
+    '@root' => empty($approot) ? $root : $approot,
+    '@out' => ($output === '') ? 'no output (composer not found for ' . $who . ', or no composer.json)' : $output,
+  )), 'notice');
+  if (_provision_psr_log_detyped($log) === FALSE) {
+    drush_log(dt('PSR/LOG genuine psr/log reinstalled in @dir by composer', array('@dir' => $log)), 'success');
+    return TRUE;
+  }
+  drush_log(dt('PSR/LOG @dir still carries the de-typed Aegir psr/log overlay (or no readable LoggerInterface.php), so no site-local Drush can start against it (Consolidation\Log\Logger::log() does not match the untyped Psr\Log\LoggerInterface::log()). Pristine copy at @orig: @orig_state. Make @parent writable by @user, or run "composer reinstall psr/log" in @root as @user, then run Verify + Lock Drush on the platform and retry.', array(
+    '@dir' => $log,
+    '@orig' => $orig,
+    '@orig_state' => is_dir($orig) ? (_provision_psr_log_detyped($orig) === FALSE ? 'present' : 'present but de-typed') : 'absent',
+    '@parent' => dirname($log),
+    '@user' => $who,
+    '@root' => empty($approot) ? $root : $approot,
+  )), 'warning');
+  return FALSE;
+}
+
+/**
+ * Lay the Aegir psr/log overlay over a Drupal 10+ codebase, in place.
+ *
+ * The pristine package stays beside it at vendor/psr/._orig_log for the
+ * unlock. It is taken from the codebase only while the codebase carries the
+ * genuine (typed) package, and refreshed then whenever it is missing, not
+ * itself genuine, or a different package version (a tenant's composer
+ * update moves psr/log on between locks); a fresh copy is written beside
+ * the old one and swapped in only once it reads genuine, so a parent the
+ * backend cannot write never costs the copy it already has. The overlay is
+ * judged by content, the same way the unlock judges it, and read back;
+ * nothing here renames the package directory.
+ *
+ * @return bool
+ *   TRUE when the codebase carries the overlay now.
+ */
+function _provision_psr_log_overlay($root, $psr_tpl) {
+  $log = _provision_psr_log_dir($root);
+  if ($log === '') {
+    return TRUE;
+  }
+  $who = provision_current_user();
+  $state = _provision_psr_log_detyped($log);
+  $orig = dirname($log) . '/._orig_log';
+  $nested = $log . '/._orig_log';
+  // A pristine copy buried inside the package by an earlier unlock goes back
+  // beside it when the parent allows; a second copy is removed.
+  if (is_dir($nested)) {
+    if (!is_dir($orig)) {
+      drush_shell_exec('mv -f %s %s', $nested, $orig);
+    }
+    if (is_dir($nested) && is_dir($orig) && _provision_psr_log_detyped($orig) === FALSE) {
+      _provision_recursive_delete($nested);
+    }
+  }
+  if ($state === TRUE) {
+    drush_log(dt('PSR/LOG Aegir overlay already in place in @dir', array('@dir' => $log)), 'info');
+    return TRUE;
+  }
+  if ($state === FALSE) {
+    $refresh = !is_dir($orig) || _provision_psr_log_detyped($orig) !== FALSE
+      || @md5_file($orig . '/composer.json') !== @md5_file($log . '/composer.json');
+    if ($refresh) {
+      $fresh = $orig . '.new';
+      if (is_dir($fresh)) {
+        _provision_recursive_delete($fresh);
+      }
+      drush_shell_exec('cp -a %s %s', $log, $fresh);
+      if (is_dir($fresh . '/._orig_log')) {
+        _provision_recursive_delete($fresh . '/._orig_log');
+      }
+      $swapped = FALSE;
+      if (is_dir($fresh) && _provision_psr_log_detyped($fresh) === FALSE) {
+        if (is_dir($orig)) {
+          _provision_recursive_delete($orig);
+        }
+        $swapped = !is_dir($orig) && drush_shell_exec('mv -f %s %s', $fresh, $orig) && is_dir($orig);
+      }
+      if (is_dir($fresh)) {
+        _provision_recursive_delete($fresh);
+      }
+      if (!$swapped) {
+        // A copy that still reads genuine, beside the package or buried
+        // inside it, serves the next unlock; only its absence is a warning.
+        if (is_dir($orig) && _provision_psr_log_detyped($orig) === FALSE) {
+          $kept = 'keeping the copy already there';
+        }
+        elseif (is_dir($nested) && _provision_psr_log_detyped($nested) === FALSE) {
+          $kept = 'keeping the copy inside the package';
+        }
+        else {
+          $kept = '';
+        }
+        drush_log(dt('PSR/LOG could not keep a fresh pristine copy of @dir at @orig (is @parent writable by @user?); @kept', array('@dir' => $log, '@orig' => $orig, '@parent' => dirname($log), '@user' => $who, '@kept' => ($kept === '') ? 'the next unlock will reinstall the package with composer' : $kept)), ($kept === '') ? 'warning' : 'advisory');
+      }
+    }
+  }
+  else {
+    // No readable interface: copying the overlay in is the repair; no copy
+    // is taken from a tree that cannot be read.
+    drush_log(dt('PSR/LOG cannot read @file to tell the Aegir overlay from the genuine psr/log; applying the overlay anyway', array('@file' => $log . '/src/LoggerInterface.php')), 'advisory');
+  }
+  drush_shell_exec('cp -af %s/. %s/src/', $psr_tpl, $log);
+  if (_provision_psr_log_detyped($log) === TRUE) {
+    drush_log(dt('PSR/LOG Aegir overlay applied in @dir (pristine copy at @orig)', array('@dir' => $log, '@orig' => $orig)), 'success');
+    return TRUE;
+  }
+  drush_log(dt('PSR/LOG the overlay copy from @tpl into @dir did not take (is @src writable by @user?); Aegir Drush 8 cannot bootstrap this codebase', array('@tpl' => $psr_tpl, '@dir' => $log, '@src' => $log . '/src', '@user' => $who)), 'warning');
+  return FALSE;
 }
 
 /**
@@ -398,6 +618,22 @@ function provision_check_codebase_status() {
       d()->isValidatorPatched = TRUE;
     }
     drush_log(dt('CHECK/CODE/VALIDATOR =@is_validator_patched= FOR @valFile', array('@is_validator_patched' => d()->isValidatorPatched, '@valFile' => $validator_file_path)), 'info');
+
+    $psr_dir = _provision_psr_log_dir(d()->root);
+    $psr_state = 'none';
+    if ($psr_dir !== '') {
+      $psr_detyped = _provision_psr_log_detyped($psr_dir);
+      if ($psr_detyped === NULL) {
+        $psr_state = 'unreadable';
+      }
+      elseif ($psr_detyped) {
+        $psr_state = 'overlay';
+      }
+      else {
+        $psr_state = 'typed';
+      }
+    }
+    drush_log(dt('CHECK/CODE/PSRLOG =@state= FOR @dir', array('@state' => $psr_state, '@dir' => ($psr_dir === '') ? d()->root : $psr_dir)), 'info');
   }
   else {
     drush_log(dt('CHECK/CODE/VERSION =@coreVersion= FOR @webRoot', array('@coreVersion' => drush_drupal_major_version(), '@webRoot' => d()->root)), 'info');
@@ -462,25 +698,38 @@ function provision_drush_local_lock_state() {
 
   $version = drush_drupal_major_version();
 
+  // The psr/log term (Drupal 10+): the de-typed Aegir overlay belongs to the
+  // locked state, the genuine typed package to the unlocked one, read from
+  // the interface file itself. A codebase without the package, or one whose
+  // interface cannot be read, carries no signal; a disagreement with the
+  // patch flags or the bits is the partial state whose body converges it.
+  $psr_detyped = NULL;
+  if ($version >= 10) {
+    $psr_dir = _provision_psr_log_dir(d()->root);
+    if ($psr_dir !== '') {
+      $psr_detyped = _provision_psr_log_detyped($psr_dir);
+    }
+  }
+
   if ($version == 10 || $version == 11) {
     // Built-state gate: trust the patch flags only on a demonstrably built tree.
     if (!is_dir(d()->symfonyDir)) {
       return 'unknown';
     }
-    if (d()->isCorePatched && d()->isConsolePatched && $bits_locked) {
+    if (d()->isCorePatched && d()->isConsolePatched && $bits_locked && $psr_detyped !== FALSE) {
       return 'locked';
     }
-    if (!d()->isCorePatched && !d()->isConsolePatched && $bits_unlocked) {
+    if (!d()->isCorePatched && !d()->isConsolePatched && $bits_unlocked && $psr_detyped !== TRUE) {
       return 'unlocked';
     }
     return 'partial';
   }
 
   // Pre-D10 and D12+: no patch templates; the lock is the chmod alone.
-  if ($bits_locked) {
+  if ($bits_locked && $psr_detyped !== FALSE) {
     return 'locked';
   }
-  if ($bits_unlocked) {
+  if ($bits_unlocked && $psr_detyped !== TRUE) {
     return 'unlocked';
   }
   return 'partial';
@@ -686,78 +935,15 @@ function provision_unlock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
-      // The de-typed psr/log overlay is parked under the account's ~/.tmp,
-      // not beside its site archives under backups/: nothing ever reads the
-      // stash back (the re-lock re-applies the overlay from $psr_tpl), and
-      // one dir per unlock used to stay under backups/ forever, listed with
-      // the real archives. The ltd worker removes ~/.tmp/psr-log-* older
-      // than a week on every run; the dir is touched after the move because
-      // mv and cp -a carry the overlay's old mtime.
-      if ($this_user == 'aegir' ) {
-        $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
-        $psr_bak = '/var/aegir/.tmp';
-      }
-      else {
-        $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
-        $psr_bak = '/data/disk/' . $this_user . '/.tmp';
-      }
-
-      if (provision_file()->exists($psr_tpl)->status()) {
-
-        $vnd_psr_log_orig_local = d()->root . '/vendor/psr/._orig_log';
-        $vnd_psr_log_orig_above = d()->root . '/../vendor/psr/._orig_log';
-
-        $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
-        $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
-
-        $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
-        $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
-
-        if (provision_file()->exists($dru_vnd_psr_local)->status()) {
-          if (provision_file()->exists($psr_good_local)->status()) {
-            if (provision_file()->exists($vnd_psr_log_orig_local)->status()) {
-              $psrback = provision_psr_log_stash_path($psr_bak);
-              $command = "mv -f $dru_vnd_psr_local $psrback";
-              $success = drush_shell_exec($command);
-              $command = "mv -f $vnd_psr_log_orig_local $dru_vnd_psr_local";
-              $success = drush_shell_exec($command);
-              $success = drush_shell_exec("touch $psrback");
-            }
-            else {
-              $psrback = provision_psr_log_stash_path($psr_bak);
-              $command = "cp -a $dru_vnd_psr_local $psrback";
-              $success = drush_shell_exec($command);
-              $success = drush_shell_exec("touch $psrback");
-              $approot = d()->root;
-              $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
-              $output = implode('', drush_shell_exec_output());
-              drush_log("PSR/LOG " . $output);
-            }
-          }
-        }
-
-        if (provision_file()->exists($dru_vnd_psr_above)->status()) {
-          if (provision_file()->exists($psr_good_above)->status()) {
-            if (provision_file()->exists($vnd_psr_log_orig_above)->status()) {
-              $psrback = provision_psr_log_stash_path($psr_bak);
-              $command = "mv -f $dru_vnd_psr_above $psrback";
-              $success = drush_shell_exec($command);
-              $command = "mv -f $vnd_psr_log_orig_above $dru_vnd_psr_above";
-              $success = drush_shell_exec($command);
-              $success = drush_shell_exec("touch $psrback");
-            }
-            else {
-              $psrback = provision_psr_log_stash_path($psr_bak);
-              $command = "cp -a $dru_vnd_psr_above $psrback";
-              $success = drush_shell_exec($command);
-              $success = drush_shell_exec("touch $psrback");
-              $approot = d()->root . "/../";
-              $result = drush_shell_cd_and_exec($approot, 'composer reinstall psr/log --no-interaction --no-progress');
-              $output = implode('', drush_shell_exec_output());
-              drush_log("PSR/LOG " . $output);
-            }
-          }
-        }
+      // The genuine psr/log first, in place and judged by content: the
+      // site-local Drush this window exists for cannot start against the
+      // de-typed overlay. Unconditional: the restore reads the pristine copy
+      // beside the package (or reinstalls it), never the account's Drush 8
+      // template the lock copies from. When it fails the patches stay on,
+      // the codebase is reported and the caller must not run that Drush
+      // (see _provision_psr_log_restore()).
+      if (!_provision_psr_log_restore(d()->root)) {
+        return FALSE;
       }
 
       // D10 has no validator patch, but the name is still concatenated into the
@@ -871,6 +1057,7 @@ function provision_unlock_drush_local_vnd() {
   else {
     drush_log(dt('Site-Local Drush Unlock skipped in provision_unlock_drush_local_vnd because unexpected type has been detected @type', array('@type' => d()->type)), 'info');
   }
+  return TRUE;
 }
 
 /**
@@ -1043,39 +1230,13 @@ function provision_lock_drush_local_vnd() {
         $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
       }
 
+      // The overlay in place, judged by content, with the pristine copy kept
+      // beside the package for the unlock (see _provision_psr_log_overlay()).
+      // Without it the patches must not go on: de-typed core over a typed
+      // psr/log is a codebase the web cannot serve, the stock one still is.
       if (provision_file()->exists($psr_tpl)->status()) {
-
-        $vnd_psr_log_orig_local = d()->root . '/vendor/psr/._orig_log';
-        $vnd_psr_log_orig_above = d()->root . '/../vendor/psr/._orig_log';
-
-        $dru_vnd_psr_local = d()->root . '/vendor/psr/log';
-        $dru_vnd_psr_above = d()->root . '/../vendor/psr/log';
-
-        $psr_good_local = $dru_vnd_psr_local . '/src/Test/TestLogger.php';
-        $psr_good_above = $dru_vnd_psr_above . '/src/Test/TestLogger.php';
-
-        if (provision_file()->exists($dru_vnd_psr_local)->status()) {
-          if (!provision_file()->exists($psr_good_local)->status()) {
-            if (!provision_file()->exists($vnd_psr_log_orig_local)->status()) {
-              $command = "cp -a $dru_vnd_psr_local $vnd_psr_log_orig_local";
-              $success = drush_shell_exec($command);
-            }
-            $target_dir = d()->root . '/vendor/psr/log/src/';
-            $command = "cp -a $psr_tpl/* $target_dir";
-            $success = drush_shell_exec($command);
-          }
-        }
-
-        if (provision_file()->exists($dru_vnd_psr_above)->status()) {
-          if (!provision_file()->exists($psr_good_above)->status()) {
-            if (!provision_file()->exists($vnd_psr_log_orig_above)->status()) {
-              $command = "cp -a $dru_vnd_psr_above $vnd_psr_log_orig_above";
-              $success = drush_shell_exec($command);
-            }
-            $target_dir = d()->root . '/../vendor/psr/log/src/';
-            $command = "cp -a $psr_tpl/* $target_dir";
-            $success = drush_shell_exec($command);
-          }
+        if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
+          return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
         }
       }
 
@@ -1197,6 +1358,7 @@ function provision_lock_drush_local_vnd() {
       }
     }
   }
+  return TRUE;
 }
 
 /**
