@@ -42,6 +42,11 @@ function drush_provision_grav_provision_restore_validate($restore_file = null) {
     ->status();
   if ($exists) {
     drush_set_option('restore_file', $restore_file);
+    // Refuse a restore that cannot fit before its safety copy starts (the
+    // shared pre-flight).
+    if (!provision_copy_task_space_preflight('restore', NULL, NULL, $restore_file)) {
+      return FALSE;
+    }
   }
 }
 

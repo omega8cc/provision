@@ -25,6 +25,11 @@ function drush_provision_txp_provision_restore_validate($restore_file = NULL) {
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
   }
+  // Refuse a restore that cannot fit before its safety copy starts (the
+  // shared pre-flight).
+  if (!provision_copy_task_space_preflight('restore', NULL, NULL, $restore_file)) {
+    return FALSE;
+  }
 }
 
 function drush_provision_txp_pre_provision_restore($restore_file) {

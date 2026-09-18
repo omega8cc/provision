@@ -192,6 +192,8 @@ function drush_provision_txp_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command, $backup_file);
+  // Captured now: any later shell call overwrites Drush's last-output buffer.
+  $tar_output = drush_shell_exec_output();
 
   // Remove the tags; a stuck tag silently shrinks later backups — say so.
   $stale_tags = array();
@@ -214,8 +216,15 @@ function drush_provision_txp_provision_backup() {
 
   chdir($olddir);
 
-  if (!$result && !drush_get_option('force', FALSE)) {
-    drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for Textpattern"));
+  if (!$result) {
+    // tar's own words, the same way the deploy-side extraction reports them;
+    // a forced run tolerates the failure, so its lines are warnings.
+    $forced = drush_get_option('force', FALSE);
+    $first_line = provision_log_tar_output($tar_output, 'Backup archive error', $forced ? 'warning' : 'error');
+    if (!$forced) {
+      $reason = ($first_line === '') ? '' : dt(' (@first)', array('@first' => $first_line));
+      drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up sites directory for Textpattern") . $reason);
+    }
   }
 }
 
