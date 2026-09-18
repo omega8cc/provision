@@ -73,6 +73,11 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
   }
+  // Refuse a clone that cannot fit before its safety copy starts (the shared
+  // pre-flight; a capsule's copies count the same way as a Drupal site's).
+  if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
 }
 
 function drush_provision_grav_pre_provision_clone($new_name, $platform = NULL) {

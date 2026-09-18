@@ -290,6 +290,26 @@ class Provision_FileSystem extends Provision_ChainedState {
 
     if (is_readable($path)) {
       if (is_writeable(dirname($target)) && !file_exists($target) && !is_dir($target)) {
+        // Refuse before the first member is written when the archive cannot
+        // fit: the extracted tree is never smaller than the archive that holds
+        // it, so free space below the archive's own size is a certain failure.
+        // Left to tar, that failure arrives minutes later as ENOSPC, after the
+        // partial extraction has filled the filesystem for every other service
+        // on the box (nginx and mysqld logged "No space left on device" while
+        // a 74 GB clone was still unpacking). A lower bound only: a poorly
+        // compressible archive can still fail later, and that case is then
+        // reported in tar's own words below.
+        $archive_bytes = @filesize($path);
+        $free_bytes = @disk_free_space(dirname($target));
+        if ($archive_bytes !== FALSE && $free_bytes !== FALSE && $free_bytes < $archive_bytes) {
+          $this->tokens['@reason'] = dt('only @free MB free on the filesystem of @where, less than the @size MB archive itself; the extracted site cannot fit, free space first', array(
+            '@free' => $this->_extract_mb($free_bytes),
+            '@size' => $this->_extract_mb($archive_bytes),
+            '@where' => dirname($target),
+          ));
+          $this->last_status = FALSE;
+          return $this;
+        }
         $this->mkdir($target);
         $oldcwd = getcwd();
         // we need to do this because some retarded implementations of tar (e.g. SunOS) don't support -C
@@ -351,7 +371,26 @@ class Provision_FileSystem extends Provision_ChainedState {
           $this->last_status = TRUE;
         }
         else {
-          $this->tokens['@reason'] = dt('The file could not be extracted');
+          // Say why in tar's own words. The output was captured all along but
+          // only ever printed under --debug, so a failed deploy, clone, migrate
+          // or restore reported nothing beyond "could not be extracted" -- a
+          // 442-second extraction that died on a full disk read exactly like a
+          // corrupt archive. The first line (usually the earliest error) rides
+          // the failure message; the rest are logged, capped so an ENOSPC that
+          // fails every remaining member cannot flood the task log.
+          $first_line = provision_log_tar_output($extract_output, 'Extraction error');
+          $reason = dt('The file could not be extracted');
+          if ($first_line !== '') {
+            $reason .= dt(': @first', array('@first' => $first_line));
+          }
+          $free_bytes = @disk_free_space(dirname($target));
+          if ($free_bytes !== FALSE) {
+            $reason .= dt('; @free MB free on the filesystem of @where now', array(
+              '@free' => $this->_extract_mb($free_bytes),
+              '@where' => dirname($target),
+            ));
+          }
+          $this->tokens['@reason'] = $reason;
           $this->last_status = FALSE;
         }
       }
@@ -366,6 +405,13 @@ class Provision_FileSystem extends Provision_ChainedState {
     }
 
     return $this;
+  }
+
+  /**
+   * Whole megabytes for a byte count, for the space messages above.
+   */
+  function _extract_mb($bytes) {
+    return (int) floor($bytes / 1048576);
   }
 
   /**

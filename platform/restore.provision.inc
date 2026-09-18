@@ -34,6 +34,12 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
     ->status();
   if ($exists) {
     drush_set_option('restore_file', $restore_file);
+    // Refuse a restore that cannot fit before its safety copy starts: the
+    // copy follows the files/private links into the store, and the archive
+    // unpacks beside the live site (provision_copy_task_space_preflight()).
+    if (!provision_copy_task_space_preflight('restore', NULL, NULL, $restore_file)) {
+      return FALSE;
+    }
   }
 }
 
@@ -129,6 +135,11 @@ function drush_provision_drupal_provision_restore($restore_file) {
     'is_restore' => TRUE,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
+
+  // The safety copy took its time; the unpacked archive must still fit.
+  if (!provision_copy_task_space_recheck('Restore of ' . d()->uri)) {
+    return FALSE;
+  }
 
   provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   if (!drush_get_error()) {

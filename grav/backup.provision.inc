@@ -270,6 +270,9 @@ function drush_provision_grav_provision_backup() {
   }
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
+  // Captured now: the readability probe below overwrites Drush's last-output
+  // buffer, and a failed retry replaces it with its own words.
+  $tar_output = drush_shell_exec_output();
 
   // Web-only secrets: Grav's web process writes user/config/*-private.php
   // (security nonce salt, api JWT signing key) owner-web at an explicit 0600,
@@ -293,6 +296,7 @@ function drush_provision_grav_provision_backup() {
       }
       $retry = str_replace(' --exclude-tag=', ' --ignore-failed-read --exclude-tag=', $command);
       $result = drush_shell_exec($retry, $backup_file);
+      $tar_output = drush_shell_exec_output();
     }
   }
 
@@ -322,8 +326,15 @@ function drush_provision_grav_provision_backup() {
       dt('Could not remove the backup exclusion tags (@tags); a stale tag would silently shrink every later backup -- remove exclude.tag by hand.', array('@tags' => implode(', ', $stale_tags))));
   }
 
-  if (!$result && !drush_get_option('force', false)) {
-    drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up the Grav site capsule"));
+  if (!$result) {
+    // tar's own words, the same way the deploy-side extraction reports them;
+    // a forced run tolerates the failure, so its lines are warnings.
+    $forced = drush_get_option('force', FALSE);
+    $first_line = provision_log_tar_output($tar_output, 'Backup archive error', $forced ? 'warning' : 'error');
+    if (!$forced) {
+      $reason = ($first_line === '') ? '' : dt(' (@first)', array('@first' => $first_line));
+      drush_set_error('PROVISION_BACKUP_FAILED', dt("Could not back up the Grav site capsule") . $reason);
+    }
   }
 }
 

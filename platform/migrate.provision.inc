@@ -9,7 +9,7 @@
  *
  * Implementation of drush_hook_COMMAND_validate().
  */
-function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
+function drush_provision_drupal_provision_migrate_validate($platform = NULL, $new_name = NULL) {
   // Backdrop migrate is not implemented in Phase 1; guard so this D-lineage
   // migrate never runs against a Backdrop site (it would clobber settings.php
   // with a legacy Drupal file). The Backdrop migrate fork lands in Phase 2.
@@ -30,6 +30,12 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL) {
       drush_log(dt('MIGRATE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }
+  }
+  // Refuse a migrate that cannot fit before its safety copy starts: the
+  // copy and the unpacked site, plus a renamed site's own copy of the store
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('migrate', $platform, $new_name)) {
+    return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
@@ -334,6 +340,11 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     'strict' => 0,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
+
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Migrate of ' . d()->uri)) {
+    return FALSE;
+  }
 
   $deploy_result = provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
   // The deploy came through: neither a failure in a later step nor an error

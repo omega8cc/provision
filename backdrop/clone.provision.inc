@@ -20,6 +20,11 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
   }
+  // Refuse a clone that cannot fit before its safety copy starts (the copy
+  // follows the links into the store, the deploy unpacks it all again).
+  if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
@@ -195,6 +200,11 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
   $resolved_backup_mode = provision_backup_mode_resolve();
   if (!empty($resolved_backup_mode)) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
+  }
+
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
+    return FALSE;
   }
 
   $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
