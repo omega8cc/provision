@@ -196,6 +196,15 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ### Declared crawler-fleet fingerprint: 429, which no IDS scorer counts.
   if ($boa_fleet_block) { return 429; }
 <?php endif; ?>
+  ### Cache-poisoning probe signature in the query string; 404, not 444, so a
+  ### scanner learns nothing from the difference with a genuine miss.
+  if ( $args ~* "=PHP[A-Z0-9]{8}-" ) { return 404; }
+  ### Credential and dotfile probes (.env/.git/.aws/.ssh, creds JSON,
+  ### settings.py). Nothing a TXP site legitimately serves.
+  if ($is_secret_path) { return 444; }
+  ### Foreign-CMS admin probes (wp-*, administrator/, phpmyadmin). A TXP site
+  ### serves none of these paths, so the whole-segment match is free of FPs.
+  if ($is_cms_probe) { return 444; }
   if ($is_ai_forged) { return 444; }
   set $ai_train_block $is_ai_training;
   if ($ai_train_allow) { set $ai_train_block ''; }
@@ -204,6 +213,11 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   if ($ai_evasive_allow) { set $ai_evasive_block ''; }
   if ($ai_evasive_block) { return 444; }
   if ($is_crawler) { return 444; }
+  ### Scanner payload maps: attack strings in the args, exploit-framework and
+  ### vulnerability-scanner user agents. Both drop at the edge with a 444 an
+  ### IDS scorer counts, instead of being answered by the tenant's PHP.
+  if ($is_denied) { return 444; }
+  if ($ua_denied) { return 444; }
   ### TLS ClientHello sent to the plain HTTP port.
   if ($tls_on_plain) { return 444; }
   ### Recommended headers (no location here defines its own add_header, so the
