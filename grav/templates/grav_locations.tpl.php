@@ -42,6 +42,10 @@ if (!isset($grav_zones_body)) {
     : '';
 }
 $grav_zone_ok = strpos($grav_zones_body, 'zone=boa_grav_anon') !== FALSE;
+// A site named under the box hostname (the same "name carries the hostname"
+// rule a hostname rename applies) renders the per-host migration gate below.
+$grav_box_fqdn = (string) d('@server_master')->remote_host;
+$grav_box_named = $grav_box_fqdn !== '' && strpos((string) $this->uri, $grav_box_fqdn) !== FALSE;
 $grav_anon_conn = (int) drush_get_option('nginx_grav_anon_conn', 100);
 if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   // An out-of-range tenant value falls back to the default -- it must never
@@ -221,6 +225,18 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
     }
+<?php if ($grav_box_named): ?>
+    # The per-host twin: a whole-server move lifts the account gate as soon
+    # as the old box relays to the new one, but a site named under the box
+    # hostname is still being renamed there, so it stays held through this
+    # file. Rendered only into a vhost named under the box hostname, which
+    # is the class the file lists, so its presence is the whole test.
+    if (-f <?php print d('@server_master')->aegir_root; ?>/static/control/http-off-host.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
+<?php endif; ?>
     limit_conn limreq 88;
 <?php if ($grav_zone_ok): ?>
     limit_conn boa_grav_anon <?php print $grav_anon_conn; ?>;

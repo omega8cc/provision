@@ -88,6 +88,14 @@ if (!$nginx_has_ktls && $server->nginx_has_ktls) {
 }
 
 $aegir_root = d('@server_master')->aegir_root;
+// A site named under the box hostname (the same "name carries the hostname"
+// rule a hostname rename applies) also renders the per-host migration gate,
+// static/control/http-off-host.pid: a whole-server move lifts the account
+// gate as soon as the old box relays to the new one, but such a site is still
+// being renamed there, so it stays held through that file. The vhost class is
+// exactly what the file lists, so its presence is the whole test.
+$txp_box_fqdn = (string) d('@server_master')->remote_host;
+$txp_box_named = $txp_box_fqdn !== '' && strpos((string) $this->uri, $txp_box_fqdn) !== FALSE;
 $ssl_args = "ssl";
 $ssl_listen_ipv4 = "*";
 $main_name = $this->uri;
@@ -309,6 +317,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
     }
+<?php if ($txp_box_named): ?>
+    if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
+<?php endif; ?>
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
   location = /css.php {
@@ -319,6 +334,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
     }
+<?php if ($txp_box_named): ?>
+    if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
+<?php endif; ?>
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
 
@@ -345,6 +367,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
         add_header Cache-Control "no-store, must-revalidate" always;
         return 503;
       }
+<?php if ($txp_box_named): ?>
+      if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+        add_header Retry-After 300 always;
+        add_header Cache-Control "no-store, must-revalidate" always;
+        return 503;
+      }
+<?php endif; ?>
       include fastcgi_params;
       fastcgi_param HTTP_PROXY "";
       fastcgi_param HTTP_HOST $host;
