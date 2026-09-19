@@ -209,6 +209,18 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # clients (an editor is never shed while a flood is trimmed). Shed = 503:
   # retryable, renders correctly through a fronting CDN, still IDS-visible.
   location = /index.php {
+    # Account write barrier parity (the global.inc chain never runs for a
+    # capsule): static/control/http-off.pid holds every PHP request on 503
+    # while a migration freezes the account. Location-scoped like the Drupal
+    # gate, so statics and acme keep serving. The presence test must not ride
+    # the open-file cache: a cached miss would keep PHP serving after the
+    # gate went up, and a cached hit would hold the 503 after it was lifted.
+    open_file_cache off;
+    if (-f <?php print d('@server_master')->aegir_root; ?>/static/control/http-off.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
     limit_conn limreq 88;
 <?php if ($grav_zone_ok): ?>
     limit_conn boa_grav_anon <?php print $grav_anon_conn; ?>;

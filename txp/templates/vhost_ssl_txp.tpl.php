@@ -10,6 +10,14 @@
  * and acme keep serving during suspension, exactly like the Drupal behaviour.
  * Shared shape with the grav track.
  *
+ * Account write barrier parity: <aegir_root>/static/control/http-off.pid
+ * holds every PHP request on 503 while a migration freezes the account
+ * (the Drupal/Backdrop gate lives in the same global settings chain). Same
+ * PHP locations, same reason. open_file_cache is off in those locations
+ * because the presence test would otherwise ride the open-file cache: a
+ * cached miss keeps PHP serving after the gate went up, a cached hit holds
+ * the 503 after it was lifted. Nothing else in a PHP location opens files.
+ *
  * (original @file docs continue below)
  * nginx vhost for a Textpattern multisite site (https + the http
  * vhost via the chained include at the end, mirroring the shared
@@ -295,10 +303,22 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   # Public PHP whitelist: EXACTLY index.php and css.php.
   location = /index.php {
     if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
+    open_file_cache off;
+    if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
   location = /css.php {
     if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
+    open_file_cache off;
+    if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+      add_header Retry-After 300 always;
+      add_header Cache-Control "no-store, must-revalidate" always;
+      return 503;
+    }
     fastcgi_pass unix:<?php print $user_socket; ?>;
   }
 
@@ -319,6 +339,12 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     }
     location ~ ^/<?php print $txp_admin_path; ?>/index\.php$ {
       if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
+      open_file_cache off;
+      if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+        add_header Retry-After 300 always;
+        add_header Cache-Control "no-store, must-revalidate" always;
+        return 503;
+      }
       include fastcgi_params;
       fastcgi_param HTTP_PROXY "";
       fastcgi_param HTTP_HOST $host;
