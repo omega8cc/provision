@@ -119,8 +119,16 @@ if ($json_written === FALSE) {
     dt('Could not write the shim config to @file.', array('@file' => $json_file)));
 }
 
+// The shim includes the pre-rendered, now-cloaked config.php (2026-09-20);
+// with cloaking on it carries no literal credentials and reads them from
+// $_SERVER instead, which a spawned CLI process only has if the real process
+// environment carries them -- same mechanism the D8+ core rebuild subprocess
+// uses for the identical reason (provision_drupal.drush.inc). Harmless when
+// credentials are not cloaked.
 $shim = dirname(__FILE__) . '/resources/txp-install-shim.php';
+provision_prepare_environment_subprocess();
 $result = drush_shell_exec('%s %s --config=%s', $php_bin, $shim, $json_file);
+provision_clear_environment_subprocess();
 $output = implode("\n", (array) drush_shell_exec_output());
 @unlink($json_file);
 

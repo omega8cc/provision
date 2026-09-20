@@ -33,6 +33,14 @@ class Provision_Config_Txp_Settings extends Provision_Config {
     $this->data['txp_multisite_root'] = $this->site_path;
     $this->data['txp_txpath'] = $this->root . '/textpattern';
 
+    // Same cloaking contract as the Drupal/Backdrop settings.php templates
+    // (2026-09-20, closing the cross-tenant credential-read finding in
+    // boa-private-notes notes/2026-09-19-txp-edb51176-defence-audit.md): with
+    // cloaking on (the BOA nginx service default), config.php carries no
+    // literal credentials, so the group stays web_group regardless -- there
+    // is nothing left in the file for another tenant's pool to read.
+    $this->cloaked = drush_get_option('provision_db_cloaking', $this->context->service('http')->cloaked_db_creds());
+
     $this->group = $this->platform->server->web_group;
   }
 }

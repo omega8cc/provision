@@ -119,6 +119,47 @@ server {
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
   set $main_site_name "<?php print $this->uri; ?>";
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+<?php
+  // If any of those parameters is empty for any reason, like after an attempt
+  // to import complete platform with sites without importing their databases,
+  // it will break Nginx reload and even shutdown all sites on the system on
+  // Nginx restart, so we need to use dummy placeholders to avoid affecting
+  // other sites on the system if this site is broken. Same guard as the
+  // Drupal/Backdrop vhost templates.
+  if (!$db_type || !$db_name || !$db_user || !$db_passwd || !$db_host) {
+    $db_type = 'mysqli';
+    $db_name = 'none';
+    $db_user = 'none';
+    $db_passwd = 'none';
+    $db_host = 'localhost';
+  }
+?>
+  fastcgi_param db_type   <?php print urlencode($db_type); ?>;
+  fastcgi_param db_name   <?php print urlencode($db_name); ?>;
+  fastcgi_param db_user   <?php print implode('@', array_map('urlencode', explode('@', $db_user))); ?>;
+  fastcgi_param db_passwd <?php print urlencode($db_passwd); ?>;
+  fastcgi_param db_host   <?php print urlencode($db_host); ?>;
+<?php
+  // Same ProxySQL port override as the Drupal/Backdrop vhost templates.
+  if (!$db_port) {
+    $ctrlf = '/data/conf/' . $script_user . '_use_proxysql.txt';
+    if (provision_file()->exists($ctrlf)->status()) {
+      $db_port = '6033';
+    }
+    else {
+      $db_port = $this->server->db_port ? $this->server->db_port : '3306';
+    }
+  }
+?>
+  fastcgi_param db_port   <?php print urlencode($db_port); ?>;
+  # Marks the six credentials above as urlencode()d: the cloaked config.php
+  # decodes exactly this source. Feeds /index.php and /css.php below by
+  # inheritance; the admin location re-declares its own set (inheritance is
+  # all-or-nothing there), so it reads these back through the $boa_db_*
+  # variables the next line declares -- same contract as the shared
+  # vhost_include.tpl.php locations.
+  fastcgi_param db_creds_urlencoded 1;
+<?php print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port); ?>
   listen  *:<?php print $http_port; ?>;
   server_name  <?php
     if ($this->redirection) {
@@ -353,6 +394,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       fastcgi_param REQUEST_SCHEME $scheme;
       fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
       fastcgi_param SCRIPT_FILENAME $request_filename;
+      fastcgi_param db_type   $boa_db_type;
+      fastcgi_param db_name   $boa_db_name;
+      fastcgi_param db_user   $boa_db_user;
+      fastcgi_param db_passwd $boa_db_passwd;
+      fastcgi_param db_host   $boa_db_host;
+      fastcgi_param db_port   $boa_db_port;
+      fastcgi_param db_creds_urlencoded $boa_db_creds_urlencoded;
       fastcgi_pass unix:<?php print $user_socket; ?>;
     }
     # No other PHP executes under the admin path (vendors/, admin-themes/,
