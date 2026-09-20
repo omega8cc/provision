@@ -65,11 +65,20 @@ try {
   // feed URL and redirect from it: a site whose siteurl names another host
   // publishes links nobody can follow, and Verify is where an operator is told
   // to go after a task left the row on the wrong name.
+  //
+  // plugin_cache_dir and production_status join them so this list matches
+  // _provision_txp_repoint_uri()'s writer list exactly (provision_txp.drush.inc):
+  // both are constants, not site-derived, but a heal list that drops rows the
+  // writer sets is how one of the two silently stops re-asserting them.
   $canonical = array(
     'siteurl' => $uri,
     'path_to_site' => $site_path . '/public',
     'file_base_path' => $site_path . '/public/files',
     'tempdir' => $site_path . '/tmp',
+    // Source-bound and PHP is include()d from it on every public request.
+    'plugin_cache_dir' => '',
+    // Never inherit a debug/testing status: it publishes trace + SQL detail.
+    'production_status' => 'live',
   );
   $stmt = $mysqli->prepare("SELECT val FROM txp_prefs WHERE name = ?");
   $upd = $mysqli->prepare("UPDATE txp_prefs SET val = ? WHERE name = ?");
