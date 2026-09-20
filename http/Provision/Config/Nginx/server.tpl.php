@@ -926,8 +926,8 @@ map $args $is_denied {
 map $http_user_agent $ua_denied {
   default  '';
   ~*/\*\*/                           ua_denied;
-  ~*waitfor([/\*]|\s\+)+delay        ua_denied;
-  ~*declare([/\*]|\s\+)+@            ua_denied;
+  ~*waitfor([/\*]|\s+)+delay         ua_denied;
+  ~*declare([/\*]|\s+)+@             ua_denied;
   ~*(benchmark|sleep|pg_sleep)\s*\(  ua_denied;
 }
 
