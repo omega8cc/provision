@@ -46,15 +46,6 @@ if (!$nginx_has_ktls && $server->nginx_has_ktls) {
 $aegir_root = d('@server_master')->aegir_root;
 $ssl_args = "ssl";
 $ssl_listen_ipv4 = "*";
-$main_name = $this->uri;
-if ($this->redirection) {
-  $main_name = $this->redirection;
-}
-$legacy_tls_ctrl = $aegir_root . "/static/control/tls-legacy-enable-" . $main_name . ".info";
-$legacy_tls_enable = FALSE;
-if (provision_file()->exists($legacy_tls_ctrl)->status()) {
-  $legacy_tls_enable = TRUE;
-}
 ?>
 
 <?php if ($this->redirection): ?>
@@ -84,9 +75,6 @@ server {
   }
 ?>
   ssl_dhparam /etc/ssl/private/nginx-wild-ssl.dhp;
-<?php if ($legacy_tls_enable): ?>
-  ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
-<?php endif; ?>
   ssl_certificate_key <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
   ssl_certificate     <?php print $ssl_chain_cert; ?>;
@@ -196,9 +184,6 @@ server {
     } ?>;
   root  <?php print "{$this->root}"; ?>;
   ssl_dhparam /etc/ssl/private/nginx-wild-ssl.dhp;
-<?php if ($legacy_tls_enable): ?>
-  ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
-<?php endif; ?>
   ssl_certificate_key <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
   ssl_certificate     <?php print $ssl_chain_cert; ?>;

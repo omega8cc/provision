@@ -102,11 +102,6 @@ $main_name = $this->uri;
 if ($this->redirection) {
   $main_name = $this->redirection;
 }
-$legacy_tls_ctrl = $aegir_root . "/static/control/tls-legacy-enable-" . $main_name . ".info";
-$legacy_tls_enable = FALSE;
-if (provision_file()->exists($legacy_tls_ctrl)->status()) {
-  $legacy_tls_enable = TRUE;
-}
 
 // Direct /files/ downloads are DENIED by default (D-010); per-site opt-out via
 // the same control-file idiom as the legacy-TLS gate above.
@@ -139,9 +134,6 @@ server {
   }
 ?>
   ssl_dhparam /etc/ssl/private/nginx-wild-ssl.dhp;
-<?php if ($legacy_tls_enable): ?>
-  ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
-<?php endif; ?>
   ssl_certificate_key <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
   ssl_certificate     <?php print $ssl_chain_cert; ?>;
@@ -241,9 +233,6 @@ server {
     } ?>;
   root  <?php print $site_public; ?>;
   ssl_dhparam /etc/ssl/private/nginx-wild-ssl.dhp;
-<?php if ($legacy_tls_enable): ?>
-  ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
-<?php endif; ?>
   ssl_certificate_key <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
   ssl_certificate     <?php print $ssl_chain_cert; ?>;

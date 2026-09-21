@@ -71,8 +71,7 @@ $txp_box_named = $txp_box_fqdn !== '' && strpos((string) $this->uri, $txp_box_fq
 $satellite_mode = d('@server_master')->satellite_mode;
 
 // Direct /files/ downloads are DENIED by default (D-010). Per-site opt-out via
-// a control file, mirroring the tls-legacy-enable-<name>.info pattern used in
-// the SSL twin: touch <aegir_root>/static/control/txp-files-open-<name>.info.
+// a control file: touch <aegir_root>/static/control/txp-files-open-<name>.info.
 $txp_main_name = $this->redirection ? $this->redirection : $this->uri;
 $txp_files_open = provision_file()
   ->exists($aegir_root . '/static/control/txp-files-open-' . $txp_main_name . '.info')
