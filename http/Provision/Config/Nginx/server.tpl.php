@@ -178,6 +178,16 @@ if ($nginx_has_gzip) {
   fastcgi_buffer_size           512k;
   fastcgi_buffers             512 8k;
   fastcgi_temp_file_write_size  512k;
+<?php if ($nginx_has_http3): ?>
+  # Nginx keeps at most this much unacknowledged data in flight per HTTP/3
+  # stream, so one stream's throughput is this size per round trip. The 64k
+  # default holds a large download to about 1.3 MB/s at 45 ms and to a few
+  # hundred KB/s across continents, a tenth of HTTP/2 on the same path; 2m
+  # measured level with HTTP/2 on a 100 Mbit/s path at that round trip. It
+  # is allocated as needed, per stream with a large response in flight, and
+  # released as the client acknowledges.
+  http3_stream_buffer_size        2m;
+<?php endif; ?>
   large_client_header_buffers 32 64k;
   map_hash_bucket_size           192;
   # Generated BOA maps can hold thousands of exact keys; at the default max
