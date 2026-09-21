@@ -1506,6 +1506,25 @@ location ^~ /downloads/ {
 }
 
 ###
+### Serve audio and video files directly, with a long send timeout. A player
+### or a CDN edge reads far ahead of playback and then reads nothing at all
+### until the listener catches up, which takes many minutes on an audio file.
+### The http-level timeout between two writes would close the response in the
+### meantime, and behind a CDN the listener then gets a file cut short long
+### after the fact. Short /files/ and /downloads/ URIs arrive here through
+### their own rewrite. Keep this location ahead of the static one below.
+###
+location ~* ^.+\.(?:mp3|ogg|oga|ogv|opus|wav|flac|aac|weba|webm|avi|mpe?g|mov|wmv|mkv|m4v)$ {
+  send_timeout 3600s;
+  expires 30d;
+  access_log off;
+  log_not_found off;
+  rewrite ^/images/(.*)$  /sites/$main_site_name/files/images/$1 last;
+  rewrite ^/.+/sites/.+/files/(.*)$  /sites/$main_site_name/files/$1 last;
+  try_files $uri =404;
+}
+
+###
 ### Serve & no-log static files & images directly,
 ### without all standard drupal rewrites, php-fpm etc.
 ###
@@ -1548,6 +1567,7 @@ location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
 ###
 location ~* ^.+\.flv$ {
   flv;
+  send_timeout 3600s;
   expires 30d;
   access_log off;
   log_not_found off;
@@ -1561,6 +1581,7 @@ location ~* ^.+\.(?:mp4|m4a)$ {
   mp4;
   mp4_buffer_size 1m;
   mp4_max_buffer_size 5m;
+  send_timeout 3600s;
   expires 30d;
   access_log off;
   log_not_found off;
