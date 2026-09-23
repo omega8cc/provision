@@ -1208,9 +1208,6 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     if ( $args ~* "nocache=1" ) {
       set $nocache_details "Args";
     }
-    if ( $sent_http_x_force_nocache = "YES" ) {
-      set $nocache_details "Skip";
-    }
     if ( $http_cookie ~* "NoCacheID" ) {
       set $nocache_details "AegirCookie";
     }
@@ -1280,7 +1277,12 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     fastcgi_pass_header Set-Cookie;
     fastcgi_pass_header X-Accel-Expires;
     fastcgi_pass_header X-Accel-Redirect;
-    fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
+    ###
+    ### A response that sends X-Force-Nocache (YES; any value but 0) is not
+    ### stored. The test belongs here: fastcgi_no_cache is read once the
+    ### response headers exist, while an if in the location runs before them.
+    ###
+    fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache $upstream_http_x_force_nocache;
     fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
     fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
   }
@@ -1308,10 +1310,6 @@ location @cache_<?php print $subdir_loc; ?> {
   }
   if ( $args ~* "nocache=1" ) {
     set $nocache_details "Args";
-    return 405;
-  }
-  if ( $sent_http_x_force_nocache = "YES" ) {
-    set $nocache_details "Skip";
     return 405;
   }
   if ( $http_cookie ~* "NoCacheID" ) {
