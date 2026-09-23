@@ -150,6 +150,17 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   }
 
   ###
+  ### The scheme a redirect in the operator includes below keeps, as in the
+  ### shared include: https for a visitor who came through the wildcard SSL
+  ### front, which reaches this vhost over plain HTTP with
+  ### X-Forwarded-Proto: https.
+  ###
+  set $boa_visitor_scheme $scheme;
+  if ($http_x_forwarded_proto = "https") {
+    set $boa_visitor_scheme "https";
+  }
+
+  ###
   ### Include high level local configuration override if exists.
   ###
   include  <?php print d('@server_master')->aegir_root; ?>/config/server_master/nginx/post.d/nginx_force_include*;

@@ -102,7 +102,13 @@ if ($this->redirection) {
         print "    try_files \$uri 404;\n";
         print "  }\n";
       }
-      print "  return 301 \$scheme://{$this->redirection}\$request_uri;\n";
+      // An HTTPS visitor who reached this alias through the wildcard SSL
+      // front arrives here over plain HTTP, with X-Forwarded-Proto: https.
+      print "  set \$boa_visitor_scheme \$scheme;\n";
+      print "  if (\$http_x_forwarded_proto = \"https\") {\n";
+      print "    set \$boa_visitor_scheme \"https\";\n";
+      print "  }\n";
+      print "  return 301 \$boa_visitor_scheme://{$this->redirection}\$request_uri;\n";
       print "}\n";
     }
   }
