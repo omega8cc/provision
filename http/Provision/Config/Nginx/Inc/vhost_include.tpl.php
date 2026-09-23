@@ -1782,6 +1782,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache "NoCache";
   }
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache "NoCache";
+  }
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD;
   fastcgi_cache_min_uses 1;
@@ -1794,7 +1797,12 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;
   fastcgi_pass_header X-Accel-Redirect;
-  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
+  ###
+  ### A response that sends X-Force-Nocache (YES; any value but 0) is not
+  ### stored. The test belongs here: fastcgi_no_cache is read once the
+  ### response headers exist, while an if in the location runs before them.
+  ###
+  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache $upstream_http_x_force_nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
   expires epoch;
@@ -1842,16 +1850,16 @@ location @cache {
     set $nocache_details "Args";
     return 405;
   }
-  if ( $sent_http_x_force_nocache = "YES" ) {
-    set $nocache_details "Skip";
-    return 405;
-  }
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache_details "AegirCookie";
     return 405;
   }
   if ( $cache_uid ) {
     set $nocache_details "DrupalCookie";
+    return 405;
+  }
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache_details "Monitor";
     return 405;
   }
   error_page 405 = @drupal;
@@ -2024,9 +2032,6 @@ location = /index.php {
   if ( $args ~* "nocache=1" ) {
     set $nocache_details "Args";
   }
-  if ( $sent_http_x_force_nocache = "YES" ) {
-    set $nocache_details "Skip";
-  }
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache_details "AegirCookie";
   }
@@ -2044,12 +2049,20 @@ location = /index.php {
   if ( $http_authorization ) {
     set $debug_auth_flag "Present";
   }
+  ###
+  ### Uptime monitors always reach the backend: never served from the cache
+  ### nor stored in it, so a monitor never reads a crawler's cached copy and
+  ### a backend that is down is never hidden behind a stale one.
+  ###
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache_details "Monitor";
+  }
 
   ###
   ### Use Nginx cache for all visitors by default.
   ###
   set $nocache "";
-  if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
+  if ( $nocache_details ~ (?:AegirCookie|Args|Skip|Monitor) ) {
     set $nocache "NoCache";
   }
 
@@ -2109,7 +2122,12 @@ location = /index.php {
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;
   fastcgi_pass_header X-Accel-Redirect;
-  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache;
+  ###
+  ### A response that sends X-Force-Nocache (YES; any value but 0) is not
+  ### stored. The test belongs here: fastcgi_no_cache is read once the
+  ### response headers exist, while an if in the location runs before them.
+  ###
+  fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache $upstream_http_x_force_nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
   fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
 }

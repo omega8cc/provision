@@ -831,6 +831,96 @@ function _provision_codebase_has_composer_patches($approot) {
 }
 
 /**
+ * Record, or ask, whether this backend process opened the lock on $root.
+ *
+ * A lock that closes a window the same task opened (a deploy's updatedb, a
+ * Drupal 11 site install) leaves every other site's service container as it
+ * was: only the task's own site ran site-local Drush in the window, and the
+ * task rebuilds that one last. A lock that closes a window an EARLIER task
+ * opened -- the Unlock Local Drush task, after which the account's own
+ * site-local Drush may have compiled any site's container with its Drush-only
+ * services (logger.drupaltodrush, whose class the lock makes unreadable) --
+ * has no such guarantee, so provision_lock_drush_local_vnd() then rebuilds
+ * every Drupal 10+ site of the platform with core's own rebuild.
+ *
+ * The unlock functions record a root only when they find the lock closed, so
+ * an unlock that runs over an owner's open window leaves it foreign, and the
+ * lock clears the record once it has read it, so a later window in the same
+ * process is judged on its own. In-process only, by design: the window a task
+ * opens ends with that task.
+ *
+ * @param string $root
+ *   The platform root the lock works on.
+ * @param bool $mark
+ *   TRUE to record $root.
+ * @param bool $clear
+ *   TRUE to drop the record for $root (after it is read).
+ *
+ * @return bool
+ *   Whether this process opened the lock on $root (before any clear).
+ */
+function _provision_drush_local_unlocked_here($root, $mark = FALSE, $clear = FALSE) {
+  static $roots = array();
+  $real = realpath($root);
+  $key = ($real !== FALSE) ? $real : rtrim($root, '/');
+  if ($mark) {
+    $roots[$key] = TRUE;
+  }
+  $here = isset($roots[$key]);
+  if ($clear) {
+    unset($roots[$key]);
+  }
+  return $here;
+}
+
+/**
+ * The last container write after a lock closed a foreign window.
+ *
+ * Runs core's own rebuild of every Drupal 10+ site of the platform once the
+ * lock really holds: vendor/drush back at 0400, in the state the web now
+ * serves. A lock whose chmod did not take leaves the local Drush readable, so
+ * nothing it compiled can fail yet; the next lock that closes the window runs
+ * the rebuild instead (and a Verify locks on that partial state every time, so
+ * rebuilding here would repeat the platform-wide run on each of them).
+ *
+ * @param bool $closes_foreign_window
+ *   What provision_lock_drush_local_vnd() read before changing any mode.
+ */
+function _provision_drush_local_relock_rebuild($closes_foreign_window) {
+  if (!$closes_foreign_window || drush_drupal_major_version() < 10) {
+    return;
+  }
+  if (_provision_drush_local_lock_is_open(d()->root)) {
+    drush_log(dt('REBUILD/RELOCK/SKIP the lock left vendor/drush open in @root, so nothing site-local Drush compiled is unreadable yet; the lock that closes it rebuilds the sites', array('@root' => d()->root)), 'warning');
+    return;
+  }
+  if (function_exists('_provision_drupal_rebuild_platform_sites')) {
+    _provision_drupal_rebuild_platform_sites(d()->root);
+  }
+  else {
+    drush_log(dt('REBUILD/RELOCK/UNAVAILABLE the lock closed an earlier Unlock window in @root, but the platform rebuild is not loaded; each site keeps its container until its next Verify', array('@root' => d()->root)), 'warning');
+  }
+}
+
+/**
+ * Whether the site-local Drush lock on $root is open right now.
+ *
+ * Read from the vendor/drush mode alone, before a lock changes it: anything
+ * but the lock's 0400 means site-local Drush could run. No vendor/drush at all
+ * means it could not, so nothing it compiles can be left behind.
+ */
+function _provision_drush_local_lock_is_open($root) {
+  $drush = _provision_first_existing(array(
+    $root . '/vendor/drush',
+    $root . '/../vendor/drush',
+  ));
+  if ($drush === '') {
+    return FALSE;
+  }
+  return ((fileperms($drush) & 0777) !== 0400);
+}
+
+/**
  * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir tasks like updatedb.
  */
@@ -839,6 +929,12 @@ function provision_unlock_drush_local_vnd() {
   if (provision_file()->exists(d()->root)->status() &&
     !preg_match("/\/aegir\/distro\//i", d()->root) &&
     !preg_match("/\/var\/aegir\//i", d()->root)) {
+
+    // Only a window this task opens counts as its own; one an earlier task
+    // left open stays foreign however many unlocks run over it.
+    if (!_provision_drush_local_lock_is_open(d()->root)) {
+      _provision_drush_local_unlocked_here(d()->root, TRUE);
+    }
 
     $dru_vnd_drush_local = d()->root . '/vendor/drush';
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
@@ -1071,6 +1167,11 @@ function provision_unlock_some_vnd() {
     !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_some_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+    // Only a window this task opens counts as its own; one an earlier task
+    // left open stays foreign however many unlocks run over it.
+    if (!_provision_drush_local_lock_is_open(d()->root)) {
+      _provision_drush_local_unlocked_here(d()->root, TRUE);
+    }
 
     // Fix ownership first
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
@@ -1130,6 +1231,11 @@ function provision_unlock_drush_only() {
     !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_unlock_drush_only: !vendor', array('!vendor' => d()->root)), 'message');
+    // Only a window this task opens counts as its own; one an earlier task
+    // left open stays foreign however many unlocks run over it.
+    if (!_provision_drush_local_lock_is_open(d()->root)) {
+      _provision_drush_local_unlocked_here(d()->root, TRUE);
+    }
 
     // Fix ownership first
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
@@ -1161,6 +1267,11 @@ function provision_lock_drush_local_vnd() {
     !preg_match("/\/var\/aegir\//i", d()->root)) {
 
     drush_log(dt('Drupal root reported in provision_lock_drush_local_vnd: !vendor', array('!vendor' => d()->root)), 'message');
+
+    // Read before anything below changes the modes: is this lock closing a
+    // window an earlier task left open? See _provision_drush_local_unlocked_here().
+    $closes_foreign_window = _provision_drush_local_lock_is_open(d()->root)
+      && !_provision_drush_local_unlocked_here(d()->root, FALSE, TRUE);
 
     // Fix ownership first
     $success = drush_shell_exec("sudo --non-interactive /usr/local/bin/fix-drupal-platform-ownership.sh --root=%s --script-user=%s --web-group=%s", d()->root, d()->server->script_user, d()->server->web_group);
@@ -1236,6 +1347,9 @@ function provision_lock_drush_local_vnd() {
       // psr/log is a codebase the web cannot serve, the stock one still is.
       if (provision_file()->exists($psr_tpl)->status()) {
         if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
+          // vendor/drush is already at 0400 here: the sites still need their
+          // rebuild, in the stock state this aborted lock leaves.
+          _provision_drush_local_relock_rebuild($closes_foreign_window);
           return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
         }
       }
@@ -1357,6 +1471,11 @@ function provision_lock_drush_local_vnd() {
         }
       }
     }
+
+    // The last container write after a window an earlier task opened: every
+    // Drupal 10+ site of the platform gets core's own rebuild, in the patched,
+    // locked state the web now serves.
+    _provision_drush_local_relock_rebuild($closes_foreign_window);
   }
   return TRUE;
 }
