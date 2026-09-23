@@ -952,9 +952,17 @@ map $request $tls_on_plain {
 ###
 ### Live switch of $key_uri for Speed Booster cache depending on $args.
 ###
+### Campaign tags and per-click ids do not change the page, so a query made
+### of nothing else is left out of the key and a tagged link shares the
+### untagged page's entry. A single other parameter keeps the whole query in
+### the key. Names match only at a ? or & boundary, never inside another
+### name (datasource=, resource=, freq=). The negative lookahead scans the
+### query once and the path is matched possessively, so a long URI costs
+### linear time.
+###
 map $request_uri $key_uri {
-  default                                                                            $request_uri;
-  ~(?<no_args_uri>[[:graph:]]+)\?(.*)(utm_|__utm|_campaign|gclid|source=|adv=|req=)  $no_args_uri;
+  default  $request_uri;
+  ~^(?<no_args_uri>[^?]*+)(?!.*[?&](?!(?:utm_|__utm|(?:pk|mtm)_(?:campaign|cpn|kwd|keyword|source|medium|content|cid|group|placement)=|(?:piwik|matomo)_(?:campaign|kwd)=|(?:gclid|gclsrc|dclid|gbraid|wbraid|gad_source|gad_campaignid|srsltid|_ga|_gl|msclkid|fbclid|igsh|igshid|ttclid|twclid|yclid|ysclid|li_fat_id|mc_cid|mc_eid|_hsenc|_hsmi|mkt_tok|rdt_cid|epik|_kx|source|adv|req)=)))\?  $no_args_uri;
 }
 
 ###

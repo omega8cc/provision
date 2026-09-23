@@ -1107,49 +1107,7 @@ function _provision_drupal_rebuild_d8plus() {
       // not have).
       $root = provision_auto_fix_platform_root($root);
     }
-    $uri = d()->uri;
-    $script = dirname(__FILE__) . '/drupal/rebuild_d8plus.php';
-    // The interpreter this backend runs under is the account's pinned CLI
-    // PHP, the one every site-local tool of this account runs under too.
-    $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
-
-    if (!is_file($script) || !is_file($root . '/core/includes/utility.inc') || $uri === '') {
-      drush_log(dt('REBUILD/CORE/SKIP no core rebuild possible for @uri (script @script, docroot @root); container and caches left to the next request', array('@uri' => $uri, '@script' => $script, '@root' => $root)), 'warning');
-      return FALSE;
-    }
-
-    drush_log(dt('REBUILD/CORE/CMD @php rebuild_d8plus.php @root @uri (core drupal_rebuild, no Drush)', array('@php' => $php, '@root' => $root, '@uri' => $uri)), 'info');
-    // Cloaked credentials reach the subprocess only through the real
-    // environment; harmless when credentials are not cloaked. Every argument
-    // is passed through the sprintf form, which escapeshellarg()s each one;
-    // stderr is captured with stdout by drush_shell_exec().
-    // The compile needs the locked vendor dirs readable: a contrib compiler
-    // pass that reflects every service class (symfony_mailer's MailerPass)
-    // autoloads a module's Drush command class, whose parent lives under
-    // vendor/drush -- unreadable while the platform lock holds it at 0400,
-    // so the whole rebuild failed on any platform shipping such a module
-    // (Varbase). Open the lock's own window for the subprocess and put the
-    // modes back exactly as found.
-    $window = _provision_drupal_rebuild_lock_window($root);
-    provision_prepare_environment_subprocess();
-    $ok = drush_shell_cd_and_exec($root, '%s %s %s %s', $php, $script, $root, $uri);
-    provision_clear_environment_subprocess();
-    _provision_drupal_rebuild_lock_window($root, $window);
-    $output = drush_shell_exec_output();
-    if ($ok) {
-      foreach ($output as $line) {
-        drush_log($line, 'notice');
-      }
-      drush_log(dt('REBUILD/CORE/OK service container and caches rebuilt for @uri', array('@uri' => $uri)), 'ok');
-      return TRUE;
-    }
-    else {
-      drush_log(dt('REBUILD/CORE/FAIL the core rebuild for @uri did not complete; container and caches left to the next request', array('@uri' => $uri)), 'warning');
-      foreach ($output as $line) {
-        drush_log($line, 'warning');
-      }
-      return FALSE;
-    }
+    return _provision_drupal_core_rebuild($root, d()->uri, TRUE);
   }
   else {
     // D8/D9: Aegir Drush 8 can bootstrap the site, so 'cache-rebuild' works.
@@ -1162,6 +1120,144 @@ function _provision_drupal_rebuild_d8plus() {
     provision_backend_invoke(d()->name, 'cache-rebuild');
     drush_set_context('DRUSH_ERROR_CODE', $pre_error);
   }
+}
+
+/**
+ * Core's own rebuild of one Drupal 10+ site, in a Drush-free subprocess.
+ *
+ * @param string $root
+ *   The site's docroot.
+ * @param string $uri
+ *   The site's URI (its sites/ directory name).
+ * @param bool $site_env
+ *   TRUE when $uri is the current site context: its cloaked credentials are
+ *   exported to the subprocess, as before. FALSE for any other site of the
+ *   platform: the environment is cleared instead, so the site's settings.php
+ *   reads its own credentials and never inherits the current site's.
+ * @param int $timeout
+ *   Seconds the subprocess may run (coreutils timeout), 0 for no limit.
+ *
+ * @return bool
+ *   TRUE when the rebuild completed.
+ */
+function _provision_drupal_core_rebuild($root, $uri, $site_env, $timeout = 0) {
+  $script = dirname(__FILE__) . '/drupal/rebuild_d8plus.php';
+  // The interpreter this backend runs under is the account's pinned CLI
+  // PHP, the one every site-local tool of this account runs under too.
+  $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : 'php';
+
+  if (!is_file($script) || !is_file($root . '/core/includes/utility.inc') || $uri === '') {
+    drush_log(dt('REBUILD/CORE/SKIP no core rebuild possible for @uri (script @script, docroot @root); container and caches left to the next request', array('@uri' => $uri, '@script' => $script, '@root' => $root)), 'warning');
+    return FALSE;
+  }
+
+  drush_log(dt('REBUILD/CORE/CMD @php rebuild_d8plus.php @root @uri (core drupal_rebuild, no Drush)', array('@php' => $php, '@root' => $root, '@uri' => $uri)), 'info');
+  // Cloaked credentials reach the subprocess only through the real
+  // environment; harmless when credentials are not cloaked. Every argument
+  // is passed through the sprintf form, which escapeshellarg()s each one;
+  // stderr is captured with stdout by drush_shell_exec().
+  // The compile needs the locked vendor dirs readable: a contrib compiler
+  // pass that reflects every service class (symfony_mailer's MailerPass)
+  // autoloads a module's Drush command class, whose parent lives under
+  // vendor/drush -- unreadable while the platform lock holds it at 0400,
+  // so the whole rebuild failed on any platform shipping such a module
+  // (Varbase). Open the lock's own window for the subprocess and put the
+  // modes back exactly as found.
+  $window = _provision_drupal_rebuild_lock_window($root);
+  // Never an inherited value: prepare exports only the options the site
+  // context carries, so clear first.
+  provision_clear_environment_subprocess();
+  if ($site_env) {
+    provision_prepare_environment_subprocess();
+  }
+  if ($timeout > 0 && is_executable('/usr/bin/timeout')) {
+    $ok = drush_shell_cd_and_exec($root, '%s %s %s %s %s %s', '/usr/bin/timeout', $timeout, $php, $script, $root, $uri);
+  }
+  else {
+    $ok = drush_shell_cd_and_exec($root, '%s %s %s %s', $php, $script, $root, $uri);
+  }
+  provision_clear_environment_subprocess();
+  _provision_drupal_rebuild_lock_window($root, $window);
+  $output = drush_shell_exec_output();
+  if ($ok) {
+    foreach ($output as $line) {
+      drush_log($line, 'notice');
+    }
+    drush_log(dt('REBUILD/CORE/OK service container and caches rebuilt for @uri', array('@uri' => $uri)), 'ok');
+    return TRUE;
+  }
+  drush_log(dt('REBUILD/CORE/FAIL the core rebuild for @uri did not complete; container and caches left to the next request', array('@uri' => $uri)), 'warning');
+  foreach ($output as $line) {
+    drush_log($line, 'warning');
+  }
+  return FALSE;
+}
+
+/**
+ * Rebuild every Drupal 10+ site of a platform whose lock was just closed.
+ *
+ * Called by provision_lock_drush_local_vnd() when the lock closes a window an
+ * earlier task opened (see _provision_drush_local_unlocked_here()). While the
+ * platform was unlocked, the account's own site-local Drush could compile the
+ * container of any of its sites, and a container compiled by Drush carries its
+ * Drush-only logger (logger.drupaltodrush). Once the lock makes vendor/drush
+ * unreadable again, that site fails every request that writes a log entry --
+ * a 404 is enough -- until its next Verify. Core's own rebuild of each site,
+ * now in the patched and locked state the web serves, is the last container
+ * write, so none of them is left on a Drush-compiled container.
+ *
+ * Non-fatal like the single-site rebuild: every outcome is logged, nothing
+ * fails the task. The sites are the sites/ subdirectories with a settings.php
+ * (neither 'default' nor a symlink) whose site alias points at this platform,
+ * so a directory left behind by an interrupted delete or migrate is skipped.
+ * Each rebuild may run for five minutes at most, so one hung site cannot hold
+ * the lock's vendor window open.
+ *
+ * @param string $root
+ *   The platform docroot.
+ */
+function _provision_drupal_rebuild_platform_sites($root) {
+  if (!is_file($root . '/core/includes/utility.inc')) {
+    $root = provision_auto_fix_platform_root($root);
+  }
+  $real_root = realpath($root);
+  $sites = array();
+  $dir = @opendir($root . '/sites');
+  if ($dir === FALSE) {
+    drush_log(dt('REBUILD/RELOCK/SKIP no sites directory in @root', array('@root' => $root)), 'warning');
+    return;
+  }
+  while (FALSE !== ($subdir = readdir($dir))) {
+    if ($subdir == '.' || $subdir == '..' || $subdir == 'default' || $subdir == 'all') {
+      continue;
+    }
+    $path = $root . '/sites/' . $subdir;
+    if (is_link($path) || !is_file($path . '/settings.php')) {
+      continue;
+    }
+    $record = drush_sitealias_get_record('@' . $subdir);
+    $alias_root = (!empty($record['root'])) ? realpath($record['root']) : FALSE;
+    if ($alias_root === FALSE || $alias_root !== $real_root) {
+      drush_log(dt('REBUILD/RELOCK/SKIP sites/@dir has no site alias on this platform', array('@dir' => $subdir)), 'notice');
+      continue;
+    }
+    $sites[] = $subdir;
+  }
+  closedir($dir);
+  sort($sites);
+  if (empty($sites)) {
+    drush_log(dt('REBUILD/RELOCK/NONE the lock closed an earlier Unlock window in @root; no site to rebuild', array('@root' => $root)), 'info');
+    return;
+  }
+  drush_log(dt('REBUILD/RELOCK/START the lock closed an earlier Unlock window in @root; core rebuild of its @n site(s), so none keeps a container compiled by site-local Drush', array('@root' => $root, '@n' => count($sites))), 'ok');
+  $current = (d()->type == 'site') ? d()->uri : '';
+  $done = 0;
+  foreach ($sites as $uri) {
+    if (_provision_drupal_core_rebuild($root, $uri, ($uri === $current), 300)) {
+      $done++;
+    }
+  }
+  drush_log(dt('REBUILD/RELOCK/DONE @done of @n site(s) rebuilt in @root', array('@done' => $done, '@n' => count($sites), '@root' => $root)), ($done == count($sites)) ? 'ok' : 'warning');
 }
 
 /**
