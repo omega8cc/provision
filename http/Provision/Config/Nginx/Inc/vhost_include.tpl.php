@@ -1782,6 +1782,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache "NoCache";
   }
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache "NoCache";
+  }
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD;
   fastcgi_cache_min_uses 1;
@@ -1852,6 +1855,10 @@ location @cache {
   }
   if ( $cache_uid ) {
     set $nocache_details "DrupalCookie";
+    return 405;
+  }
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache_details "Monitor";
     return 405;
   }
   error_page 405 = @drupal;
@@ -2044,12 +2051,20 @@ location = /index.php {
   if ( $http_authorization ) {
     set $debug_auth_flag "Present";
   }
+  ###
+  ### Uptime monitors always reach the backend: never served from the cache
+  ### nor stored in it, so a monitor never reads a crawler's cached copy and
+  ### a backend that is down is never hidden behind a stale one.
+  ###
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache_details "Monitor";
+  }
 
   ###
   ### Use Nginx cache for all visitors by default.
   ###
   set $nocache "";
-  if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
+  if ( $nocache_details ~ (?:AegirCookie|Args|Skip|Monitor) ) {
     set $nocache "NoCache";
   }
 

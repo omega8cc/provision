@@ -1229,10 +1229,18 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       set $debug_auth_flag "Present";
     }
     ###
+    ### Uptime monitors always reach the backend: never served from the cache
+    ### nor stored in it, so a monitor never reads a crawler's cached copy and
+    ### a backend that is down is never hidden behind a stale one.
+    ###
+    if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+      set $nocache_details "Monitor";
+    }
+    ###
     ### Use Nginx cache for all visitors by default.
     ###
     set $nocache "";
-    if ( $nocache_details ~ (?:AegirCookie|Args|Skip) ) {
+    if ( $nocache_details ~ (?:AegirCookie|Args|Skip|Monitor) ) {
       set $nocache "NoCache";
     }
 
@@ -1312,6 +1320,10 @@ location @cache_<?php print $subdir_loc; ?> {
   }
   if ( $cache_uid ) {
     set $nocache_details "DrupalCookie";
+    return 405;
+  }
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    set $nocache_details "Monitor";
     return 405;
   }
   error_page 405 = @drupal_<?php print $subdir_loc; ?>;
