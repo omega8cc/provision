@@ -2030,8 +2030,19 @@ location = /index.php {
   if ( $http_cookie ~* "NoCacheID" ) {
     set $nocache_details "AegirCookie";
   }
+  ###
+  ### The debug headers below report THAT a session cookie or an
+  ### Authorization header was sent, never its value: a response header is
+  ### readable by same-origin script, the HttpOnly session cookie is not.
+  ###
+  set $debug_session_flag "";
+  set $debug_auth_flag "";
   if ( $cache_uid ) {
     set $nocache_details "DrupalCookie";
+    set $debug_session_flag "Session";
+  }
+  if ( $http_authorization ) {
+    set $debug_auth_flag "Present";
   }
 
   ###
@@ -2046,7 +2057,7 @@ location = /index.php {
   ### Add headers for debugging
   ###
   add_header X-Debug-NoCache-Switch "$nocache";
-  add_header X-Debug-NoCache-Auth "$http_authorization";
+  add_header X-Debug-NoCache-Auth "$debug_auth_flag";
   add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
   add_header X-Device "$device";
   add_header X-GeoIP-Country-Code "$geoip_country_code";
@@ -2057,7 +2068,7 @@ location = /index.php {
   add_header X-Arg-Nocache "$arg_nocache";
   add_header X-Arg-Comment "$arg_comment";
   add_header X-Speed-Cache "$upstream_cache_status";
-  add_header X-Speed-Cache-UID "$cache_uid";
+  add_header X-Speed-Cache-UID "$debug_session_flag";
   add_header X-Speed-Cache-Key "$key_uri";
   add_header X-NoCache "$nocache_details";
   add_header X-This-Proto "$http_x_forwarded_proto";

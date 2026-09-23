@@ -18,7 +18,7 @@
  * above SITE is intentionally absent: a command asking for CONFIGURATION+ on
  * a Grav root fails the phase gate loudly, which is correct.
  *
- * Parse-conservative on purpose (boa-grav D-005): bootstrap candidates are
+ * Parse-conservative on purpose: bootstrap candidates are
  * probed on every box the shared provision tree ships to.
  */
 

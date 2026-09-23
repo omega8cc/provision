@@ -10,7 +10,7 @@
  * symlinking), so every mode is self-contained without -h; the only symlinks
  * in scope are the four load-bearing admin core links, and dereferencing
  * those bakes the shared core into every archive and restores dir-over-symlink
- * states (map R-10). No cloaking dance either: TXP config.php always carries
+ * states. No cloaking dance either: TXP config.php always carries
  * literal credentials (the BOA golden rule), nothing to uncloak.
  */
 
@@ -21,7 +21,7 @@ const PROVISION_TXP_BACKUP_EXCLUDED_DIRECTORIES = array(
 
 // mysqldump-only mode: exclude the bulky per-site content dirs; NEVER
 // './private' (config.php lives there — the Drupal-layer SQLDUMP list would
-// silently strip the site's credentials from every DB-mode backup, map R-3).
+// silently strip the site's credentials from every DB-mode backup).
 const PROVISION_TXP_BACKUP_EXCLUDED_DIRECTORIES_SQLDUMP = array(
   './tmp',
   './public/files',

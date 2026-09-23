@@ -87,7 +87,7 @@ function drush_provision_txp_provision_verify() {
     // pre-hook row above is deliberately not always a warning).
     drush_set_option('txp_skeleton_missing', !is_dir(d()->root . '/sites/site1'), 'drupal');
 
-    // No BOA control INI on a Textpattern platform (boa-txp D-013), and none
+    // No BOA control INI on a Textpattern platform, and none
     // of the Drupal sites/all/{modules,themes,libraries} the nightly once laid
     // into a platform with sites: clear them while they hold nothing else.
     // sites/all/drush stays, the platform drushrc renders there.

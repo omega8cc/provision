@@ -146,8 +146,8 @@ class Provision_Context_server extends Provision_Context {
    * escapeshellarg() before building $command. This transit layer
    * preserves command structure and applies escapeshellcmd() only as
    * defence-in-depth — it cannot safely re-escape unescaped argument
-   * values after the fact. See DECISIONS.md Decision 002 of the
-   * aegir-shell-injection-audit project for the unsafe-character set.
+   * values after the fact; a value is safe here only once escapeshellarg() has
+   * quoted it, whatever characters it carries.
    *
    * Newline, carriage-return and NUL bytes in $command are rejected:
    * a legitimate shell command never contains them and their presence

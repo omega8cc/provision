@@ -4,7 +4,7 @@
  * Grav 2 specific functions for the provisioning framework.
  *
  * Parallel of txp/provision_txp.drush.inc for Grav 2 platforms and SITE-CAPSULE
- * sites (boa-grav D-003: every Aegir Grav site is a complete, self-contained
+ * sites (every Aegir Grav site is a complete, self-contained
  * Grav install at sites/<uri>/ inside a platform that is itself a pristine
  * admin-bundle release -- the seed each capsule is copied from). Every command
  * hook in this layer early-returns unless the context root is a Grav root
@@ -18,9 +18,9 @@
  * phase 1. No drush bootstrap of the CMS ever happens (GravBoot exists only to
  * satisfy the bootstrap-phase gate); every Grav CLI call runs in a separate
  * enforced-PHP process as the instance user with umask 0002 (both spike-proven
- * requirements -- see boa-grav docs/spikes/2026-08-31-round-1.md).
+ * requirements).
  *
- * PHP floor (boa-grav D-005): Grav support requires PHP >= 8.3 at task runtime,
+ * PHP floor: Grav support requires PHP >= 8.3 at task runtime,
  * 8.4 preferred (the BOA default), ENFORCED -- no per-site PHP selection. THIS
  * file and the GravBoot class stay syntax-conservative because drush includes
  * them at commandfile discovery on every box the shared provision tree ships
@@ -58,7 +58,7 @@ function provision_grav_drush_init() {
 function provision_grav_drush_command() {
   $items = array();
   $items['provision-grav-upgrade'] = array(
-    'description' => 'Upgrade a Grav site capsule in place to a staged official admin-bundle release (mirror-fed, D-004/D-006; safety backup first; user content, accounts and configuration survive).',
+    'description' => 'Upgrade a Grav site capsule in place to a staged official admin-bundle release (mirror-fed; safety backup first; user content, accounts and configuration survive).',
     'arguments' => array(
       'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged under <aegir_root>/static/grav-releases/.'),
     ),
@@ -117,7 +117,7 @@ function provision_grav_drush_command() {
 /**
  * Resolve the newest staged official admin-bundle artefact.
  *
- * The BOA channel (boa-grav D-004: staticbuild -> mirrors -> box) stages the
+ * The BOA channel (staticbuild -> mirrors -> box) stages the
  * official grav-admin-v*.zip files under <aegir_root>/static/grav-releases/;
  * newest by version sort wins. Returns FALSE when nothing is staged.
  */
@@ -242,7 +242,7 @@ function provision_grav_provision_config_load_templates($config) {
 /**
  * Pick the enforced PHP CLI binary for Grav (>= 8.3 floor, 8.4 preferred).
  *
- * No per-site or per-instance PHP selection for Grav (D-005 addendum,
+ * No per-site or per-instance PHP selection for Grav (the floor is
  * enforced, unlike Drupal): the BOA default 8.4 first, then newer, then the
  * 8.3 floor, then the running backend CLI when it already satisfies the
  * floor. FALSE when the box cannot satisfy the floor -- callers refuse the
@@ -304,7 +304,7 @@ function _provision_grav_get_version($root = NULL) {
  * Find the Grav capsules on this platform: sites/<name>/system/defines.php.
  *
  * Feeds the platform verify 'sites' option AND the platform-delete refusal
- * (boa-grav R0: the shared guard is a settings.php glob and is EMPTY for Grav
+ * (the shared guard is a settings.php glob and is EMPTY for Grav
  * -- without this, deleting a populated Grav platform would recursively
  * destroy every capsule). Returns uri => uri, the
  * provision_drupal_find_sites() shape.
@@ -322,7 +322,7 @@ function provision_grav_find_sites($root = NULL) {
       // Deploy/restore leftovers (<uri>.restore, <uri>.original and the
       // parked -stale-extract shapes) are full Grav trees too; they are
       // transient debris, never sites. A symlinked entry is not a capsule
-      // either: both Grav upgrade paths refuse symlinked trees (D-003), so
+      // either: both Grav upgrade paths refuse symlinked trees, so
       // counting one would register a site every task must then choke on.
       if (strpos($uri, '.restore') !== FALSE
         || strpos($uri, '.original') !== FALSE
@@ -582,7 +582,7 @@ function _provision_grav_writable_dirs() {
  *
  * Grav never reads boa_site_control.ini or boa_platform_control.ini (the
  * global.inc chain does not run for a capsule), so BOA no longer seeds either
- * (boa-grav D-011); this clears what an earlier release, the nightly or an
+ * of them; this clears what an earlier release, the nightly or an
  * old archive left. Both names go whatever they hold: nothing reads them
  * here, and BOA's own nightly uncommented lines in them, so their content
  * says nothing about intent. The directory goes only when that leaves it
@@ -633,7 +633,7 @@ function _provision_grav_drop_boa_ini_dir($dir, $ini) {
  * into sites/<uri>/, excluding sites/ itself (no recursion) and the seed's
  * own volatile dirs' contents. Every run: assert vendor/, enforce the
  * ownership model on the writable set and refresh the per-site .env. A
- * capsule carries no BOA control INI (boa-grav D-011): whatever an earlier
+ * capsule carries no BOA control INI: whatever an earlier
  * release or an old archive left in modules/ is cleared first.
  */
 function _provision_grav_create_directories() {
@@ -668,7 +668,7 @@ function _provision_grav_create_directories() {
 
   $web_group = d('@server_master')->web_group;
 
-  // No BOA control INI in a capsule (boa-grav D-011): clear what an earlier
+  // No BOA control INI in a capsule: clear what an earlier
   // release, the nightly or an old archive left, then lay down the writable
   // set.
   _provision_grav_drop_boa_ini_dir($site_path . '/modules', 'boa_site_control.ini');
@@ -697,7 +697,7 @@ function _provision_grav_create_directories() {
   }
 
   // AFTER the generic writable pass (which would re-widen them): the secret
-  // subtrees drop their world bits (boa-grav D-008).
+  // subtrees drop their world bits.
   _provision_grav_secure_secrets($site_path);
 
   // The private secrets exist before the web tier ever needs them, owned by
@@ -709,7 +709,7 @@ function _provision_grav_create_directories() {
 }
 
 /**
- * Drop world access on the capsule's secret surfaces (boa-grav D-008).
+ * Drop world access on the capsule's secret surfaces.
  *
  * user/accounts (password hashes, reset tokens), user/config (session salt,
  * SMTP/API credentials) and user/env are group-rw for FPM and owner-rw for
@@ -756,7 +756,7 @@ function _provision_grav_secure_secrets($site_path) {
 
 /**
  * Write the per-site .env (Grav 2 native, loaded before any constant --
- * the settings.php analogue; boa-grav map par.3.1.3).
+ * the settings.php analogue).
  *
  * Idempotent single authority: GRAV_ENVIRONMENT pinned to the site uri so the
  * environment:// stream never keys off a request hostname (aliases would
@@ -789,7 +789,7 @@ function _provision_grav_write_env($site_path = NULL, $uri = NULL) {
   provision_file()->file_put_contents($env, $data)
     ->succeed('Generated config file <code>@path</code>')
     ->fail('Could not generate config file <code>@path</code>');
-  // The WRITER owns the mode (D-008): without this, deploy-path rewrites
+  // The WRITER owns the mode: without this, deploy-path rewrites
   // leave .env at the process umask (world-readable) until the next verify
   // or heal tightens it. FPM reads it via the web group.
   provision_file()->chgrp($env, d('@server_master')->web_group);
@@ -799,7 +799,7 @@ function _provision_grav_write_env($site_path = NULL, $uri = NULL) {
 /**
  * Run a Grav CLI command inside a capsule (the automation seam).
  *
- * Contract (spike-proven, boa-grav docs/spikes/2026-08-31-round-1.md): the
+ * Contract (spike-proven): the
  * enforced PHP binary; cwd = the capsule; umask 0002 for the child (a 022
  * CLI-created dir loses group-write and fatals the next web save); vendor/
  * asserted first (a vendor-less tree turns any CLI entry into an unpinned
@@ -900,7 +900,7 @@ function _provision_grav_create_admin_account($username, $email) {
   $web_group = d('@server_master')->web_group;
   provision_file()->chgrp($yaml, $web_group);
   // 0660, not 0640: the login plugin WRITES here from FPM (reset tokens,
-  // admin profile edits) -- the D-008 secrets mode, group-rw and no world.
+  // admin profile edits) -- the secrets mode, group-rw and no world.
   provision_file()->chmod($yaml, 0660);
   return $password;
 }
@@ -1095,7 +1095,7 @@ function _provision_grav_artefact_version($artefact) {
  *
  * Instance-user owned, group web, 0660: the web tier rewrites it through the
  * group on the next update it performs itself, and 0660 is the mode the
- * secret pass (boa-grav D-008) asserts on every regular file under
+ * secret pass asserts on every regular file under
  * user/config. A wider seed would simply be corrected by the verify that
  * follows the upgrade, leaving two writers disagreeing about one file.
  */

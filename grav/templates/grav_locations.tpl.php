@@ -7,8 +7,8 @@
  *
  * Self-contained on purpose: the shared nginx_vhost_common.conf is
  * Drupal-shaped end to end and applied to a Grav docroot raw-serves system/**
- * source and user/** YAML (boa-grav R6). Contract per map par.3.4 +
- * docs/spikes/2026-08-31-round-1.md: docroot = the capsule; ONLY /index.php
+ * source and user/** YAML. Contract (spike-proven):
+ * docroot = the capsule; ONLY /index.php
  * executes; Grav internals + Aegir artefacts + root metadata denied; front
  * controller keeps the query string; no acme block here (BOA injects it via
  * $extra_config into every main server block).
@@ -21,10 +21,10 @@
  * freely. Guard verdicts keep the fleet 444 (classified-abusive clients);
  * the CAPACITY cap below sheds 503 instead -- its victim can be a legitimate
  * anonymous visitor, a 444 reaches CDN-fronted visitors as a hard error, and
- * no Grav-side IDS detector counts these 444s (boa-grav Q9 ruling, D-007).
+ * no Grav-side IDS detector counts these 444s.
  */
 
-// Concurrency guardrail (Q9/D-007): no fastcgi_cache in phase 1 (Grav
+// Concurrency guardrail: no fastcgi_cache in phase 1 (Grav
 // re-emits its session Set-Cookie on every response, so the shared speed
 // zone would store nothing) and no limit_req (a rate cap on the single
 // front controller is the highest-false-positive control available);
@@ -164,7 +164,7 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   location ~* \.sql$ { return 404; }
 
   # Root metadata (dependency inventory + docs -- /composer.lock served 271KB
-  # under upstream's own config; spike-1 live catch).
+  # under upstream's own config; caught live in a spike).
   location ~* ^/(composer\.(json|lock)|now\.json|CHANGELOG\.md|README\.md|SECURITY\.md|LICENSE\.txt|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md)$ { return 404; }
 
   # Grav internal trees. cache/logs/tmp/backup/bin/tests never serve;

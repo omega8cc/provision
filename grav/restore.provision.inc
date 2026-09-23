@@ -7,7 +7,7 @@
  * Fork of platform/restore.provision.inc collapsed to the DB-less capsule: the
  * safety copy is forced to site_files_without_db_backup (the TRUTHFUL
  * grav-restorable mode -- the Drupal flow's site_files_with_mysqldump forcing
- * would be a lying label here, boa-grav R5), and the whole MyQuick
+ * would be a lying label here), and the whole MyQuick
  * internal-backup-flag machinery (a DB-dump concern) is gone. The restore
  * itself is the standard backup -> provision-deploy -> provision-verify chain.
  */

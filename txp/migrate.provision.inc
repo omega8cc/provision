@@ -6,8 +6,8 @@
  * Round-2 state: FAIL-CLOSED. Migrate (platform move / rename) is not built
  * yet, and with the shared Drupal hooks union-guarded away an unimplemented
  * migrate would SILENTLY NO-OP — a task that reports success having moved
- * nothing. Refuse loudly instead until the real engine lands (map §2.1
- * item 7 rename-as-path-move semantics; phase-1 migrate is restricted to
+ * nothing. Refuse loudly instead until the real engine lands (with
+ * rename-as-path-move semantics; phase-1 migrate is restricted to
  * same-core platforms by design either way).
  */
 

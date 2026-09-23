@@ -1159,7 +1159,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     add_header X-GeoIP-Country-Code "$geoip_country_code";
     add_header X-GeoIP-Country-Name "$geoip_country_name";
     add_header X-Speed-Cache "$upstream_cache_status";
-    add_header X-Speed-Cache-UID "$cache_uid";
+    add_header X-Speed-Cache-UID "$debug_session_flag";
     add_header X-Speed-Cache-Key "$key_uri";
     add_header X-NoCache "$nocache_details";
     add_header X-This-Proto "$http_x_forwarded_proto";
@@ -1214,8 +1214,19 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     if ( $http_cookie ~* "NoCacheID" ) {
       set $nocache_details "AegirCookie";
     }
+    ###
+    ### The debug headers report THAT a session cookie or an Authorization
+    ### header was sent, never its value: a response header is readable by
+    ### same-origin script, the HttpOnly session cookie is not.
+    ###
+    set $debug_session_flag "";
+    set $debug_auth_flag "";
     if ( $cache_uid ) {
       set $nocache_details "DrupalCookie";
+      set $debug_session_flag "Session";
+    }
+    if ( $http_authorization ) {
+      set $debug_auth_flag "Present";
     }
     ###
     ### Use Nginx cache for all visitors by default.
@@ -1234,7 +1245,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     ### Add headers for debugging
     ###
     add_header X-Debug-NoCache-Switch "$nocache";
-    add_header X-Debug-NoCache-Auth "$http_authorization";
+    add_header X-Debug-NoCache-Auth "$debug_auth_flag";
     add_header X-Debug-NoCache-Cookie "$cookie_NoCacheID";
 
     add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";

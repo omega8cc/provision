@@ -927,7 +927,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         else {
           // SECURITY: $db_name derives from alias context; $oct_db_* originate
           // in BOA root control files but may contain shell-special characters.
-          // Escape every interpolated value. See DECISIONS.md Decision 002.
+          // Escape every interpolated value with escapeshellarg().
           $command = $myloader_path
             . ' --database=' . escapeshellarg($db_name)
             . ' --host=' . escapeshellarg($oct_db_host)
@@ -1282,7 +1282,7 @@ port=%s
         }
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
-        // Escape every interpolated value. See DECISIONS.md Decision 002.
+        // Escape every interpolated value with escapeshellarg().
         $command = $mydumper_path
           . ' --database=' . escapeshellarg($db_name)
           . ' --host=' . escapeshellarg($oct_db_host)

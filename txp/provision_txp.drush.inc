@@ -225,7 +225,7 @@ function provision_txp_provision_config_load_templates($config) {
 }
 
 /**
- * Pick the enforced PHP CLI binary for TXP shims (>= 8.4, D-008).
+ * Pick the enforced PHP CLI binary for TXP shims (>= 8.4 floor).
  *
  * No per-site or per-instance PHP selection for TXP (enforced, unlike Drupal):
  * the running backend CLI when it already satisfies the floor, else the newest
@@ -302,7 +302,7 @@ function provision_txp_find_sites($root = NULL) {
       // Skip revert artefacts (<uri>.restore / <uri>.original): they carry a
       // full config.php but are NOT sites. Counting them would deadlock
       // platform delete and report phantom sites to the frontend; they are the
-      // D-035 leftover subsystem's business, not ours. Symlinked site dirs are
+      // leftover subsystem's business, not ours. Symlinked site dirs are
       // skipped for the same reason the Drupal scan skips them.
       if (preg_match('/\.(restore|original)$/', $uri) || is_link($dir)) {
         continue;
@@ -695,7 +695,7 @@ function _provision_txp_ensure_db_creds_loaded() {
  *
  * Textpattern never reads boa_site_control.ini or boa_platform_control.ini
  * (private/config.php loads none of BOA's global PHP), so BOA no longer seeds
- * either (boa-txp D-013); this clears what an earlier release, the nightly or
+ * either of them; this clears what an earlier release, the nightly or
  * an old archive left. Both names go whatever they hold: nothing reads them
  * here, and BOA's own nightly uncommented lines in them, so their content
  * says nothing about intent. The directory goes only when that leaves it
@@ -779,7 +779,7 @@ function _provision_txp_create_directories() {
 
   $web_group = d('@server_master')->web_group;
 
-  // No BOA control INI on a Textpattern site (boa-txp D-013): clear what an
+  // No BOA control INI on a Textpattern site: clear what an
   // earlier release, the nightly or an old archive left in modules/.
   _provision_txp_drop_boa_ini_dir($site_path . '/modules', 'boa_site_control.ini');
 
@@ -943,9 +943,9 @@ function _provision_txp_mint_login_link() {
 }
 
 /**
- * Compose + best-effort send the welcome mail (D-006: box-level MTA/relay
- * only; on boxes without a relay this logs and moves on). Content per the
- * map OQ-6 proposal: site URL, admin URL, username and a password-SET link —
+ * Compose + best-effort send the welcome mail (box-level MTA/relay
+ * only; on boxes without a relay this logs and moves on). Content:
+ * site URL, admin URL, username and a password-SET link —
  * never a plaintext password.
  */
 function _provision_txp_send_welcome_mail($client_email, $login_link) {

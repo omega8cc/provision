@@ -4,7 +4,7 @@
  * Provision hooks for the provision install command (Grav layer).
  *
  * Fork of txp/install.provision.inc minus everything database: a phase-1 Grav
- * site is DB-less by design (boa-grav D-003 capsule model), so there is no db
+ * site is DB-less by design (site-capsule model), so there is no db
  * drop on force-reinstall and no credential plumbing -- install is capsule
  * materialisation + the .env + the first admin account.
  */
@@ -20,7 +20,7 @@ function drush_provision_grav_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
-  // D-005 enforcement: refuse the task outright when the box has no >= 8.3 PHP.
+  // Floor enforcement: refuse the task outright when the box has no >= 8.3 PHP.
   if (_provision_grav_php_bin() === FALSE) {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
       dt('No PHP >= 8.3 binary found; Grav tasks refuse to run below the enforced floor.'));
