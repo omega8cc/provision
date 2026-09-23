@@ -3,7 +3,7 @@
 /**
  * Migrate command — Backdrop layer (guard + Backdrop-to-Backdrop support).
  *
- * Backdrop-to-Backdrop migrate is SUPPORTED here (D-028): same-domain moves
+ * Backdrop-to-Backdrop migrate is SUPPORTED here: same-domain moves
  * onto another (typically newer) Backdrop platform, and renames — mirroring
  * the D-lineage orchestration in platform/migrate.provision.inc with the
  * Backdrop settings writer and alias helpers. The http/db service hooks
@@ -20,7 +20,7 @@
  * commandfile's prefix, so nothing collapses — every hook here carries the
  * doubled drush_provision_backdrop_(pre_|post_)provision_migrate form, and
  * runs alongside the D-lineage hooks (each layer early-returns on the other
- * layer's sites; the D-014 root-keyed pattern).
+ * layer's sites; the root-keyed per-hook guard pattern).
  */
 
 /**

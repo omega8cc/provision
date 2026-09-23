@@ -3,7 +3,7 @@
  * @file
  * Provision hooks for the provision delete command (Grav layer).
  *
- * The platform-delete refusal (boa-grav R0) plus the site/platform delete
+ * The platform-delete refusal plus the site/platform delete
  * implementations, forked from platform/delete.provision.inc minus everything
  * database and Drupal-alias-shaped. The shared Drupal hooks early-return on
  * the foreign-CMS union, so without these a grav delete would be a silent
@@ -92,7 +92,7 @@ function drush_provision_grav_provision_delete() {
     provision_drupal_push_site($override_slave_authority = TRUE);
   }
   elseif (d()->type === 'platform') {
-    // The R0 validate refusal has already run (and --force bypasses it, the
+    // The validate refusal has already run (and --force bypasses it, the
     // shared semantics); belt here for the force path over a populated
     // platform: log what is being destroyed.
     $sites = provision_grav_find_sites();

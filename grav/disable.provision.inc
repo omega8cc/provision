@@ -9,7 +9,7 @@
  * Provision_Config_Http_Site renders the disabled vhost
  * (vhost_disabled.tpl.php) on the next config write, so the site is
  * unreachable at the nginx layer. Grav has no in-CMS state to toggle (no DB;
- * the maintenance-page story inside Grav is Q11, a later wave).
+ * the maintenance-page story inside Grav is a later wave).
  */
 
 /**

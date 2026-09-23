@@ -54,7 +54,7 @@ function drush_provision_backdrop_pre_provision_restore($restore_file) {
   // helper was built for), so the write below would otherwise blank the live
   // settings.php credentials -- breaking serving for the restore window on
   // uncloaked boxes, and stranding a credential-less sites/<uri>.restore
-  // artifact when the deploy aborts mid-swap (D-035: the purge task can then
+  // artifact when the deploy aborts mid-swap (the leftover purge task can then
   // never confirm the orphan copy database).
   _provision_backdrop_ensure_db_creds_loaded();
   _provision_backdrop_create_settings_file();

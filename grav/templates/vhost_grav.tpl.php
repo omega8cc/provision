@@ -6,10 +6,10 @@
  * Selected via hook_provision_config_load_templates() when the platform is a
  * Grav root. The one structural difference from every Drupal vhost: the
  * docroot is the SITE CAPSULE (sites/<uri>/ -- a complete Grav install,
- * boa-grav D-003), not the platform root. The location contract lives in
+ * self-contained), not the platform root. The location contract lives in
  * grav_locations.tpl.php, shared with the https template.
  *
- * Enforced PHP (D-005 addendum): the enforced-version FPM socket is pinned at
+ * Enforced PHP: the enforced-version FPM socket is pinned at
  * render time (BOA default 8.4; 8.5 then the 8.3 floor as fallbacks; bare
  * socket last resort) -- never the instance's per-site-selectable pool, and
  * the per-site fpm.info/multi-fpm.info machinery is deliberately not
@@ -78,7 +78,7 @@ server {
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
   # Pin the environment:// stream to the site uri (never the request
   # hostname -- aliases must not fork per-host config). Proven to reach
-  # getenv() under this FPM stack (spike Q7).
+  # getenv() under this FPM stack.
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
   # Truthful scheme for Grav's Uri fallbacks (stock fastcgi_params does not
   # carry REQUEST_SCHEME under this stack), and -- presence-gated on the

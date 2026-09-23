@@ -144,7 +144,7 @@ function drush_provision_grav_provision_backup() {
 
   // NB no provision_drupal_fetch_site() here: its sync set is Drupal-shaped
   // (files/, private/, modules/, ...) and phase 1 is single-server by stated
-  // precondition (map par.4); a remote-web Grav topology needs a grav-aware
+  // precondition; a remote-web Grav topology needs a grav-aware
   // fetch first.
 
   $olddir = getcwd();
@@ -340,7 +340,7 @@ function drush_provision_grav_provision_backup() {
 
 /**
  * The Grav backup exclusion set: the regenerable volatile dirs, relative to
- * the capsule root (spike-4-proven). The alter hook is applied for future
+ * the capsule root (spike-proven). The alter hook is applied for future
  * extension; there is no sqldump list (that mode is refused in validate).
  */
 function drush_provision_grav_provision_backup_get_exclusion_dirs($backup_mode = NULL) {

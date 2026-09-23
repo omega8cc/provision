@@ -8,7 +8,7 @@
  * version readable), tree/perms repair on the group model, the .env re-render,
  * and the frontend reporting contract (sites + packages + the 'grav' signal --
  * re-reported EVERY run or the per-platform instance-sync wipe removes the
- * synthetic profile, boa-grav R8).
+ * synthetic profile).
  */
 
 /**
@@ -86,7 +86,7 @@ function drush_provision_grav_provision_verify() {
     $grav_version = _provision_grav_get_version();
     drush_set_option('grav', ($grav_version !== '' ? $grav_version : 'unknown'), 'drupal');
 
-    // No BOA control INI on a Grav platform (boa-grav D-011), and none of the
+    // No BOA control INI on a Grav platform, and none of the
     // Drupal sites/all/{modules,themes,libraries} the nightly once laid into a
     // platform with sites: clear them while they hold nothing else.
     // sites/all/drush stays, the platform drushrc renders there.

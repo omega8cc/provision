@@ -4,12 +4,12 @@
  * @file
  * The provision-grav-upgrade command: mirror-fed in-place capsule upgrade.
  *
- * Spike-3-proven mechanics (boa-grav docs/spikes/2026-08-31-round-1.md):
+ * Spike-proven mechanics:
  * `bin/gpm direct-install -y -n <local official admin-bundle zip>` upgrades a
  * capsule in place; user/, accounts, and foreign root files (drushrc.php,
  * .env) survive (the installer replaces only entries the package ships);
  * `official_gpm_only` stays enforced because the artefact is a LOCAL file —
- * this box never talks to getgrav.org (D-004 mirror-first; D-006: the admin
+ * this box never talks to getgrav.org (mirror-first; the admin
  * bundle carries the managed plugin set, the long tail stays client-side).
  *
  * Two consequences of that same installer shape drive everything below.
@@ -31,7 +31,7 @@ function drush_provision_grav_upgrade_validate($artefact = NULL) {
   }
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_GRAV_NOT_GRAV',
-      dt('provision-grav-upgrade runs on a SITE context (per-capsule upgrades, D-003).'));
+      dt('provision-grav-upgrade runs on a SITE context (per-capsule upgrades).'));
   }
   if (_provision_grav_php_bin() === FALSE) {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
