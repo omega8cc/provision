@@ -96,7 +96,7 @@ function provision_class_file($class_name) {
 }
 
 /**
- * Detect a Backdrop CMS platform/site root (D-013).
+ * Detect a Backdrop CMS platform/site root.
  *
  * Positive signal, matching BackdropBoot::valid_root() and bee's bee_find_root():
  * a root index.php + core/includes/bootstrap.inc + core/misc/backdrop.js, and NO
@@ -1700,7 +1700,7 @@ function provision_backend_invoke($target, $command, $arguments = array(), $data
 }
 
 /**
- * Validate a revert-artifact leftover directory name (D-035).
+ * Validate a revert-artifact leftover directory name.
  *
  * Strict allowlist: a lowercase domain-shaped basename carrying the .restore
  * or .original revert-artifact suffix. No slashes, no dot-dot, no leading dot

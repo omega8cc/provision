@@ -2,7 +2,7 @@
 
 /**
  * @file
- * provision-leftover-import command hooks (D-035).
+ * provision-leftover-import command hooks.
  *
  * Inspect a revert-artifact leftover (sites/<site>.restore or .original)
  * stranded on a platform by an aborted deploy/restore/migrate swap and report

@@ -7,7 +7,7 @@
  * (module_load_include), never its drush commands — module-shipped drush
  * commandfiles are not reliably discovered for site aliases.
  *
- * HARD GATE (D-026, no force flag): any field content_migrate classes
+ * HARD GATE (no force flag): any field content_migrate classes
  * 'missing' (its provider module is absent/disabled) aborts the hop via
  * drush_set_error — the error rides the integrated backend invoke into the
  * parent command, which then discards the copy. Skipping a field would

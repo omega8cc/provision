@@ -4,7 +4,7 @@
  * Site installation for Textpattern.
  *
  * Runs the vendored headless shim (txp/txp/resources/txp-install-shim.php) in
- * its own PHP >= 8.4 process (D-008 enforced; _provision_txp_php_bin()). The
+ * its own PHP >= 8.4 process (enforced floor; _provision_txp_php_bin()). The
  * shim mirrors Textpattern's official CLI installer (setup/setup.php) plus the
  * two multisite constants it lacks, and consumes the private/config.php the
  * settings writer has already rendered -- ONE authority for the config from
@@ -27,7 +27,7 @@
 $php_bin = _provision_txp_php_bin();
 if ($php_bin === FALSE) {
   return drush_set_error('PROVISION_TXP_PHP_TOO_OLD',
-    dt('No PHP >= 8.4 binary found; refusing to install (enforced floor, D-008).'));
+    dt('No PHP >= 8.4 binary found; refusing to install (enforced floor).'));
 }
 
 $root = d()->root;

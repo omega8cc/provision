@@ -3,7 +3,7 @@
  * @file
  * nginx vhost template for a Textpattern multisite site.
  *
- * Suspend parity (map R-18): BOA suspension = /data/conf/suspended/<oct>.pid
+ * Suspend parity: BOA suspension = /data/conf/suspended/<oct>.pid
  * (managed by `boa suspend|unsuspend`; enforced for Drupal/Backdrop in the
  * global settings chain). Foreign-CMS sites never run that chain, so the
  * check lives in the PHP locations here — location-scoped on purpose: statics
@@ -43,7 +43,7 @@ if (!$script_user) {
 if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
-// Enforced PHP (D-008 addendum): pin the enforced-version FPM socket
+// Enforced PHP: pin the enforced-version FPM socket
 // (BOA default 8.4; 8.5 fallback), never the instance's per-site-selectable
 // pool. The bare socket is the last resort on topologies without versioned
 // pools. Render-time file checks: this runs on the box.
@@ -103,7 +103,7 @@ if ($this->redirection) {
   $main_name = $this->redirection;
 }
 
-// Direct /files/ downloads are DENIED by default (D-010); per-site opt-out via
+// Direct /files/ downloads are DENIED by default; per-site opt-out via
 // the same control-file idiom as the legacy-TLS gate above.
 $txp_files_open = provision_file()
   ->exists($aegir_root . '/static/control/txp-files-open-' . $main_name . '.info')
@@ -305,7 +305,7 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ### zone-dependent limits -- AI-class rate limits and the per-vhost
   ### anonymous-render cap -- are a designed round-3 item, presence-gated on
   ### the BOA-written zones file, NOT copied blind: their key semantics are
-  ### CMS-specific. See boa-txp docs/integration-map.md R-22.)
+  ### CMS-specific.)
   include /data/conf/nginx_high_load.c*;
 
   ### Reject non-standard request methods without a 405 body (shared-include
@@ -325,7 +325,7 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location ~* \.txp$ { return 403; }
   location ~* ^/themes/.*/manifest\.json$ { deny all; }
 <?php if (!$txp_files_open): ?>
-  ### Direct file downloads DENIED by default (D-010) -- see the http twin.
+  ### Direct file downloads DENIED by default -- see the http twin.
   location ^~ /files/ { return 403; }
 <?php endif; ?>
 

@@ -23,7 +23,7 @@ if (!$script_user) {
 if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
-// Enforced PHP (D-005 addendum): pin the enforced-version FPM socket
+// Enforced PHP: pin the enforced-version FPM socket
 // (BOA default 8.4; 8.5 then the 8.3 floor as fallbacks), never the
 // instance's per-site-selectable pool. The bare socket is the last resort on
 // topologies without versioned pools. Render-time file checks: this runs on
@@ -132,7 +132,7 @@ server {
   # location-level fastcgi_param would cancel the inherited param set).
   fastcgi_param REQUEST_SCHEME $scheme;
   # Pin the environment:// stream to the site uri (never the request
-  # hostname). Proven to reach getenv() under this FPM stack (spike Q7).
+  # hostname). Proven to reach getenv() under this FPM stack.
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>

@@ -12,8 +12,8 @@
  *
  * Cloaked (provision_db_cloaking, on by default under the BOA nginx service):
  * carries NO literal credentials, closing the cross-tenant read every
- * tenant's shared web_data group otherwise permitted (boa-private-notes
- * notes/2026-09-19-txp-edb51176-defence-audit.md). The web tier reads them
+ * tenant's shared web_data group otherwise permitted.
+ * The web tier reads them
  * from the vhost's fastcgi_param db_* set (urlencode()d there, decoded here
  * via the db_creds_urlencoded marker -- same contract as the Drupal/Backdrop
  * settings.php templates); the one CLI consumer (the install shim,

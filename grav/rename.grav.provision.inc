@@ -4,7 +4,7 @@
  * @file
  * The provision-grav-rename command: same-platform rename of a Grav capsule.
  *
- * A Grav site IS its directory (boa-grav D-003: sites/<uri>/ is a complete,
+ * A Grav site IS its directory (sites/<uri>/ is a complete,
  * self-contained install), so a rename on the same platform is a move plus a
  * re-point plus new front-end plumbing -- no archive, no deploy, no database.
  * That is the whole reason this command exists next to the copy upgrade: the
@@ -22,7 +22,7 @@
  * _provision_drupal_native_symlink, since a capsule keeps its own files) and
  * never creates a client symlink (install and verify actively delete one),
  * so a rename has neither to move, and a capsule carries no BOA control INI
- * (boa-grav D-011). Backups already taken keep their old-name file names, as
+ * either. Backups already taken keep their old-name file names, as
  * they do after any rename: they are registered against the site node, not
  * its uri.
  *

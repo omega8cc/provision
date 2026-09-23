@@ -6,7 +6,7 @@
  * Runs after clone/migrate/rename/restore extraction + DB import, against the
  * TARGET site's DB with the target creds. The caller names the class in the
  * deploy options ('deploy_class'); the classes are deliberately treated
- * differently (docs/analysis/txp-clone-surface.md §2):
+ * differently:
  *
  *  - NEW OWNER ('clone'): the copy must not inherit the source's secrets, its
  *    sessions, or its people. blog_uid is REGENERATED (it is both the feed

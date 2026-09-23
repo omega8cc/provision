@@ -66,7 +66,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
 
   if ($extracted) {
     // Recreate the volatile dirs the backup excludes and restore the group
-    // ownership model on the extracted tree (spike-4-proven restore recipe).
+    // ownership model on the extracted tree (spike-proven restore recipe).
     $web_group = d('@server_master')->web_group;
     foreach (_provision_grav_writable_dirs() as $dir) {
       $path = $extract_path . '/' . $dir;

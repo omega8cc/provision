@@ -2,7 +2,7 @@
 
 /**
  * @file
- * provision-leftover-purge command hooks (D-035).
+ * provision-leftover-purge command hooks.
  *
  * Delete a revert-artifact leftover (sites/<site>.restore or .original)
  * stranded on a platform by an aborted deploy/restore/migrate swap, and drop

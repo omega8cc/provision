@@ -385,7 +385,7 @@ class Provision_Service_db extends Provision_Service {
           // SECURITY: $db_name derives from alias context; $oct_db_* and
           // $oct_db_dirx originate in BOA root control files but may contain
           // shell-special characters in passwords. Escape every interpolated
-          // value before shell exec. See DECISIONS.md Decision 002.
+          // value with escapeshellarg() before shell exec.
           $command = $myloader_path
             . ' --database=' . escapeshellarg($db_name)
             . ' --host=' . escapeshellarg($oct_db_host)

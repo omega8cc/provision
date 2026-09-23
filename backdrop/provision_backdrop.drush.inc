@@ -393,7 +393,7 @@ function _provision_backdrop_unlink_alias_symlinks() {
  * NB overriding drush_drupal_major_version() to 7 globally was rejected: it
  * feeds 75+ version gates in provision alone, many doing D7-EXACT things
  * (registry, update.php, field/module APIs) that Backdrop has diverged from --
- * a per-function fork is the precise, safe fix (D-002).
+ * a per-function fork is the precise, safe fix.
  */
 function _provision_backdrop_maintain_aliases() {
   d()->root = provision_auto_fix_platform_root(d()->root);

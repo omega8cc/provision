@@ -20,7 +20,7 @@ function drush_provision_txp_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
-  // D-008 enforcement: refuse the task outright when the box has no >= 8.4 PHP.
+  // Floor enforcement: refuse the task outright when the box has no >= 8.4 PHP.
   if (_provision_txp_php_bin() === FALSE) {
     return drush_set_error('PROVISION_TXP_PHP_TOO_OLD',
       dt('No PHP >= 8.4 binary found; TXP tasks refuse to run below the enforced floor.'));

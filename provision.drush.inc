@@ -212,7 +212,7 @@ function provision_drush_command() {
     'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
-  // Revert-artifact leftover management (D-035): a deploy/restore/migrate that
+  // Revert-artifact leftover management: a deploy/restore/migrate that
   // aborts mid-swap strands sites/<name>.restore on the platform — a syndrome
   // shared by Drupal and Backdrop alike, so the pair lives here in the general
   // layer. provision-leftover-import inspects such a leftover (so the frontend
