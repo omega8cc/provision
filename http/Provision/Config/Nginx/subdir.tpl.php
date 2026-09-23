@@ -1383,7 +1383,6 @@ location @allowupdate_<?php print $subdir_loc; ?> {
   fastcgi_param  MAIN_SITE_NAME      <?php print $this->uri; ?>;
 
   fastcgi_param  REDIRECT_STATUS     200;
-  fastcgi_index  index.php;
 
   fastcgi_param SCRIPT_FILENAME <?php print "{$this->root}"; ?>/$real_fastcgi_script_name;
 
