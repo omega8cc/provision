@@ -176,6 +176,18 @@ if ($is_amp_chain) {
 }
 <?php endif; ?>
 
+###
+### The scheme the redirects below keep, as in the shared vhost include:
+### https for a visitor who came through the wildcard SSL front, which
+### reaches this vhost over plain HTTP with X-Forwarded-Proto: https. Set
+### here as well for a domain that is no site, whose server has no shared
+### include; every subdirectory conf of a domain sets the same value.
+###
+set $boa_visitor_scheme $scheme;
+if ($http_x_forwarded_proto = "https") {
+  set $boa_visitor_scheme "https";
+}
+
 # $is_static_chain / $is_content_chain are intentionally NOT guarded on subdir
 # vhosts: a subdir site legitimately serves /<subdir>/sites/all/... assets, which
 # $is_static_chain matches as buried-under-content.  Both guards apply on
@@ -506,7 +518,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location ^~ /<?php print $subdir; ?>/admin/settings/performance/cache-backend {
     access_log off;
     log_not_found off;
-    return 301 $scheme://$host/<?php print $subdir; ?>/admin/settings/performance;
+    return 301 $boa_visitor_scheme://$host/<?php print $subdir; ?>/admin/settings/performance;
   }
 
   ###
@@ -515,7 +527,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location ^~ /<?php print $subdir; ?>/admin/config/development/performance/redis {
     access_log off;
     log_not_found off;
-    return 301 $scheme://$host/<?php print $subdir; ?>/admin/config/development/performance;
+    return 301 $boa_visitor_scheme://$host/<?php print $subdir; ?>/admin/config/development/performance;
   }
 
   ###
@@ -524,7 +536,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location ^~ /<?php print $subdir; ?>/admin/reports/redis {
     access_log off;
     log_not_found off;
-    return 301 $scheme://$host/<?php print $subdir; ?>/admin/reports;
+    return 301 $boa_visitor_scheme://$host/<?php print $subdir; ?>/admin/reports;
   }
 
   ###
@@ -758,7 +770,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     }
     access_log off;
     log_not_found off;
-    rewrite ^/<?php print $subdir; ?>/sites/.*/files/private/(.*)$ $scheme://$host/<?php print $subdir; ?>/system/files/private/$1 permanent;
+    rewrite ^/<?php print $subdir; ?>/sites/.*/files/private/(.*)$ $boa_visitor_scheme://$host/<?php print $subdir; ?>/system/files/private/$1 permanent;
     add_header X-Content-Type-Options "nosniff";
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Header "Private Generator 1.0a";
@@ -1146,7 +1158,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ### Rewrite legacy requests with /<?php print $subdir; ?>/index.php to extension-free URL.
   ###
   if ( $args ~* "^q=(?<query_value>.*)" ) {
-    rewrite ^/<?php print $subdir; ?>/index.php$ $scheme://$host/<?php print $subdir; ?>/?q=$query_value? permanent;
+    rewrite ^/<?php print $subdir; ?>/index.php$ $boa_visitor_scheme://$host/<?php print $subdir; ?>/?q=$query_value? permanent;
   }
 
   ###
