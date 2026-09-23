@@ -1123,7 +1123,7 @@ function _provision_drupal_rebuild_d8plus() {
 }
 
 /**
- * Core's own rebuild of one Drupal 10+ site, in a Drush-free subprocess.
+ * Core's own rebuild of one Drupal 8+ site, in a Drush-free subprocess.
  *
  * @param string $root
  *   The site's docroot.
@@ -1194,7 +1194,7 @@ function _provision_drupal_core_rebuild($root, $uri, $site_env, $timeout = 0) {
 }
 
 /**
- * Rebuild every Drupal 10+ site of a platform whose lock was just closed.
+ * Rebuild every Drupal 8+ site of a platform whose lock was just closed.
  *
  * Called by provision_lock_drush_local_vnd() when the lock closes a window an
  * earlier task opened (see _provision_drush_local_unlocked_here()). While the
@@ -1203,8 +1203,8 @@ function _provision_drupal_core_rebuild($root, $uri, $site_env, $timeout = 0) {
  * Drush-only logger (logger.drupaltodrush). Once the lock makes vendor/drush
  * unreadable again, that site fails every request that writes a log entry --
  * a 404 is enough -- until its next Verify. Core's own rebuild of each site,
- * now in the patched and locked state the web serves, is the last container
- * write, so none of them is left on a Drush-compiled container.
+ * now in the locked (and on 10+ patched) state the web serves, is the last
+ * container write, so none of them is left on a Drush-compiled container.
  *
  * Non-fatal like the single-site rebuild: every outcome is logged, nothing
  * fails the task. The sites are the sites/ subdirectories with a settings.php
