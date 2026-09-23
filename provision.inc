@@ -841,7 +841,7 @@ function _provision_codebase_has_composer_patches($approot) {
  * site-local Drush may have compiled any site's container with its Drush-only
  * services (logger.drupaltodrush, whose class the lock makes unreadable) --
  * has no such guarantee, so provision_lock_drush_local_vnd() then rebuilds
- * every Drupal 10+ site of the platform with core's own rebuild.
+ * every Drupal 8+ site of the platform with core's own rebuild.
  *
  * The unlock functions record a root only when they find the lock closed, so
  * an unlock that runs over an owner's open window leaves it foreign, and the
@@ -876,18 +876,21 @@ function _provision_drush_local_unlocked_here($root, $mark = FALSE, $clear = FAL
 /**
  * The last container write after a lock closed a foreign window.
  *
- * Runs core's own rebuild of every Drupal 10+ site of the platform once the
+ * Runs core's own rebuild of every Drupal 8+ site of the platform once the
  * lock really holds: vendor/drush back at 0400, in the state the web now
- * serves. A lock whose chmod did not take leaves the local Drush readable, so
- * nothing it compiled can fail yet; the next lock that closes the window runs
- * the rebuild instead (and a Verify locks on that partial state every time, so
- * rebuilding here would repeat the platform-wide run on each of them).
+ * serves. Drupal 8 and 9 need it as much as 10+: their lock is the chmod
+ * alone, and the Drush 10 or 11 they carry compiles the same Drush-only
+ * logger into the container. A lock whose chmod did not take leaves the local
+ * Drush readable, so nothing it compiled can fail yet; the next lock that
+ * closes the window runs the rebuild instead (and a Verify locks on that
+ * partial state every time, so rebuilding here would repeat the platform-wide
+ * run on each of them).
  *
  * @param bool $closes_foreign_window
  *   What provision_lock_drush_local_vnd() read before changing any mode.
  */
 function _provision_drush_local_relock_rebuild($closes_foreign_window) {
-  if (!$closes_foreign_window || drush_drupal_major_version() < 10) {
+  if (!$closes_foreign_window || drush_drupal_major_version() < 8) {
     return;
   }
   if (_provision_drush_local_lock_is_open(d()->root)) {
@@ -1473,8 +1476,8 @@ function provision_lock_drush_local_vnd() {
     }
 
     // The last container write after a window an earlier task opened: every
-    // Drupal 10+ site of the platform gets core's own rebuild, in the patched,
-    // locked state the web now serves.
+    // Drupal 8+ site of the platform gets core's own rebuild, in the locked
+    // (and on 10+ patched) state the web now serves.
     _provision_drush_local_relock_rebuild($closes_foreign_window);
   }
   return TRUE;
