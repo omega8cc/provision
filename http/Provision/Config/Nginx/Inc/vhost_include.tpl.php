@@ -121,6 +121,19 @@ if ($main_site_name = '') {
 }
 
 ###
+### The scheme every redirect below keeps. A site without its own
+### certificate is served over HTTPS by the box's wildcard SSL front, which
+### reaches this vhost over plain HTTP and says so in X-Forwarded-Proto, so
+### $scheme alone would send that visitor to http://. Same trust as the
+### base_url logic in global.inc: a client sending the header on port 80
+### changes only the redirects it is served itself.
+###
+set $boa_visitor_scheme $scheme;
+if ($http_x_forwarded_proto = "https") {
+  set $boa_visitor_scheme "https";
+}
+
+###
 ### Block “node-chain” URL mutation spam.
 ### Examples:
 ### /node/1771/pl/node/1771/es/node/1771/...
@@ -423,7 +436,7 @@ add_header Alt-Svc 'h3=":443"; ma=86400';
 ###
 ### Force clean URLs for Drupal 8+.
 ###
-rewrite ^/index.php/(.*)$ $scheme://$host/$1 permanent;
+rewrite ^/index.php/(.*)$ $boa_visitor_scheme://$host/$1 permanent;
 
 ###
 ### Include high level local configuration override if exists.
@@ -883,7 +896,7 @@ location ^~ /hosting/c/server_master {
   if ( $is_bot ) {
     return 444;
   }
-  return 301 $scheme://$host/hosting/sites;
+  return 301 $boa_visitor_scheme://$host/hosting/sites;
 }
 
 ###
@@ -898,7 +911,7 @@ location ^~ /hosting/c/server_localhost {
   if ( $is_bot ) {
     return 444;
   }
-  return 301 $scheme://$host/hosting/sites;
+  return 301 $boa_visitor_scheme://$host/hosting/sites;
 }
 
 ###
@@ -943,7 +956,7 @@ location ^~ /admin/settings/performance/cache-backend {
   if ( $is_bot ) {
     return 444;
   }
-  return 301 $scheme://$host/admin/settings/performance;
+  return 301 $boa_visitor_scheme://$host/admin/settings/performance;
 }
 
 ###
@@ -956,7 +969,7 @@ location ^~ /admin/config/development/performance/redis {
   if ( $is_bot ) {
     return 444;
   }
-  return 301 $scheme://$host/admin/config/development/performance;
+  return 301 $boa_visitor_scheme://$host/admin/config/development/performance;
 }
 
 ###
@@ -969,7 +982,7 @@ location ^~ /admin/reports/redis {
   if ( $is_bot ) {
     return 444;
   }
-  return 301 $scheme://$host/admin/reports;
+  return 301 $boa_visitor_scheme://$host/admin/reports;
 }
 
 ###
@@ -1239,7 +1252,7 @@ location ~* ^/sites/.*/files/private/ {
   }
   access_log off;
   log_not_found off;
-  rewrite ^/sites/.*/files/private/(.*)$ $scheme://$host/system/files/private/$1 permanent;
+  rewrite ^/sites/.*/files/private/(.*)$ $boa_visitor_scheme://$host/system/files/private/$1 permanent;
   set $nocache_details "Skip";
   try_files $uri @drupal;
 }
