@@ -1015,11 +1015,11 @@ map $uri $is_static_chain {
   default 0;
 
   # buried sites/all|default asset-dir (or ui/external) marker, ending in an asset
-  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:sites/(?:all|default)/(?:modules|themes|libraries)|ui/external)/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+  "~*^/(?![a-z]{2}/)(?!(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/)[^?]+/(?:sites/(?:all|default)/(?:modules|themes|libraries)|ui/external)/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|avif|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
 
   # same Drupal asset-dir token repeated (relative-URL concatenation); asset-
   # anchored so it cannot match a legitimate content path with no static file
-  "~*^/[^?]*/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
+  "~*^/[^?]*/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+/(?:sites/all/(?:modules|themes)|modules/(?:system|field|user|node|filter|search))/[^?]+\.(?:css|js|htc|png|gif|jpe?g|svg|ico|webp|avif|bmp|woff2?|ttf|otf|eot|less|map)$"  1;
 
   # a canonical Drupal core asset file buried under a content path (these core
   # filenames only ever occur legitimately at a root-anchored path)
