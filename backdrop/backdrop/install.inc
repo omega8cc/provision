@@ -86,6 +86,7 @@ $db_user = urldecode(drush_get_option('db_user', '', 'site'));
 $db_pass = urldecode(drush_get_option('db_passwd', '', 'site'));
 $db_host = drush_get_option('db_host', 'localhost', 'site');
 $db_name = drush_get_option('db_name', '', 'site');
+$admin_pass = provision_password();
 
 $args = array(
   '--root='      . escapeshellarg($root),
@@ -97,7 +98,7 @@ $args = array(
   '--db-pass='   . escapeshellarg($db_pass),
   '--db-host='   . escapeshellarg($db_host),
   '--username='  . escapeshellarg(drush_get_option('admin_user', PROVISION_DEFAULT_ADMIN_USER)),
-  '--password='  . escapeshellarg(provision_password()),
+  '--password='  . escapeshellarg($admin_pass),
   '--email='     . escapeshellarg($mail),
   '--site-name=' . escapeshellarg($uri),
   '--site-mail=' . escapeshellarg($mail),
@@ -106,8 +107,10 @@ $args = array(
 );
 
 $cmd = escapeshellarg($php_bin) . ' ' . escapeshellarg($bee) . ' ' . implode(' ', $args) . ' 2>&1';
-drush_log(dt('BACKDROP/INSTALL/CMD @cmd', array('@cmd' => $cmd)), 'info');
-$result = drush_shell_cd_and_exec($root, $cmd);
+// The command carries the site's database password and the new admin
+// password: log and run it masked.
+drush_log(dt('BACKDROP/INSTALL/CMD @cmd', array('@cmd' => provision_mask_secrets($cmd, array($db_pass, $admin_pass)))), 'info');
+$result = provision_shell_exec_secret($cmd, array($db_pass, $admin_pass), $root);
 $output = drush_shell_exec_output();
 $installed = FALSE;
 foreach ($output as $line) {

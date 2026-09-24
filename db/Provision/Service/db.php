@@ -398,7 +398,7 @@ class Provision_Service_db extends Provision_Service {
           if (provision_file()->exists($myquick_creds_log)->status()) {
             drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
-          $success = drush_shell_exec($command);
+          $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
           if (!$success) {
             // Never interpolate $command into messages: it carries --password.
