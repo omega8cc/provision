@@ -95,7 +95,7 @@ function drush_provision_txp_provision_restore($restore_file) {
     // tmp_expim fast-import of the PRE-restore safety dump).
     'is_restore' => TRUE,
     // The site's current database, carried across when the archive has no dump.
-    'restore_source_db' => drush_get_option('db_name', ''),
+    'restore_source_db' => drush_get_option('db_name', '', 'site'),
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 

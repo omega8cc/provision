@@ -233,14 +233,18 @@ class Provision_Service_db extends Provision_Service {
         // tmp_expim here and let the fast import below load it, which its
         // internal-flow rule accepts as a single fresh foreign dump. The
         // restore's own safety copy is classic and leaves no dump in
-        // tmp_expim. Without the fast path there is nothing to import: the
-        // classic branch fails the deploy, which rolls the site back.
+        // tmp_expim. When the current database cannot be carried across,
+        // the classic branch fails the deploy ("No database dump was found"),
+        // which rolls the site back: tmp_expim is never read here without a
+        // dump this task made, since a stale internal flag could otherwise
+        // let another site's leftover dump pass the acceptance rule.
         $old_db_name = drush_get_option('restore_source_db', drush_get_option('old_db_name', ''));
         $aegir_root = d('@server_master')->aegir_root;
-        if (empty($backup_mode)
+        $fast_path = empty($backup_mode)
           && is_file($aegir_root . '/static/control/MyQuick.info')
           && is_executable('/usr/local/bin/mydumper')
-          && is_executable('/usr/local/bin/myloader')
+          && is_executable('/usr/local/bin/myloader');
+        if ($fast_path
           && $old_db_name !== ''
           && $old_db_name !== $db_name
           && $this->database_exists($old_db_name)) {
@@ -251,7 +255,13 @@ class Provision_Service_db extends Provision_Service {
           drush_log(dt('The restored archive carries no database dump; the current database is carried over unchanged (files-only restore).'), 'warning');
         }
         else {
-          drush_log(dt('The restored archive carries no database dump, and without fast DB backups the current database cannot be carried over.'), 'warning');
+          $restore_wants_classic = TRUE;
+          if (!$fast_path) {
+            drush_log(dt('The restored archive carries no database dump, and without fast DB backups the current database cannot be carried over.'), 'warning');
+          }
+          else {
+            drush_log(dt('The restored archive carries no database dump, and the current database (@db) could not be found to carry over.', array('@db' => $old_db_name === '' ? 'unknown' : $old_db_name)), 'warning');
+          }
         }
       }
     }
