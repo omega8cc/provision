@@ -235,7 +235,7 @@ function drush_provision_drupal_provision_install() {
       // reason before the codebase is touched.
       $d11_db_version = _provision_d11_db_server_version();
       if ($d11_db_version !== FALSE && version_compare($d11_db_version, '8.0', '<')) {
-        return drush_set_error('PROVISION_DRUPAL_DB_TOO_OLD', dt('Drupal @major needs MySQL 8; this database server runs @version. Move the box to Percona 8.4 first (docs.boa.io: Percona 8 upgrade readiness), then run Install again. The codebase was not touched.', array(
+        return drush_set_error('PROVISION_DRUPAL_DB_TOO_OLD', dt('Drupal @major needs MySQL 8; this database server runs @version. Upgrade Percona on this box to 8.4 in place first (docs.boa.io: Percona 8 upgrade readiness), then run Install again. The codebase was not touched.', array(
           '@major' => drush_drupal_major_version(),
           '@version' => $d11_db_version,
         )));
