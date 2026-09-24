@@ -580,7 +580,7 @@ location ^~ /cdn/farfuture/ {
   gzip_http_version 1.1;
   if_modified_since exact;
   set $nocache_details "Skip";
-  location ~* ^/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
+  location ~* ^/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
     expires max;
     add_header X-Content-Type-Options "nosniff";
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -1494,7 +1494,7 @@ location ^~ /files/ {
     try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
 
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -1508,7 +1508,7 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -1541,7 +1541,7 @@ location ~* ^.+\.(?:mp3|ogg|oga|ogv|opus|wav|flac|aac|weba|webm|avi|mpe?g|mov|wm
 ### Serve & no-log static files & images directly,
 ### without all standard drupal rewrites, php-fpm etc.
 ###
-location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
   expires 30d;
   access_log off;
   log_not_found off;
