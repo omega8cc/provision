@@ -421,9 +421,12 @@ function drush_provision_drupal_post_provision_deploy() {
  * Runs at the database bootstrap level, before the first post-deploy
  * registry rebuild, on a deploy whose URI changed. It rewrites the same
  * prefixes the deploy engine include does later (the old URI and
- * "default"), with the trailing slash, so a longer name that merely starts
- * with the old one is left alone. A failure logs a warning only: the later
- * FULL-bootstrap rewrite stays in place as before.
+ * "default"), anchored on the directory as that include now is too, so the
+ * second pass changes nothing. A failed query logs a warning only, and the
+ * later FULL-bootstrap rewrite still runs; a database that cannot be
+ * reached at all has already failed the deploy in drush_bootstrap(). The
+ * connection is closed afterwards, so it does not sit idle through the
+ * registry rebuild and updatedb subprocesses.
  */
 function _provision_drupal_deploy_7_system_paths() {
   $old_uri = drush_get_option('old_uri', '');
@@ -436,14 +439,22 @@ function _provision_drupal_deploy_7_system_paths() {
     return;
   }
   $changed = 0;
-  foreach (array($old_uri, 'default') as $from) {
-    $changed += db_query("UPDATE {system} SET filename = REPLACE(filename, :old, :new) WHERE filename LIKE :like", array(
-      ':old' => 'sites/' . $from . '/',
-      ':new' => 'sites/' . $new_uri . '/',
-      ':like' => 'sites/' . db_like($from) . '/%',
-    ))->rowCount();
+  try {
+    foreach (array($old_uri, 'default') as $from) {
+      $changed += db_query("UPDATE {system} SET filename = REPLACE(filename, :old, :new) WHERE filename LIKE :like", array(
+        ':old' => 'sites/' . $from . '/',
+        ':new' => 'sites/' . $new_uri . '/',
+        ':like' => 'sites/' . db_like($from) . '/%',
+      ))->rowCount();
+    }
+    drush_log(dt('Pointed @count {system} rows at sites/@new before the registry rebuild.', array('@count' => $changed, '@new' => $new_uri)), 'info');
   }
-  drush_log(dt('Pointed @count {system} rows at sites/@new before the registry rebuild.', array('@count' => $changed, '@new' => $new_uri)), 'info');
+  catch (Exception $e) {
+    drush_log(dt('Could not point {system} at sites/@new before the registry rebuild: @msg', array('@new' => $new_uri, '@msg' => $e->getMessage())), 'warning');
+  }
+  if (class_exists('Database')) {
+    Database::closeConnection();
+  }
 }
 
 /**
