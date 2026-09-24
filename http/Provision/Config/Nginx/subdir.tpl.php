@@ -1155,13 +1155,6 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   }
 
   ###
-  ### Rewrite legacy requests with /<?php print $subdir; ?>/index.php to extension-free URL.
-  ###
-  if ( $args ~* "^q=(?<query_value>.*)" ) {
-    rewrite ^/<?php print $subdir; ?>/index.php$ $boa_visitor_scheme://$host/<?php print $subdir; ?>/?q=$query_value? permanent;
-  }
-
-  ###
   ### Send all non-static requests to php-fpm, restricted to known php file.
   ###
   location = /<?php print $subdir; ?>/index.php {
