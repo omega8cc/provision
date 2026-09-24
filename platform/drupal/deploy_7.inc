@@ -53,7 +53,16 @@ function _provision_platform_drupal_deploy_7_replace($old_url, $new_url) {
     db_query("UPDATE {block_custom} SET body     = REPLACE(body,     :old, :new)", $replace_patterns);
   }
   if (!file_exists(DRUPAL_ROOT . '/core/includes/drupal.inc')) {
-    db_query("UPDATE {system}       SET filename = REPLACE(filename, :old, :new)", $replace_patterns);
+    // Anchored on the directory (trailing slash, LIKE on the prefix), the
+    // same rewrite the post-deploy hook already did before the registry
+    // rebuild, so running it again is a no-op; unanchored, a new name that
+    // begins with the old one plus a dot and a label was rewritten a
+    // second time.
+    db_query("UPDATE {system} SET filename = REPLACE(filename, :old, :new) WHERE filename LIKE :like", array(
+      ':old' => 'sites/' . $old_url . '/',
+      ':new' => 'sites/' . $new_url . '/',
+      ':like' => 'sites/' . db_like($old_url) . '/%',
+    ));
   }
 
   if (function_exists('field_info_field_map')) {
