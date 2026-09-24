@@ -390,7 +390,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     gzip_http_version 1.1;
     if_modified_since exact;
     set $nocache_details "Skip";
-    location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less))$ {
+    location ~* ^/<?php print $subdir; ?>/(cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less))$ {
       expires max;
       add_header X-Content-Type-Options "nosniff";
       add_header X-Frame-Options "SAMEORIGIN" always;
@@ -732,7 +732,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
-    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
       expires 30d;
       access_log off;
       log_not_found off;
@@ -897,7 +897,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ### Serve & no-log static files & images directly,
   ### without all standard drupal rewrites, php-fpm etc.
   ###
-  location ~* ^/<?php print $subdir; ?>/(.+\.(?:jpe?g|gif|png|ico|webp|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|aspx?|class|otf|ttf|woff2?|eot|less))$ {
+  location ~* ^/<?php print $subdir; ?>/(.+\.(?:jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|aspx?|class|otf|ttf|woff2?|eot|less))$ {
     expires 30d;
     access_log off;
     log_not_found off;
