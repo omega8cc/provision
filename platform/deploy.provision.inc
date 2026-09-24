@@ -232,6 +232,16 @@ function drush_provision_drupal_post_provision_deploy() {
   if (drush_get_option('d6_d7_upgrade', FALSE)) {
     _provision_drupal_deploy_quarantine_d6_modules(d()->site_path);
   }
+  // A Drupal 7 site deployed under a new URI (clone, rename) still carries
+  // its old sites/<uri> paths in {system} until the deploy engine include
+  // below rewrites them under a FULL bootstrap. The registry rebuild that
+  // runs first would load a site-local module from the old site directory
+  // (still there on a clone) and again from the new one: "Cannot redeclare".
+  // Rewrite {system} at the database level before that rebuild.
+  if (drush_drupal_major_version() == 7 && !provision_is_hostmaster_site()
+    && !drush_get_option('d6_d7_upgrade', FALSE)) {
+    _provision_drupal_deploy_7_system_paths();
+  }
   // Run registry-rebuild without cache-clear, if available.
   if (function_exists('drush_registry_rebuild')) {
     if (drush_get_option('d6_d7_upgrade', FALSE)) {
@@ -403,6 +413,37 @@ function drush_provision_drupal_post_provision_deploy() {
       }
     }
   }
+}
+
+/**
+ * Point a Drupal 7 site's {system} rows at its new sites directory.
+ *
+ * Runs at the database bootstrap level, before the first post-deploy
+ * registry rebuild, on a deploy whose URI changed. It rewrites the same
+ * prefixes the deploy engine include does later (the old URI and
+ * "default"), with the trailing slash, so a longer name that merely starts
+ * with the old one is left alone. A failure logs a warning only: the later
+ * FULL-bootstrap rewrite stays in place as before.
+ */
+function _provision_drupal_deploy_7_system_paths() {
+  $old_uri = drush_get_option('old_uri', '');
+  $new_uri = d()->uri;
+  if ($old_uri === '' || $old_uri == $new_uri) {
+    return;
+  }
+  if (!drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_DATABASE) || !function_exists('db_query')) {
+    drush_log(dt('Could not reach the site database to point {system} at sites/@new before the registry rebuild.', array('@new' => $new_uri)), 'warning');
+    return;
+  }
+  $changed = 0;
+  foreach (array($old_uri, 'default') as $from) {
+    $changed += db_query("UPDATE {system} SET filename = REPLACE(filename, :old, :new) WHERE filename LIKE :like", array(
+      ':old' => 'sites/' . $from . '/',
+      ':new' => 'sites/' . $new_uri . '/',
+      ':like' => 'sites/' . db_like($from) . '/%',
+    ))->rowCount();
+  }
+  drush_log(dt('Pointed @count {system} rows at sites/@new before the registry rebuild.', array('@count' => $changed, '@new' => $new_uri)), 'info');
 }
 
 /**
