@@ -84,8 +84,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       if (is_readable('/opt/tools/drush/proxysql_adm_pwd.inc')) {
         include('/opt/tools/drush/proxysql_adm_pwd.inc');
         $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
+        // The admin password rides -p and the site password the SQL: run masked.
         $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-        drush_shell_exec($command);
+        provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
         if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
           drush_log(dt("Failed to add @name to ProxySQL", array('@name' => $name)), 'warning');
         }
@@ -95,43 +96,43 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         else {
           $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "INSERT INTO mysql_users (username,password,default_hostgroup) VALUES ('" . $name . "','" . $password . "',10);";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "LOAD MYSQL USERS TO RUNTIME;";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "SAVE MYSQL USERS FROM RUNTIME;";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "SAVE MYSQL USERS TO DISK;";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "DELETE FROM mysql_query_rules where username='" . $name . "';";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "INSERT INTO mysql_query_rules (username,destination_hostgroup,active) values ('" . $name . "',10,1);";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "INSERT INTO mysql_query_rules (username,destination_hostgroup,active) values ('" . $name . "',11,1);";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "LOAD MYSQL QUERY RULES TO RUNTIME;";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
 
           $proxysqlc = "SAVE MYSQL QUERY RULES TO DISK;";
           $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-          drush_shell_exec($command);
+          provision_shell_exec_secret($command, array($prxy_adm_paswd, $password));
         }
       }
     }
@@ -247,9 +248,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       return;
     }
     include('/opt/tools/drush/proxysql_adm_pwd.inc');
+    // The admin password rides -p on every command below: run them masked.
     $proxysqlc = "SELECT hostgroup_id,hostname,port,status FROM mysql_servers;";
     $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-    drush_shell_exec($command);
+    provision_shell_exec_secret($command, array($prxy_adm_paswd));
     if (preg_match("/Access denied for user 'admin'@'([^']*)'/", implode('', drush_shell_exec_output()), $match)) {
       drush_log(dt("REVOKE/PXY: Failed to delete @name in ProxySQL", array('@name' => $name)), 'warning');
     }
@@ -259,31 +261,31 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     else {
       $proxysqlc = "DELETE FROM mysql_users where username='" . $name . "';";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "LOAD MYSQL USERS TO RUNTIME;";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "SAVE MYSQL USERS FROM RUNTIME;";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "SAVE MYSQL USERS TO DISK;";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "DELETE FROM mysql_query_rules where username='" . $name . "';";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "LOAD MYSQL QUERY RULES TO RUNTIME;";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
 
       $proxysqlc = "SAVE MYSQL QUERY RULES TO DISK;";
       $command = sprintf('mysql -u admin -h %s -P %s -p%s -e %s', '127.0.0.1', '6032', $prxy_adm_paswd, escapeshellarg($proxysqlc));
-      drush_shell_exec($command);
+      provision_shell_exec_secret($command, array($prxy_adm_paswd));
     }
   }
 
@@ -940,7 +942,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           if (provision_file()->exists($myquick_creds_log)->status()) {
             drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
-          $success = drush_shell_exec($command);
+          $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
           if (!$success) {
             // Never interpolate $command into messages: it carries --password.
@@ -1295,7 +1297,7 @@ port=%s
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
         }
-        $success = drush_shell_exec($command);
+        $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
         if ((!$success || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           // Never interpolate $command into messages: it carries --password.
