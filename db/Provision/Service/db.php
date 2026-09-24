@@ -224,11 +224,34 @@ class Provision_Service_db extends Provision_Service {
         $restore_wants_classic = TRUE;
       }
       else {
-        // A modeless MyQuick-era archive carries no database.sql at all;
-        // hard-failing would make every such historical backup unrestorable.
-        // The fast path re-imports the pre-restore safety dump, so the
-        // database is left as it was - say so instead of pretending.
-        drush_log(dt('The restored archive carries no database dump; the database is left unchanged (files-only restore).'), 'warning');
+        // A dump-less archive (a modeless MyQuick-era snapshot, a Migrate
+        // or Delete safety copy, a "Site files without any DB" backup)
+        // restores files only. The deploy has already created a fresh,
+        // empty database for the site, so leaving the database as it was
+        // means carrying the current one across: dump the old database into
+        // tmp_expim here and let the fast import below load it, which its
+        // internal-flow rule accepts as a single fresh foreign dump. The
+        // restore's own safety copy is classic and leaves no dump in
+        // tmp_expim. Without the fast path there is nothing to import: the
+        // classic branch fails the deploy, which rolls the site back.
+        $old_db_name = drush_get_option('old_db_name', '');
+        $aegir_root = d('@server_master')->aegir_root;
+        if (empty($backup_mode)
+          && is_file($aegir_root . '/static/control/MyQuick.info')
+          && is_executable('/usr/local/bin/mydumper')
+          && is_executable('/usr/local/bin/myloader')
+          && $old_db_name !== ''
+          && $old_db_name !== $db_name
+          && $this->database_exists($old_db_name)) {
+          $this->generate_dump($old_db_name);
+          if (drush_get_error()) {
+            return FALSE;
+          }
+          drush_log(dt('The restored archive carries no database dump; the current database is carried over unchanged (files-only restore).'), 'warning');
+        }
+        else {
+          drush_log(dt('The restored archive carries no database dump, and without fast DB backups the current database cannot be carried over.'), 'warning');
+        }
       }
     }
     if (empty($backup_mode) && !$restore_wants_classic) {
@@ -510,7 +533,7 @@ class Provision_Service_db extends Provision_Service {
     return FALSE;
   }
 
-  function generate_dump() {
+  function generate_dump($source_db = NULL) {
     return FALSE;
   }
 

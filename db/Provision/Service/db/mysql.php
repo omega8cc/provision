@@ -1122,8 +1122,12 @@ port=%s
 
   /**
    * Generate a mysqldump for use in backups.
+   *
+   * A named $source_db is dumped instead of the site's own database, by the
+   * fast path only (the dump-less restore in import_site_database()): the
+   * classic branch dumps the site's database with the site's credentials.
    */
-  function generate_dump() {
+  function generate_dump($source_db = NULL) {
     // Set the umask to 077 so that the dump itself is non-readable by the
     // webserver.
     umask(0077);
@@ -1154,6 +1158,9 @@ port=%s
       $creds = $this->fetch_site_credentials();
     }
     extract($creds);
+    if (!empty($source_db)) {
+      $db_name = $source_db;
+    }
 
     $enable_myquick = FALSE;
     $mydumper_path = FALSE;
@@ -1306,6 +1313,11 @@ port=%s
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
       }
+    }
+    elseif (!empty($source_db)) {
+      // The classic branch below dumps drush_get_option('db_name') with the
+      // site's own credentials, never a named source database.
+      drush_set_error('PROVISION_BACKUP_FAILED', dt('The database @db can only be dumped by the fast path.', array('@db' => $source_db)));
     }
     else {
       // Mixed copy-paste of drush_shell_exec and provision_shell_exec.
