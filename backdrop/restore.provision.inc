@@ -125,6 +125,8 @@ function drush_provision_backdrop_provision_restore($restore_file) {
   // database (left in place by the internal-backup flag), and the fast-import
   // path would silently re-import it - restoring nothing.
   $deploy_options['is_restore'] = TRUE;
+  // The site's current database, carried across when the archive has no dump.
+  $deploy_options['restore_source_db'] = drush_get_option('db_name', '');
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
   // The safety copy took its time; the unpacked archive must still fit.

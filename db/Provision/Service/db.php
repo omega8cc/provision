@@ -228,13 +228,14 @@ class Provision_Service_db extends Provision_Service {
         // or Delete safety copy, a "Site files without any DB" backup)
         // restores files only. The deploy has already created a fresh,
         // empty database for the site, so leaving the database as it was
-        // means carrying the current one across: dump the old database into
+        // means carrying the current one across (the restore passes its name
+        // in as restore_source_db): dump the old database into
         // tmp_expim here and let the fast import below load it, which its
         // internal-flow rule accepts as a single fresh foreign dump. The
         // restore's own safety copy is classic and leaves no dump in
         // tmp_expim. Without the fast path there is nothing to import: the
         // classic branch fails the deploy, which rolls the site back.
-        $old_db_name = drush_get_option('old_db_name', '');
+        $old_db_name = drush_get_option('restore_source_db', drush_get_option('old_db_name', ''));
         $aegir_root = d('@server_master')->aegir_root;
         if (empty($backup_mode)
           && is_file($aegir_root . '/static/control/MyQuick.info')

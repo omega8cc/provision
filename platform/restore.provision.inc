@@ -133,6 +133,10 @@ function drush_provision_drupal_provision_restore($restore_file) {
     // CURRENT database (left in place by the internal-backup flag), and the
     // fast-import path would silently re-import it - restoring nothing.
     'is_restore' => TRUE,
+    // The site's current database, for an archive that carries no dump: the
+    // deploy carries it across instead of importing one (import_site_database()).
+    // The deploy child cannot read it itself before its own credentials change.
+    'restore_source_db' => drush_get_option('db_name', ''),
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 
