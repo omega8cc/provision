@@ -47,6 +47,12 @@ class Provision_Service_http_nginx_ssl extends Provision_Service_http_ssl {
     $this->server->setProperty('provision_db_cloaking', TRUE);
     $this->server->setProperty('phpfpm_mode', 'port');
     $this->server->setProperty('satellite_mode', 'boa');
+    // Subdirectory sites: the two site configs the plain nginx service
+    // registers. Without them a <domain>/<subdir> alias wrote no vhost here.
+    if (provision_hosting_feature_enabled('subdirs')) {
+      $this->configs['site'][] = 'Provision_Config_Nginx_Subdir';
+      $this->configs['site'][] = 'Provision_Config_Nginx_SubdirVhost';
+    }
   }
 
   function save_server() {
