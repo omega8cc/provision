@@ -5,6 +5,7 @@ if (!$satellite_mode && $server->satellite_mode) {
 }
 ?>
 
+### Subdirectory site <?php print $this->uri; ?>.
 location ^~ /<?php print $subdir; ?>/ {
   root  /var/www/nginx-default;
   index  index.html index.htm;

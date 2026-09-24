@@ -210,6 +210,23 @@ server {
   root  <?php print "{$this->root}"; ?>;
   <?php print $extra_config; ?>
 <?php
+// The subdirectory sites of this domain go in before the shared include: each
+// clears the static-chain flag for its own asset paths, and that must happen
+// before the shared include tests it.
+// A site with a subdirectory alias of its own domain includes the directory
+// before it exists: this verify writes the conf only after the vhost, and a
+// glob over a missing directory is no error.
+$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
+$own_subdirs = FALSE;
+foreach ((array) $this->aliases as $alias_url) {
+  if (strpos($alias_url, $this->uri . '/') === 0) {
+    $own_subdirs = TRUE;
+  }
+}
+$subdir_include = '';
+if (provision_hosting_feature_enabled('subdirs') && ($own_subdirs || provision_file()->exists($if_subsite)->status())) {
+  $subdir_include = "  include  " . $if_subsite . "/*.conf;\n";
+}
 if ($this->redirection || $ssl_redirection) {
   if ($ssl_redirection && !$this->redirection) {
     // redirect aliases in non-ssl to the same alias on ssl.
@@ -229,6 +246,7 @@ if ($this->redirection || $ssl_redirection) {
     print "  set \$ai_train_allow 0;\n";
     print "  set \$ai_evasive_allow 0;\n";
     print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n";
+    print $subdir_include;
     print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
     print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port);
   }
@@ -239,12 +257,9 @@ else {
   print "  set \$ai_train_allow 0;\n";
   print "  set \$ai_evasive_allow 0;\n";
   print "  include  " . $server->include_path . "/ai_policy/{$this->uri}.conf*;\n";
+  print $subdir_include;
   print "  include  " . $server->include_path . "/nginx_vhost_common.conf;\n";
   print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port);
-}
-$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
-if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {
-  print "  include  " . $if_subsite . "/*.conf;\n";
 }
 ?>
 }

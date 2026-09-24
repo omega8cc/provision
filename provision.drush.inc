@@ -638,7 +638,16 @@ function provision_hosting_feature_enabled($feature) {
  */
 function provision_generate_login_reset() {
   $uri = d()->redirection ?: d()->uri;
-  $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $uri, 'no-browser' => TRUE));
+  // A subdirectory address (example.com/site1) carries its parent's host, and
+  // a bootstrap under it keys the site's cache on the parent's name: it reads
+  // and writes the parent site's cache entries. Bootstrap under the site's own
+  // name, then point the link at the subdirectory address.
+  $subdir = is_string($uri) && strpos($uri, '/') !== FALSE;
+  $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $subdir ? d()->uri : $uri, 'no-browser' => TRUE));
+  $link = $result['output'];
+  if ($subdir) {
+    $link = str_replace('://' . d()->uri . '/', '://' . $uri . '/', $link);
+  }
 
-  return $result['output'];
+  return $link;
 }

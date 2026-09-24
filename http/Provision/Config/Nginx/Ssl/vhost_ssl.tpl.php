@@ -199,6 +199,20 @@ server {
   set $ai_train_allow 0;
   set $ai_evasive_allow 0;
   include  <?php print $server->include_path; ?>/ai_policy/<?php print $this->uri; ?>.conf*;
+<?php
+// The subdirectory sites of this domain, before the shared include, as
+// vhost.tpl.php places them on the plain port.
+$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
+$own_subdirs = FALSE;
+foreach ((array) $this->aliases as $alias_url) {
+  if (strpos($alias_url, $this->uri . '/') === 0) {
+    $own_subdirs = TRUE;
+  }
+}
+if (provision_hosting_feature_enabled('subdirs') && ($own_subdirs || provision_file()->exists($if_subsite)->status())) {
+  print "  include  " . $if_subsite . "/*.conf;\n";
+}
+?>
   include  <?php print $server->include_path; ?>/nginx_vhost_common.conf;
 <?php print provision_nginx_db_set_lines($db_type, $db_name, $db_user, $db_passwd, $db_host, $db_port); ?>
 }
