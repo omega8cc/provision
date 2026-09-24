@@ -128,15 +128,24 @@ $subdir_dot = str_replace('/', '.', $subdir);
 ###  nginx.conf site level extended vhost include start
 #######################################################
 
-set $subdir_main_site_name "<?php print $this->uri; ?>";
+###
+### Subdirectory site <?php print $this->uri; ?>.
+### Its own name is printed into every location below, never set as a
+### variable: every subdirectory conf of one domain is included at the
+### same server level, where the last set of a shared variable would win
+### for all of them.
+###
 
 ###
-### Use the main site name if available, instead of
-### potentially virtual server_name when alias is set
-### as redirection target. See #2358977 for details.
+### This site's assets sit one path segment below the domain, where the
+### static-chain map in server.tpl.php reads /<?php print $subdir; ?>/sites/all/...
+### as relative-URL junk: the same root dirs the map lets through at a
+### domain's root are let through here. The parent's vhost includes this file
+### before its shared include, so this runs before that guard does; anything
+### deeper under /<?php print $subdir; ?>/ stays guarded.
 ###
-if ($subdir_main_site_name = '') {
-  set $subdir_main_site_name "$server_name";
+if ($uri ~* "^/<?php print $subdir; ?>/(?:sites|modules|misc|themes|core|libraries|profiles|cdn|files|system|external|s3)/") {
+  set $is_static_chain 0;
 }
 
 ###
@@ -188,10 +197,10 @@ if ($http_x_forwarded_proto = "https") {
   set $boa_visitor_scheme "https";
 }
 
-# $is_static_chain / $is_content_chain are intentionally NOT guarded on subdir
-# vhosts: a subdir site legitimately serves /<subdir>/sites/all/... assets, which
-# $is_static_chain matches as buried-under-content.  Both guards apply on
-# full-domain vhosts only.
+# $is_static_chain / $is_content_chain are not tested here. A site's vhost tests
+# both for every path through the shared include, subdirectories included, which
+# is why this site's own asset roots clear the static-chain flag above; the vhost
+# of a domain that is no site tests neither.
 
 # Mitigation for https://www.drupal.org/SA-CORE-2018-002
 set $rce "ZZ";
@@ -220,7 +229,7 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
     log_not_found off;
     expires 30d;
     set $nocache_details "Skip";
-    rewrite ^/<?php print $subdir; ?>/sites/default/files/imagecache/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 last;
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/imagecache/(.*)$ /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/imagecache/$1 last;
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
   }
   location ~* ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles) {
@@ -228,31 +237,45 @@ location ^~ /<?php print $subdir; ?>/sites/default/files {
     log_not_found off;
     expires 30d;
     set $nocache_details "Skip";
-    rewrite ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles)/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 last;
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/(css|js|styles)/(.*)$ /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1/$2 last;
     try_files /$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
   location ~* ^/<?php print $subdir; ?>/sites/default/files {
     access_log off;
     log_not_found off;
     expires 30d;
-    rewrite ^/<?php print $subdir; ?>/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+    rewrite ^/<?php print $subdir; ?>/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
     try_files /$1 $uri =404;
   }
 }
 
 ###
+### Redirect to working homepage. Kept outside the master location, which
+### takes only paths under /<?php print $subdir; ?>/, so the parent site keeps
+### its own /<?php print $subdir; ?>-anything paths. Relative, so a visitor who
+### came in over HTTPS through the wildcard front stays on HTTPS.
+###
+location = /<?php print $subdir; ?> {
+  access_log off;
+  log_not_found off;
+  absolute_redirect off;
+  return 301 /<?php print $subdir; ?>/;
+}
+
+###
 ### Master location for subdir support (start)
 ###
-location ^~ /<?php print $subdir; ?> {
+location ^~ /<?php print $subdir; ?>/ {
 
   root  <?php print "{$this->root}"; ?>;
 
   set $nocache_details "Cache";
 
   ###
-  ### Drop security-banned client IPs.  The standalone subdir server
-  ### (subdir_vhost.tpl.php) never pulls in the full-domain vhost include, so
-  ### the IDS ban and the fleet refusal below are restated for this location.
+  ### Drop security-banned client IPs.  nginx runs these guards here only for
+  ### requests that end in this location, never for the nested ones: for the
+  ### whole domain they run at server level, from the shared include in a
+  ### site's vhost or from subdir_vhost.tpl.php for a domain that is no site.
   ###
   if ($is_banned) {
     return 444;
@@ -396,7 +419,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     access_log off;
     log_not_found off;
     expires 30d;
-    try_files /sites/$subdir_main_site_name/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
+    try_files /sites/<?php print $this->uri; ?>/files/favicon.ico /sites/$host/files/favicon.ico /favicon.ico $uri =204;
   }
 
   ###
@@ -406,7 +429,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location = /<?php print $subdir; ?>/llms.txt {
     access_log off;
     log_not_found off;
-    try_files /sites/$subdir_main_site_name/files/$host.llms.txt /sites/$subdir_main_site_name/files/llms.txt /sites/$host/files/llms.txt /llms.txt $uri @cache_<?php print $subdir_loc; ?>;
+    try_files /sites/<?php print $this->uri; ?>/files/$host.llms.txt /sites/<?php print $this->uri; ?>/files/llms.txt /sites/$host/files/llms.txt /llms.txt $uri @cache_<?php print $subdir_loc; ?>;
   }
 
   ###
@@ -416,7 +439,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location = /<?php print $subdir; ?>/robots.txt {
     access_log off;
     log_not_found off;
-    try_files /sites/$subdir_main_site_name/files/$host.robots.txt /sites/$subdir_main_site_name/files/robots.txt /sites/$host/files/robots.txt /robots.txt $uri @cache_<?php print $subdir_loc; ?>;
+    try_files /sites/<?php print $this->uri; ?>/files/$host.robots.txt /sites/<?php print $this->uri; ?>/files/robots.txt /sites/$host/files/robots.txt /robots.txt $uri @cache_<?php print $subdir_loc; ?>;
   }
 
   ###
@@ -666,8 +689,8 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       log_not_found off;
       expires 30d;
       set $nocache_details "Skip";
-      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/(css|js|styles)/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/(css|js|styles)/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -678,8 +701,8 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       log_not_found off;
       expires 30d;
       set $nocache_details "Skip";
-      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/css/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/css/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -690,8 +713,8 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       log_not_found off;
       expires 30d;
       set $nocache_details "Skip";
-      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/js/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/js/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     ###
@@ -702,18 +725,18 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
       log_not_found off;
       expires 30d;
       # fix common problems with old paths after import from standalone to Aegir multisite
-      rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1/$2 last;
-      rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/files/(.*)$               /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1/$2 last;
+      rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/sites/default/files/(.*)$ /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/imagecache/$1/$2 last;
+      rewrite ^/<?php print $subdir; ?>/files/imagecache/(.*)/files/(.*)$               /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/imagecache/$1/$2 last;
       set $nocache_details "Skip";
-      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
-      try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
+      try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
     location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
       expires 30d;
       access_log off;
       log_not_found off;
-      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1 last;
+      rewrite ^/<?php print $subdir; ?>/files/(.*)$  /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1 last;
       try_files $uri =404;
     }
     try_files /$1 $uri @cache_<?php print $subdir_loc; ?>;
@@ -728,7 +751,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     log_not_found off;
     expires 30d;
     set $nocache_details "Skip";
-    try_files /<?php print $subdir; ?>/sites/$subdir_main_site_name/files/$1/$2 $uri @drupal_<?php print $subdir_loc; ?>;
+    try_files /<?php print $subdir; ?>/sites/<?php print $this->uri; ?>/files/$1/$2 $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
@@ -981,7 +1004,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ###
   location ~* ^/<?php print $subdir; ?>/(sites/.*/files/.*) {
     root  <?php print "{$this->root}"; ?>;
-    rewrite ^/<?php print $subdir; ?>/sites/(.*)$ /sites/$subdir_main_site_name/$1 last;
+    rewrite ^/<?php print $subdir; ?>/sites/(.*)$ /sites/<?php print $this->uri; ?>/$1 last;
     access_log off;
     log_not_found off;
     expires 30d;
@@ -1061,15 +1084,6 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     return 405;
   }
   error_page 405 = @drupal_<?php print $subdir_loc; ?>;
-
-  ###
-  ### Redirect to working homepage.
-  ###
-  location = /<?php print $subdir; ?> {
-    access_log off;
-    log_not_found off;
-    return 301 $scheme://$host/<?php print $subdir; ?>/;
-  }
 
   ###
   ### Catch all unspecified requests.
@@ -1168,7 +1182,7 @@ if (strpos($boa_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     add_header X-Speed-Cache-Key "$key_uri";
     add_header X-NoCache "$nocache_details";
     add_header X-This-Proto "$http_x_forwarded_proto";
-    add_header X-Server-Sub-Name "$subdir_main_site_name";
+    add_header X-Server-Sub-Name "<?php print $this->uri; ?>";
     add_header X-Response-Status "$status";
 
     root  <?php print "{$this->root}"; ?>;
