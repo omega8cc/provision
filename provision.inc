@@ -1787,6 +1787,67 @@ function provision_password($length = 10) {
 }
 
 /**
+ * Run a shell command that carries secrets, without echoing them.
+ *
+ * drush_shell_exec() prints "Executing: <command>" to stderr on every verbose
+ * or debug run, and task and upgrade logs keep that output, so a command with
+ * a password in it must not go through it. This runs the command the way
+ * drush_shell_exec() does, prints that line with each secret masked, and
+ * leaves the output to drush_shell_exec_output() for the caller.
+ *
+ * @param string $command
+ *   The complete command, secrets passed through escapeshellarg().
+ * @param array $secrets
+ *   The secret values as they appear before escaping.
+ * @param string $cd
+ *   Optional directory to run the command in.
+ *
+ * @return bool
+ *   TRUE when the command exits 0.
+ */
+function provision_shell_exec_secret($command, $secrets, $cd = NULL) {
+  if ($cd !== NULL) {
+    $command = 'cd ' . escapeshellarg($cd) . ' && ' . $command;
+  }
+  if (drush_get_context('DRUSH_VERBOSE') || drush_get_context('DRUSH_SIMULATE')) {
+    drush_print('Executing: ' . provision_mask_secrets($command, $secrets), 0, STDERR);
+  }
+  if (drush_get_context('DRUSH_SIMULATE')) {
+    return TRUE;
+  }
+  $output = array();
+  $result = 0;
+  exec($command . ' 2>&1', $output, $result);
+  if (function_exists('_drush_shell_exec_output_set')) {
+    _drush_shell_exec_output_set($output);
+  }
+  if (drush_get_context('DRUSH_DEBUG')) {
+    foreach ($output as $line) {
+      drush_print(provision_mask_secrets($line, $secrets), 2);
+    }
+  }
+  return ($result == 0);
+}
+
+/**
+ * Mask secret values in a command line or message.
+ *
+ * Replaces each secret in its escapeshellarg() form first, then in its raw
+ * form, so both a command line and a tool's own output are covered.
+ */
+function provision_mask_secrets($text, $secrets) {
+  foreach ((array) $secrets as $secret) {
+    $secret = (string) $secret;
+    if ($secret === '') {
+      continue;
+    }
+    $text = str_replace(escapeshellarg($secret), "'***'", $text);
+    $text = str_replace($secret, '***', $text);
+  }
+  return $text;
+}
+
+/**
  * This is a helper function which changes deeply nested objects into arrays
  *
  * This helps get past the face that objects are not simple to work with, or
