@@ -2381,6 +2381,47 @@ function provision_context_alias_file($name) {
 }
 
 /**
+ * What a web server's vhost file for $uri is: 'none', 'placeholder' (the
+ * parent vhost a domain that is no site gets for its subdirectory sites, told
+ * apart the way Provision_Config_Nginx_Subdir::unlink_placeholder() does) or
+ * 'site'. NULL when $server is no web server with a vhost directory.
+ */
+function _provision_vhost_kind($server, $uri) {
+  $vhostd = is_object($server) ? (string) $server->http_vhostd_path : '';
+  if ($vhostd === '') {
+    return NULL;
+  }
+  // Provision_Config_Http_Site::filename().
+  $file = $vhostd . '/' . $uri . (drush_get_option('provision_apache_conf_suffix', FALSE) ? '.conf' : '');
+  if (!is_file($file)) {
+    return 'none';
+  }
+  $body = @file_get_contents($file);
+  if (is_string($body)
+    && strpos($body, 'fastcgi_param') === FALSE
+    && strpos($body, 'include  ' . $server->http_subdird_path . '/' . $uri . '/*.conf;') !== FALSE) {
+    return 'placeholder';
+  }
+  return 'site';
+}
+
+/**
+ * Record what a clone's or rename's new name had before the task writes its
+ * context on $platform: in $option whether that context existed (1) or not
+ * (0), in "{$option}_vhost" what its vhost file was (_provision_vhost_kind()).
+ * A failure removes only what the task made
+ * (provision_remove_unfinished_context()).
+ */
+function provision_probe_new_name($option, $new_name, $platform) {
+  drush_set_option($option, is_file(provision_context_alias_file($new_name)) ? 1 : 0);
+  $target = d($platform);
+  $kind = is_object($target) ? _provision_vhost_kind($target->web_server, ltrim((string) $new_name, '@')) : NULL;
+  if ($kind !== NULL) {
+    drush_set_option($option . '_vhost', $kind);
+  }
+}
+
+/**
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the
@@ -2390,7 +2431,8 @@ function provision_context_alias_file($name) {
  * had run site:alias-convert, a yml alias in ~/.drush/sites, until something
  * else removed them. Called from the command rollbacks, which Drush runs on
  * ANY error raised after the command hook completed; so this removes nothing
- * unless the caller recorded, in the option named by $preexisted_option, that
+ * unless the caller recorded, in the option named by $preexisted_option
+ * (provision_probe_new_name(), which also records the name's vhost), that
  * it probed the name (0: free, 1: a context of that name existed before the
  * task, which is not ours to remove -- the front end never lets a clone or
  * rename target an existing site, a command-line run might), and nothing when
@@ -2446,13 +2488,28 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
   if (is_file(provision_context_alias_file($new_name))) {
     // The deploy's http post hook wrote the new name's vhost before a later
     // step failed, and its own rollback writes it again: it goes with the
-    // context, the way a Delete removes it. Cleanup, never the rollback's
-    // verdict: the task's error state is kept as it was around it.
+    // context, the way a Delete removes it. Only a site vhost this task made:
+    // none before (or a subdirectory parent's placeholder, which the Delete
+    // path writes back while subdirectory sites remain under the name) and a
+    // site vhost now. Otherwise the deploy never reached its http hook, and a
+    // reload would drop the source vhost a rename's pre hook removed before
+    // that rename's own rollback writes it back; or the vhost is someone
+    // else's. The subdirectory configs take their site from d(), which is the
+    // source here, so the unfinished context is d()'s root while its configs
+    // go. Cleanup, never the rollback's verdict: the task's error state is
+    // kept as it was around it.
     $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
     $unfinished = d($new_name);
-    if (is_object($unfinished) && $unfinished->type === 'site') {
-      $unfinished->service('http')->delete_config('site');
-      $unfinished->service('http')->parse_configs();
+    $before = drush_get_option($preexisted_option . '_vhost', NULL);
+    if (is_object($unfinished) && $unfinished->type === 'site'
+      && ($before === 'none' || $before === 'placeholder')
+      && is_object($unfinished->platform)
+      && _provision_vhost_kind($unfinished->platform->web_server, $new_uri) === 'site') {
+      $root = d()->name;
+      d($new_name, TRUE);
+      d()->service('http')->delete_config('site');
+      d()->service('http')->parse_configs();
+      d($root, TRUE);
     }
     drush_set_context('DRUSH_ERROR_CODE', $pre_error);
     drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
