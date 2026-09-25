@@ -31,6 +31,10 @@ function drush_db_pre_provision_migrate() {
 
 // Deletes the old database credentials
 function drush_db_post_provision_migrate() {
+  // The source is being retired: from here a failed migrate must keep its
+  // copy, which is then all that is left of the site (see the migrate
+  // rollbacks' provision_remove_unfinished_target_copy()).
+  drush_set_option('migrate_source_retiring', TRUE);
   provision_reload_config('site', d()->site_path . '/drushrc.php');
   $source = drush_get_option('provision_migrate_source_db', array());
   if (is_array($source) && !empty($source['db_name'])) {

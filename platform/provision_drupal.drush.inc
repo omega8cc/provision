@@ -966,6 +966,39 @@ function _provision_drush10_script() {
 }
 
 /**
+ * Convert the account's Drush 8 aliases into the Drush 10+ yml aliases.
+ *
+ * Runs on the backend's own interpreter and ini (see
+ * _provision_php_script_cmd()): the bare `drush10` launcher runs on whatever
+ * ini the shell exports, and the account's Drush 8 ini is refused by every
+ * modern Drush, after which no yml alias exists for a new site. The
+ * converter re-converts every alias once any .alias.drushrc.php is newer
+ * than its yml, so a rewritten drushrc alias is carried over on the next
+ * run. Never silent: a failed conversion is a warning.
+ *
+ * @param string $aegir_root
+ *   The account home holding .drush.
+ */
+function _provision_drush10_alias_convert($aegir_root) {
+  $drush10 = _provision_drush10_script();
+  if ($drush10 !== '') {
+    $alias_cmd = _provision_php_script_cmd($drush10, array('site:alias-convert', $aegir_root . '/.drush/sites', '--yes'));
+  }
+  else {
+    $alias_cmd = 'drush10 site:alias-convert ~/.drush/sites --yes';
+  }
+  drush_log(dt('DRUSH/TEN/ALIASES/UPDATE site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
+  $result = drush_shell_cd_and_exec($aegir_root, $alias_cmd);
+  $output = implode('', drush_shell_exec_output());
+  if (!$result || preg_match('/\[(preflight|error)\]/i', $output)) {
+    drush_log("DRUSH/TEN/ALIASES/FAIL " . $output, 'warning');
+  }
+  else {
+    drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+  }
+}
+
+/**
  * The PHP interpreter every site-local subprocess of this backend runs under.
  *
  * PHP_BINARY is the interpreter of this very process: the account's pinned

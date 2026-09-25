@@ -314,6 +314,27 @@ function provision_txp_find_sites($root = NULL) {
 }
 
 /**
+ * Re-render private/config.php from the site's own drushrc.php.
+ *
+ * For a site directory a failed replacing deploy has just swapped back: the
+ * credentials are read from that drushrc.php into locals, never from the
+ * 'site' option context (see drush_provision_txp_pre_provision_deploy_rollback()
+ * for why that context cannot be trusted there).
+ */
+function _provision_txp_config_from_drushrc() {
+  $creds = _provision_txp_drushrc_creds(d()->site_path . '/drushrc.php');
+  if (!empty($creds)) {
+    $data = array_merge((array) drush_get_context('site'), $creds);
+    $config = new Provision_Config_Txp_Settings(d()->name, $data);
+    $config->write();
+    drush_log(dt('Restored the original database credentials in private/config.php after the failed deploy.'), 'ok');
+    return;
+  }
+  drush_log(dt('Could not read the original credentials from @rc; run Verify on this site to re-render private/config.php.',
+    array('@rc' => d()->site_path . '/drushrc.php')), 'warning');
+}
+
+/**
  * Read the db credentials out of a persisted site drushrc.php into an array.
  *
  * Regex parse (no include, so the file's $_SERVER side effects never run).
