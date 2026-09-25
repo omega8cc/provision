@@ -1817,7 +1817,10 @@ location ~ ^/(?<esi>esi/.*)"$ {
   ###
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache $upstream_http_x_force_nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
-  fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
+  ### No http_500: a 5xx is cached for 1s and refreshed every window (the error
+  ### microcache); served stale it replayed the first 500 for as long as the
+  ### upstream kept failing. PHP down or slow still gets the last good copy.
+  fastcgi_cache_use_stale error invalid_header timeout updating;
   expires epoch;
 }
 
@@ -1947,7 +1950,16 @@ location @regular {
 ###
 location @modern {
   set $location_detected "Modern";
-  try_files $uri /index.php?$query_string;
+  try_files $uri @modern_to_index;
+}
+
+###
+### Reach /index.php by rewrite, not by the internal redirect a try_files URI
+### fallback performs: that restarts at the server level, where
+### set $nocache_details "Cache" runs again and erases a location's "Skip".
+###
+location @modern_to_index {
+  rewrite ^ /index.php?$query_string? last;
 }
 
 ###
@@ -2142,7 +2154,10 @@ location = /index.php {
   ###
   fastcgi_no_cache $cookie_NoCacheID $http_authorization $nocache $upstream_http_x_force_nocache;
   fastcgi_cache_bypass $cookie_NoCacheID $http_authorization $nocache;
-  fastcgi_cache_use_stale error http_500 invalid_header timeout updating;
+  ### No http_500: a 5xx is cached for 1s and refreshed every window (the error
+  ### microcache); served stale it replayed the first 500 for as long as the
+  ### upstream kept failing. PHP down or slow still gets the last good copy.
+  fastcgi_cache_use_stale error invalid_header timeout updating;
 }
 
 ###
