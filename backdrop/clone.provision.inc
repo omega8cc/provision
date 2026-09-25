@@ -186,9 +186,10 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
     $options['db_server'] = $db_server;
   }
 
-  // A context of that name that exists before this clone writes its own is
-  // not this clone's to remove on a failure (see the rollback below).
-  drush_set_option('clone_target_preexisted', is_file(provision_context_alias_file($new_name)) ? 1 : 0);
+  // A context or a site vhost of that name that exists before this clone
+  // writes its own is not this clone's to remove on a failure (see the
+  // rollback below).
+  provision_probe_new_name('clone_target_preexisted', $new_name, $options['platform']);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   # note that we reset the aliases so they don't conflict with the original site
 
