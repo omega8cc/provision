@@ -2386,17 +2386,18 @@ function provision_context_alias_file($name) {
  * Both write the new site's context (provision-save) before they invoke the
  * deploy on it; the deploy's own rollback drops the half-built site directory
  * and database, but the context stayed behind, so a site that never came to
- * be kept an alias in ~/.drush and, once the deploy had run site:alias-convert,
- * a yml alias in ~/.drush/sites, until something else removed them. Called from
- * the command rollbacks, which Drush runs on ANY error raised after the command
- * hook completed; so this removes nothing unless the caller recorded, in the
- * option named by $preexisted_option, that it probed the name (0: free, 1: a
- * context of that name existed before the task, which is not ours to remove --
- * the front end never lets a clone or rename target an existing site, a
- * command-line run might), and nothing when the caller recorded in
- * $deployed_option that its deploy came through (a later step failed; the site
- * exists and keeps its context). Never the source site's own context, never one
- * of the source's own alias names (their pointer files are the source's).
+ * be kept an alias in ~/.drush, the vhost its deploy wrote and, once the deploy
+ * had run site:alias-convert, a yml alias in ~/.drush/sites, until something
+ * else removed them. Called from the command rollbacks, which Drush runs on
+ * ANY error raised after the command hook completed; so this removes nothing
+ * unless the caller recorded, in the option named by $preexisted_option, that
+ * it probed the name (0: free, 1: a context of that name existed before the
+ * task, which is not ours to remove -- the front end never lets a clone or
+ * rename target an existing site, a command-line run might), and nothing when
+ * the caller recorded in $deployed_option that its deploy came through (a later
+ * step failed; the site exists and keeps its context). Never the source site's
+ * own context, never one of the source's own alias names (their pointer files
+ * are the source's).
  *
  * The yml alias is the converted copy of the drushrc alias. The converter
  * writes two files for it: a placeholder named after the drushrc alias, and
@@ -2443,6 +2444,17 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
   }
   $new_name = '@' . $new_uri;
   if (is_file(provision_context_alias_file($new_name))) {
+    // The deploy's http post hook wrote the new name's vhost before a later
+    // step failed, and its own rollback writes it again: it goes with the
+    // context, the way a Delete removes it. Cleanup, never the rollback's
+    // verdict: the task's error state is kept as it was around it.
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    $unfinished = d($new_name);
+    if (is_object($unfinished) && $unfinished->type === 'site') {
+      $unfinished->service('http')->delete_config('site');
+      $unfinished->service('http')->parse_configs();
+    }
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
     drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
     drush_log(dt('Removed the context @name of the site this task left unfinished.', array('@name' => $new_name)), 'ok');
   }
