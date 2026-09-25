@@ -150,13 +150,18 @@ function drush_provision_txp_pre_provision_clone_rollback($new_name, $platform =
  *
  * The clone writes the new site's context before it invokes the deploy; a
  * failed deploy rolls its own site directory and database back but left that
- * context behind (see provision_remove_unfinished_context()).
+ * context behind (see provision_remove_unfinished_context()). A deploy that
+ * died without rolling back left the directory and database too (see
+ * provision_remove_unfinished_target_copy()).
  */
 function drush_provision_txp_provision_clone_rollback($new_name, $platform = NULL) {
   if (!function_exists('provision_platform_is_txp') || !provision_platform_is_txp(d())) {
     return;
   }
   provision_remove_unfinished_context($new_name, 'clone_target_preexisted', 'clone_target_deployed');
+  if (!drush_get_option('clone_target_deployed', FALSE)) {
+    provision_remove_unfinished_target_copy('clone_target_copy');
+  }
 }
 
 function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
@@ -238,7 +243,10 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   $deploy_options['deploy_class'] = 'clone';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
 
+  // What the deploy is about to create on the target (see the rollback).
+  provision_target_copy_probe('clone_target_copy', $options['root'], $options['uri'], isset($options['db_server']) ? $options['db_server'] : '');
   $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  provision_target_copy_deployed('clone_target_copy', $deploy_result);
 
   // The deploy came through: neither a failure in a later step nor an error
   // raised BEFORE the deploy must cost the built site its context -- and

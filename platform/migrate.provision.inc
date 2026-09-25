@@ -114,9 +114,16 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   _provision_drupal_create_settings_file();
   provision_drupal_push_site();
 
-  $success =  provision_file()->unlink(drush_get_option('backup_file'))
-    ->succeed('Removed unused migration site package')
-    ->fail('Could not remove unused migration site package');
+  // Once the source is being retired, this package holds the only copy of its
+  // pre-migrate database: keep it.
+  if (drush_get_option('migrate_source_retiring', FALSE)) {
+    drush_log(dt('Kept the migration site package @path: the source was being retired when the migrate failed.', array('@path' => drush_get_option('backup_file'))), 'warning');
+  }
+  else {
+    $success = provision_file()->unlink(drush_get_option('backup_file'))
+      ->succeed('Removed unused migration site package')
+      ->fail('Could not remove unused migration site package');
+  }
   // Belt: a crashed migrate must not leave the internal-backup flag behind -
   // a leftover one makes every later backup on the account skip the MyQuick
   // tmp_expim rotation and can leak a dump into a files-only archive.
@@ -346,7 +353,10 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     return FALSE;
   }
 
+  // What the deploy is about to create on the target (see the rollback).
+  provision_target_copy_probe('migrate_target_copy', $options['root'], $options['uri'], isset($options['db_server']) ? $options['db_server'] : '');
   $deploy_result = provision_backend_invoke($target, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  provision_target_copy_deployed('migrate_target_copy', $deploy_result);
   // The deploy came through: neither a failure in a later step nor an error
   // raised BEFORE the deploy must cost the built site its context -- and
   // drush_get_error() reports both alike, it is the process-wide sticky flag.
@@ -429,12 +439,42 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
     _provision_drupal_maintain_aliases();
   }
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('platform' => drush_get_option('old_platform'), 'root' => NULL, 'uri' => NULL));
+  // Under the same name the deploy's alias conversion (Drupal 10+) pointed the
+  // site's yml alias at the target platform; convert again, so it follows the
+  // drushrc alias the save above put back.
+  if ((is_null($new_name) || ($new_name == d()->name)) && is_array(drush_get_option('migrate_target_copy', NULL))) {
+    $aegir_root = d('@server_master')->aegir_root;
+    $placeholder = $aegir_root . '/.drush/sites/' . ltrim(d()->name, '@') . '.site.yml';
+    if (is_file($placeholder) && !is_link($placeholder) && _provision_drush10_script() !== '') {
+      // A missing placeholder makes the converter redo every alias; the
+      // drushrc alias being newer by mtime alone is missed within a second.
+      provision_file()->unlink($placeholder);
+      _provision_drush10_alias_convert($aegir_root);
+    }
+  }
   // A rename wrote the target's context before the deploy; the deploy's own
   // rollback drops the half-built site, this drops the context it left (never
   // the source's, never a pre-existing one, never one of the source's alias
   // names -- the provision-save above rewrote those pointer files).
   if (!is_null($new_name) && ($new_name != d()->name)) {
     provision_remove_unfinished_context($new_name, 'migrate_target_preexisted', 'migrate_target_deployed');
+  }
+  // The copy the deploy built on the target. Under the same name the site
+  // record went back to the old platform just above, so nothing points at the
+  // copy whether or not its deploy completed -- unless a post hook had begun to
+  // retire the source (migrate_source_retiring): then the copy is what is left
+  // of the site. Under a new name a completed deploy keeps the copy with its
+  // context.
+  $same_name = is_null($new_name) || ($new_name == d()->name);
+  if (($same_name && !drush_get_option('migrate_source_retiring', FALSE))
+    || (!$same_name && !drush_get_option('migrate_target_deployed', FALSE))) {
+    provision_remove_unfinished_target_copy('migrate_target_copy');
+  }
+  elseif ($same_name) {
+    $record = drush_get_option('migrate_target_copy', NULL);
+    if (is_array($record) && !empty($record['site_path'])) {
+      drush_log(dt('The source was being retired when the migrate failed: the copy at @path is what is left of the site, and it is kept.', array('@path' => $record['site_path'])), 'warning');
+    }
   }
 }
 
@@ -459,6 +499,8 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
     // we remove the aliases even if redirection is enabled as a precaution
     // if redirection is enabled, keep silent about errors
     _provision_drupal_delete_aliases();
+    // The source is being retired: a later error must keep the copy.
+    drush_set_option('migrate_source_retiring', TRUE);
     _provision_recursive_delete(d()->site_path);
     d()->service('http')->sync(d()->site_path);
   }

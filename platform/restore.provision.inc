@@ -145,7 +145,10 @@ function drush_provision_drupal_provision_restore($restore_file) {
     return FALSE;
   }
 
-  provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
+  // What the deploy is about to replace (see the failure branch below).
+  provision_target_copy_probe('restore_target_copy', d()->root, d()->uri, isset(d()->options['db_server']) ? d()->options['db_server'] : '');
+  $deploy_result = provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
+  provision_target_copy_deployed('restore_target_copy', $deploy_result);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
 
@@ -168,6 +171,9 @@ function drush_provision_drupal_provision_restore($restore_file) {
     // from the persisted (enabled) state; site_enabled was only ever flipped
     // in memory, never written to the alias. Without this the site stays on
     // "Under Construction" until an operator runs Enable/Verify by hand.
+    // A deploy that died never swapped back: put the original tree back and
+    // remove the restored copy first (provision_remove_unfinished_target_copy()).
+    provision_remove_unfinished_target_copy('restore_target_copy');
     d()->site_enabled = true;
     _provision_drupal_create_settings_file();
     d()->service('http')->create_config('site');

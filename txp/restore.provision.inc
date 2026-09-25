@@ -104,7 +104,10 @@ function drush_provision_txp_provision_restore($restore_file) {
   // must not rewrite the site's contact data.
   $deploy_options['deploy_class'] = 'restore';
 
-  provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
+  // What the deploy is about to replace (see the failure branch below).
+  provision_target_copy_probe('restore_target_copy', d()->root, d()->uri, isset(d()->options['db_server']) ? d()->options['db_server'] : '');
+  $deploy_result = provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
+  provision_target_copy_deployed('restore_target_copy', $deploy_result);
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', FALSE);
@@ -116,7 +119,12 @@ function drush_provision_txp_provision_restore($restore_file) {
     // still wrong is the vhost. Re-render it from the persisted (enabled)
     // state -- site_enabled was only ever flipped in memory, never written to
     // the alias. Without this the site stays on "Under Construction" until an
-    // operator runs Enable/Verify by hand (live-proven on the rig).
+    // operator runs Enable/Verify by hand (live-proven on the rig). A deploy
+    // that died never swapped back: put the original tree back and remove the
+    // restored copy first (provision_remove_unfinished_target_copy()).
+    // The restored copy shares private/ with the original (a restore keeps
+    // the link into the store), so config.php follows the original back.
+    provision_remove_unfinished_target_copy('restore_target_copy', '_provision_txp_config_from_drushrc');
     d()->site_enabled = TRUE;
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();

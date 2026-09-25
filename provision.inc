@@ -1989,6 +1989,25 @@ function _provision_leftover_parse_settings($dir) {
   // $options literals (var_export'd, always single-quoted). Parsed with the
   // same charsets as above and NEVER included: it is Drush configuration and
   // must not execute here.
+  return _provision_leftover_parse_drushrc($dir, $result);
+}
+
+/**
+ * Parse the db name and host out of a site directory's drushrc.php.
+ *
+ * The values sit there as plain $options literals (var_export'd, always
+ * single-quoted); parsed, never included. A db host already in $result
+ * (from settings.php) is kept.
+ *
+ * @param string $dir
+ *   Absolute path of the site directory.
+ * @param array $result
+ *   array('db_name' => string, 'db_host' => string) found so far.
+ *
+ * @return array
+ *   The same shape, filled from drushrc.php where it holds the values.
+ */
+function _provision_leftover_parse_drushrc($dir, $result = array('db_name' => '', 'db_host' => '')) {
   $drushrc = $dir . '/drushrc.php';
   if (!is_file($drushrc) || !is_readable($drushrc)) {
     return $result;
@@ -2040,6 +2059,128 @@ function _provision_leftover_parse_foreign_cms($dir) {
   }
   // (grav arm lands here in the grav track's unit.)
   return $result;
+}
+
+/**
+ * Check whether any OTHER site dir on the platform references a database.
+ *
+ * Sweeps every sites/<dir>/settings.php except the leftover being purged;
+ * a match means the database is NOT an orphan (typically the crashed-mid-swap
+ * shape, where the artifact and the live site dir still share credentials).
+ *
+ * @param string $root
+ *   The platform root.
+ * @param string $leftover
+ *   The leftover directory name being purged (excluded from the sweep).
+ * @param string $db_name
+ *   The database name to look for.
+ *
+ * @return string
+ *   The first referencing directory name, or '' when none reference it.
+ */
+function _provision_leftover_db_in_use($root, $leftover, $db_name) {
+  $handle = opendir($root . '/sites');
+  if (!$handle) {
+    // Cannot prove the negative -- report "in use" so the drop is skipped.
+    drush_log(dt('Cannot open @path to prove the database is orphaned.', array('@path' => $root . '/sites')), 'warning');
+    return dt('(unreadable sites directory)');
+  }
+  $found = '';
+  while (FALSE !== ($subdir = readdir($handle))) {
+    if ($subdir === '.' || $subdir === '..' || $subdir === $leftover) {
+      continue;
+    }
+    $dir = $root . '/sites/' . $subdir;
+    if (!is_dir($dir) || is_link($dir)) {
+      continue;
+    }
+    $other = _provision_leftover_parse_settings($dir);
+    if ($other['db_name'] === '') {
+      $other = _provision_leftover_parse_foreign_cms($dir);
+    }
+    if ($other['db_name'] !== '' && $other['db_name'] === $db_name) {
+      $found = $subdir;
+      break;
+    }
+  }
+  closedir($handle);
+  return $found;
+}
+
+/**
+ * Drop the orphan copy database on the recorded db server context.
+ *
+ * Best-effort by design: a missing server context or an absent database logs
+ * a warning and leaves the directory purge to proceed -- the drop is cleanup,
+ * not the task's success criterion.
+ *
+ * @param string $db_name
+ *   The database to drop (already through every safety gate).
+ * @param string $db_host
+ *   The db host the artifact's settings.php names ('' when unparsed). A
+ *   non-local host must match the drop server's remote_host -- server-binding
+ *   guard against dropping a same-named database on the wrong server.
+ * @param string|null $server_name
+ *   The db server context; NULL reads the leftover_db_server option.
+ * @param string $db_user
+ *   When given, the database user whose grants on the dropped database are
+ *   revoked afterwards, as the deploy's own rollback does; the account goes
+ *   only when nothing else is left on it (see revoke()).
+ */
+function _provision_leftover_drop_db($db_name, $db_host = '', $server_name = NULL, $db_user = '') {
+  if (is_null($server_name)) {
+    $server_name = drush_get_option('leftover_db_server', '');
+  }
+  if (!is_string($server_name) || $server_name === '') {
+    drush_log(dt('No db server context was passed; leaving database @db in place.', array('@db' => $db_name)), 'warning');
+    return;
+  }
+  $server = d('@' . ltrim($server_name, '@'), FALSE, FALSE);
+  if (is_null($server) || !is_object($server) || $server->type !== 'server') {
+    drush_log(dt('Db server context @name could not be loaded; leaving database @db in place.',
+      array('@name' => $server_name, '@db' => $db_name)), 'warning');
+    return;
+  }
+  // Server-binding guard: when the artifact names a remote db host, it must
+  // be the host this server context talks to. Local spellings are trusted to
+  // the frontend's server choice (single-box BOA norm).
+  if (is_string($db_host) && $db_host !== ''
+    && !in_array(strtolower($db_host), array('localhost', '127.0.0.1'), TRUE)) {
+    $remote = isset($server->remote_host) && is_string($server->remote_host) ? $server->remote_host : '';
+    if ($remote !== '' && strtolower($db_host) !== strtolower($remote)) {
+      drush_log(dt('The leftover names db host @host but @name talks to @remote; leaving database @db in place.',
+        array('@host' => $db_host, '@name' => $server_name, '@remote' => $remote, '@db' => $db_name)), 'warning');
+      return;
+    }
+  }
+  // service() indexes into ->services without an isset guard; probe first.
+  if (!array_key_exists('db', $server->get_services())) {
+    drush_log(dt('Db server context @name carries no db service; leaving database @db in place.',
+      array('@name' => $server_name, '@db' => $db_name)), 'warning');
+    return;
+  }
+  $service = $server->service('db');
+  if (!$service->database_exists($db_name)) {
+    drush_log(dt('Database @db does not exist on @name -- nothing to drop.',
+      array('@db' => $db_name, '@name' => $server_name)), 'info');
+    return;
+  }
+  if ($service->drop_database($db_name)) {
+    drush_log(dt('Dropped the orphan copy database @db on @name.',
+      array('@db' => $db_name, '@name' => $server_name)), 'ok');
+    if (is_string($db_user) && $db_user !== '') {
+      if ($service->revoke($db_name, $db_user)) {
+        drush_log(dt('Revoked the grants of @user on @db.', array('@user' => $db_user, '@db' => $db_name)), 'ok');
+      }
+      else {
+        drush_log(dt('Could not revoke the grants of @user on @db; revoke them manually.', array('@user' => $db_user, '@db' => $db_name)), 'warning');
+      }
+    }
+  }
+  else {
+    drush_log(dt('Failed to drop database @db on @name; drop it manually if it is confirmed orphaned.',
+      array('@db' => $db_name, '@name' => $server_name)), 'warning');
+  }
 }
 
 /**
@@ -2253,9 +2394,15 @@ function provision_context_alias_file($name) {
  * exists and keeps its context). Never the source site's own context, never one
  * of the source's own alias names (their pointer files are the source's).
  *
- * The yml alias is the converted copy of the drushrc alias; the limited-shell
- * worker regenerates the whole store from the drushrc aliases, but only on its
- * own triggers, so the stale copy is removed here with its checksum.
+ * The yml alias is the converted copy of the drushrc alias. The converter
+ * writes two files for it: a placeholder named after the drushrc alias, and
+ * the alias itself in the file named after all labels but the last, under
+ * the last label (see _provision_drush10_alias_twin_remove()). The
+ * limited-shell worker regenerates the whole store when it finds a
+ * placeholder without its drushrc alias, but only then; so both are removed
+ * here with their checksums, and when the alias file cannot go (it holds
+ * another alias too, or was edited) the placeholder stays as that worker's
+ * cue.
  */
 function provision_remove_unfinished_context($new_name, $preexisted_option, $deployed_option = '') {
   $new_uri = ltrim((string) $new_name, '@');
@@ -2298,6 +2445,10 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
   // The same home the deploy's alias conversion writes into (site:alias-convert
   // over $aegir_root/.drush/sites).
   $sites = d('@server_master')->aegir_root . '/.drush/sites';
+  if (!_provision_drush10_alias_twin_remove($sites, $new_uri)) {
+    drush_log(dt('The yml alias of @name shares its file or was edited; its placeholder stays for the next alias store rebuild.', array('@name' => $new_name)), 'notice');
+    return;
+  }
   foreach (array($sites . '/' . $new_uri . '.site.yml', $sites . '/.checksums/' . $new_uri . '.site.md5') as $path) {
     if (is_file($path)) {
       provision_file()->unlink($path)
@@ -2305,6 +2456,356 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
         ->fail('Could not remove @path of the unfinished site');
     }
   }
+}
+
+/**
+ * Remove the yml file site:alias-convert wrote for one drushrc alias.
+ *
+ * The converter files an alias under its last label as the environment, in a
+ * file named after the rest with dots turned to dashes (example.com: the
+ * 'com' environment of example.site.yml), so two aliases that differ only in
+ * the last label share one file, and so do a.b.com and a-b.com. The file
+ * goes, with its checksum, only when it holds this alias alone and is what
+ * the converter wrote (its recorded checksum matches); anything else is left
+ * to a rebuild of the whole store.
+ *
+ * @param string $sites
+ *   The yml alias store.
+ * @param string $uri
+ *   The alias name, without its '@'.
+ *
+ * @return bool
+ *   TRUE when no such file is left: there was none, or it was removed.
+ */
+function _provision_drush10_alias_twin_remove($sites, $uri) {
+  $location = $uri;
+  $env = 'dev';
+  if (preg_match('/^(.*)\.([^.]+)$/', $uri, $m)) {
+    $location = $m[1];
+    $env = $m[2];
+  }
+  $location = strtr($location, '.', '-');
+  $file = $sites . '/' . $location . '.site.yml';
+  $checksum = $sites . '/.checksums/' . $location . '.site.md5';
+  if (!file_exists($file) && !is_link($file)) {
+    return TRUE;
+  }
+  if (is_link($file) || !is_file($file) || !is_file($checksum)) {
+    return FALSE;
+  }
+  $contents = file_get_contents($file);
+  $recorded = file_get_contents($checksum);
+  if (!is_string($contents) || !is_string($recorded)
+    || md5($contents) !== trim(preg_replace('/^#.*/m', '', $recorded))) {
+    return FALSE;
+  }
+  // Environments are the top-level keys of the converter's YAML dump.
+  if (!preg_match_all('/^([^\s#][^:]*):\s*$/m', $contents, $keys)) {
+    return FALSE;
+  }
+  $envs = array_map(function ($key) {
+    return trim($key, "'\"");
+  }, $keys[1]);
+  if ($envs !== array($env)) {
+    return FALSE;
+  }
+  // a.b.com and a-b.com share this file name: it must be this alias's record.
+  if (!preg_match('/^\s+uri:\s*[\'"]?' . preg_quote($uri, '/') . '[\'"]?\s*$/m', $contents)) {
+    return FALSE;
+  }
+  foreach (array($file, $checksum) as $path) {
+    provision_file()->unlink($path)
+      ->succeed('Removed @path of the unfinished site')
+      ->fail('Could not remove @path of the unfinished site');
+  }
+  return !file_exists($file);
+}
+
+/**
+ * Record the site directory a clone, migrate or restore deploys into.
+ *
+ * Called right before the deploy is invoked, under the option $option;
+ * provision_target_copy_deployed() adds what the deploy reports, and the
+ * command's rollback hands both to provision_remove_unfinished_target_copy().
+ * Only a directory that does not exist yet becomes the deploy's own: onto an
+ * existing one the deploy extracts beside it (<dir>.restore) and swaps, and
+ * its own rollback swaps back. The existing directory's inode and mtime are
+ * kept, which a rename does not change (a removed directory's inode can come
+ * back on a new one, its mtime not), so a rollback that has to do the swap
+ * back itself can tell which of the two directories was there before.
+ *
+ * @param string $option
+ *   The option the record is kept in.
+ * @param string $root
+ *   The target platform root.
+ * @param string $uri
+ *   The uri of the site the deploy builds.
+ * @param string $db_server
+ *   The db server context its database is created on.
+ */
+function provision_target_copy_probe($option, $root, $uri, $db_server) {
+  $path = provision_auto_fix_platform_root($root) . '/sites/' . ltrim((string) $uri, '@');
+  $preexisted = file_exists($path) || is_link($path);
+  $original = $preexisted && is_dir($path) && !is_link($path);
+  drush_set_option($option, array(
+    'site_path' => $path,
+    'preexisted' => $preexisted ? 1 : 0,
+    'inode' => $original ? (int) fileinode($path) : 0,
+    'mtime' => $original ? (int) filemtime($path) : 0,
+    'restore_preexisted' => (file_exists($path . '.restore') || is_link($path . '.restore')) ? 1 : 0,
+    'db_server' => is_string($db_server) ? $db_server : '',
+    'db_name' => '',
+    'db_user' => '',
+  ));
+}
+
+/**
+ * The database a site directory names, read from its own files.
+ *
+ * settings.php when it holds literal credentials, then the directory's own
+ * drushrc.php, then a foreign CMS's config. That config can sit behind a link
+ * a restored copy shares with the original (Textpattern's private/), so it
+ * comes last: the drushrc.php of each directory is its own.
+ *
+ * @param string $dir
+ *   Absolute path of the site directory.
+ *
+ * @return array
+ *   array('db_name' => string, 'db_host' => string), empty strings when
+ *   nothing names a database.
+ */
+function _provision_target_copy_parse_db($dir) {
+  $parsed = _provision_leftover_parse_settings($dir);
+  if ($parsed['db_name'] === '') {
+    $parsed = _provision_leftover_parse_drushrc($dir, $parsed);
+  }
+  if ($parsed['db_name'] === '') {
+    $parsed = _provision_leftover_parse_foreign_cms($dir);
+  }
+  return $parsed;
+}
+
+/**
+ * Put back the directory a replacing deploy swapped out, when it could not.
+ *
+ * A deploy onto an existing site directory extracts its copy into
+ * <dir>.restore and then swaps the two. A deploy that died leaves either
+ * state; the inode and mtime recorded by provision_target_copy_probe() say
+ * which directory was there before, and only then is anything moved.
+ *
+ * @param array $record
+ *   The probe's record.
+ * @param bool $swapped
+ *   Set to TRUE when the original was moved back into place.
+ *
+ * @return string
+ *   The path of the deploy's copy, back beside the original as
+ *   <dir>.restore, or '' when the state is not the probe's own.
+ */
+function _provision_target_copy_swap_back($record, &$swapped) {
+  $swapped = FALSE;
+  $path = $record['site_path'];
+  $restore = $path . '.restore';
+  if (empty($record['inode']) || !empty($record['restore_preexisted'])) {
+    return '';
+  }
+  if (is_link($path) || is_link($restore) || !is_dir($path) || !is_dir($restore)) {
+    return '';
+  }
+  $mtime = isset($record['mtime']) ? (int) $record['mtime'] : 0;
+  clearstatcache();
+  if ((int) fileinode($path) === (int) $record['inode'] && (int) filemtime($path) === $mtime) {
+    // Never swapped: the extraction beside the original is the copy.
+    return $restore;
+  }
+  if ((int) fileinode($restore) !== (int) $record['inode'] || (int) filemtime($restore) !== $mtime) {
+    return '';
+  }
+  $swapped = (bool) provision_file()->switch_paths($restore, $path)
+    ->succeed('Put @path2 that was there before this task back in place.')
+    ->fail('Could not put @path2 that was there before this task back in place.')
+    ->status();
+  clearstatcache();
+  if (!$swapped || (int) fileinode($path) !== (int) $record['inode']) {
+    $swapped = FALSE;
+    return '';
+  }
+  return $restore;
+}
+
+/**
+ * Keep the database the deploy reports for the site it built.
+ *
+ * The deploy runs as its own process and picks the database name and user
+ * itself. Its backend result carries them in 'context' -- also from a
+ * process that died on a PHP fatal, whose Drush shutdown still reports. No
+ * result (a killed process) leaves them unknown, and then no database is
+ * dropped for the copy.
+ */
+function provision_target_copy_deployed($option, $deploy_result) {
+  $record = drush_get_option($option, NULL);
+  if (!is_array($record)) {
+    return;
+  }
+  if (is_array($deploy_result) && isset($deploy_result['context']) && is_array($deploy_result['context'])) {
+    foreach (array('db_name', 'db_user') as $key) {
+      $value = isset($deploy_result['context'][$key]) ? $deploy_result['context'][$key] : '';
+      $record[$key] = (is_string($value) && preg_match('/^[A-Za-z0-9_]+$/', $value)) ? $value : '';
+    }
+  }
+  drush_log(dt('The deploy reported database @db for @path.', array('@db' => $record['db_name'] === '' ? '(none)' : $record['db_name'], '@path' => $record['site_path'])), 'info');
+  drush_set_option($option, $record);
+}
+
+/**
+ * Remove the site copy a failed clone, migrate or restore left on its target.
+ *
+ * A deploy that fails removes its own half-built site: its rollback deletes
+ * the directory it extracted, swaps a replaced one back and drops the
+ * database it created. A deploy that dies on a PHP fatal -- a module whose
+ * code does not load on the target's core -- runs no rollback at all, and a
+ * deploy that completed is not rolled back when a later step of the task
+ * fails. The copy then stayed with its database: on a new directory, a site
+ * directory no site record points at, which keeps the platform from ever
+ * counting as single-client; on a replaced one (a restore), the copy in the
+ * site's place and the original beside it.
+ *
+ * The directory goes only when the probe found it absent before the deploy;
+ * a directory that was there is never removed, and when the deploy swapped
+ * its copy in, the original is put back first (see
+ * _provision_target_copy_swap_back()) and the copy beside it goes instead.
+ * The database goes only when every source agrees it is the copy's own: the
+ * deploy reported it, the copy's settings name it, it is not the source
+ * site's, no other site directory on the target platform names it, and it is
+ * not a system database; anything short of that names it in a warning and
+ * leaves it. The copy's alias records in the target's sites.php stay: they
+ * map to a directory that is gone, which Drupal ignores, and the next deploy
+ * of that uri rewrites them.
+ *
+ * @param string $option
+ *   The option provision_target_copy_probe() recorded under.
+ * @param string $after_swap_back
+ *   A function to run once a replaced original is back in place, before the
+ *   database is judged: a CMS whose copy shares a file with the original
+ *   through a link re-renders it there.
+ */
+function provision_remove_unfinished_target_copy($option, $after_swap_back = '') {
+  $record = drush_get_option($option, NULL);
+  // Unrecorded: the task failed before its deploy.
+  if (!is_array($record) || empty($record['site_path'])) {
+    return;
+  }
+  $path = $record['site_path'];
+  if (!empty($record['preexisted'])) {
+    // The deploy replaced an existing directory; the copy is the one beside
+    // it once the original is back.
+    $swapped = FALSE;
+    $copy = _provision_target_copy_swap_back($record, $swapped);
+    if ($copy === '') {
+      drush_log(dt('The site directory @path existed before this task and is left in place.', array('@path' => $path)), 'notice');
+      return;
+    }
+    if ($swapped && is_string($after_swap_back) && $after_swap_back !== '' && function_exists($after_swap_back)) {
+      call_user_func($after_swap_back);
+    }
+    $path = $copy;
+  }
+  // Gone already: the deploy's own rollback removed it, with its database.
+  if (is_link($path) || !is_dir($path)) {
+    return;
+  }
+
+  // The database leg is decided before the directory goes (the parse needs it).
+  $parsed = _provision_target_copy_parse_db($path);
+  $reported = isset($record['db_name']) ? $record['db_name'] : '';
+  // The source site's own credentials: its loaded site context and its
+  // settings on disk.
+  $source_dbs = array();
+  $source_db = drush_get_option('db_name', '', 'site');
+  if (is_string($source_db) && $source_db !== '') {
+    $source_dbs[] = $source_db;
+  }
+  $source_parsed = _provision_target_copy_parse_db(d()->site_path);
+  if ($source_parsed['db_name'] !== '') {
+    $source_dbs[] = $source_parsed['db_name'];
+  }
+  $source_user = drush_get_option('db_user', '', 'site');
+  // A copy built on another db server (a migrate with a new one) may carry the
+  // source's database name there: that name guards the source's server only.
+  $source_server = isset(d()->options['db_server']) && is_string(d()->options['db_server']) ? ltrim(d()->options['db_server'], '@') : '';
+  $copy_server = isset($record['db_server']) ? ltrim($record['db_server'], '@') : '';
+  $other_server = ($source_server !== '' && $copy_server !== '' && $source_server !== $copy_server);
+  $drop = FALSE;
+  $why = '';
+  if ($parsed['db_name'] === '') {
+    // The copy names no database: nothing to decide.
+  }
+  elseif ($reported === '') {
+    $why = dt('the deploy did not report the database it created');
+  }
+  elseif ($parsed['db_name'] !== $reported) {
+    $why = (!$other_server && in_array($reported, $source_dbs, TRUE))
+      ? dt('the deploy reported another database')
+      : dt('the deploy reported @db', array('@db' => $reported));
+  }
+  elseif (empty($source_dbs) && !$other_server) {
+    $why = dt('the source site database is not known');
+  }
+  elseif (!$other_server && in_array($reported, $source_dbs, TRUE)) {
+    $why = dt('it is the source site database');
+  }
+  elseif (in_array(strtolower($reported), array('mysql', 'information_schema', 'performance_schema', 'sys', 'test'), TRUE)) {
+    $why = dt('it is a system database');
+  }
+  elseif ($holder = _provision_leftover_db_in_use(dirname(dirname($path)), basename($path), $reported)) {
+    $why = dt('sites/@holder names it too', array('@holder' => $holder));
+  }
+  else {
+    $drop = TRUE;
+  }
+  if ($drop) {
+    // The user's grants go with the database, never a source site's user.
+    $user = isset($record['db_user']) ? $record['db_user'] : '';
+    if ($user === $source_user && !$other_server) {
+      $user = '';
+    }
+    // Cleanup, never the rollback's verdict: keep the task's error state as
+    // it was around the drop (see drush_provision_leftover_purge()).
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    _provision_leftover_drop_db($reported, $parsed['db_host'], $record['db_server'], $user);
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+  }
+  elseif ($why !== '') {
+    // Name the database the copy has, never one of the source's: a name the
+    // deploy confirmed on another server is its own there; a name only read
+    // from the copy may still be the source's, carried in by the archive.
+    $named = '';
+    foreach (array($reported, $parsed['db_name']) as $candidate) {
+      if ($candidate === '') {
+        continue;
+      }
+      $confirmed_elsewhere = $other_server && $candidate === $reported;
+      if ($confirmed_elsewhere || !in_array($candidate, $source_dbs, TRUE)) {
+        $named = $candidate;
+        break;
+      }
+    }
+    if ($named !== '') {
+      drush_log(dt('Database @db of the unfinished copy is left in place on @server: @why.', array('@db' => $named, '@server' => $record['db_server'], '@why' => $why)), 'warning');
+    }
+    else {
+      drush_log(dt('The database of the unfinished copy is not known (@why); check for an unused database this task created.', array('@why' => $why)), 'warning');
+    }
+  }
+
+  _provision_recursive_delete($path);
+  clearstatcache();
+  if (is_dir($path)) {
+    drush_log(dt('Could not remove @path, the unfinished copy this task left on its target platform.', array('@path' => $path)), 'warning');
+    return;
+  }
+  d()->service('http')->sync($path);
+  drush_log(dt('Removed @path, the unfinished copy this task left on its target platform.', array('@path' => $path)), 'ok');
 }
 
 /**
