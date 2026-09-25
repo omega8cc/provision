@@ -25,6 +25,11 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // Refuse a target that cannot run on its command-line PHP before the
+  // safety copy, not at its deploy (provision_cli_php_target_preflight()).
+  if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 

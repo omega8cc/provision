@@ -2916,6 +2916,73 @@ function provision_site_bytes($site_path, $follow_links = TRUE) {
 }
 
 /**
+ * Refuse a clone or migrate whose target cannot run on its command-line PHP.
+ *
+ * On a BOA account the shell wrapper picks the PHP of every Drush process
+ * the backend starts, from the platform the process runs on: its line in
+ * ~/static/control/cli-per-platform.info, else the account-wide phpNN.info
+ * switch or cli.info. The target's deploy and verify are processes of their
+ * own on the target alias, so they get the target platform's PHP, and the
+ * wrapper refuses a core that cannot run on it before PHP starts -- but that
+ * is after this task's safety copy. So ask the wrapper now: a no-op Drush
+ * line on the target root and uri goes through /bin/sh the way the deploy
+ * will, and a refusal comes back as its backend packet.
+ *
+ * @param $task
+ *   'clone' or 'migrate'.
+ * @param $platform
+ *   The target platform context name (NULL = the site's own).
+ * @param $new_name
+ *   The target site context name of a clone or a renaming migrate.
+ *
+ * @return
+ *   TRUE when the target may run, or when no wrapper answers; FALSE, after
+ *   drush_set_error(), when the wrapper refuses it.
+ */
+function provision_cli_php_target_preflight($task, $platform = NULL, $new_name = NULL) {
+  if (@realpath('/bin/sh') !== '/opt/local/bin/websh' || !defined('DRUSH_COMMAND')) {
+    return TRUE;
+  }
+  $root = d()->platform->root;
+  if (!empty($platform)) {
+    $target_platform = d($platform);
+    if (is_object($target_platform) && !empty($target_platform->root)) {
+      $root = $target_platform->root;
+    }
+  }
+  $uri = d()->uri;
+  if (!empty($new_name)) {
+    $uri = ltrim($new_name, '@');
+  }
+  if (empty($root) || empty($uri)) {
+    return TRUE;
+  }
+  // The docroot the deploy will use: a platform registered at its composer
+  // root gets its web/docroot/html below it (the site context does the same).
+  $root = provision_auto_fix_platform_root($root);
+  // stderr goes nowhere: in backend mode Drush writes every log entry there as
+  // a packet, and this process's stderr is the pipe its own task reads. The
+  // wrapper's answer comes back on stdout. --boa-cli-php-probe makes the
+  // wrapper judge the line as the site task it stands for (version alone
+  // loads no codebase and would pass); --strict=0 lets Drush ignore it.
+  $cmd = 'php ' . escapeshellarg(DRUSH_COMMAND) . ' --root=' . escapeshellarg($root)
+    . ' --uri=' . escapeshellarg($uri) . ' --strict=0 --boa-cli-php-probe --backend=2 version 2>/dev/null';
+  $output = array();
+  $rc = 0;
+  exec($cmd, $output, $rc);
+  $text = implode("\n", $output);
+  if (!preg_match('/DRUSH_BACKEND_OUTPUT_START>>>(.*)<<<DRUSH_BACKEND_OUTPUT_END/s', $text, $m)) {
+    return TRUE;
+  }
+  $data = json_decode($m[1], TRUE);
+  if (!is_array($data) || empty($data['error_log']['BOA_CLI_PHP_REFUSED'])) {
+    return TRUE;
+  }
+  $msg = implode(' ', (array) $data['error_log']['BOA_CLI_PHP_REFUSED']);
+  return drush_set_error('PROVISION_CLI_PHP_TARGET', dt('@what refused before the safety copy, for the target: @msg', array('@what' => ucfirst($task) . ' of ' . d()->uri, '@msg' => $msg)));
+}
+
+/**
  * Refuse a copying task before it starts when its copies cannot fit.
  *
  * A clone, a migrate and a restore each make a safety copy of the site and
