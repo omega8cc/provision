@@ -378,9 +378,10 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
 
   drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
 
-  // A rename's target context that exists before this migrate writes its own
-  // is not this migrate's to remove on a failure (see the rollback below).
-  drush_set_option('migrate_target_preexisted', is_file(provision_context_alias_file($target)) ? 1 : 0);
+  // A rename's target context or site vhost that exists before this migrate
+  // writes its own is not this migrate's to remove on a failure (see the
+  // rollback below).
+  provision_probe_new_name('migrate_target_preexisted', $target, $options['platform']);
   drush_invoke_process('@none', 'provision-save', array($target), $options);
 
   // Build an options array to pass to the deploy task. This allows injection
