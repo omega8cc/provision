@@ -58,6 +58,61 @@ function provision_drush_init() {
   _provision_drush_check_user();
   // Abort the process if the load is too high.
   _provision_drush_check_load();
+  // Name the command-line PHP of this task process in the task log.
+  _provision_drush_cli_php_report();
+}
+
+/**
+ * Log which command-line PHP runs this provision command, and what chose it.
+ *
+ * On a BOA box the shell wrapper (websh) picks the PHP of every Drush
+ * process the backend starts -- a line in ~/static/control/
+ * cli-per-platform.info for the platform the process runs on, else the
+ * phpNN.info switch, else cli.info -- and hands its reason to the process
+ * as BOA_CLI_PHP_FROM, with anything wrong in that file as BOA_CLI_PHP_WARN.
+ * Both go into the task log here, so every task shows the PHP it ran on and
+ * the file that chose it. provision-save runs on no codebase and is left out.
+ */
+function _provision_drush_cli_php_report() {
+  // Once per process: an in-process drush_invoke() (the backup a Clone,
+  // Migrate, Restore or Delete takes) runs the init hooks again.
+  static $done = FALSE;
+  if ($done) {
+    return;
+  }
+  $command = drush_get_command();
+  if (empty($command['command']) || strpos($command['command'], 'provision-') !== 0
+    || $command['command'] === 'provision-save') {
+    return;
+  }
+  $done = TRUE;
+  $from = getenv('BOA_CLI_PHP_FROM');
+  if ($from === FALSE || $from === '') {
+    $from = dt('not chosen by your control files (the BOA shell wrapper was paused or bypassed)');
+  }
+  $name = d()->name;
+  $where = '';
+  if (isset(d()->root) && is_string(d()->root) && d()->root !== '') {
+    $where = d()->root;
+    if (preg_match('#^/data/disk/[^/]+/static/(.+)$#', $where, $m)) {
+      $where = 'static/' . $m[1];
+    }
+    $where = ' (' . $where . ')';
+  }
+  drush_log(dt('Command-line PHP @version for @name@where: @from', array(
+    '@version' => PHP_VERSION,
+    '@name' => $name,
+    '@where' => $where,
+    '@from' => $from,
+  )), 'notice');
+  $warn = getenv('BOA_CLI_PHP_WARN');
+  if (is_string($warn) && $warn !== '') {
+    foreach (explode("\n", $warn) as $line) {
+      if (trim($line) !== '') {
+        drush_log(trim($line), 'warning');
+      }
+    }
+  }
 }
 
 /**
