@@ -497,6 +497,10 @@ function _provision_psr_log_overlay($root, $psr_tpl) {
     drush_log(dt('PSR/LOG Aegir overlay already in place in @dir', array('@dir' => $log)), 'info');
     return TRUE;
   }
+  if (!is_dir($psr_tpl)) {
+    drush_log(dt('PSR/LOG the Drush 8 psr/log template @tpl is missing, so the Aegir overlay cannot be laid over @dir; the account\'s Drush 8 copy is incomplete (an octopus up-* pass reinstalls it), then run Verify again', array('@tpl' => $psr_tpl, '@dir' => $log)), 'warning');
+    return FALSE;
+  }
   if ($state === FALSE) {
     $refresh = !is_dir($orig) || _provision_psr_log_detyped($orig) !== FALSE
       || @md5_file($orig . '/composer.json') !== @md5_file($log . '/composer.json');
@@ -1382,13 +1386,13 @@ function provision_lock_drush_local_vnd() {
       // beside the package for the unlock (see _provision_psr_log_overlay()).
       // Without it the patches must not go on: de-typed core over a typed
       // psr/log is a codebase the web cannot serve, the stock one still is.
-      if (provision_file()->exists($psr_tpl)->status()) {
-        if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
-          // vendor/drush is already at 0400 here: the sites still need their
-          // rebuild, in the stock state this aborted lock leaves.
-          _provision_drush_local_relock_rebuild($closes_foreign_window);
-          return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
-        }
+      // A missing Drush 8 template is one of the ways the overlay cannot land
+      // (the helper says so), not a reason to skip it and patch anyway.
+      if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
+        // vendor/drush is already at 0400 here: the sites still need their
+        // rebuild, in the stock state this aborted lock leaves.
+        _provision_drush_local_relock_rebuild($closes_foreign_window);
+        return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
       }
 
       // D10 has no validator patch, but the name is still concatenated into the
