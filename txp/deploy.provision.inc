@@ -141,17 +141,7 @@ function drush_provision_txp_pre_provision_deploy_rollback() {
     // credentials back into the 'site' context would make the db layer's own
     // rollback (destroy_site_database(), which reads that context) drop the
     // site's REAL database instead of the new one.
-    $creds = _provision_txp_drushrc_creds(d()->site_path . '/drushrc.php');
-    if (!empty($creds)) {
-      $data = array_merge((array) drush_get_context('site'), $creds);
-      $config = new Provision_Config_Txp_Settings(d()->name, $data);
-      $config->write();
-      drush_log(dt('Restored the original database credentials in private/config.php after the failed deploy.'), 'ok');
-    }
-    else {
-      drush_log(dt('Could not read the original credentials from @rc; run Verify on this site to re-render private/config.php.',
-        array('@rc' => d()->site_path . '/drushrc.php')), 'warning');
-    }
+    _provision_txp_config_from_drushrc();
 
     // The extracted archive tree (now back under .restore) is spent.
     _provision_recursive_delete(d()->site_path . '.restore');
