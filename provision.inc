@@ -795,6 +795,40 @@ function _provision_require_site_local_drush($approot) {
 }
 
 /**
+ * Does this codebase already carry a site-local Drush?
+ *
+ * Read from the vendor/drush directory itself and from what composer
+ * recorded (vendor/composer/installed.json), never from
+ * vendor/drush/drush/drush.php: the platform lock holds vendor/drush at
+ * 0400, which not even its owner can traverse, so on a locked platform that
+ * file reads as missing, and the on-box require was started on a platform
+ * that has Drush -- it rewrote composer.json and composer.lock and then
+ * failed to install into the locked directory.
+ */
+function _provision_codebase_has_drush($approot) {
+  $approot = rtrim($approot, '/');
+  if (is_dir($approot . '/vendor/drush')) {
+    return TRUE;
+  }
+  $installed_path = $approot . '/vendor/composer/installed.json';
+  if (is_readable($installed_path)) {
+    $installed = json_decode(file_get_contents($installed_path), TRUE);
+    if (is_array($installed)) {
+      // Composer 2 wraps the list in "packages"; composer 1 wrote the list.
+      $packages = isset($installed['packages']) ? $installed['packages'] : $installed;
+      if (is_array($packages)) {
+        foreach ($packages as $package) {
+          if (is_array($package) && isset($package['name']) && $package['name'] === 'drush/drush') {
+            return TRUE;
+          }
+        }
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
  * Does this codebase carry composer patches?
  *
  * TRUE when composer.json declares extra.patches or extra.patches-file, or
@@ -1020,12 +1054,12 @@ function provision_unlock_drush_local_vnd() {
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
+      if (!_provision_codebase_has_drush(d()->root)) {
         _provision_require_site_local_drush(d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
+      if (!_provision_codebase_has_drush(d()->root . "/../")) {
         _provision_require_site_local_drush(d()->root . "/../");
       }
     }
@@ -1290,12 +1324,12 @@ function provision_lock_drush_local_vnd() {
     $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      if (!provision_file()->exists($dru_dru_dru_php_local)->status()) {
+      if (!_provision_codebase_has_drush(d()->root)) {
         _provision_require_site_local_drush(d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      if (!provision_file()->exists($dru_dru_dru_php_above)->status()) {
+      if (!_provision_codebase_has_drush(d()->root . "/../")) {
         _provision_require_site_local_drush(d()->root . "/../");
       }
     }
