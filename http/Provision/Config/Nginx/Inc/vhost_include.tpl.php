@@ -1950,7 +1950,16 @@ location @regular {
 ###
 location @modern {
   set $location_detected "Modern";
-  try_files $uri /index.php?$query_string;
+  try_files $uri @modern_to_index;
+}
+
+###
+### Reach /index.php by rewrite, not by the internal redirect a try_files URI
+### fallback performs: that restarts at the server level, where
+### set $nocache_details "Cache" runs again and erases a location's "Skip".
+###
+location @modern_to_index {
+  rewrite ^ /index.php?$query_string? last;
 }
 
 ###

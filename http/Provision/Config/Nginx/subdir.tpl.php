@@ -1384,7 +1384,16 @@ location @drupal_<?php print $subdir_loc; ?> {
 ### Special location for Drupal 7+.
 ###
 location @modern_<?php print $subdir_loc; ?> {
-  try_files $uri /<?php print $subdir; ?>/index.php?$query_string;
+  try_files $uri @modern_to_index_<?php print $subdir_loc; ?>;
+}
+
+###
+### Reach index.php by rewrite, not by the internal redirect a try_files URI
+### fallback performs: that restarts at the server level, where
+### set $nocache_details "Cache" runs again and erases a location's "Skip".
+###
+location @modern_to_index_<?php print $subdir_loc; ?> {
+  rewrite ^ /<?php print $subdir; ?>/index.php?$query_string? last;
 }
 
 ###
