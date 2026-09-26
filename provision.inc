@@ -1917,7 +1917,17 @@ function _scrub_object($input) {
  */
 function provision_backend_invoke($target, $command, $arguments = array(), $data = array(), $mode = 'GET') {
   $context = '@' . ltrim($target, '@');
-  return drush_invoke_process($context, $command, $arguments, $data, array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE));
+  $backend_options = array('method' => $mode, 'integrate' => TRUE, 'dispatch-using-alias' => TRUE);
+  // The commands sent here exist only in the Drush running Aegir. Left to
+  // pick, Drush dispatches to a target whose root has no index.php (a
+  // Composer project registered at its top folder) through the project's own
+  // vendor/bin/drush, a modern Drush that runs none of them and reports
+  // nothing back. An alias that names its own drush-script still wins.
+  $record = drush_sitealias_get_record($context);
+  if (empty($record['remote-host'])) {
+    $backend_options['drush-script'] = DRUSH_COMMAND;
+  }
+  return drush_invoke_process($context, $command, $arguments, $data, $backend_options);
 }
 
 /**
