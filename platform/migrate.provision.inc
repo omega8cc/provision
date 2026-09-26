@@ -113,11 +113,18 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  // Set site_offline to false and regenerate the config.
-  drush_log(dt("Bringing site out of maintenance"));
-  d()->site_enabled = true;
-  _provision_drupal_create_settings_file();
-  provision_drupal_push_site();
+  // A site the command rollback kept on its target (the source was already
+  // being retired) has nothing to bring back here: its settings and vhost are
+  // the ones the target verify wrote, and writing them at the old path would
+  // re-create a site directory there with no database behind it.
+  $kept_on_target = drush_get_option('migrate_kept_on_target', FALSE);
+  if (!$kept_on_target) {
+    // Set site_offline to false and regenerate the config.
+    drush_log(dt("Bringing site out of maintenance"));
+    d()->site_enabled = true;
+    _provision_drupal_create_settings_file();
+    provision_drupal_push_site();
+  }
 
   // Once the source is being retired, this package holds the only copy of its
   // pre-migrate database: keep it.
@@ -138,16 +145,18 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
       ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
       ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
   }
-  d()->service('http')->create_config('site');
-  d()->service('http')->parse_configs();
+  if (!$kept_on_target) {
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+  }
   // The site's cache namespaces are keyed by its name without a leading www.
   // (see _provision_valkey_purge_site()). On Drupal 8 and 9, and under a cache
   // module older than the one that keys each copy by its database, a copy
   // built under the same name or its www. twin shared the source's: what a
   // newer core wrote there does not unserialize under the old one, and the
   // site would fail on it until a flush. Purge every namespace under the
-  // name, now that the vhost has been rewritten. Only a cache is lost,
-  // whichever copy the site is left on.
+  // name, now that the vhost has been rewritten (or kept on the target). Only
+  // a cache is lost, whichever copy the site is left on.
   $old_host = preg_replace('`^www\.`', '', strtolower(d()->uri));
   $new_host = is_null($new_name) ? $old_host : preg_replace('`^www\.`', '', strtolower(ltrim($new_name, '@')));
   if ($new_host == $old_host && is_array(drush_get_option('migrate_target_copy', NULL))) {
@@ -428,6 +437,16 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
+  $same_name = is_null($new_name) || ($new_name == d()->name);
+  $outcome = provision_migrate_failure_outcome($same_name,
+    drush_get_option('migrate_source_retiring', FALSE),
+    drush_get_option('migrate_target_deployed', FALSE));
+  // The source was already being retired: the copy is the site. Nothing below
+  // may put the record back on a platform where the site is gone.
+  if ($outcome === 'roll_forward') {
+    _provision_drupal_migrate_roll_forward($platform, $new_name);
+    return;
+  }
   // A same-platform rename may have dropped the rename target's sites.php
   // record (pre-D7: its alias symlink) before invoking the deploy; a failed
   // deploy must not leave the source's alias routing incomplete. Rebuild the
@@ -469,21 +488,81 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   }
   // The copy the deploy built on the target. Under the same name the site
   // record went back to the old platform just above, so nothing points at the
-  // copy whether or not its deploy completed -- unless a post hook had begun to
-  // retire the source (migrate_source_retiring): then the copy is what is left
-  // of the site. Under a new name a completed deploy keeps the copy with its
-  // context.
-  $same_name = is_null($new_name) || ($new_name == d()->name);
-  if (($same_name && !drush_get_option('migrate_source_retiring', FALSE))
-    || (!$same_name && !drush_get_option('migrate_target_deployed', FALSE))) {
+  // copy whether or not its deploy completed. Under a new name a completed
+  // deploy keeps the copy with its context.
+  if ($outcome === 'remove_copy') {
     provision_remove_unfinished_target_copy('migrate_target_copy');
   }
-  elseif ($same_name) {
+  elseif ($outcome === 'keep_copy') {
     $record = drush_get_option('migrate_target_copy', NULL);
     if (is_array($record) && !empty($record['site_path'])) {
       drush_log(dt('The source was being retired when the migrate failed: the copy at @path is what is left of the site, and it is kept.', array('@path' => $record['site_path'])), 'warning');
     }
   }
+}
+
+/**
+ * Finish a migrate forward after the source had begun to go.
+ *
+ * Called by the migrate rollback when a post hook failed after the source's
+ * database was dropped or its directory deleted (see
+ * provision_migrate_failure_outcome()). The deploy and the target verify
+ * completed, so the copy is a served site: the retirement the post hook did
+ * not reach is finished, the site context is reloaded from the copy so the
+ * task's result carries its database, profile and packages, and
+ * migrate_kept_on_target tells the front end to record the site on the
+ * target (hosting_migrate_hosting_migrate_task_rollback()). The record, the
+ * vhost, the yml aliases and the client link stay as the deploy and the
+ * verify left them; the pre rollbacks skip rewriting them at the old path.
+ */
+function _provision_drupal_migrate_roll_forward($platform, $new_name) {
+  if (!drush_get_option('migrate_source_retired', FALSE)) {
+    _provision_drupal_retire_migrate_source($new_name);
+  }
+  _provision_migrate_keep_on_target($platform);
+}
+
+/**
+ * Retire the migrated site's source, the step of the migrate post hook.
+ *
+ * Deletes the source's sites.php records and its site directory (unless the
+ * deploy replaced that directory in place), and on a rename the old name's
+ * store, drushrc alias, directory, records and client link. Idempotent, so
+ * the migrate rollback can finish what a failed post hook did not reach.
+ */
+function _provision_drupal_retire_migrate_source($new_name) {
+  if (!drush_get_option('deploy_replace_site', FALSE)) {
+    // we remove the aliases even if redirection is enabled as a precaution
+    // if redirection is enabled, keep silent about errors
+    _provision_drupal_delete_aliases();
+    // The source is being retired: a later error must keep the copy.
+    drush_set_option('migrate_source_retiring', TRUE);
+    _provision_recursive_delete(d()->site_path);
+    d()->service('http')->sync(d()->site_path);
+  }
+
+  if (!is_null($new_name) && ($new_name != d()->name)) {
+    // Use correct context for cleanup operations.
+    $source_name = drush_get_option('source_name');
+    drush_log(dt("LOG/RENAME source_name is @this", array('@this' => $source_name)), 'info');
+    // The renamed site has its own copy in its own store (the force-unshare
+    // in the command hook); set the old-name store aside the way a delete
+    // does, BEFORE the old alias goes (the wrapper proves ownership through
+    // it). Never a deletion; a store named by a share control file stays,
+    // with a warning.
+    _provision_drupal_archive_static_store(ltrim(d()->uri, '@'), 'RENAME');
+    // Remove the existing drush alias.
+    $config = new Provision_Config_Drushrc_Alias(d()->name);
+    $config->unlink();
+    // Delete the old site directory.
+    _provision_recursive_delete(d($source_name)->site_path);
+    d()->service('http')->sync(d($source_name)->site_path);
+    // Remove old site name aliases.
+    _provision_drupal_delete_aliases();
+    // Remove the symlink in the clients directory.
+    _provision_client_delete_symlink();
+  }
+  drush_set_option('migrate_source_retired', TRUE);
 }
 
 /**
@@ -503,36 +582,7 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   }
   drush_set_option('installed', FALSE);
 
-  if (!drush_get_option('deploy_replace_site', FALSE)) {
-    // we remove the aliases even if redirection is enabled as a precaution
-    // if redirection is enabled, keep silent about errors
-    _provision_drupal_delete_aliases();
-    // The source is being retired: a later error must keep the copy.
-    drush_set_option('migrate_source_retiring', TRUE);
-    _provision_recursive_delete(d()->site_path);
-    d()->service('http')->sync(d()->site_path);
-  }
-
-  if (!is_null($new_name) && ($new_name != d()->name)) {
-    // Use correct context for cleanup operations.
-    $source_name = drush_get_option('source_name');
-    drush_log(dt("LOG/RENAME source_name is @this", array('@this' => $source_name)), 'info');
-    // The renamed site has its own copy in its own store (the force-unshare
-    // above); set the old-name store aside the way a delete does, BEFORE the
-    // old alias goes (the wrapper proves ownership through it). Never a
-    // deletion; a store named by a share control file stays, with a warning.
-    _provision_drupal_archive_static_store(ltrim(d()->uri, '@'), 'RENAME');
-    // Remove the existing drush alias.
-    $config = new Provision_Config_Drushrc_Alias(d()->name);
-    $config->unlink();
-    // Delete the old site directory.
-    _provision_recursive_delete(d($source_name)->site_path);
-    d()->service('http')->sync(d($source_name)->site_path);
-    // Remove old site name aliases.
-    _provision_drupal_delete_aliases();
-    // Remove the symlink in the clients directory.
-    _provision_client_delete_symlink();
-  }
+  _provision_drupal_retire_migrate_source($new_name);
 
   $rename_only = drush_get_option('rename_only');
   if ($rename_only) {

@@ -4279,9 +4279,11 @@ function provision_probe_new_name($option, $new_name, $platform) {
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the
- * deploy on it; the deploy's own rollback drops the half-built site directory
- * and database, but the context stayed behind, so a site that never came to
- * be kept an alias in ~/.drush, the vhost its deploy wrote and, once the deploy
+ * deploy on it. A deploy that fails normally drops its half-built site
+ * directory and database in its own rollback (one that dies on a PHP fatal
+ * runs none: provision_remove_unfinished_target_copy() removes that copy),
+ * but the context stayed behind either way, so a site that never came to be
+ * kept an alias in ~/.drush, the vhost its deploy wrote and, once the deploy
  * had run site:alias-convert, a yml alias in ~/.drush/sites, until something
  * else removed them. Called from the command rollbacks, which Drush runs on
  * ANY error raised after the command hook completed; so this removes nothing
@@ -4298,12 +4300,12 @@ function provision_probe_new_name($option, $new_name, $platform) {
  * The yml alias is the converted copy of the drushrc alias. The converter
  * writes two files for it: a placeholder named after the drushrc alias, and
  * the alias itself in the file named after all labels but the last, under
- * the last label (see _provision_drush10_alias_twin_remove()). The
- * limited-shell worker regenerates the whole store when it finds a
- * placeholder without its drushrc alias, but only then; so both are removed
- * here with their checksums, and when the alias file cannot go (it holds
- * another alias too, or was edited) the placeholder stays as that worker's
- * cue.
+ * the last label (see _provision_drush10_alias_twin_remove()). BOA's
+ * limited-shell worker rebuilds the whole store once the drushrc aliases
+ * differ from its last finished rebuild, which the removed context makes
+ * them; both are removed here with their checksums so the store is right at
+ * once, and when the alias file cannot go (it holds another alias too, or was
+ * edited) it stays, with its placeholder, for that rebuild.
  */
 function provision_remove_unfinished_context($new_name, $preexisted_option, $deployed_option = '') {
   $new_uri = ltrim((string) $new_name, '@');
@@ -4383,6 +4385,67 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
         ->fail('Could not remove @path of the unfinished site');
     }
   }
+}
+
+/**
+ * What a failed Migrate does with the copy its deploy built.
+ *
+ * Once a post hook has begun to retire the source (its database dropped, its
+ * directory about to go) after a deploy that came through, the copy is the
+ * site: the migrate is finished forward and the record stays on the target
+ * ('roll_forward'). Before that, a same-name copy has nothing pointing at it
+ * and goes ('remove_copy'), as does a rename's copy whose deploy did not
+ * complete; a rename whose deploy completed keeps its new context and copy
+ * ('keep_new_context'). A source being retired without a confirmed deploy
+ * keeps its copy untouched ('keep_copy'), which a post phase that only runs
+ * after a successful deploy never reaches.
+ *
+ * @param bool $same_name
+ *   The migrate keeps the site's name.
+ * @param bool $retiring
+ *   A post hook set migrate_source_retiring.
+ * @param bool $deployed
+ *   The deploy reported success (migrate_target_deployed).
+ *
+ * @return string
+ *   'roll_forward', 'remove_copy', 'keep_new_context' or 'keep_copy'.
+ */
+function provision_migrate_failure_outcome($same_name, $retiring, $deployed) {
+  if ($retiring) {
+    return $deployed ? 'roll_forward' : 'keep_copy';
+  }
+  if ($same_name || !$deployed) {
+    return 'remove_copy';
+  }
+  return 'keep_new_context';
+}
+
+/**
+ * Point a failed migrate's result at the site it keeps on its target.
+ *
+ * The last step of a roll-forward (see provision_migrate_failure_outcome()):
+ * the site context is reloaded from the copy's drushrc.php, as a completed
+ * migrate's post hook does, so the task's result carries the copy's
+ * database, profile and packages; migrate_kept_on_target names the target
+ * platform, which the front end checks before it records the site there. A
+ * source database the retirement could not drop is named and left alone.
+ *
+ * @param string $platform
+ *   The target platform's context name.
+ */
+function _provision_migrate_keep_on_target($platform) {
+  $site_path = (string) drush_get_option('new_site_path', '');
+  if ($site_path !== '' && is_file($site_path . '/drushrc.php')) {
+    provision_reload_config('site', $site_path . '/drushrc.php');
+  }
+  $target = d($platform)->name;
+  drush_set_option('migrate_kept_on_target', $target);
+  $source = drush_get_option('provision_migrate_source_db', array());
+  if (is_array($source) && !empty($source['db_name'])
+    && d()->service('db')->database_exists($source['db_name'])) {
+    drush_log(dt('The source database @db could not be dropped; it is left in place.', array('@db' => $source['db_name'])), 'warning');
+  }
+  drush_log(dt('The source was retired when the migrate failed: the site stays on @platform at @path, and its record follows it.', array('@platform' => $target, '@path' => $site_path)), 'warning');
 }
 
 /**
@@ -4605,9 +4668,13 @@ function provision_target_copy_deployed($option, $deploy_result) {
  * deploy reported it, the copy's settings name it, it is not the source
  * site's, no other site directory on the target platform names it, and it is
  * not a system database; anything short of that names it in a warning and
- * leaves it. The copy's alias records in the target's sites.php stay: they
- * map to a directory that is gone, which Drupal ignores, and the next deploy
- * of that uri rewrites them.
+ * leaves it. The copy's records in the target's sites.php stay: a clone or
+ * rename deploys its new name with no host aliases (a Backdrop one leaves
+ * only its self-map), and a same-name move leaves the source's own records;
+ * they map to a directory that is gone, which Drupal and Backdrop ignore, and
+ * a deploy, install, verify or delete of that uri on that platform rewrites
+ * them. Removing them from here would render the store with the source as
+ * d()'s root.
  *
  * @param string $option
  *   The option provision_target_copy_probe() recorded under.
