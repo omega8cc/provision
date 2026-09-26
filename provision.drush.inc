@@ -94,8 +94,12 @@ function _provision_drush_cli_php_report() {
   $where = '';
   if (isset(d()->root) && is_string(d()->root) && d()->root !== '') {
     $where = d()->root;
+    // Named as the shell wrapper names it in its notes and refusals.
     if (preg_match('#^/data/disk/[^/]+/static/(.+)$#', $where, $m)) {
       $where = 'static/' . $m[1];
+    }
+    elseif (preg_match('#^/data/disk/[^/]+/distro/(.+)$#', $where, $m)) {
+      $where = '~/distro/' . $m[1];
     }
     $where = ' (' . $where . ')';
   }
