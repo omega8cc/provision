@@ -296,13 +296,14 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     // Platform moves are immune: the deploy bootstraps under the target
     // platform root, whose sites.php never mapped the source's aliases.
     if (!is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
-      $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+      $store = new Provision_Config_Backdrop_Alias_Store(d()->name);
       $merged = $store->merged_records();
       if (isset($merged[$pre_new_uri]) && $merged[$pre_new_uri] == $pre_old_uri) {
         // maintain() before the drop: it re-keys this site's records from
         // the live alias set, so subdir aliases keep the slash-form keys
         // the template's slash->dot conversion expects — hand-unsetting
-        // alone leaves them dot-keyed and the template nulls them out.
+        // alone leaves them dot-keyed and the template nulls them out. The
+        // Backdrop store keeps the source's self-map through maintain().
         $store->maintain();
         unset($store->records[$pre_new_uri]);
         unset($store->loaded_records[$pre_new_uri]);
@@ -437,10 +438,13 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
   // source's alias routing incomplete. Rebuild the full mapping from the
   // source's still-unchanged alias set (the store-based body of
   // _provision_drupal_maintain_aliases(), inlined to skip its Drupal
-  // major-version branching).
+  // major-version branching). The Backdrop store, never the Drupal one: its
+  // maintain() re-adds the source's self-map, without which a source with no
+  // host aliases would be left with an empty sites.php, which Backdrop
+  // resolves to the platform root.
   if (!is_null($new_name) && ($new_name != d()->name)
     && !is_null(d($platform)->name) && (d($platform)->name == d()->platform->name)) {
-    $store = new Provision_Config_Drupal_Alias_Store(d()->name);
+    $store = new Provision_Config_Backdrop_Alias_Store(d()->name);
     $store->maintain();
     $store->write();
     d()->service('http')->sync($store->filename());
