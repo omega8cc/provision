@@ -1242,7 +1242,7 @@ location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*?/s3/files/(css|js|styles)/(.
 ###
 ### The files/imagecache support.
 ###
-location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/imagecache/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/imagecache/(?<ic>.*)$ {
   location ~* \.php$ {
     return 404;
   }
@@ -1255,7 +1255,7 @@ location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/imagecache/(.
   add_header X-Content-Type-Options "nosniff";
   add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public";
-  try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
+  try_files /sites/$main_site_name/files/imagecache/$ic $uri @drupal;
 }
 
 ###
