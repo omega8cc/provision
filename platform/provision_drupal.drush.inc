@@ -902,9 +902,8 @@ function _provision_drupal_rebuild_caches() {
  * CLI PHP, chosen by websh when it launched Aegir's Drush 8, the same one it
  * would choose for the site-local Drush (_provision_site_local_php()), and
  * it runs on that interpreter's own php.ini (-c, _provision_site_local_php_ini()):
- * a modern Drush refuses to start under any non-empty open_basedir, and the
- * account's ~/.drush/php.ini for Aegir's Drush 8 carries one, so the ini
- * must never be left to the environment (PHPRC) of whatever shell or
+ * a modern Drush refuses to start under any non-empty open_basedir, so the
+ * ini is never left to the environment (PHPRC) of whatever shell or
  * launcher stands between this backend and the child. Every
  * argument is escaped here; the caller passes the string to
  * drush_shell_cd_and_exec() as ONE argument (no sprintf, so a '%' in an
@@ -924,11 +923,11 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
  * Command line running any PHP script on the backend's own interpreter and
  * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
  *
- * The shell's own ini policy never reaches the child: websh hands every
- * account launch the account's Drush 8 php.ini (PHPRC), whose open_basedir
- * every modern Drush refuses at preflight, so a launcher line such as
- * `drush10 ...` run through the shell dies before it does anything, while
- * this form runs the same script on the stock ini. -c beats PHPRC.
+ * The shell's own ini policy never reaches the child: whatever PHPRC a shell
+ * or launcher in between exports, this form runs the script on its
+ * interpreter's stock ini (-c beats PHPRC), so an ini carrying an
+ * open_basedir, which every modern Drush refuses at preflight, cannot stop
+ * it before it does anything.
  */
 function _provision_php_script_cmd($script, $args, $php_opts = array()) {
   $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
