@@ -420,16 +420,4 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
 
   # Everything else that ends in .php 404s (upload dirs included).
   location ~* \.php$ { return 404; }
-<?php
-$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
-if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {
-  print "  include  " . $if_subsite . "/*.conf;\n";
-  // The Drupal subdirectory sites there pass PHP to the pool nginx names in
-  // $user_socket, which this vhost sets for none of its own locations.
-  print "  include  " . $aegir_root . "/config/server_master/nginx/post.d/fpm_include*;\n";
-  print "  if (\$user_socket = '') {\n";
-  print "    set \$user_socket \"" . $script_user . "\";\n";
-  print "  }\n";
-}
-?>
 }
