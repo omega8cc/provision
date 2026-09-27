@@ -2024,7 +2024,15 @@ function _provision_client_delete_old_symlink() {
  */
 function _provision_client_delete_symlink() {
   if (d()->client_name) {
-    provision_file()->unlink(d()->server->clients_path . '/' . d()->client_name . '/' . d()->uri)
+    $link = d()->server->clients_path . '/' . d()->client_name . '/' . d()->uri;
+    // provision_file()->unlink() reports success for a path it did not
+    // remove (missing, or a directory), so the log said "Deleted symlink" on
+    // every Grav and Textpattern Verify: act, and say so, only when there is
+    // a link or a file to remove.
+    if (!is_link($link) && !is_file($link)) {
+      return;
+    }
+    provision_file()->unlink($link)
       ->succeed('Deleted symlink @path')
       ->fail('Failed to delete symlink @path: @reason');
   }
