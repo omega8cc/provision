@@ -2259,10 +2259,11 @@ function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
  * scoped only by prefix: md5(<host>)_sn_* (D8+ integration, compiled
  * container and routing included), md5(<host>)_n_* (D7 integration) and
  * <host>_z_* (front-end page cache, also consumed as cache_prefix when the
- * front-end block is active). All three use the www-stripped host, and for
- * subdirectory sites the host part only -- so a subdir purge flushes its
- * siblings' shared namespace, which is safe (cache only) and unavoidable
- * (the namespace does not distinguish them). The md5 scoping makes matching
+ * front-end block is active). All three use the www-stripped site name. A
+ * subdirectory site's is its own name, the uri of its context and not its
+ * address (example.com/blog), on the web and on the command line alike, so
+ * its purge reaches its own entries only; a uri carrying a path is cut to
+ * its host part. The md5 scoping makes matching
  * another site's keys impossible; the plain-host _z_ pattern cannot match a
  * different host either (the match is anchored at the key start).
  *
