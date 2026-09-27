@@ -429,6 +429,17 @@ function _provision_drupal_create_directories($url = NULL) {
 
     $mkdir["sites/$url/files/civicrm/persist"] = 02775;
     $chgrp["sites/$url/files/civicrm/persist"] = d('@server_master')->web_group;
+
+    // Private files keep no world bits once the account runs in its own web
+    // group (BOA's wg-<account>): the account's pools reach them through
+    // it, and nginx never serves them directly.
+    if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
+      foreach ($mkdir as $path => $perm) {
+        if ($perm === 02775 && preg_match('#/private(/|$)#', $path)) {
+          $mkdir[$path] = 02770;
+        }
+      }
+    }
   }
 
   // These paths should not have recursive operations performed on them.
