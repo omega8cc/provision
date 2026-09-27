@@ -1825,11 +1825,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
 }
 
 ###
-### Workaround for https://www.drupal.org/node/2599326.
+### A 405 goes to Drupal: a static file asked for with a method other than
+### GET or HEAD, and the autocomplete workaround in the catch-all below.
 ###
-if ( $args ~* "/autocomplete/" ) {
-  return 405;
-}
 error_page 405 = @drupal;
 
 ###
@@ -1838,6 +1836,14 @@ error_page 405 = @drupal;
 location / {
   if ( $http_user_agent ~* wget ) {
     return 444;
+  }
+  ###
+  ### Workaround for https://www.drupal.org/node/2599326. Here, not at
+  ### server level, where it also took the paths of the subdirectory sites
+  ### this server includes and sent them to this site's Drupal.
+  ###
+  if ( $args ~* "/autocomplete/" ) {
+    return 405;
   }
   ###
   ### Allow but rate-limit AI search/index, user-triggered and utility bots on
