@@ -580,6 +580,9 @@ location ^~ /cdn/farfuture/ {
   gzip_http_version 1.1;
   if_modified_since exact;
   set $nocache_details "Skip";
+  location ~* ^/cdn/farfuture/[^/]+/[^/]+/(?:CHANGELOG\.txt$|(?:.*/)?\.|sites/[^/]+/(?:files/)?private/|sites/.*/files/(?:backup_migrate/|config_|civicrm/(?:ConfigAndLog|custom|upload|templates_c))|(?:.*/)?vendor/composer/|(?:.*/)?composer\.(?:json|lock)$|(?:.*/)?(?:modules|themes|libraries)/.*\.(?:txt|md)$|.*\.(?:php|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|[a-z]*sql|theme|twig|tpl|xtmpl|yml)(?:~|\.sw[op]|\.bak|\.orig|\.save)?$) {
+    return 404;
+  }
   location ~* ^/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
     expires max;
     add_header X-Content-Type-Options "nosniff";
@@ -1068,11 +1071,44 @@ location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) 
 }
 
 ###
+### Deny direct access to backups.
+###
+location ~* ^/sites/.*/files/backup_migrate/ {
+  if ( $is_bot ) {
+    return 444;
+  }
+  access_log off;
+  log_not_found off;
+  deny all;
+}
+
+###
+### Deny direct access to config files in Drupal 8+.
+###
+location ~* ^/sites/.*/files/config_.* {
+  if ( $is_bot ) {
+    return 444;
+  }
+  access_log off;
+  log_not_found off;
+  deny all;
+}
+
+###
+### No PHP source from a files directory, whatever location would take it.
+###
+location ~* ^/sites/[^/]+/files/.+\.php$ {
+  access_log off;
+  log_not_found off;
+  return 404;
+}
+
+###
 ### [Option] Deny public access to webform uploaded files
 ### for privacy reasons and to prevent phishing attacks.
 ### The files uploaded should be available only via SFTP.
 ###
-location ~* ^/sites/.*/files/webform/ {
+location ~* ^/sites/[^/]+/files/webform/ {
   if ( $is_bot ) {
     return 444;
   }
@@ -1120,9 +1156,14 @@ location ~* (?:cgi-bin|vti-bin) {
 }
 
 ###
-### Deny bots on some weak modules uri.
+### Deny bots on some weak modules uri. A site's private directories are left
+### to the private-download locations, here and in the file-serving locations
+### down to the local include below.
 ###
-location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|flag\/flag) {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*(?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|flag\/flag) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -1135,7 +1176,10 @@ location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|fl
 ### Responsive Images support.
 ### https://drupal.org/project/responsive_images
 ###
-location ~* \.r\.(?:jpe?g|png|gif) {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*\.r\.(?:jpe?g|png|gif) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $http_cookie ~* "rwdimgsize=large" ) {
     rewrite ^/(.*)/mobile/(.*)\.r(\.(?:jpe?g|png|gif))$ /$1/desktop/$2$3 last;
   }
@@ -1150,7 +1194,10 @@ location ~* \.r\.(?:jpe?g|png|gif) {
 ### Adaptive Image Styles support.
 ### https://drupal.org/project/ais
 ###
-location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $http_cookie ~* "ais=(?<ais_cookie>[a-z0-9-_]+)" ) {
     rewrite ^/(.+)/files/(css|js|styles)/adaptive/(.+)$ /$1/files/$2/$ais_cookie/$3 last;
   }
@@ -1163,7 +1210,10 @@ location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
 ###
 ### The files/styles support.
 ###
-location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/(css|js|styles)/(.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1176,7 +1226,10 @@ location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
 ###
 ### The s3/files/styles (s3fs) support.
 ###
-location ~* /s3/files/(css|js|styles)/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*?/s3/files/(css|js|styles)/(.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1189,7 +1242,10 @@ location ~* /s3/files/(css|js|styles)/(.*)$ {
 ###
 ### The files/imagecache support.
 ###
-location ~* /sites/.*/files/imagecache/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/imagecache/(.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1205,36 +1261,19 @@ location ~* /sites/.*/files/imagecache/(.*)$ {
 ###
 ### Send requests with /external/ and /system/ URI keywords to @drupal.
 ###
-location ~* /(?:external|system)/ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/(?:external|system)/ {
+  location ~* \.php$ {
+    if ( -f $request_filename ) {
+      return 404;
+    }
+    set $nocache_details "Skip";
+    try_files "" @drupal;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
   set $nocache_details "Skip";
   try_files $uri @drupal;
-}
-
-###
-### Deny direct access to backups.
-###
-location ~* ^/sites/.*/files/backup_migrate/ {
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-  deny all;
-}
-
-###
-### Deny direct access to config files in Drupal 8+.
-###
-location ~* ^/sites/.*/files/config_.* {
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-  deny all;
 }
 
 ###
@@ -1296,6 +1335,9 @@ location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
 ### Advagg_css and Advagg_js support.
 ###
 location ~* files/advagg_(?:css|js)/ {
+  location ~* \.php$ {
+    return 404;
+  }
   expires max;
   access_log off;
   log_not_found off;
@@ -1635,6 +1677,9 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
 ### Deny crawlers and never cache known AJAX requests.
 ###
 location ~* /(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -1661,6 +1706,9 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
 ### Serve & no-log any not specified above static files directly.
 ###
 location ~* ^/sites/.*/files/ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
