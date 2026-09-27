@@ -472,10 +472,10 @@ location ^~ /.well-known/mta-sts.txt {
 ### HTTPRL standard support.
 ###
 location ^~ /httprl_async_function_callback {
-  if ( $is_bot ) {
-    return 444;
-  }
   location ~* ^/httprl_async_function_callback {
+    if ( $is_bot ) {
+      return 444;
+    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
@@ -1036,6 +1036,9 @@ location ^~ /audio/download {
     return 444;
   }
   location ~* ^/audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg)$ {
+    if ( $is_bot ) {
+      return 444;
+    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";

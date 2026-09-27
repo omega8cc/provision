@@ -341,6 +341,9 @@ location ^~ /<?php print $subdir; ?>/ {
   ###
   location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
     location ~* ^/<?php print $subdir; ?>/httprl_async_function_callback {
+      if ( $is_bot ) {
+        return 444;
+      }
       access_log off;
       log_not_found off;
       set $nocache_details "Skip";
@@ -774,6 +777,9 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### Support for audio module.
   ###
   location ^~ /<?php print $subdir; ?>/audio/download {
+    if ( $is_bot ) {
+      return 444;
+    }
     location ~* ^/<?php print $subdir; ?>/(audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg))$ {
       if ( $is_bot ) {
         return 444;
@@ -1160,7 +1166,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ###
   ### Wysiwyg Fields support.
   ###
-  location ~* ^/<?php print $subdir; ?>/(.*/wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css)) {
+  location ~* ^/<?php print $subdir; ?>/(.*/wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css))$ {
     access_log off;
     log_not_found off;
     try_files /$1 $uri @drupal_<?php print $subdir_loc; ?>;
