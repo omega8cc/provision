@@ -368,7 +368,7 @@ map $http_user_agent $is_ai_training {
 ###
 map $http_user_agent $is_ai_search {
   default  '';
-  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot  is_ai_search;
+  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot  is_ai_search;
 }
 
 ###
@@ -437,6 +437,7 @@ map $http_user_agent $ai_search_limit_key {
   ~*YouBot                 youbot;
   ~*Google-CloudVertexBot  google_vertexbot;
   ~*Kimi-SearchBot         kimi_searchbot;
+  ~*ExaSearchBot           exa_searchbot;
 }
 
 map $http_user_agent $ai_user_limit_key {
