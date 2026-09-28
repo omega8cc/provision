@@ -472,10 +472,10 @@ location ^~ /.well-known/mta-sts.txt {
 ### HTTPRL standard support.
 ###
 location ^~ /httprl_async_function_callback {
-  if ( $is_bot ) {
-    return 444;
-  }
   location ~* ^/httprl_async_function_callback {
+    if ( $is_bot ) {
+      return 444;
+    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
@@ -580,6 +580,9 @@ location ^~ /cdn/farfuture/ {
   gzip_http_version 1.1;
   if_modified_since exact;
   set $nocache_details "Skip";
+  location ~* ^/cdn/farfuture/[^/]+/[^/]+/(?:CHANGELOG\.txt$|(?:.*/)?\.|sites/[^/]+/(?:files/)?private/|sites/.*/files/(?:backup_migrate/|config_|civicrm/(?:ConfigAndLog|custom|upload|templates_c))|(?:.*/)?vendor/composer/|(?:.*/)?composer\.(?:json|lock)$|(?:.*/)?(?:modules|themes|libraries)/.*\.(?:txt|md)$|.*\.(?:php|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|[a-z]*sql|theme|twig|tpl|xtmpl|yml)(?:~|\.sw[op]|\.bak|\.orig|\.save)?$) {
+    return 404;
+  }
   location ~* ^/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
     expires max;
     add_header X-Content-Type-Options "nosniff";
@@ -835,9 +838,9 @@ location ~* ^/[a-z][a-z]/search {
 ###   3. limit_req search_flood          — per-vhost global cap; catches the
 ###      remaining self-referer / few-facet distributed bots by aggregate rate.
 ###
-### Note: $is_bot check is intentionally omitted — bots probing /user/login
-### exclusively use modern, realistic UA strings.  The rate-limit zone provides
-### the equivalent protection for that tier.
+### Known bot agents ($is_bot) are refused first, as on the other dynamic
+### locations; bots probing /user/login mostly send realistic UA strings, so
+### the three tiers above carry the real load.
 ###
 ### set $nocache_details "Skip" bypasses Speed Booster so the login form is
 ### always rendered fresh (consistent with how /admin is handled).
@@ -1033,6 +1036,9 @@ location ^~ /audio/download {
     return 444;
   }
   location ~* ^/audio/download/.*/.*\.(?:mp3|mp4|m4a|ogg)$ {
+    if ( $is_bot ) {
+      return 444;
+    }
     access_log off;
     log_not_found off;
     set $nocache_details "Skip";
@@ -1068,11 +1074,44 @@ location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) 
 }
 
 ###
+### Deny direct access to backups.
+###
+location ~* ^/sites/.*/files/backup_migrate/ {
+  if ( $is_bot ) {
+    return 444;
+  }
+  access_log off;
+  log_not_found off;
+  deny all;
+}
+
+###
+### Deny direct access to config files in Drupal 8+.
+###
+location ~* ^/sites/.*/files/config_.* {
+  if ( $is_bot ) {
+    return 444;
+  }
+  access_log off;
+  log_not_found off;
+  deny all;
+}
+
+###
+### No PHP source from a files directory, whatever location would take it.
+###
+location ~* ^/sites/[^/]+/files/.+\.php$ {
+  access_log off;
+  log_not_found off;
+  return 404;
+}
+
+###
 ### [Option] Deny public access to webform uploaded files
 ### for privacy reasons and to prevent phishing attacks.
 ### The files uploaded should be available only via SFTP.
 ###
-location ~* ^/sites/.*/files/webform/ {
+location ~* ^/sites/[^/]+/files/webform/ {
   if ( $is_bot ) {
     return 444;
   }
@@ -1120,9 +1159,14 @@ location ~* (?:cgi-bin|vti-bin) {
 }
 
 ###
-### Deny bots on some weak modules uri.
+### Deny bots on some weak modules uri. A site's private directories are left
+### to the private-download locations, here and in the file-serving locations
+### down to the local include below.
 ###
-location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|flag\/flag) {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*(?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|flag\/flag) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -1135,7 +1179,10 @@ location ~* (?:validation|aggregator|vote_up_down|captcha|vbulletin|glossary/|fl
 ### Responsive Images support.
 ### https://drupal.org/project/responsive_images
 ###
-location ~* \.r\.(?:jpe?g|png|gif) {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*\.r\.(?:jpe?g|png|gif) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $http_cookie ~* "rwdimgsize=large" ) {
     rewrite ^/(.*)/mobile/(.*)\.r(\.(?:jpe?g|png|gif))$ /$1/desktop/$2$3 last;
   }
@@ -1150,7 +1197,10 @@ location ~* \.r\.(?:jpe?g|png|gif) {
 ### Adaptive Image Styles support.
 ### https://drupal.org/project/ais
 ###
-location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $http_cookie ~* "ais=(?<ais_cookie>[a-z0-9-_]+)" ) {
     rewrite ^/(.+)/files/(css|js|styles)/adaptive/(.+)$ /$1/files/$2/$ais_cookie/$3 last;
   }
@@ -1163,7 +1213,10 @@ location ~* /(?:.+)/files/(css|js|styles)/adaptive/(?:.+)$ {
 ###
 ### The files/styles support.
 ###
-location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/(css|js|styles)/(.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1176,7 +1229,10 @@ location ~* /sites/.*/files/(css|js|styles)/(.*)$ {
 ###
 ### The s3/files/styles (s3fs) support.
 ###
-location ~* /s3/files/(css|js|styles)/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*?/s3/files/(css|js|styles)/(.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1189,7 +1245,10 @@ location ~* /s3/files/(css|js|styles)/(.*)$ {
 ###
 ### The files/imagecache support.
 ###
-location ~* /sites/.*/files/imagecache/(.*)$ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/sites/.*/files/imagecache/(?<ic>.*)$ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires max;
@@ -1199,42 +1258,25 @@ location ~* /sites/.*/files/imagecache/(.*)$ {
   add_header X-Content-Type-Options "nosniff";
   add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Cache-Control "public";
-  try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
+  try_files /sites/$main_site_name/files/imagecache/$ic $uri @drupal;
 }
 
 ###
 ### Send requests with /external/ and /system/ URI keywords to @drupal.
 ###
-location ~* /(?:external|system)/ {
+location ~* ^(?!/sites/[^/]+/(?:files/)?private/).*/(?:external|system)/ {
+  location ~* \.php$ {
+    if ( -f $request_filename ) {
+      return 404;
+    }
+    set $nocache_details "Skip";
+    try_files "" @drupal;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
   set $nocache_details "Skip";
   try_files $uri @drupal;
-}
-
-###
-### Deny direct access to backups.
-###
-location ~* ^/sites/.*/files/backup_migrate/ {
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-  deny all;
-}
-
-###
-### Deny direct access to config files in Drupal 8+.
-###
-location ~* ^/sites/.*/files/config_.* {
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-  deny all;
 }
 
 ###
@@ -1296,6 +1338,9 @@ location ~* wysiwyg_fields/(?:plugins|scripts)/.*\.(?:js|css) {
 ### Advagg_css and Advagg_js support.
 ###
 location ~* files/advagg_(?:css|js)/ {
+  location ~* \.php$ {
+    return 404;
+  }
   expires max;
   access_log off;
   log_not_found off;
@@ -1494,7 +1539,7 @@ location ^~ /files/ {
     try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
 
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -1508,7 +1553,7 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|mp4|m4a|flv|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -1635,6 +1680,9 @@ location ~* /(?:modules|libraries)/(?:contrib/)?(?:ad|tinybrowser|f?ckeditor|tin
 ### Deny crawlers and never cache known AJAX requests.
 ###
 location ~* /(?:ahah|ajax|batch|autocomplete|progress/|x-progress-id|js/.*) {
+  location ~* \.php$ {
+    return 404;
+  }
   if ( $is_bot ) {
     return 444;
   }
@@ -1661,6 +1709,9 @@ location ~* ^/sites/.*/(?:modules|libraries)/(?:contrib/)?(?:tinybrowser|f?ckedi
 ### Serve & no-log any not specified above static files directly.
 ###
 location ~* ^/sites/.*/files/ {
+  location ~* \.php$ {
+    return 404;
+  }
   access_log off;
   log_not_found off;
   expires 30d;
@@ -1825,11 +1876,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
 }
 
 ###
-### Workaround for https://www.drupal.org/node/2599326.
+### A 405 goes to Drupal: a static file asked for with a method other than
+### GET or HEAD, and the autocomplete workaround in the catch-all below.
 ###
-if ( $args ~* "/autocomplete/" ) {
-  return 405;
-}
 error_page 405 = @drupal;
 
 ###
@@ -1838,6 +1887,14 @@ error_page 405 = @drupal;
 location / {
   if ( $http_user_agent ~* wget ) {
     return 444;
+  }
+  ###
+  ### Workaround for https://www.drupal.org/node/2599326. Here, not at
+  ### server level, where it also took the paths of the subdirectory sites
+  ### this server includes and sent them to this site's Drupal.
+  ###
+  if ( $args ~* "/autocomplete/" ) {
+    return 405;
   }
   ###
   ### Allow but rate-limit AI search/index, user-triggered and utility bots on
@@ -2143,6 +2200,9 @@ location = /index.php {
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
   fastcgi_cache_lock on;
+  ### A new URL's first render holds the lock; the others wait for its
+  ### cached copy rather than all reaching PHP once 5 s have passed.
+  fastcgi_cache_lock_timeout 30s;
   fastcgi_ignore_headers Cache-Control Expires Vary;
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;

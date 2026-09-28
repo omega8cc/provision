@@ -429,6 +429,17 @@ function _provision_drupal_create_directories($url = NULL) {
 
     $mkdir["sites/$url/files/civicrm/persist"] = 02775;
     $chgrp["sites/$url/files/civicrm/persist"] = d('@server_master')->web_group;
+
+    // Private files keep no world bits once the account runs in its own web
+    // group (BOA's wg-<account>): the account's pools reach them through
+    // it, and nginx never serves them directly.
+    if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
+      foreach ($mkdir as $path => $perm) {
+        if ($perm === 02775 && preg_match('#/private(/|$)#', $path)) {
+          $mkdir[$path] = 02770;
+        }
+      }
+    }
   }
 
   // These paths should not have recursive operations performed on them.
@@ -902,9 +913,8 @@ function _provision_drupal_rebuild_caches() {
  * CLI PHP, chosen by websh when it launched Aegir's Drush 8, the same one it
  * would choose for the site-local Drush (_provision_site_local_php()), and
  * it runs on that interpreter's own php.ini (-c, _provision_site_local_php_ini()):
- * a modern Drush refuses to start under any non-empty open_basedir, and the
- * account's ~/.drush/php.ini for Aegir's Drush 8 carries one, so the ini
- * must never be left to the environment (PHPRC) of whatever shell or
+ * a modern Drush refuses to start under any non-empty open_basedir, so the
+ * ini is never left to the environment (PHPRC) of whatever shell or
  * launcher stands between this backend and the child. Every
  * argument is escaped here; the caller passes the string to
  * drush_shell_cd_and_exec() as ONE argument (no sprintf, so a '%' in an
@@ -924,11 +934,11 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
  * Command line running any PHP script on the backend's own interpreter and
  * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
  *
- * The shell's own ini policy never reaches the child: websh hands every
- * account launch the account's Drush 8 php.ini (PHPRC), whose open_basedir
- * every modern Drush refuses at preflight, so a launcher line such as
- * `drush10 ...` run through the shell dies before it does anything, while
- * this form runs the same script on the stock ini. -c beats PHPRC.
+ * The shell's own ini policy never reaches the child: whatever PHPRC a shell
+ * or launcher in between exports, this form runs the script on its
+ * interpreter's stock ini (-c beats PHPRC), so an ini carrying an
+ * open_basedir, which every modern Drush refuses at preflight, cannot stop
+ * it before it does anything.
  */
 function _provision_php_script_cmd($script, $args, $php_opts = array()) {
   $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
@@ -2024,7 +2034,15 @@ function _provision_client_delete_old_symlink() {
  */
 function _provision_client_delete_symlink() {
   if (d()->client_name) {
-    provision_file()->unlink(d()->server->clients_path . '/' . d()->client_name . '/' . d()->uri)
+    $link = d()->server->clients_path . '/' . d()->client_name . '/' . d()->uri;
+    // provision_file()->unlink() reports success for a path it did not
+    // remove (missing, or a directory), so the log said "Deleted symlink" on
+    // every Grav and Textpattern Verify: act, and say so, only when there is
+    // a link or a file to remove.
+    if (!is_link($link) && !is_file($link)) {
+      return;
+    }
+    provision_file()->unlink($link)
       ->succeed('Deleted symlink @path')
       ->fail('Failed to delete symlink @path: @reason');
   }
@@ -2252,10 +2270,11 @@ function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
  * scoped only by prefix: md5(<host>)_sn_* (D8+ integration, compiled
  * container and routing included), md5(<host>)_n_* (D7 integration) and
  * <host>_z_* (front-end page cache, also consumed as cache_prefix when the
- * front-end block is active). All three use the www-stripped host, and for
- * subdirectory sites the host part only -- so a subdir purge flushes its
- * siblings' shared namespace, which is safe (cache only) and unavoidable
- * (the namespace does not distinguish them). The md5 scoping makes matching
+ * front-end block is active). All three use the www-stripped site name. A
+ * subdirectory site's is its own name, the uri of its context and not its
+ * address (example.com/blog), on the web and on the command line alike, so
+ * its purge reaches its own entries only; a uri carrying a path is cut to
+ * its host part. The md5 scoping makes matching
  * another site's keys impossible; the plain-host _z_ pattern cannot match a
  * different host either (the match is anchored at the key start).
  *
