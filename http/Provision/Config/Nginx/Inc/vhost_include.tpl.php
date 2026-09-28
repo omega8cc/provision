@@ -838,9 +838,9 @@ location ~* ^/[a-z][a-z]/search {
 ###   3. limit_req search_flood          — per-vhost global cap; catches the
 ###      remaining self-referer / few-facet distributed bots by aggregate rate.
 ###
-### Note: $is_bot check is intentionally omitted — bots probing /user/login
-### exclusively use modern, realistic UA strings.  The rate-limit zone provides
-### the equivalent protection for that tier.
+### Known bot agents ($is_bot) are refused first, as on the other dynamic
+### locations; bots probing /user/login mostly send realistic UA strings, so
+### the three tiers above carry the real load.
 ###
 ### set $nocache_details "Skip" bypasses Speed Booster so the login form is
 ### always rendered fresh (consistent with how /admin is handled).
@@ -1539,7 +1539,7 @@ location ^~ /files/ {
     try_files /sites/$main_site_name/files/imagecache/$1 $uri @drupal;
   }
 
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -1553,7 +1553,7 @@ location ^~ /files/ {
 ### Map /downloads/ shortcut early to avoid overrides in other locations.
 ###
 location ^~ /downloads/ {
-  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+  location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|mp4|m4a|flv|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
     expires 30d;
     access_log off;
     log_not_found off;
@@ -2200,6 +2200,9 @@ location = /index.php {
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
   fastcgi_cache_lock on;
+  ### A new URL's first render holds the lock; the others wait for its
+  ### cached copy rather than all reaching PHP once 5 s have passed.
+  fastcgi_cache_lock_timeout 30s;
   fastcgi_ignore_headers Cache-Control Expires Vary;
   fastcgi_pass_header Set-Cookie;
   fastcgi_pass_header X-Accel-Expires;

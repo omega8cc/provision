@@ -1105,7 +1105,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
       try_files /sites/<?php print $this->uri; ?>/files/imagecache/$1 $uri @drupal_<?php print $subdir_loc; ?>;
     }
 
-    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
+    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|css|js|map)$ {
       expires 30d;
       access_log off;
       log_not_found off;
@@ -1119,7 +1119,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### Map /<?php print $subdir; ?>/downloads/ shortcut early to avoid overrides in other locations.
   ###
   location ^~ /<?php print $subdir; ?>/downloads/ {
-    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
+    location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|mp4|m4a|flv|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
       expires 30d;
       access_log off;
       log_not_found off;
@@ -1778,6 +1778,9 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
     fastcgi_cache_valid 301 302 403 404 1s;
     fastcgi_cache_valid any 1s;
     fastcgi_cache_lock on;
+    ### A new URL's first render holds the lock; the others wait for its
+    ### cached copy rather than all reaching PHP once 5 s have passed.
+    fastcgi_cache_lock_timeout 30s;
     fastcgi_ignore_headers Cache-Control Expires Vary;
     fastcgi_pass_header Set-Cookie;
     fastcgi_pass_header X-Accel-Expires;
