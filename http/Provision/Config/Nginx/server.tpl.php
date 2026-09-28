@@ -354,7 +354,7 @@ map $http_user_agent $is_ai_training {
   # tried in order, so this one keeps them out of the training class.
   ~*Claude-User|Claude-SearchBot|Amzn-SearchBot                                          '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
-  ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot                                      is_ai_training;
+  ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot|KimiBot                              is_ai_training;
   # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
   # sweeping full site content (~1.8k pages/day from 2 IPs, all 200s -- so the
   # status-scoring IDS never sees it); both tokens so a build that drops the
@@ -368,7 +368,7 @@ map $http_user_agent $is_ai_training {
 ###
 map $http_user_agent $is_ai_search {
   default  '';
-  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot  is_ai_search;
+  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot  is_ai_search;
 }
 
 ###
@@ -381,7 +381,7 @@ map $http_user_agent $is_ai_search {
 ###
 map $http_user_agent $is_ai_user {
   default  '';
-  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher|Google-?Agent  is_ai_user;
+  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher|Google-?Agent|Kimi-User  is_ai_user;
 }
 
 ###
@@ -436,6 +436,8 @@ map $http_user_agent $ai_search_limit_key {
   ~*MistralAI-Index        mistralai_index;
   ~*YouBot                 youbot;
   ~*Google-CloudVertexBot  google_vertexbot;
+  ~*Kimi-SearchBot         kimi_searchbot;
+  ~*ExaSearchBot           exa_searchbot;
 }
 
 map $http_user_agent $ai_user_limit_key {
@@ -445,6 +447,7 @@ map $http_user_agent $ai_user_limit_key {
   ~*MistralAI-User        mistralai_user;
   ~*Meta-ExternalFetcher  meta_fetcher;
   ~*Google-?Agent         google_agent;
+  ~*Kimi-User             kimi_user;
 }
 
 map $http_user_agent $ai_utility_limit_key {
