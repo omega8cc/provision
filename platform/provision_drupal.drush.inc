@@ -2071,23 +2071,20 @@ function _provision_find_profile_languages($profile_path) {
 }
 
 /**
- * Resolve the box-level Valkey/Redis wiring the hosted sites cache through.
+ * Resolve the box-level Valkey wiring the hosted sites cache through.
  *
- * The rendered settings chain partial (global-valkey.inc, or global-redis.inc
- * on Redis-legacy boxes) carries the connection literals every site's
- * settings.php consumes, and the live password additionally sits in a pass
- * file the same chain prefers. Both are world-readable by design (the web
- * runtime reads them as the site user), so the account user running
- * Provision tasks can read them too. Parse the rendered literals instead of
- * re-deriving any value: these files are the system of record for what the
- * sites actually connect to. Returns FALSE when the box has no such wiring
- * (e.g. vanilla Aegir), which callers treat as nothing-to-purge.
+ * The rendered settings chain partial (global-valkey.inc) carries the
+ * connection literals every site's settings.php consumes, and the live
+ * password additionally sits in a pass file the same chain prefers. Both are
+ * world-readable by design (the web runtime reads them as the site user), so
+ * the account user running Provision tasks can read them too. Parse the
+ * rendered literals instead of re-deriving any value: these files are the
+ * system of record for what the sites actually connect to. Returns FALSE when
+ * the box has no such wiring (e.g. vanilla Aegir), which callers treat as
+ * nothing-to-purge.
  */
 function _provision_valkey_conf() {
   $conf_file = '/data/conf/global/global-valkey.inc';
-  if (!is_readable($conf_file)) {
-    $conf_file = '/data/conf/global/global-redis.inc';
-  }
   if (!is_readable($conf_file)) {
     return FALSE;
   }
