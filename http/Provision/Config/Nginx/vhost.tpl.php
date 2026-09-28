@@ -117,7 +117,6 @@ if ($this->redirection || !$this->redirection) {
       // decode. Without this an adopted site whose password holds '@', '#' or
       // '!' authenticates the web tier with the escaped form.
       print "  fastcgi_param db_creds_urlencoded 1;\n";
-      print "  fastcgi_param BOA_UA_LK_SELF \$boa_ua_lk_self;\n";
 
       $alias_url = str_replace('/', '.', $alias_url);
       print "  server_name  {$alias_url};\n";
@@ -185,10 +184,6 @@ server {
   # decodes exactly this source, while the CLI tier (drushrc.php / exported
   # environment) carries them raw and must not decode.
   fastcgi_param db_creds_urlencoded 1;
-  # The login/admin lock verdict for the backend's query-string gate; the
-  # user_admin_access fragment sets it and the default below covers an unlisted
-  # site. The wildcard SSL front overrides it on the proxied HTTPS hop.
-  fastcgi_param BOA_UA_LK_SELF $boa_ua_lk_self;
   listen  *:<?php print $http_port; ?>;
   server_name  <?php
     // this is the main vhost, so we need to put the redirection

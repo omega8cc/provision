@@ -150,11 +150,6 @@ server {
   # Marks the six credentials above as urlencode()d: the cloaked settings.php
   # decodes exactly this source, while the CLI tier carries them raw.
   fastcgi_param db_creds_urlencoded 1;
-  # The login/admin lock verdict for the backend's query-string gate. This vhost
-  # serves the real client directly on its own certificate, so its own value
-  # stands; the user_admin_access fragment sets it, the default below covers an
-  # unlisted site.
-  fastcgi_param BOA_UA_LK_SELF $boa_ua_lk_self;
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} quic"; ?>; 
