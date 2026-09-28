@@ -182,12 +182,6 @@ server {
   set $ai_evasive_allow 0;
   include  <?php print $server->include_path; ?>/ai_policy/<?php print $this->uri; ?>.conf*;
 <?php include(PROVISION_GRAV_DIR . '/templates/grav_locations.tpl.php'); ?>
-<?php
-$if_subsite = $this->data['http_subdird_path'] . '/' . $this->uri;
-if (provision_hosting_feature_enabled('subdirs') && provision_file()->exists($if_subsite)->status()) {
-  print "  include  " . $if_subsite . "/*.conf;\n";
-}
-?>
 }
 
 <?php endif; ?>

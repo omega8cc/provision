@@ -135,11 +135,20 @@ class Provision_Config_Nginx_Subdir extends Provision_Config_Http {
 
   /**
    * Grav and Textpattern sites carry their own vhost contract, and this
-   * Drupal-shaped location set would serve their trees raw.
+   * Drupal-shaped location set would serve their trees raw. Nor does a Grav
+   * or Textpattern site carry subdirectory sites: its vhost includes no
+   * subdirectory configs, so a conf written for its domain would never be
+   * served, and its site would be verified again for nothing.
    */
   function serves_subdirs($alias) {
     if (provision_platform_is_foreign_cms(d()->root)) {
       drush_log(dt('Subdirectory alias @alias skipped: only Drupal and Backdrop sites can be served from a subdirectory.', array('@alias' => $alias)), 'warning');
+      return FALSE;
+    }
+    $domain = strtok($alias, '/');
+    $record = provision_sitealias_get_record('@' . $domain);
+    if (!empty($record['root']) && provision_platform_is_foreign_cms($record['root'])) {
+      drush_log(dt('Subdirectory alias @alias skipped: @domain is a Grav or Textpattern site, which cannot carry subdirectory sites.', array('@alias' => $alias, '@domain' => $domain)), 'warning');
       return FALSE;
     }
     return TRUE;

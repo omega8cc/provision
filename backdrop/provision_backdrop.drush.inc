@@ -207,9 +207,12 @@ function _provision_backdrop_create_directories($url = NULL) {
       ->succeed('Changed group ownership of <code>@path</code> to @gid')
       ->fail('Could not change group ownership <code>@path</code> to @gid');
   }
-  // chmod AFTER chgrp because chgrp strips the setgid bit.
+  // chmod AFTER chgrp because chgrp strips the setgid bit. No world bits once
+  // the account runs in its own web group (BOA's wg-<account>), as for the
+  // rest of private/.
+  $config_mode = (strpos((string) $web_group, 'wg-') === 0) ? 02770 : 02775;
   foreach ($config_dirs as $path) {
-    provision_file()->chmod($path, 02775)
+    provision_file()->chmod($path, $config_mode)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions <code>@path</code> to @perm');
   }

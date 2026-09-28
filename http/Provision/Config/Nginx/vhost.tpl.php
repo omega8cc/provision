@@ -122,6 +122,7 @@ if ($this->redirection || !$this->redirection) {
       print "  server_name  {$alias_url};\n";
       print "  root  {$this->root};\n";
       print "  include  " . $server->include_path . "/ip_access/{$this->uri}.conf*;\n";
+      print "  set \$boa_ua_lk_self \"0\";\n";
       print "  include  " . $server->include_path . "/user_admin_access/{$this->uri}.conf*;\n";
       print "  set \$ai_train_allow 0;\n";
       print "  set \$ai_evasive_allow 0;\n";
@@ -242,6 +243,7 @@ if ($this->redirection || $ssl_redirection) {
   }
   elseif (!$ssl_redirection && $this->redirection) {
     print "  include  " . $server->include_path . "/ip_access/{$this->uri}.conf*;\n";
+    print "  set \$boa_ua_lk_self \"0\";\n";
     print "  include  " . $server->include_path . "/user_admin_access/{$this->uri}.conf*;\n";
     print "  set \$ai_train_allow 0;\n";
     print "  set \$ai_evasive_allow 0;\n";
