@@ -349,6 +349,10 @@ map $http_user_agent $is_ai_crawler {
 ###
 map $http_user_agent $is_ai_training {
   default  '';
+  # Allowed classes whose UA carries a training token in its contact part
+  # ("+claudebot@anthropic.com", ".../support/amazonbot"): regex lines are
+  # tried in order, so this one keeps them out of the training class.
+  ~*Claude-User|Claude-SearchBot|Amzn-SearchBot                                          '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot                                      is_ai_training;
   # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
