@@ -326,6 +326,22 @@ function drush_provision_drupal_provision_install() {
         if (!empty($options['client_email'])) {
           $command[] = '--account-mail=' . $options['client_email'];
         }
+        // The language chosen for the site. Without --locale Drush installs
+        // English (no language or locale module, no strings), while the D6-D10
+        // path hands the same value to install_drupal() in install_N.inc.
+        // Core then downloads that translation from localize.drupal.org and
+        // fails the install when it cannot. The codes offered come from *.po
+        // file names in the profile: a name not shaped like a language code
+        // installs English with a warning.
+        $site_language = d()->language;
+        if (!empty($site_language) && $site_language != 'en') {
+          if (strlen($site_language) <= 12 && preg_match('/^[a-z]{2,3}(-[a-z0-9]{1,8})*\z/', $site_language)) {
+            $command[] = '--locale=' . $site_language;
+          }
+          else {
+            drush_log(dt('D11/INSTALL/LOCALE site language @lang is not a Drupal language code, installing in English', array('@lang' => $site_language)), 'warning');
+          }
+        }
         $command[] = '--db-url=' . $db_url;
         $command[] = '--yes';
         $command[] = '-vvv';
