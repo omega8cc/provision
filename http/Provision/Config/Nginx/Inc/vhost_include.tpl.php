@@ -386,7 +386,7 @@ if ($is_botnet) {
 ###
 ### Include high load protection config if exists.
 ###
-include /data/conf/nginx_high_load.c*;
+include /data/conf/nginx_high_load.con[f];
 
 ###
 ### Deny not compatible request methods without 405 response.
