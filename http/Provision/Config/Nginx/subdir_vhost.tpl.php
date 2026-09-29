@@ -124,7 +124,7 @@ server {
     return 444;
   }
 
-  include /data/conf/nginx_high_load.c*;
+  include /data/conf/nginx_high_load.con[f];
 
   if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
     return 444;

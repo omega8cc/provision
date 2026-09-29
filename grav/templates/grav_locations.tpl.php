@@ -138,7 +138,7 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   ###
   ### Include high load protection config if exists.
   ###
-  include /data/conf/nginx_high_load.c*;
+  include /data/conf/nginx_high_load.con[f];
 
   ###
   ### Deny not compatible request methods without 405 response. The allowed

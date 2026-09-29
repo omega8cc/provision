@@ -294,7 +294,7 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   ### anonymous-render cap -- are a designed round-3 item, presence-gated on
   ### the BOA-written zones file, NOT copied blind: their key semantics are
   ### CMS-specific.)
-  include /data/conf/nginx_high_load.c*;
+  include /data/conf/nginx_high_load.con[f];
 
   ### Reject non-standard request methods without a 405 body (shared-include
   ### parity; CMS-agnostic).

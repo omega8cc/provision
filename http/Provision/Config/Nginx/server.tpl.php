@@ -128,12 +128,15 @@ else {
 
 # Resolve the real client IP on Cloudflare-fronted vhosts so rate-limit keys,
 # REMOTE_ADDR and access logs reflect the visitor and not the CF edge.  Trusted
-# CF source ranges are supplied by a BOA-managed wildcard include, so a missing
-# file never breaks `nginx -t`; with no trusted ranges the CF-Connecting-IP
+# CF source ranges are supplied by BOA-managed includes: each one-character
+# class matches only its own file (the migration proxy's .cmig and the CF
+# list's .conf), so a missing file never breaks `nginx -t` and no other file
+# with the same prefix is loaded; with no trusted ranges the CF-Connecting-IP
 # header is ignored and $remote_addr is left unchanged (no spoofing risk).
 print "  real_ip_header    CF-Connecting-IP;\n";
 print "  real_ip_recursive on;\n";
-print "  include /data/conf/nginx_cloudflare_real_ip.c*;\n";
+print "  include /data/conf/nginx_cloudflare_real_ip.cmi[g];\n";
+print "  include /data/conf/nginx_cloudflare_real_ip.con[f];\n";
 
 if ($nginx_has_gzip) {
   print "  gzip_static       on;\n";
@@ -526,12 +529,14 @@ map $uri $is_cms_probe {
 ### here at nginx instead).  Keyed on $remote_addr, which Cloudflare realip
 ### resolves to the real client (v4 or v6), so the deny bites CF-proxied
 ### attackers at the origin's nginx — where an origin CSF/iptables ban on a
-### CF-fronted IP would not.  Wildcard include: an absent or empty file is safe
-### (no entries → $is_banned stays 0).
+### CF-fronted IP would not.  Each include matches only its own file (the
+### IPv4 .conf and the IPv6 .conf6): an absent or empty file is safe (no
+### entries → $is_banned stays 0), and no other file with the prefix is loaded.
 ###
 geo $remote_addr $is_banned {
   default 0;
-  include /data/conf/nginx_banned_ips.c*;
+  include /data/conf/nginx_banned_ips.con[f];
+  include /data/conf/nginx_banned_ips.conf[6];
 }
 
 ###
@@ -1094,18 +1099,19 @@ map $http_cookie $cache_uid {
 ### subdirectory, so the class match is safe across Drupal/Backdrop sites (the
 ### existing /[a-z][a-z]/search and /[a-z][a-z]/civicrm locations rely on the same
 ### convention).  Opt a vhost OUT by adding a   "host" 0;   line to
-### /data/conf/boa_i18n_guard.map (wildcard include below; an absent file leaves
-### the guardrail ON fleet-wide).
+### /data/conf/boa_i18n_guard.map (included below by an exact-name pattern; an
+### absent file leaves the guardrail ON fleet-wide).
 ###
 
 ### Per-vhost on/off switch.  Default 1 (ON) — see the note above on why a
-### two-letter prefix is a safe fleet-wide language signal.  A BOA-managed
-### wildcard include can set specific hosts to 0 to opt them out (e.g. a
-### non-Drupal app, or a single-language site that uses a two-letter path for a
-### region rather than a language); an absent/empty file leaves every host ON.
+### two-letter prefix is a safe fleet-wide language signal.  The operator's
+### /data/conf/boa_i18n_guard.map can set specific hosts to 0 to opt them out
+### (e.g. a non-Drupal app, or a single-language site that uses a two-letter
+### path for a region rather than a language); the include matches only that
+### file, and an absent/empty one leaves every host ON.
 map $host $boa_i18n_guard {
   default 1;
-  include /data/conf/boa_i18n_guard.map*;
+  include /data/conf/boa_i18n_guard.ma[p];
 }
 
 ### Localized request class: 1 when the ORIGINAL request URI targets a path
