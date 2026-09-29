@@ -128,7 +128,7 @@ if (!$installed) {
 $onetime = provision_generate_login_reset();
 if (!empty($onetime)) {
   drush_set_option('login_link', $onetime);
-  drush_log(dt('Login url: !onetime', array('!onetime' => $onetime)), 'success');
+  drush_log(dt('One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'success');
 }
 else {
   drush_log(dt('Could not derive a one-time login link (user-login).'), 'warning');
