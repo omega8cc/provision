@@ -37,8 +37,45 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     return $this->query("CREATE DATABASE `%s`", $name);
   }
 
+  /**
+   * A verify-probe database name scoped to this account.
+   *
+   * The create and grant probes below build a throwaway database (and, for the
+   * grant probe, a throwaway user), test it and drop it. The name used to be
+   * the single shared 'site_tmp_test' for every account on the server, so two
+   * accounts running a server verify at the same time raced: one account's
+   * drop removed the database the other was still probing, turning a healthy
+   * verify into a spurious PROVISION_CREATE_DB_FAILED, and the shared probe
+   * user was granted and revoked by both at once. Scoping the name to the
+   * account's own system user removes the collision while staying self-healing
+   * - a fixed per-account name, not a uniqid that would orphan the database on
+   * an interrupted probe. Falls back to the shared name when the script user
+   * is unknown. PHP 5.6-safe.
+   */
+  function verify_probe_db_name() {
+    $base = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
+    $script_user = d('@server_master')->script_user;
+    if (!$script_user) {
+      $script_user = drush_get_option('script_user');
+    }
+    if (!$script_user && isset($this->server->script_user)) {
+      $script_user = $this->server->script_user;
+    }
+    if ($script_user) {
+      $suffix = preg_replace('/[^A-Za-z0-9_]/', '', $script_user);
+      // The grant probe's user is this name plus '_user', and MySQL caps a
+      // user name at 32 characters: a longer account name takes a short
+      // fixed hash of itself instead, still one name per account.
+      if (strlen($base . '_' . $suffix . '_user') > 32) {
+        $suffix = substr(md5($script_user), 0, 8);
+      }
+      $base .= '_' . $suffix;
+    }
+    return $base;
+  }
+
   function can_create_database() {
-    $test = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
+    $test = $this->verify_probe_db_name();
     $this->create_database($test);
 
     if ($this->database_exists($test)) {
@@ -57,7 +94,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    *   TRUE if the check was successful.
    */
   function can_grant_privileges() {
-    $dbname   = drush_get_option('aegir_db_prefix', 'site_') . 'tmp_test';
+    $dbname   = $this->verify_probe_db_name();
     $this->create_database($dbname);
     $user     = $dbname . '_user';
     $password = $dbname . '_password';
