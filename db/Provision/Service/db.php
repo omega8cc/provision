@@ -31,7 +31,14 @@ class Provision_Service_db extends Provision_Service {
   }
 
   function save_server() {
-    // Check database 4 byte UTF-8 support and save it for later.
+    // Check database 4 byte UTF-8 support and save it for later. A server
+    // this save cannot connect to keeps what an earlier save recorded: a
+    // failed connection says nothing about its support, and a FALSE recorded
+    // for it drops the utf8mb4 charset from every settings.php written after
+    // it, until a later save connects again.
+    if (method_exists($this, 'connect') && !$this->connect()) {
+      return;
+    }
     $this->server->utf8mb4_is_supported = $this->utf8mb4_is_supported();
   }
 
