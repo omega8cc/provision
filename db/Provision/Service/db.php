@@ -93,13 +93,18 @@ class Provision_Service_db extends Provision_Service {
       drush_log(dt("SUGGEST_BASE is OK @suggest_base", array('@suggest_base' => $suggest_base)), 'info');
     }
 
-    if (!$this->database_exists($suggest_base)) {
+    // The name also becomes the site's database login, and the grant sets
+    // that login's password, so a name is free only when no database AND no
+    // login of it exists. A login alone takes it too: for an account whose
+    // name is 16 characters the panel's name is the account's own instance
+    // login, and reusing it reset that login's password mid-install.
+    if (!$this->database_exists($suggest_base) && !$this->user_exists($suggest_base)) {
       return $suggest_base;
     }
 
     for ($i = 0; $i < 100; $i++) {
       $option = sprintf("%s_%d", substr($suggest_base, 0, 15 - strlen( (string) $i) ), $i);
-      if (!$this->database_exists($option)) {
+      if (!$this->database_exists($option) && !$this->user_exists($option)) {
         return $option;
       }
     }
@@ -520,6 +525,14 @@ class Provision_Service_db extends Provision_Service {
   }
 
   function database_exists($name) {
+    return FALSE;
+  }
+
+  /**
+   * Whether a database login of this name exists on this server, on any
+   * host. A service that cannot tell answers FALSE.
+   */
+  function user_exists($name) {
     return FALSE;
   }
 

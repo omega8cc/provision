@@ -38,6 +38,28 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   /**
+   * Whether a login of this name exists on this server, on any host.
+   *
+   * Asked over this service's own connection, so it reads the server the
+   * site uses, remote ones included. A server that refuses the read answers
+   * FALSE with a warning: the name is then checked against databases only,
+   * as before this check existed. PHP 5.6-safe.
+   */
+  function user_exists($name) {
+    $this->ensure_connected();
+    $result = $this->conn ? $this->query("SELECT 1 FROM mysql.user WHERE User = '%s' LIMIT 1", $name) : FALSE;
+    if (!$result) {
+      drush_log(dt('Could not read the database logins on this server, so @name was checked against databases only.', array('@name' => $name)), 'warning');
+      return FALSE;
+    }
+    if ($result->fetch()) {
+      drush_log(dt('A database login named @name already exists, so the name is taken.', array('@name' => $name)), 'info');
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  /**
    * A verify-probe database name scoped to this account.
    *
    * The create and grant probes below build a throwaway database (and, for the

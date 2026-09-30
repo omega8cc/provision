@@ -61,6 +61,21 @@ function drush_provision_backdrop_provision_install_validate() {
             '@database' => $old_db_name,
           )), 'ok');
         }
+
+        // The old site login goes as well, before the install below names its
+        // database: that name check skips any name a login still holds, so a
+        // login left here keeps the old password and its grant on the dropped
+        // database, and the site moves to a suffixed name. With the database
+        // gone, destroy_site_database() only revokes, through the path a site
+        // delete takes, which drops a login only once bare USAGE is all it
+        // holds. A database the drop could not remove keeps its login.
+        if ($old_db_name && !empty($options['db_user'])
+          && !d()->service('db')->database_exists($old_db_name)) {
+          d()->service('db')->destroy_site_database(array(
+            'db_name' => $old_db_name,
+            'db_user' => $options['db_user'],
+          ));
+        }
       }
 
       // Destroy site_path.
