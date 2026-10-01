@@ -49,12 +49,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    * /usr/local/bin/boa-dbctl, run by root through sudo. The switch is the
    * root-owned control file /data/conf/<account>_db_broker.txt: a regular
    * file no one else can write, whose server= line names this very server
-   * context. Every other server context (an additional database server, a
-   * remote database head) keeps the direct path. The account is the one
-   * this process runs as, never a name read from a file the account owns.
-   * Read once per service. The switch looks for this function's name in an
-   * account's copy of this file before it turns the account over, so keep
-   * it. PHP 5.6-safe.
+   * context and whose rows= line passes the broker's own rule, so a file
+   * the broker refuses never turns this side over. Every other server
+   * context (an additional database server, a remote database head) keeps
+   * the direct path. The account is the one this process runs as, never a
+   * name read from a file the account owns. Read once per service. The
+   * switch looks for this function's name in an account's copy of this file
+   * before it turns the account over, so keep it. PHP 5.6-safe.
    */
   function broker_mode() {
     if (!is_null($this->broker_mode)) {
@@ -82,14 +83,30 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     if (!is_string($contents)) {
       return FALSE;
     }
-    // The last server= line, as the broker reads it.
+    // Read as the broker reads it: NUL bytes dropped (a shell variable holds
+    // none), then the last server= and the last rows= line, each value the
+    // rest of its line as written. rows= names the instance user's host rows
+    // in use: at least one, split on commas and spaces, each passing the
+    // broker's host rule, or the broker refuses every call.
+    $contents = str_replace("\0", '', $contents);
     $named = '';
+    $rows = '';
     foreach (explode("\n", $contents) as $line) {
       if (strpos($line, 'server=') === 0) {
-        $named = substr($line, 7);
+        $named = (string) substr($line, 7);
+      }
+      elseif (strpos($line, 'rows=') === 0) {
+        $rows = (string) substr($line, 5);
       }
     }
-    if (preg_match('/^@[A-Za-z0-9_.-]{1,128}$/', $named) === 1
+    $hosts = preg_split('/[, ]+/', $rows, -1, PREG_SPLIT_NO_EMPTY);
+    $rows_ok = is_array($hosts) && count($hosts) > 0;
+    foreach ((array) $hosts as $host) {
+      if (preg_match('/^[A-Za-z0-9._%:-]{1,255}$/', $host) !== 1) {
+        $rows_ok = FALSE;
+      }
+    }
+    if ($rows_ok && preg_match('/^@[A-Za-z0-9_.-]{1,128}$/', $named) === 1
       && isset($this->server->name) && $named === $this->server->name) {
       $this->broker_mode = TRUE;
       drush_log(dt('Databases on @server go through the root database broker.', array('@server' => $named)), 'info');
