@@ -592,12 +592,16 @@ function _provision_drupal_store_skip($path, $site_dir) {
  *
  * @return
  *   FALSE when the path is the site's own or resolves nowhere; otherwise an
- *   array: 'path', the first link on the way (or the path itself when it is
- *   outside the site dir), and 'target', where it resolves.
+ *   array: 'path', the last link on the way, the one that leads out (or the
+ *   path itself when it is outside the site dir), and 'target', where that
+ *   resolves.
  */
 function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
   clearstatcache(TRUE);
   $path = (string) $path;
+  while (strpos($path, './') === 0) {
+    $path = (string) substr($path, 2);
+  }
   if (strlen($path) > 1) {
     $path = rtrim($path, '/');
   }
@@ -612,35 +616,36 @@ function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
       }
     }
   }
-  $first = NULL;
+  $link = NULL;
   $last = NULL;
   if ($parts) {
     $cur = $site_dir;
     foreach ($parts as $part) {
       $cur .= '/' . $part;
       if (is_link($cur)) {
-        if ($first === NULL) {
-          $first = $cur;
-        }
+        $link = $cur;
       }
       elseif (!file_exists($cur)) {
         break;
       }
       $last = $cur;
     }
-    if ($first === NULL) {
+    if ($link === NULL) {
       return FALSE;
     }
   }
   else {
-    $first = $path;
+    $link = $path;
     $last = $path;
   }
   $target = realpath($last);
   if ($target === FALSE || _provision_drupal_in_own_store($target, $aegir_root)) {
     return FALSE;
   }
-  return array('path' => $first, 'target' => $target);
+  // What lies past the last link is real, so that link is the one that leads
+  // out: name it and where it leads, once for all the paths through it.
+  $at = realpath($link);
+  return array('path' => $link, 'target' => ($at === FALSE) ? $target : $at);
 }
 
 /**
