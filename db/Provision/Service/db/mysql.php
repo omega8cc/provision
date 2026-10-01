@@ -60,6 +60,28 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   /**
+   * The host part of an existing login named $name, for a DEFINER.
+   *
+   * Read over this service's own connection, so it is the server the site
+   * uses. Every host the site's user is granted from carries the same rights
+   * on its database; 'localhost' is taken when it is one of them, so the
+   * choice does not depend on the order the server lists them in. FALSE when
+   * there is no such login or the read is refused. PHP 5.6-safe.
+   */
+  function definer_host($name) {
+    $this->ensure_connected();
+    $result = $this->conn ? $this->query("SELECT Host FROM mysql.user WHERE User = '%s' ORDER BY (Host = 'localhost') DESC, Host LIMIT 1", $name) : FALSE;
+    if (!$result) {
+      return FALSE;
+    }
+    $row = $result->fetch();
+    if (!$row || !isset($row['Host'])) {
+      return FALSE;
+    }
+    return (string) $row['Host'];
+  }
+
+  /**
    * A verify-probe database name scoped to this account.
    *
    * The create and grant probes below build a throwaway database (and, for the
@@ -997,7 +1019,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             . ' --port=' . escapeshellarg($oct_db_port)
             . ' --directory=' . escapeshellarg($oct_db_dirx)
             . ' --threads=' . escapeshellarg($threads)
-            . ' --drop-table=DROP --verbose=2';
+            . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+            . $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx)
+            . ' --verbose=2';
           if (provision_file()->exists($myquick_creds_log)->status()) {
             drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
@@ -1358,7 +1382,8 @@ port=%s
           . ' --password=' . escapeshellarg($oct_db_pass)
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
-          . $rows_opt . ' --build-empty-files --threads=' . escapeshellarg($threads)
+          . $rows_opt . $this->mydumper_objects_option($mydumper_path)
+          . ' --build-empty-files --threads=' . escapeshellarg($threads)
           . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
