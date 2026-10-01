@@ -214,6 +214,29 @@ class Provision_Service_db extends Provision_Service {
     return str_replace(escapeshellarg($secret), "'***'", $command);
   }
 
+  /**
+   * The option that keeps a myloader import in the binary log, or ''.
+   *
+   * myloader opens every session with SET SQL_LOG_BIN=0 unless told
+   * otherwise, and the packaged /etc/mydumper.cnf, which a call without an
+   * option file of its own reads, sets it again. On a server running with
+   * the binary log on (a replication source) the import then never reached
+   * the replica, whose applier stopped at the first replicated write to the
+   * tables it never got. --ignore-set=SQL_LOG_BIN drops that one session
+   * variable wherever it comes from; --enable-binlog is no substitute: that
+   * file sets it again, and the 0.19.3 line refuses the option. With the
+   * binary log off it changes nothing. Asked through --help, so a build
+   * without it gets its arguments as before.
+   */
+  function myloader_binlog_option($myloader_path) {
+    if (drush_shell_exec($myloader_path . ' --help')) {
+      if (preg_match('/^\s+--ignore-set(\s|=)/m', implode("\n", drush_shell_exec_output()))) {
+        return ' --ignore-set=SQL_LOG_BIN';
+      }
+    }
+    return '';
+  }
+
   function import_site_database($dump_file = null, $creds = array()) {
     if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
@@ -440,7 +463,8 @@ class Provision_Service_db extends Provision_Service {
             . ' --port=' . escapeshellarg($oct_db_port)
             . ' --directory=' . escapeshellarg($oct_db_dirx)
             . ' --threads=' . escapeshellarg($threads)
-            . ' --drop-table=DROP --verbose=2';
+            . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+            . ' --verbose=2';
           if (provision_file()->exists($myquick_creds_log)->status()) {
             drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
           }
