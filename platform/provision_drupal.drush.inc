@@ -430,15 +430,12 @@ function _provision_drupal_create_directories($url = NULL) {
     $mkdir["sites/$url/files/civicrm/persist"] = 02775;
     $chgrp["sites/$url/files/civicrm/persist"] = d('@server_master')->web_group;
 
-    // Private files keep no world bits once the account runs in its own web
-    // group (BOA's wg-<account>): the account's pools reach them through
-    // it, and nginx never serves them directly.
+    // Private files, and the CiviCRM stores nginx denies, keep no world bits
+    // once the account runs in its own web group (BOA's wg-<account>): the
+    // account's pools reach them through it, and nginx never serves them
+    // directly.
     if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
-      foreach ($mkdir as $path => $perm) {
-        if ($perm === 02775 && preg_match('#/private(/|$)#', $path)) {
-          $mkdir[$path] = 02770;
-        }
-      }
+      $mkdir = _provision_drupal_web_group_private($mkdir);
     }
   }
 
@@ -511,6 +508,29 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not change permissions <code>@path</code> to @perm');
     }
   }
+}
+
+/**
+ * The directories a site in its own web group keeps without world bits.
+ *
+ * Every private path, and the CiviCRM log and custom-field upload stores
+ * under files/, which nginx denies (a case-insensitive prefix): each one
+ * created at 02775 is narrowed to 02770.
+ *
+ * @param array $mkdir
+ *   The directories to create, path => mode.
+ *
+ * @return array
+ *   The same list with those modes narrowed.
+ */
+function _provision_drupal_web_group_private($mkdir) {
+  foreach ($mkdir as $path => $perm) {
+    if ($perm === 02775 && (preg_match('#/private(/|$)#', $path)
+      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))) {
+      $mkdir[$path] = 02770;
+    }
+  }
+  return $mkdir;
 }
 
 /**
