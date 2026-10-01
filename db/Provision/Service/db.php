@@ -237,6 +237,68 @@ class Provision_Service_db extends Provision_Service {
     return '';
   }
 
+  /**
+   * The options that put triggers, stored routines and events into a dump.
+   *
+   * mydumper writes none of them unless asked, so a site that kept them (a
+   * logging trigger, a function its queries call, a scheduled event) lost
+   * them on a Migrate and on a Restore that carried its database over.
+   * Asked through --help, so a build without one of them gets its arguments
+   * as before.
+   */
+  function mydumper_objects_option($mydumper_path) {
+    $options = '';
+    if (drush_shell_exec($mydumper_path . ' --help')) {
+      $help = implode("\n", drush_shell_exec_output());
+      foreach (array('--triggers', '--routines', '--events') as $option) {
+        if (preg_match('/^\s+(-[A-Za-z],\s+)?' . preg_quote($option, '/') . '(\s|=|$)/m', $help)) {
+          $options .= ' ' . $option;
+        }
+      }
+    }
+    return $options;
+  }
+
+  /**
+   * The options that hand a fast import's views, triggers, routines and
+   * events to the site's own database user.
+   *
+   * The import runs with the server's admin login, and each object kept the
+   * DEFINER it was dumped with: the source database's user, which a Migrate
+   * or a Restore drops once the import is done, so each object failed from
+   * then on (ERROR 1449, the definer does not exist). The classic path
+   * strips the definers and loads as the site's own user, so every object
+   * belongs to that user; --replace-definer gives them the same owner here.
+   * Stripping them would make the admin login their definer, and an object
+   * runs with its definer's rights. A myloader without --replace-definer
+   * (the 0.19.3 line) loads the tables and views as before and leaves the
+   * triggers, routines and events out, as before.
+   */
+  function myloader_definer_option($myloader_path, $db_user, $dump_dir) {
+    $help = '';
+    if (drush_shell_exec($myloader_path . ' --help')) {
+      $help = implode("\n", drush_shell_exec_output());
+    }
+    if (preg_match('/^\s+--replace-definer(\s|=)/m', $help)
+      && preg_match('/^[A-Za-z0-9_]+$/', (string) $db_user)) {
+      $host = $this->definer_host($db_user);
+      if (is_string($host) && preg_match('/^[A-Za-z0-9_.:%-]+$/', $host)) {
+        return ' --replace-definer=' . escapeshellarg('`' . $db_user . '`@`' . $host . '`');
+      }
+    }
+    $options = '';
+    foreach (array('--skip-triggers', '--skip-post') as $option) {
+      if (preg_match('/^\s+' . preg_quote($option, '/') . '(\s|=)/m', $help)) {
+        $options .= ' ' . $option;
+      }
+    }
+    $carried = array_merge((array) glob($dump_dir . '/*-schema-triggers.sql*'), (array) glob($dump_dir . '/*-schema-post.sql*'));
+    if ($options !== '' && count(array_filter($carried))) {
+      drush_log(dt('The dump carries triggers, routines or events, and this myloader cannot hand them to @user: they are left out of the import.', array('@user' => $db_user)), 'warning');
+    }
+    return $options;
+  }
+
   function import_site_database($dump_file = null, $creds = array()) {
     if (empty($creds)) {
       $creds = $this->fetch_site_credentials();
@@ -464,6 +526,7 @@ class Provision_Service_db extends Provision_Service {
             . ' --directory=' . escapeshellarg($oct_db_dirx)
             . ' --threads=' . escapeshellarg($threads)
             . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+            . $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx)
             . ' --verbose=2';
           if (provision_file()->exists($myquick_creds_log)->status()) {
             drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
@@ -557,6 +620,14 @@ class Provision_Service_db extends Provision_Service {
    * host. A service that cannot tell answers FALSE.
    */
   function user_exists($name) {
+    return FALSE;
+  }
+
+  /**
+   * The host part of an existing login named $name, for a DEFINER, or
+   * FALSE. A service that cannot tell answers FALSE.
+   */
+  function definer_host($name) {
     return FALSE;
   }
 
