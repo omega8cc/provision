@@ -93,24 +93,50 @@ class Provision_Service_db extends Provision_Service {
       drush_log(dt("SUGGEST_BASE is OK @suggest_base", array('@suggest_base' => $suggest_base)), 'info');
     }
 
-    // The name also becomes the site's database login, and the grant sets
-    // that login's password, so a name is free only when no database AND no
-    // login of it exists. A login alone takes it too: for an account whose
-    // name is 16 characters the panel's name is the account's own instance
-    // login, and reusing it reset that login's password mid-install.
-    if (!$this->database_exists($suggest_base) && !$this->user_exists($suggest_base)) {
+    // name_is_free() answers NULL when it cannot tell (the database broker
+    // did not answer), which ends the search rather than trying every name.
+    $free = $this->name_is_free($suggest_base);
+    if ($free) {
       return $suggest_base;
     }
 
-    for ($i = 0; $i < 100; $i++) {
+    for ($i = 0; !is_null($free) && $i < 100; $i++) {
       $option = sprintf("%s_%d", substr($suggest_base, 0, 15 - strlen( (string) $i) ), $i);
-      if (!$this->database_exists($option) && !$this->user_exists($option)) {
+      $free = $this->name_is_free($option);
+      if ($free) {
         return $option;
       }
     }
 
+    if (is_null($free)) {
+      drush_set_error('PROVISION_CREATE_DB_FAILED', dt("Could not reserve a database name through the database broker"));
+      return false;
+    }
     drush_set_error('PROVISION_CREATE_DB_FAILED', dt("Could not find a free database names after 100 attempts"));
     return false;
+  }
+
+  /**
+   * Whether a database name is free for a new site.
+   *
+   * The name also becomes the site's database login, and the grant sets
+   * that login's password, so a name is free only when no database AND no
+   * login of it exists. A login alone takes it too: for an account whose
+   * name is 16 characters the panel's name is the account's own instance
+   * login, and reusing it reset that login's password mid-install. A
+   * service that hands names out through a broker reserves the name here
+   * instead, and answers NULL when it cannot tell.
+   */
+  function name_is_free($name) {
+    return !$this->database_exists($name) && !$this->user_exists($name);
+  }
+
+  /**
+   * Whether this server's databases go through the root database broker.
+   * A service without one answers FALSE.
+   */
+  function broker_mode() {
+    return FALSE;
   }
 
   /**
@@ -128,6 +154,16 @@ class Provision_Service_db extends Provision_Service {
       return FALSE;
     }
 
+    // Through the database broker the database comes first: its create takes
+    // every grant still left on the name before the database exists, and a
+    // grant made ahead of it would be one of them. Its answer is the proof,
+    // since the name's reservation alone already reads as existing there.
+    $broker = $this->broker_mode();
+    if ($broker && !$this->create_database($db_name)) {
+      drush_set_error('PROVISION_CREATE_DB_FAILED', dt("Could not create @name database", array("@name" => $db_name)));
+      return FALSE;
+    }
+
     foreach ($this->grant_host_list() as $db_grant_host) {
       drush_log(dt("Granting privileges to %user@%client on %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)), 'info');
       if (!$this->grant($db_name, $db_user, $db_passwd, $db_grant_host)) {
@@ -136,7 +172,9 @@ class Provision_Service_db extends Provision_Service {
       drush_log(dt("Granted privileges to %user@%client on %database", array('%user' => $db_user, '%client' => $db_grant_host, '%database' => $db_name)), 'success');
     }
 
-    $this->create_database($db_name);
+    if (!$broker) {
+      $this->create_database($db_name);
+    }
     $status = $this->database_exists($db_name);
 
     if ($status) {
@@ -511,6 +549,14 @@ class Provision_Service_db extends Provision_Service {
             }
           }
           drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Refusing the fast database import: the shared dump store does not provably hold this site\'s database (expected @db, internal flow: @flow, found: @found). A leftover or concurrent export must never be imported - re-run the task.', array('@db' => $db_name, '@flow' => $internal_flow ? 'yes' : 'no', '@found' => count($found_dumps) ? implode(', ', $found_dumps) : 'no dump at all')));
+        }
+        elseif ($this->broker_mode()) {
+          // The broker loads the store as the site's own database user,
+          // proven first, never with an admin login: the site user, then
+          // its password, one line each on stdin.
+          if ($this->broker_call('load', array('--', $db_name), $db_user . "\n" . $db_passwd . "\n") === FALSE) {
+            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => $this->broker_failure())));
+          }
         }
         else {
           // SECURITY: $db_name derives from alias context; $oct_db_* and
