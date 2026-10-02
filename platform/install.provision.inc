@@ -267,7 +267,6 @@ function drush_provision_drupal_provision_install() {
           provision_lock_drush_local_vnd();
           return drush_set_error('PROVISION_PSR_LOG_RESTORE_FAILED', dt('Drupal site-install not run for @uri: the codebase still carries the de-typed Aegir psr/log the site-local Drush cannot start against (see the PSR/LOG lines above)', array('@uri' => d()->uri)));
         }
-        sleep(5);
       }
 
       // Define Drush Command
@@ -617,7 +616,6 @@ function drush_provision_drupal_provision_install() {
           drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
-        sleep(5);
       }
     }
 
