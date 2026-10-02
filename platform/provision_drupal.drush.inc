@@ -430,15 +430,12 @@ function _provision_drupal_create_directories($url = NULL) {
     $mkdir["sites/$url/files/civicrm/persist"] = 02775;
     $chgrp["sites/$url/files/civicrm/persist"] = d('@server_master')->web_group;
 
-    // Private files keep no world bits once the account runs in its own web
-    // group (BOA's wg-<account>): the account's pools reach them through
-    // it, and nginx never serves them directly.
+    // Private files, and the CiviCRM stores nginx denies, keep no world bits
+    // once the account runs in its own web group (BOA's wg-<account>): the
+    // account's pools reach them through it, and nginx never serves them
+    // directly.
     if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
-      foreach ($mkdir as $path => $perm) {
-        if ($perm === 02775 && preg_match('#/private(/|$)#', $path)) {
-          $mkdir[$path] = 02770;
-        }
-      }
+      $mkdir = _provision_drupal_web_group_private($mkdir);
     }
   }
 
@@ -489,6 +486,17 @@ function _provision_drupal_create_directories($url = NULL) {
   drush_command_invoke_all_ref('provision_drupal_chgrp_not_recursive_alter', $chgrp_not_recursive, $url);
   drush_command_invoke_all_ref('provision_drupal_chmod_not_recursive_alter', $chmod_not_recursive, $url);
 
+  // The account owns the names in a site's files and private trees, so any
+  // of them can be a link: act only on what is the site's own.
+  if ($url != 'all') {
+    foreach (array_keys($mkdir + $chgrp) as $path) {
+      if (preg_match('#^sites/' . preg_quote($url, '#') . '/(files|private)(/|$)#', $path)
+        && _provision_drupal_store_skip($path, "sites/$url")) {
+        unset($mkdir[$path], $chgrp[$path]);
+      }
+    }
+  }
+
   foreach ($mkdir as $path => $perm) {
     if (!is_dir($path)) {
       provision_file()->mkdir($path)
@@ -511,6 +519,213 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not change permissions <code>@path</code> to @perm');
     }
   }
+}
+
+/**
+ * The directories a site in its own web group keeps without world bits.
+ *
+ * Every private path, and the CiviCRM log and custom-field upload stores
+ * under files/, which nginx denies (a case-insensitive prefix): each one
+ * created at 02775 is narrowed to 02770.
+ *
+ * @param array $mkdir
+ *   The directories to create, path => mode.
+ *
+ * @return array
+ *   The same list with those modes narrowed.
+ */
+function _provision_drupal_web_group_private($mkdir) {
+  foreach ($mkdir as $path => $perm) {
+    if ($perm === 02775 && (preg_match('#/private(/|$)#', $path)
+      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))) {
+      $mkdir[$path] = 02770;
+    }
+  }
+  return $mkdir;
+}
+
+/**
+ * Whether to leave a path of a site's files or private tree alone.
+ *
+ * TRUE when the path leads out of this account's own files store (see
+ * _provision_drupal_outside_store()). Logs one warning per link it meets.
+ *
+ * @param $path
+ *   The path, relative to the platform root (the working directory) or
+ *   absolute.
+ * @param $site_dir
+ *   The site dir, sites/<uri>.
+ */
+function _provision_drupal_store_skip($path, $site_dir) {
+  static $told = array();
+  $out = _provision_drupal_outside_store($path, $site_dir, d('@server_master')->aegir_root);
+  if ($out === FALSE) {
+    return FALSE;
+  }
+  $key = $out['path'] . "\n" . $out['target'];
+  if (empty($told[$key])) {
+    $told[$key] = TRUE;
+    if ($out['target'] === '') {
+      drush_log(dt("STORE/SKIP @path cannot be resolved by PHP (too many links, or too long a path), so it cannot be checked against this account's own files store; left as it is, with everything below it", array('@path' => $out['path'])), 'warning');
+    }
+    else {
+      drush_log(dt("STORE/SKIP @path resolves to @target, outside this account's own files store; left as it is, with everything below it", array('@path' => $out['path'], '@target' => $out['target'])), 'warning');
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Where a path of a site's files or private tree leads, if not the site's.
+ *
+ * The account owns the names under sites/<uri>, so files, private and any
+ * directory below them can be a link it planted. A path is the site's own
+ * when no link lies on its way below the site dir, or when the deepest part
+ * of it that exists resolves strictly below this account's own files store
+ * (_provision_drupal_in_own_store()). A path outside the site dir is the
+ * site's own by the store rule only. A link that resolves nowhere is left to
+ * the caller: mkdir, chgrp and chmod cannot pass through it, and fail on it
+ * as before. A path the kernel reaches but PHP's realpath() cannot resolve
+ * (it follows at most 32 links where Linux follows 40, and gives up once a
+ * relative link body and its directory reach MAXPATHLEN) cannot be judged,
+ * so it is not the site's own.
+ *
+ * @param $path
+ *   The path, relative to the platform root (the working directory) or
+ *   absolute.
+ * @param $site_dir
+ *   The site dir in the same form, sites/<uri>.
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ *
+ * @return
+ *   FALSE when the path is the site's own or resolves nowhere; otherwise an
+ *   array: 'path', the last link on the way, the one that leads out (or the
+ *   path itself when it is outside the site dir), and 'target', where that
+ *   resolves, or '' when PHP cannot resolve it.
+ */
+function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
+  clearstatcache(TRUE);
+  $path = _provision_drupal_path_tidy($path);
+  $site_dir = _provision_drupal_path_tidy($site_dir);
+  $parts = array();
+  if ($site_dir !== '' && strpos($path, $site_dir . '/') === 0) {
+    $parts = explode('/', substr($path, strlen($site_dir) + 1));
+    foreach ($parts as $part) {
+      if ($part === '' || $part === '.' || $part === '..') {
+        $parts = array();
+        break;
+      }
+    }
+  }
+  $link = NULL;
+  $last = NULL;
+  if ($parts) {
+    $cur = $site_dir;
+    foreach ($parts as $part) {
+      $cur .= '/' . $part;
+      if (is_link($cur)) {
+        $link = $cur;
+      }
+      elseif (!file_exists($cur)) {
+        break;
+      }
+      $last = $cur;
+    }
+    if ($link === NULL) {
+      return FALSE;
+    }
+  }
+  else {
+    $link = $path;
+    $last = $path;
+  }
+  $target = realpath($last);
+  if ($target === FALSE) {
+    // file_exists() asks the kernel, as mkdir, chmod and the .htaccess
+    // update will: a dangling link or a loop fails there too.
+    if (!file_exists($last)) {
+      return FALSE;
+    }
+    return array('path' => $link, 'target' => '');
+  }
+  if (_provision_drupal_in_own_store($target, $aegir_root)) {
+    return FALSE;
+  }
+  // What lies past the last link is real, so that link is the one that leads
+  // out: name it and where it leads, once for all the paths through it.
+  $at = realpath($link);
+  return array('path' => $link, 'target' => ($at === FALSE) ? $target : $at);
+}
+
+/**
+ * A path in the one spelling the kernel walks: runs of slashes made one, and
+ * every "." name and a trailing slash dropped, so "./sites/<uri>/files",
+ * ".//sites/<uri>/files" and "sites/<uri>/./files/" all read
+ * "sites/<uri>/files". A ".." name is kept: where it leads depends on the
+ * links before it.
+ */
+function _provision_drupal_path_tidy($path) {
+  $path = (string) $path;
+  $names = array();
+  foreach (explode('/', $path) as $name) {
+    if ($name !== '' && $name !== '.') {
+      $names[] = $name;
+    }
+  }
+  return ((strpos($path, '/') === 0) ? '/' : '') . implode('/', $names);
+}
+
+/**
+ * Whether a resolved path lies strictly below the account's own files store.
+ *
+ * The store is <aegir_root>/static/files/, or for an Octopus account its
+ * store on attached storage, /mnt/<mount>/files/<account>/static/files/,
+ * where no directory of the mount part is itself named files or static. A
+ * name starting with a dot right below either store root is BOA's own
+ * (.backups, .backup-exports, .archived), never a site's store. The same
+ * rule as the store test of BOA's root-side site fixers.
+ *
+ * @param $res
+ *   A path with every link resolved (realpath()).
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ */
+function _provision_drupal_in_own_store($res, $aegir_root) {
+  $disk = '/data/disk/';
+  $mnt = '/mnt/';
+  $res = (string) $res;
+  if (preg_match('#[^A-Za-z0-9._/-]#', $res)) {
+    return FALSE;
+  }
+  $root = rtrim((string) $aegir_root, '/');
+  if ($root === '') {
+    return FALSE;
+  }
+  $acct = '';
+  if (strpos($root . '/', $disk) === 0) {
+    $acct = substr($root, strlen($disk));
+    if ($acct === '' || preg_match('#[^a-z0-9-]#', $acct)) {
+      return FALSE;
+    }
+  }
+  $own = $root . '/static/files/';
+  $mid = '/files/' . $acct . '/static/files/';
+  if (strlen($res) > strlen($own) && strpos($res, $own) === 0) {
+    $top = substr($res, strlen($own));
+  }
+  elseif ($acct !== '' && preg_match('#^' . preg_quote($mnt, '#') . '.+' . preg_quote($mid, '#') . '.#', $res)) {
+    $pos = strpos($res, $mid);
+    $m = substr($res, 0, $pos);
+    if (strpos($m, '/files/') !== FALSE || strpos($m, '/static/') !== FALSE) {
+      return FALSE;
+    }
+    $top = substr($res, $pos + strlen($mid));
+  }
+  else {
+    return FALSE;
+  }
+  return $top !== '' && $top[0] !== '.';
 }
 
 /**
@@ -845,6 +1060,9 @@ function _provision_drupal_ensure_htaccess_update() {
       'directory' => variable_get('file_temporary_path', file_directory_temp()),
     );
     foreach ($htaccess_files as $htaccess_file => $info) {
+      if (_provision_drupal_htaccess_skip($info['directory'])) {
+        continue;
+      }
       // Check for the string which was added to the recommended .htaccess file
       // in the latest security update.
       if (!file_exists($htaccess_file) || !($contents = @file_get_contents($htaccess_file)) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
@@ -868,6 +1086,9 @@ function _provision_drupal_ensure_htaccess_update() {
       'directory' => file_directory_temp(),
     );
     foreach ($htaccess_files as $key => $info) {
+      if (_provision_drupal_htaccess_skip($info['directory'])) {
+        continue;
+      }
       // Check for the string which was added to the recommended .htaccess file
       // in the latest security update.
       $htaccess_file = $info['directory'] . '/.htaccess';
@@ -881,6 +1102,24 @@ function _provision_drupal_ensure_htaccess_update() {
       }
     }
   }
+}
+
+/**
+ * Whether the .htaccess update leaves one of a site's files directories alone.
+ *
+ * The directory comes from the site's own settings, so it is judged by the
+ * store rule of the site's files and private trees
+ * (_provision_drupal_store_skip()), in the form relative to the platform root.
+ * Both are tidied first: a "<root>//sites/<uri>/..." spelling must not lose
+ * its platform root and be read as "/sites/<uri>/...", which exists nowhere.
+ */
+function _provision_drupal_htaccess_skip($dir) {
+  $dir = _provision_drupal_path_tidy($dir);
+  $root = _provision_drupal_path_tidy(d()->root) . '/';
+  if (strpos($dir, $root) === 0) {
+    $dir = substr($dir, strlen($root));
+  }
+  return _provision_drupal_store_skip($dir, 'sites/' . d()->uri);
 }
 
 /**
