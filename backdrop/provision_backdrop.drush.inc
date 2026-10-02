@@ -195,6 +195,12 @@ function _provision_backdrop_create_directories($url = NULL) {
     "sites/$url/private/config/active",
     "sites/$url/private/config/staging",
   );
+  // Only what is the site's own, as for the shared scaffolding above.
+  foreach ($config_dirs as $i => $path) {
+    if (_provision_drupal_store_skip($path, "sites/$url")) {
+      unset($config_dirs[$i]);
+    }
+  }
   foreach ($config_dirs as $path) {
     if (!is_dir($path)) {
       provision_file()->mkdir($path)

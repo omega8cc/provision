@@ -12,6 +12,16 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   protected $safe_shell_exec_output = '';
   protected $has_port = TRUE;
 
+  // Whether this server goes through the root database broker: NULL until
+  // broker_mode() has read it, once per service.
+  protected $broker_mode = NULL;
+  // The broker's selftest answer, asked once per service.
+  protected $broker_selftest = NULL;
+  // The last broker call's refusal (code 0 when it succeeded) and its stderr,
+  // where a dump or a load leaves its tool's own output.
+  public $broker_error = array('code' => 0, 'reason' => '');
+  protected $broker_stderr = '';
+
   function default_port() {
     $script_user = d('@server_master')->script_user;
     if (!$script_user) {
@@ -29,12 +39,270 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     }
   }
 
+  /**
+   * Whether this server's databases are handled by the root database broker.
+   *
+   * Once an account is switched on a box, its instance database user holds
+   * rights on its own databases only, and everything that needs more --
+   * creating, dropping and reserving databases, granting and revoking site
+   * users, the verify probes, the fast dumps and loads -- goes through
+   * /usr/local/bin/boa-dbctl, run by root through sudo. The switch is the
+   * root-owned control file /data/conf/<account>_db_broker.txt: a regular
+   * file no one else can write, whose server= line names this very server
+   * context and whose rows= line passes the broker's own rule, so a file
+   * the broker refuses never turns this side over. Every other server
+   * context (an additional database server, a remote database head) keeps
+   * the direct path. The account is the one this process runs as, never a
+   * name read from a file the account owns. Read once per service. The
+   * switch looks for this function's name in an account's copy of this file
+   * before it turns the account over, so keep it. PHP 5.6-safe.
+   */
+  function broker_mode() {
+    if (!is_null($this->broker_mode)) {
+      return $this->broker_mode;
+    }
+    $this->broker_mode = FALSE;
+    $conf_dir = '/data/conf';
+    $root_uid = 0;
+    if (!function_exists('posix_geteuid') || !function_exists('posix_getpwuid')) {
+      return FALSE;
+    }
+    $pw = posix_getpwuid(posix_geteuid());
+    if (!is_array($pw) || !isset($pw['name'])
+      || preg_match('/^[A-Za-z0-9_-]{1,32}$/', $pw['name']) !== 1) {
+      return FALSE;
+    }
+    $file = $conf_dir . '/' . $pw['name'] . '_db_broker.txt';
+    clearstatcache();
+    $stat = @lstat($file);
+    if (!is_array($stat) || ($stat['mode'] & 0170000) !== 0100000
+      || $stat['uid'] !== $root_uid || ($stat['mode'] & 022) !== 0) {
+      return FALSE;
+    }
+    $contents = @file_get_contents($file, FALSE, NULL, 0, 4096);
+    if (!is_string($contents)) {
+      return FALSE;
+    }
+    // Read as the broker reads it: NUL bytes dropped (a shell variable holds
+    // none), then the last server= and the last rows= line, each value the
+    // rest of its line as written. rows= names the instance user's host rows
+    // in use: at least one, split on commas and spaces, each passing the
+    // broker's host rule, or the broker refuses every call.
+    $contents = str_replace("\0", '', $contents);
+    $named = '';
+    $rows = '';
+    foreach (explode("\n", $contents) as $line) {
+      if (strpos($line, 'server=') === 0) {
+        $named = (string) substr($line, 7);
+      }
+      elseif (strpos($line, 'rows=') === 0) {
+        $rows = (string) substr($line, 5);
+      }
+    }
+    $hosts = preg_split('/[, ]+/', $rows, -1, PREG_SPLIT_NO_EMPTY);
+    $rows_ok = is_array($hosts) && count($hosts) > 0;
+    foreach ((array) $hosts as $host) {
+      if (preg_match('/^[A-Za-z0-9._%:-]{1,255}$/', $host) !== 1) {
+        $rows_ok = FALSE;
+      }
+    }
+    if ($rows_ok && preg_match('/^@[A-Za-z0-9_.-]{1,128}$/', $named) === 1
+      && isset($this->server->name) && $named === $this->server->name) {
+      $this->broker_mode = TRUE;
+      drush_log(dt('Databases on @server go through the root database broker.', array('@server' => $named)), 'info');
+    }
+    return $this->broker_mode;
+  }
+
+  /**
+   * Run one verb of the root database broker.
+   *
+   * Returns its stdout lines, the last being its "OK <verb> ..." line, or
+   * FALSE. Every argument goes through escapeshellarg(), and a secret only
+   * on stdin, never on the command line. A refusal ("ERR <code> <reason>"
+   * on stderr) is logged at $level and kept in $this->broker_error; it never
+   * sets a drush error here, so each caller keeps the severity the statement
+   * it replaces had: a failed create, grant, dump or load fails the task,
+   * while a revoke or a drop that warned and went on still does. ALRT lines
+   * the broker prints are passed on as warnings. PHP 5.6-safe: proc_open()
+   * takes a string command.
+   */
+  function broker_call($verb, $args = array(), $stdin = NULL, $level = 'warning') {
+    $command = 'sudo --non-interactive /usr/local/bin/boa-dbctl';
+    $this->broker_error = array('code' => 0, 'reason' => '');
+    $this->broker_stderr = '';
+    $command .= ' ' . escapeshellarg($verb);
+    foreach ($args as $arg) {
+      $command .= ' ' . escapeshellarg((string) $arg);
+    }
+    $pipes = array();
+    $descriptorspec = array(
+      0 => array('pipe', 'r'),
+      1 => array('pipe', 'w'),
+      2 => array('pipe', 'w'),
+    );
+    $process = proc_open($command, $descriptorspec, $pipes);
+    if (!is_resource($process)) {
+      $this->broker_error = array('code' => -1, 'reason' => 'the broker could not be started');
+      drush_log(dt('Database broker @verb: @reason.', array('@verb' => $verb, '@reason' => $this->broker_error['reason'])), $level);
+      return FALSE;
+    }
+    if (!is_null($stdin)) {
+      fwrite($pipes[0], $stdin);
+    }
+    fclose($pipes[0]);
+    // Both pipes drained together, as safe_shell_exec() does: a dump or a
+    // load writes its tool's output to stderr while stdout stays open.
+    $output = array(1 => '', 2 => '');
+    stream_set_blocking($pipes[1], 0);
+    stream_set_blocking($pipes[2], 0);
+    $open = array(1 => TRUE, 2 => TRUE);
+    while ($open[1] || $open[2]) {
+      $read = array();
+      if ($open[1]) { $read[1] = $pipes[1]; }
+      if ($open[2]) { $read[2] = $pipes[2]; }
+      $write = NULL;
+      $except = NULL;
+      if (stream_select($read, $write, $except, 5) === FALSE) {
+        break;
+      }
+      foreach ($read as $idx => $stream) {
+        $chunk = fread($stream, 8192);
+        if ($chunk === FALSE || $chunk === '') {
+          if (feof($stream)) {
+            $open[$idx] = FALSE;
+          }
+        }
+        else {
+          $output[$idx] .= $chunk;
+        }
+      }
+    }
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    $status = proc_close($process);
+    $this->broker_stderr = $output[2];
+    foreach (explode("\n", $output[2]) as $line) {
+      if (strpos($line, 'ALRT: ') === 0) {
+        drush_log(dt('Database broker: @msg', array('@msg' => $this->broker_clean(substr($line, 6)))), 'warning');
+      }
+    }
+    $lines = ($output[1] === '') ? array() : explode("\n", rtrim($output[1], "\n"));
+    $last = count($lines) ? $lines[count($lines) - 1] : '';
+    if ($status === 0 && ($last === 'OK ' . $verb || strpos($last, 'OK ' . $verb . ' ') === 0)) {
+      return $lines;
+    }
+    $matches = array();
+    if (preg_match_all('/^ERR ([0-9]+) ?(.*)$/m', $output[2], $matches)) {
+      $i = count($matches[1]) - 1;
+      $this->broker_error = array('code' => (int) $matches[1][$i], 'reason' => $this->broker_clean($matches[2][$i]));
+    }
+    else {
+      $first = trim(strtok($output[2], "\n"));
+      $this->broker_error = array('code' => ($status === 0) ? -1 : $status, 'reason' => ($first === '') ? 'no answer' : $this->broker_clean($first));
+    }
+    drush_log(dt('Database broker @verb: ERR @code @reason', array('@verb' => $verb, '@code' => $this->broker_error['code'], '@reason' => $this->broker_error['reason'])), $level);
+    return FALSE;
+  }
+
+  /**
+   * A line from the broker fit for a log: printable ASCII only, bounded.
+   */
+  function broker_clean($text) {
+    return substr(preg_replace('/[^\x20-\x7E]/', '?', (string) $text), 0, 300);
+  }
+
+  /**
+   * The last broker refusal for a task error: its ERR line, then the last
+   * lines a dump or a load's tool wrote.
+   */
+  function broker_failure() {
+    $text = 'ERR ' . $this->broker_error['code'] . ' ' . $this->broker_error['reason'];
+    $tail = array();
+    foreach (explode("\n", $this->broker_stderr) as $line) {
+      if ($line !== '' && strpos($line, 'ERR ') !== 0) {
+        $tail[] = $this->broker_clean($line);
+      }
+    }
+    if (count($tail)) {
+      $text .= "\n" . implode("\n", array_slice($tail, -20));
+    }
+    return $text;
+  }
+
+  /**
+   * One answer of the broker's verify probes ('create', 'grant' or
+   * 'utf8mb4'): its selftest makes and drops the account's probe database
+   * and probe user and the utf8mb4 test table, once per service.
+   */
+  function broker_selftest($probe) {
+    if (is_null($this->broker_selftest)) {
+      $this->broker_selftest = array();
+      $lines = $this->broker_call('selftest');
+      $matches = array();
+      if ($lines !== FALSE
+        && preg_match('/^OK selftest create=(ok|fail) grant=(ok|fail) utf8mb4=(ok|no)$/', $lines[count($lines) - 1], $matches) === 1) {
+        $this->broker_selftest = array(
+          'create' => ($matches[1] === 'ok'),
+          'grant' => ($matches[2] === 'ok'),
+          'utf8mb4' => ($matches[3] === 'ok'),
+        );
+      }
+    }
+    return !empty($this->broker_selftest[$probe]);
+  }
+
   function drop_database($name) {
+    if ($this->broker_mode()) {
+      // The broker drops the database, takes the instance user's grant on
+      // it and the name's registry entry.
+      return ($this->broker_call('drop', array('--', $name)) !== FALSE);
+    }
     return $this->query("DROP DATABASE `%s`", $name);
   }
 
   function create_database($name) {
+    if ($this->broker_mode()) {
+      // The broker creates the database on the account's reserved (or a
+      // free) name, after taking every grant a dropped database of that
+      // name left behind, and grants the instance user on it.
+      return ($this->broker_call('create', array('--', $name)) !== FALSE);
+    }
     return $this->query("CREATE DATABASE `%s`", $name);
+  }
+
+  /**
+   * In broker mode a database exists when its schema does, or when a
+   * registry entry holds the name: a name another account reserved is not
+   * free either.
+   */
+  function database_exists($name) {
+    if ($this->broker_mode()) {
+      $lines = $this->broker_call('exists', array('--', $name));
+      return ($lines !== FALSE && $lines[count($lines) - 1] === 'OK exists ' . $name . ' yes');
+    }
+    return parent::database_exists($name);
+  }
+
+  /**
+   * In broker mode a name is free when the broker reserves it for this
+   * account: no schema, no login of that name, no other user's pattern
+   * grant matching it, and no other account's entry. NULL when the broker
+   * cannot tell, so the name search stops instead of trying a hundred more.
+   */
+  function name_is_free($name) {
+    if (!$this->broker_mode()) {
+      return parent::name_is_free($name);
+    }
+    if ($this->broker_call('reserve', array('--', $name), NULL, 'info') !== FALSE) {
+      return TRUE;
+    }
+    // 4 taken, 2 a name the broker never hands out: try the next one.
+    if ($this->broker_error['code'] === 4 || $this->broker_error['code'] === 2) {
+      return FALSE;
+    }
+    drush_log(dt('The database broker could not reserve @name: ERR @code @reason', array('@name' => $name, '@code' => $this->broker_error['code'], '@reason' => $this->broker_error['reason'])), 'warning');
+    return NULL;
   }
 
   /**
@@ -119,6 +387,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function can_create_database() {
+    if ($this->broker_mode()) {
+      return $this->broker_selftest('create');
+    }
     $test = $this->verify_probe_db_name();
     $this->create_database($test);
 
@@ -138,6 +409,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    *   TRUE if the check was successful.
    */
   function can_grant_privileges() {
+    if ($this->broker_mode()) {
+      return $this->broker_selftest('grant');
+    }
     $dbname   = $this->verify_probe_db_name();
     $this->create_database($dbname);
     $user     = $dbname . '_user';
@@ -154,6 +428,14 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       $host = '%';
     }
     $host = ($host) ? $host : '%';
+
+    if ($this->broker_mode()) {
+      // The broker does what grant_privileges() does below, on this host and
+      // on 127.0.0.1: the user created when missing, its password set (read
+      // from stdin), ALL PRIVILEGES on the escaped name, and a pattern grant
+      // on the plain name taken away. ProxySQL boxes are never in broker mode.
+      return ($this->broker_call('grant', array('--', $name, $username, $host), $password . "\n") !== FALSE);
+    }
 
     if ($host != "127.0.0.1") {
       $extra_host = "127.0.0.1";
@@ -457,6 +739,13 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   function revoke($name, $username, $host = '') {
+    if ($this->broker_mode()) {
+      // Every host row of the user, as below, whatever $host is: the
+      // broker revokes its grants on this database as stored, both
+      // spellings and per object, and drops a row left holding nothing.
+      return ($this->broker_call('revoke', array('--', $name, $username)) !== FALSE);
+    }
+
     // Define the desired hosts
     if (provision_file()->exists('/data/conf/clstr.cnf')->status()) {
       $desired_hosts = ['%', '127.0.0.1', 'localhost'];
@@ -1007,6 +1296,14 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           }
           drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Refusing the fast database import: the shared dump store does not provably hold this site\'s database (expected @db, internal flow: @flow, found: @found). A concurrent backup may have rotated the store - re-run the task.', array('@db' => $db_name, '@flow' => $internal_flow ? 'yes' : 'no', '@found' => count($found_dumps) ? implode(', ', $found_dumps) : 'no dump at all')));
         }
+        elseif ($this->broker_mode()) {
+          // The broker loads the store as the site's own database user,
+          // proven first, never with an admin login: the site user, then
+          // its password, one line each on stdin.
+          if ($this->broker_call('load', array('--', $db_name), $db_user . "\n" . $db_passwd . "\n") === FALSE) {
+            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => $this->broker_failure())));
+          }
+        }
         else {
           // SECURITY: $db_name derives from alias context; $oct_db_* originate
           // in BOA root control files but may contain shell-special characters.
@@ -1267,6 +1564,7 @@ port=%s
 
       $oct_db_test = $oct_db_dirx . '/metadata';
       $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
+      $count = 0;
       while ((is_file($oct_db_test) || is_file($oct_db_test_p)) && $count <= 6) {
         $count++;
         sleep(10);
@@ -1340,7 +1638,16 @@ port=%s
         drush_log(dt("MyQuick generate_dump mysql.php oct_db_port @var", array('@var' => $oct_db_port)), 'info');
       }
 
-      if (is_dir($oct_db_dirx) &&
+      if ($this->broker_mode() && is_dir($oct_db_dirx) && $db_name) {
+        // The broker dumps as root into its own staging and moves the
+        // finished dump, the account's own, into this empty tmp_expim.
+        $dumped = $this->broker_call('dump', array('--', $db_name));
+        clearstatcache();
+        if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
+          drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => $dumped ? 'the dump carries no metadata marker' : $this->broker_failure())));
+        }
+      }
+      elseif (is_dir($oct_db_dirx) &&
         $db_name &&
         $oct_db_user &&
         $oct_db_pass &&
@@ -1560,6 +1867,9 @@ port=%s
     }
 
     // Ensure that the MySQL server supports large prefixes and utf8mb4.
+    if ($this->broker_mode()) {
+      return $this->broker_selftest('utf8mb4');
+    }
     $dbname = uniqid(drush_get_option('aegir_db_prefix', 'site_'));
     $this->create_database($dbname);
     $success = $this->query("CREATE TABLE `%s`.`drupal_utf8mb4_test` (id VARCHAR(255), PRIMARY KEY(id(255))) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC", $dbname);
