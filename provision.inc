@@ -591,6 +591,254 @@ function _provision_psr_log_overlay($root, $psr_tpl) {
 }
 
 /**
+ * The four core logger files the lock's core patch de-types, relative to the
+ * docroot. The same four in Drupal 10 and 11.
+ */
+function _provision_core_logger_files() {
+  return array(
+    'core/lib/Drupal/Core/Logger/RfcLoggerTrait.php',
+    'core/lib/Drupal/Core/Logger/LoggerChannel.php',
+    'core/modules/dblog/src/Logger/DbLog.php',
+    'core/modules/syslog/src/Logger/SysLog.php',
+  );
+}
+
+/**
+ * Where the lock keeps the stock copies of those files: beside the pristine
+ * psr/log package. '' when the codebase has no psr/log.
+ */
+function _provision_core_logger_stock_dir($root) {
+  $log = _provision_psr_log_dir($root);
+  return ($log === '') ? '' : dirname($log) . '/._orig_core';
+}
+
+/**
+ * Whether a core logger file declares log() the stock way.
+ *
+ * Read from the declaration itself, as the psr/log state is.
+ *
+ * @return bool|null
+ *   TRUE = stock (typed message), FALSE = de-typed by the lock's patch,
+ *   NULL = unreadable, or a declaration this does not know.
+ */
+function _provision_core_logger_typed($file) {
+  if (!is_file($file) || !is_readable($file)) {
+    return NULL;
+  }
+  $content = file_get_contents($file);
+  if ($content === FALSE) {
+    return NULL;
+  }
+  if (preg_match('/function log\(\$level,\s*[^$)]*Stringable[^$)]*\$message/', $content)) {
+    return TRUE;
+  }
+  if (preg_match('/function log\(\$level,\s*\$message/', $content)) {
+    return FALSE;
+  }
+  return NULL;
+}
+
+/**
+ * Whether the stock copies are complete and taken from this core.
+ */
+function _provision_core_logger_stock_ok($root) {
+  $dir = _provision_core_logger_stock_dir($root);
+  if ($dir === '' || !is_dir($dir)) {
+    return FALSE;
+  }
+  foreach (_provision_core_logger_files() as $rel) {
+    if (_provision_core_logger_typed($dir . '/' . $rel) !== TRUE) {
+      return FALSE;
+    }
+  }
+  $mark = @file_get_contents($dir . '/VERSION');
+  return is_string($mark) && trim($mark) === (string) drush_drupal_version();
+}
+
+/**
+ * Whether settings.php has everything it loads the stock classes from: the
+ * copies of the core logger files and a pristine psr/log that reads typed.
+ */
+function _provision_core_logger_web_ready($root) {
+  $dir = _provision_core_logger_stock_dir($root);
+  return $dir !== '' && _provision_core_logger_stock_ok($root)
+    && _provision_psr_log_detyped(dirname($dir) . '/._orig_log') === FALSE;
+}
+
+/**
+ * Whether a locked tree still owes the web its stock copies and the lock body
+ * can deliver them.
+ *
+ * Only then is the tree 'partial'. One whose pristine psr/log is missing or
+ * de-typed (the lock cannot take that copy from an overlaid package), or
+ * whose four core logger files are not all de-typed the way the current
+ * patch leaves them (a tree patched by an older patch), would be sent
+ * through the lock body by every Verify without ever getting there.
+ */
+function _provision_core_logger_stock_due($root) {
+  $dir = _provision_core_logger_stock_dir($root);
+  if ($dir === '' || _provision_core_logger_stock_ok($root)) {
+    return FALSE;
+  }
+  if (_provision_psr_log_detyped(dirname($dir) . '/._orig_log') !== FALSE) {
+    return FALSE;
+  }
+  foreach (_provision_core_logger_files() as $rel) {
+    if (_provision_core_logger_typed($root . '/' . $rel) !== FALSE) {
+      return FALSE;
+    }
+  }
+  // A build that already failed for this very tree (the patch does not
+  // reverse on files edited by hand or patched by another template) is not
+  // tried again by every Verify. Any real lock run still tries, and a new
+  // core or a changed file is a new tree.
+  $tried = @file_get_contents($dir . '.failed');
+  if (is_string($tried) && trim($tried) === _provision_core_logger_tree_mark($root)) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * What identifies the tree a stock-copy build was tried on: the core version
+ * and the four core logger files as they are on disk.
+ */
+function _provision_core_logger_tree_mark($root) {
+  $mark = (string) drush_drupal_version();
+  foreach (_provision_core_logger_files() as $rel) {
+    $mark .= ' ' . @md5_file($root . '/' . $rel);
+  }
+  return $mark;
+}
+
+/**
+ * A stock-copy build failed on a de-typed tree: note which tree (see
+ * _provision_core_logger_stock_due()), drop the half-built copies.
+ *
+ * @return bool
+ *   Always FALSE, for the caller to return.
+ */
+function _provision_core_logger_stock_failed($root, $new) {
+  $dir = _provision_core_logger_stock_dir($root);
+  if (is_dir($new)) {
+    _provision_recursive_delete($new);
+  }
+  if ($dir !== '') {
+    @file_put_contents($dir . '.failed', _provision_core_logger_tree_mark($root) . "\n");
+  }
+  return FALSE;
+}
+
+/**
+ * Keep stock copies of the core logger files for whatever is not Drush 8.
+ *
+ * The locked state exists for Aegir's own Drush: it brings psr/log v1, so the
+ * codebase's psr/log and core's logger classes are de-typed on disk. A web
+ * request has no such need, and with those files de-typed every logger
+ * written for the typed psr/log (a contributed module's own logger, a
+ * subclass of a core logger) died at class load on a locked platform. The
+ * settings.php of each site therefore loads the stock classes from the
+ * copies kept here and from the pristine psr/log beside them, before
+ * anything else has loaded one; a process that already has (Drush 8 binds
+ * its psr/log at preflight) is left to the files on disk.
+ *
+ * The copies are taken from the tree as it is: plainly while it is still
+ * stock, and through the lock's own core patch, reversed on the copies, when
+ * an earlier lock already de-typed it. They are built beside the old ones
+ * and swapped in only when all four read stock, and they carry the core
+ * version they belong to: settings.php ignores copies of another core.
+ * Failure costs nothing but the old behaviour, so it is logged, not fatal.
+ *
+ * @return bool
+ *   TRUE when the stock copies are in place for this core.
+ */
+function _provision_core_logger_stock_keep($root, $patch_tpl) {
+  $dir = _provision_core_logger_stock_dir($root);
+  if ($dir === '') {
+    return FALSE;
+  }
+  $who = provision_current_user();
+  $files = _provision_core_logger_files();
+  $typed = 0;
+  $detyped = 0;
+  foreach ($files as $rel) {
+    $state = _provision_core_logger_typed($root . '/' . $rel);
+    if ($state === TRUE) {
+      $typed++;
+    }
+    elseif ($state === FALSE) {
+      $detyped++;
+    }
+  }
+  if ($typed !== count($files) && $detyped !== count($files)) {
+    drush_log(dt('CORE/STOCK the core logger files in @root are neither all stock nor all de-typed (@typed stock, @detyped de-typed of @all), so no stock copies are kept for the web', array('@root' => $root, '@typed' => $typed, '@detyped' => $detyped, '@all' => count($files))), 'advisory');
+    return FALSE;
+  }
+  $new = $dir . '.new';
+  if (is_dir($new)) {
+    _provision_recursive_delete($new);
+  }
+  foreach ($files as $rel) {
+    drush_shell_exec('mkdir -p %s', dirname($new . '/' . $rel));
+    drush_shell_exec('cp -f %s %s', $root . '/' . $rel, $new . '/' . $rel);
+    if (!is_file($new . '/' . $rel)) {
+      drush_log(dt('CORE/STOCK could not copy @file to @new (is @parent writable by @user?), so no stock copies are kept for the web', array('@file' => $rel, '@new' => $new, '@parent' => dirname($dir), '@user' => $who)), 'advisory');
+      return _provision_core_logger_stock_failed($root, $new);
+    }
+  }
+  if ($detyped === count($files)) {
+    if (!is_file($patch_tpl)) {
+      drush_log(dt('CORE/STOCK the core patch @tpl is missing, so the de-typed core logger files of @root cannot be turned back into stock copies for the web', array('@tpl' => $patch_tpl, '@root' => $root)), 'advisory');
+      return _provision_core_logger_stock_failed($root, $new);
+    }
+    if (!drush_shell_exec('patch --dry-run -R -d %s -p1 < %s', $new, $patch_tpl)) {
+      drush_log(dt('CORE/STOCK the core patch @tpl does not reverse cleanly on copies of the de-typed core logger files of @root (edited by hand, or patched by another template), so no stock copies are kept for the web', array('@tpl' => $patch_tpl, '@root' => $root)), 'advisory');
+      return _provision_core_logger_stock_failed($root, $new);
+    }
+    drush_shell_exec('patch --no-backup-if-mismatch -R -d %s -p1 < %s', $new, $patch_tpl);
+  }
+  foreach ($files as $rel) {
+    if (_provision_core_logger_typed($new . '/' . $rel) !== TRUE) {
+      drush_log(dt('CORE/STOCK the copy of @file does not read stock, so no stock copies are kept for the web', array('@file' => $rel)), 'advisory');
+      return _provision_core_logger_stock_failed($root, $new);
+    }
+  }
+  file_put_contents($new . '/VERSION', drush_drupal_version() . "\n");
+  drush_shell_exec('chmod -R u=rwX,go=rX %s', $new);
+  if (is_dir($dir)) {
+    _provision_recursive_delete($dir);
+  }
+  if (is_dir($dir) || !drush_shell_exec('mv -f %s %s', $new, $dir) || !_provision_core_logger_stock_ok($root)) {
+    drush_log(dt('CORE/STOCK could not put the stock copies of the core logger files at @dir (is @parent writable by @user?)', array('@dir' => $dir, '@parent' => dirname($dir), '@user' => $who)), 'advisory');
+    return _provision_core_logger_stock_failed($root, $new);
+  }
+  if (is_file($dir . '.failed')) {
+    @unlink($dir . '.failed');
+  }
+  drush_log(dt('CORE/STOCK stock copies of the core logger files kept at @dir for core @version', array('@dir' => $dir, '@version' => drush_drupal_version())), 'success');
+  return TRUE;
+}
+
+/**
+ * Remove the stock copies: the tree itself is stock again.
+ */
+function _provision_core_logger_stock_drop($root) {
+  $dir = _provision_core_logger_stock_dir($root);
+  if ($dir === '') {
+    return;
+  }
+  foreach (array($dir, $dir . '.new') as $gone) {
+    if (is_dir($gone)) {
+      _provision_recursive_delete($gone);
+      drush_log(dt('CORE/STOCK removed @dir', array('@dir' => $gone)), 'info');
+    }
+  }
+  if (is_file($dir . '.failed')) {
+    @unlink($dir . '.failed');
+  }
+}
+
+/**
  * Custom helper function findAppRoot
  */
 function findAppRoot($startDir) {
@@ -675,6 +923,7 @@ function provision_check_codebase_status() {
       }
     }
     drush_log(dt('CHECK/CODE/PSRLOG =@state= FOR @dir', array('@state' => $psr_state, '@dir' => ($psr_dir === '') ? d()->root : $psr_dir)), 'info');
+    drush_log(dt('CHECK/CODE/STOCK =@state= FOR @dir', array('@state' => _provision_core_logger_web_ready(d()->root) ? 'kept' : 'none', '@dir' => ($psr_dir === '') ? d()->root : dirname($psr_dir) . '/._orig_core')), 'info');
   }
   else {
     drush_log(dt('CHECK/CODE/VERSION =@coreVersion= FOR @webRoot', array('@coreVersion' => drush_drupal_major_version(), '@webRoot' => d()->root)), 'info');
@@ -758,6 +1007,15 @@ function provision_drush_local_lock_state() {
       return 'unknown';
     }
     if (d()->isCorePatched && d()->isConsolePatched && $bits_locked && $psr_detyped !== FALSE) {
+      // The web serves a locked codebase from the stock copies the lock
+      // keeps of the core logger files. A locked tree without them (locked
+      // before they existed, core moved on since) is one the lock body still
+      // has to finish; its other steps find nothing left to do. Asked only
+      // of a tree the lock body can serve (see the helper): one it cannot
+      // stays 'locked', exactly as it read before the copies existed.
+      if (_provision_core_logger_stock_due(d()->root)) {
+        return 'partial';
+      }
       return 'locked';
     }
     if (!d()->isCorePatched && !d()->isConsolePatched && $bits_unlocked && $psr_detyped !== TRUE) {
@@ -1226,6 +1484,13 @@ function provision_unlock_drush_local_vnd() {
           drush_log($line, $line_status);
         }
       }
+
+      // Core reads stock on disk again: the copies the lock kept for the web
+      // go, so a later update of core can never meet stale ones.
+      provision_check_codebase_status();
+      if (!d()->isCorePatched) {
+        _provision_core_logger_stock_drop(d()->root);
+      }
     }
   }
   else {
@@ -1474,6 +1739,15 @@ function provision_lock_drush_local_vnd() {
 
       provision_check_codebase_status();
 
+      // The stock copies of the core logger files, which each site's
+      // settings.php serves the web from while the tree is de-typed (see
+      // _provision_core_logger_stock_keep()): taken before the patch goes
+      // on, or rebuilt from the patched files when an earlier lock left
+      // none or core has moved on since.
+      if (isset($core_patch_fname) && (!d()->isCorePatched || !_provision_core_logger_stock_ok(d()->root))) {
+        _provision_core_logger_stock_keep(d()->root, $patchCoreTpl);
+      }
+
       $commandCore = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
       $commandValidator = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
@@ -1531,10 +1805,13 @@ function provision_lock_drush_local_vnd() {
         provision_file()->unlink($patchConsoleFile);
       }
 
-      if (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
+      // Drupal 11.0 ships no package_manager, so there is nothing for the
+      // validator patch to change there and its dry run can only fail.
+      $validator_target = is_file(d()->root . '/core/modules/package_manager/src/Validator/DiskSpaceValidator.php');
+      if (drush_drupal_major_version() == 11 && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
         drush_set_error('PROVISION_VALIDATOR_PATCH_DRYRUN_FAILED', dt('Validator patch would not apply cleanly in @webRoot; skipping to avoid a partial patch.', array('@webRoot' => d()->root)));
       }
-      elseif (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
+      elseif (drush_drupal_major_version() == 11 && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/APPLY @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();

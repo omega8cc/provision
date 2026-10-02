@@ -17,6 +17,61 @@ print '<?php' ?>
  * to avoid further confusion.
  */
 
+/**
+ * While this platform is locked, Aegir keeps the codebase's psr/log package
+ * and four core logger files de-typed on disk, which its own Drush needs,
+ * and their stock copies beside the package. A request that has loaded none
+ * of those classes yet takes the stock copies, so loggers written for the
+ * typed psr/log keep working. Aegir's Drush has bound its own psr/log before
+ * this file is read and is left alone, and so is a codebase that is not in
+ * the locked state or whose copies are not this core's.
+ */
+if (isset($app_root) && !interface_exists('Psr\Log\LoggerInterface', FALSE)) {
+  call_user_func(function ($aegir_root) {
+    $aegir_psr = is_dir($aegir_root . '/vendor/psr/log') ? $aegir_root . '/vendor/psr' : dirname($aegir_root) . '/vendor/psr';
+    $aegir_log = $aegir_psr . '/._orig_log/src/';
+    $aegir_core = $aegir_psr . '/._orig_core/';
+    $aegir_stock = array(
+      'Psr\Log\LoggerInterface' => $aegir_log . 'LoggerInterface.php',
+      'Psr\Log\LogLevel' => $aegir_log . 'LogLevel.php',
+      'Psr\Log\InvalidArgumentException' => $aegir_log . 'InvalidArgumentException.php',
+      'Psr\Log\LoggerAwareInterface' => $aegir_log . 'LoggerAwareInterface.php',
+      'Psr\Log\LoggerTrait' => $aegir_log . 'LoggerTrait.php',
+      'Psr\Log\LoggerAwareTrait' => $aegir_log . 'LoggerAwareTrait.php',
+      'Psr\Log\AbstractLogger' => $aegir_log . 'AbstractLogger.php',
+      'Psr\Log\NullLogger' => $aegir_log . 'NullLogger.php',
+      'Drupal\Core\Logger\RfcLoggerTrait' => $aegir_core . 'core/lib/Drupal/Core/Logger/RfcLoggerTrait.php',
+      'Drupal\Core\Logger\LoggerChannel' => $aegir_core . 'core/lib/Drupal/Core/Logger/LoggerChannel.php',
+      'Drupal\dblog\Logger\DbLog' => $aegir_core . 'core/modules/dblog/src/Logger/DbLog.php',
+      'Drupal\syslog\Logger\SysLog' => $aegir_core . 'core/modules/syslog/src/Logger/SysLog.php',
+    );
+    foreach ($aegir_stock as $aegir_name => $aegir_file) {
+      if (class_exists($aegir_name, FALSE) || interface_exists($aegir_name, FALSE) || trait_exists($aegir_name, FALSE) || !is_file($aegir_file)) {
+        return;
+      }
+    }
+    $aegir_disk = @file_get_contents($aegir_psr . '/log/src/LoggerInterface.php');
+    $aegir_trait = @file_get_contents($aegir_root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php');
+    $aegir_mark = @file_get_contents($aegir_core . 'VERSION');
+    if (!is_string($aegir_disk) || !is_string($aegir_trait) || !is_string($aegir_mark)
+      || strpos($aegir_disk, 'Stringable') !== FALSE || strpos($aegir_trait, 'Stringable') !== FALSE
+      || trim($aegir_mark) !== \Drupal::VERSION) {
+      return;
+    }
+    // The copies themselves must be the typed ones: a pristine package an
+    // old lock took from an already de-typed tree is not.
+    $aegir_copy = @file_get_contents($aegir_log . 'LoggerInterface.php');
+    $aegir_stockt = @file_get_contents($aegir_core . 'core/lib/Drupal/Core/Logger/RfcLoggerTrait.php');
+    if (!is_string($aegir_copy) || !is_string($aegir_stockt)
+      || strpos($aegir_copy, 'Stringable') === FALSE || strpos($aegir_stockt, 'Stringable') === FALSE) {
+      return;
+    }
+    foreach ($aegir_stock as $aegir_file) {
+      require_once $aegir_file;
+    }
+  }, $app_root);
+}
+
 <?php if ($subdirs_support_enabled): ?>
 /**
  * Detecting subdirectory mode
