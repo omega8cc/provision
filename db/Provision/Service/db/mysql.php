@@ -1564,6 +1564,7 @@ port=%s
 
       $oct_db_test = $oct_db_dirx . '/metadata';
       $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
+      $count = 0;
       while ((is_file($oct_db_test) || is_file($oct_db_test_p)) && $count <= 6) {
         $count++;
         sleep(10);
