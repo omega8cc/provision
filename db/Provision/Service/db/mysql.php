@@ -1474,6 +1474,12 @@ port=%s
         // the DEFINER of a stored procedure or function, written bare at the
         // start of its CREATE line, in double quotes under ANSI_QUOTES
         '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
+        // a routine, event or trigger made while the database had another
+        // default collation is wrapped in ALTER DATABASE lines naming the
+        // dumped database, which the database user loading the dump into
+        // its own database may not alter (ERROR 1044); without the name
+        // they apply to the database being loaded
+        '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
         // remove broken CREATE ALGORITHM entries
         '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
       );
