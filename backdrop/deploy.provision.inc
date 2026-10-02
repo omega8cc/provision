@@ -59,21 +59,12 @@ function drush_provision_backdrop_pre_provision_deploy($backup_file) {
     ->status();
 
   if ($extracted) {
-    // Make sure the files in the files directory are accessible by the web server.
-    provision_file()->chgrp(drush_get_option('extract_path') . '/files', d('@server_master')->web_group, TRUE)
-      ->succeed('Changed group ownership of files in <code>@path</code> to @gid')
-      ->fail('Could not change group ownership of files in <code>@path</code> to @gid');
-    provision_file()->chgrp(drush_get_option('extract_path') . '/private/files', d('@server_master')->web_group, TRUE)
-      ->succeed('Changed group ownership of private files in <code>@path</code> to @gid')
-      ->fail('Could not change group ownership of private files in <code>@path</code> to @gid');
-    // Backdrop's file-based JSON config lives here and is web-group-writable at
-    // runtime; restore it group-writable so the web process can keep writing it.
-    provision_file()->chgrp(drush_get_option('extract_path') . '/private/config', d('@server_master')->web_group, TRUE)
-      ->succeed('Changed group ownership of config files in <code>@path</code> to @gid')
-      ->fail('Could not change group ownership of config files in <code>@path</code> to @gid');
-    provision_file()->chgrp(drush_get_option('extract_path') . '/private/temp', d('@server_master')->web_group, TRUE)
-      ->succeed('Changed group ownership of temp files in <code>@path</code> to @gid')
-      ->fail('Could not change group ownership of temp files in <code>@path</code> to @gid');
+    // Make sure the files in the files directory are accessible by the web
+    // server, where the extracted site's trees are its own. Backdrop's
+    // file-based JSON config lives in private/config and is
+    // web-group-writable at runtime; restore it group-writable so the web
+    // process can keep writing it.
+    _provision_drupal_deploy_chgrp(drush_get_option('extract_path'));
 
     if (drush_get_option('deploy_replace_site', FALSE)) {
       $old = d()->site_path . '.restore';

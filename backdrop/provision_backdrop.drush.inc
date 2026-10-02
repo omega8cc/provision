@@ -195,31 +195,55 @@ function _provision_backdrop_create_directories($url = NULL) {
     "sites/$url/private/config/active",
     "sites/$url/private/config/staging",
   );
-  // Only what is the site's own, as for the shared scaffolding above.
+  // Only what is the site's own, and only where it was judged to be, as for
+  // the shared scaffolding above.
+  $places = array();
   foreach ($config_dirs as $i => $path) {
-    if (_provision_drupal_store_skip($path, "sites/$url")) {
+    $place = _provision_drupal_store_place($path, "sites/$url");
+    if ($place === FALSE) {
       unset($config_dirs[$i]);
+    }
+    else {
+      $places[$path] = $place;
     }
   }
   foreach ($config_dirs as $path) {
     if (!is_dir($path)) {
-      provision_file()->mkdir($path)
-        ->succeed('Created <code>@path</code>')
+      if (isset($places[$path])) {
+        $made = provision_file()->mkdir_in($places[$path]['dir'], $places[$path]['rest'], $path);
+      }
+      else {
+        $made = provision_file()->mkdir($path);
+      }
+      $made->succeed('Created <code>@path</code>')
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
   foreach ($config_dirs as $path) {
-    provision_file()->chgrp($path, $web_group)
-      ->succeed('Changed group ownership of <code>@path</code> to @gid')
-      ->fail('Could not change group ownership <code>@path</code> to @gid');
+    if (!isset($places[$path])) {
+      provision_file()->chgrp($path, $web_group)
+        ->succeed('Changed group ownership of <code>@path</code> to @gid')
+        ->fail('Could not change group ownership <code>@path</code> to @gid');
+    }
+    elseif (!$places[$path]['link']) {
+      // As chgrp(): a link itself is left alone.
+      provision_file()->chgrp_in(_provision_drupal_place_path($places[$path]), $web_group, FALSE, $path)
+        ->succeed('Changed group ownership of <code>@path</code> to @gid')
+        ->fail('Could not change group ownership <code>@path</code> to @gid');
+    }
   }
   // chmod AFTER chgrp because chgrp strips the setgid bit. No world bits once
   // the account runs in its own web group (BOA's wg-<account>), as for the
   // rest of private/.
   $config_mode = (strpos((string) $web_group, 'wg-') === 0) ? 02770 : 02775;
   foreach ($config_dirs as $path) {
-    provision_file()->chmod($path, $config_mode)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
+    if (isset($places[$path])) {
+      $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $config_mode, FALSE, $path);
+    }
+    else {
+      $done = provision_file()->chmod($path, $config_mode);
+    }
+    $done->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions <code>@path</code> to @perm');
   }
 }

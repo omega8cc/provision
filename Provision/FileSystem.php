@@ -539,6 +539,245 @@ class Provision_FileSystem extends Provision_ChainedState {
   }
 
   /**
+   * Create the directories $names, one below the other, from the physical
+   * directory $dir, where a caller judged the path to be.
+   *
+   * $dir is entered for real first, and each name is made there by name
+   * (mkdir() never follows a link) and entered for real before the next (see
+   * _enter()), so a link put on the way since the path was judged is never
+   * followed. A name that exists already is entered the same way.
+   *
+   * Sets @path and @reason tokens for ->succeed and ->fail.
+   *
+   * @param $dir
+   *   The physical path (realpath()) of the deepest directory that exists,
+   *   or NULL when the path resolves nowhere: then nothing is made, and the
+   *   operation fails as mkdir() fails through a dangling link.
+   * @param $names
+   *   The names to make below it, in order.
+   * @param $path
+   *   The path this stands for, for the log.
+   */
+  function mkdir_in($dir, $names, $path) {
+    $this->_clear_state();
+    $this->tokens = array('@path' => $path);
+    if ($dir === NULL) {
+      $this->last_status = FALSE;
+      return $this;
+    }
+
+    $cwd = getcwd();
+    $status = $this->_enter($dir);
+    $moved = !$status;
+    foreach ($names as $name) {
+      if (!$status) {
+        break;
+      }
+      if (!@mkdir($name, 0775) && !file_exists($name) && !is_link($name)) {
+        $status = FALSE;
+        break;
+      }
+      $dir .= '/' . $name;
+      $status = $this->_enter($dir, $name);
+      $moved = !$status;
+    }
+    $this->_leave($cwd);
+    if ($moved) {
+      $this->tokens['@reason'] = dt('@path is not where it was checked', array('@path' => $path));
+    }
+    $this->last_status = $status;
+
+    return $this;
+  }
+
+  /**
+   * Change the group of the physical directory $dir, and with $recursive of
+   * everything below it, as chgrp() does for a path a caller judged: $dir is
+   * entered for real (see _enter()) and the change is made there, on '.' or
+   * by the walk of _here_recursive().
+   *
+   * Sets @path, @gid, and @reason tokens for ->succeed and ->fail.
+   *
+   * @param $dir
+   *   The physical path (realpath()) of the directory, or NULL when the path
+   *   resolves nowhere: then nothing is changed, and the operation fails as
+   *   chgrp() fails on a missing path.
+   * @param $gid
+   *   The name of group id you wish to change the file group ownership to.
+   * @param $recursive
+   *   TRUE to descend into subdirectories.
+   * @param $path
+   *   The path this stands for, for the log.
+   */
+  function chgrp_in($dir, $gid, $recursive, $path) {
+    $this->_clear_state();
+    $this->tokens = array('@path' => $path, '@gid' => $gid);
+    if ($dir === NULL) {
+      $group = provision_posix_groupname($gid);
+      $this->tokens['@reason'] = dt("chgrp to @group failed on @path", array('@group' => $group ? $group : $gid, '@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+
+    $cwd = getcwd();
+    if (!$this->_enter($dir)) {
+      $this->_leave($cwd);
+      $this->tokens['@reason'] = dt('@path is not where it was checked', array('@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+    if ($group = provision_posix_groupname($gid)) {
+      if (provision_user_in_group(provision_current_user(), $gid)) {
+        $done = $recursive ? $this->_here_recursive('chgrp', $group) : chgrp('.', $group);
+        if (!$done) {
+          $this->tokens['@reason'] = dt("chgrp to @group failed on @path", array('@group' => $group, '@path' => $path));
+        }
+      }
+      else {
+        $this->tokens['@reason'] = dt("@user is not in @group group", array("@user" => provision_current_user(), "@group" => $group));
+      }
+    }
+    else {
+      $done = $recursive ? $this->_here_recursive('chgrp', $gid) : @chgrp('.', $gid);
+      if (!$done) {
+        $this->tokens['@reason'] = dt("the group does not exist");
+      }
+    }
+
+    clearstatcache();
+    $this->last_status = $this->_enter($dir) && $group == provision_posix_groupname(filegroup('.'));
+    $this->_leave($cwd);
+
+    return $this;
+  }
+
+  /**
+   * Change the mode of the physical directory $dir to $perms, and with
+   * $recursive of everything below it, as chmod() does for a path a caller
+   * judged: $dir is entered for real (see _enter()) and the change is made
+   * there, on '.' or by the walk of _here_recursive().
+   *
+   * Sets @path, @perm, and @reason tokens for ->succeed and ->fail.
+   *
+   * @param $dir
+   *   The physical path (realpath()) of the directory, or NULL when the path
+   *   resolves nowhere: then nothing is changed, and the operation fails as
+   *   chmod() fails on a missing path.
+   * @param $perms
+   *   An octal value denoting the desired file permissions.
+   * @param $recursive
+   *   TRUE to descend into subdirectories.
+   * @param $path
+   *   The path this stands for, for the log.
+   */
+  function chmod_in($dir, $perms, $recursive, $path) {
+    $this->_clear_state();
+    $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $perms));
+    if ($dir === NULL) {
+      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+
+    $cwd = getcwd();
+    if (!$this->_enter($dir)) {
+      $this->_leave($cwd);
+      $this->tokens['@reason'] = dt('@path is not where it was checked', array('@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+    if ($recursive) {
+      $done = $this->_here_recursive('chmod', $perms);
+    }
+    else {
+      $done = @chmod('.', $perms);
+    }
+    if (!$done) {
+      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
+    }
+    clearstatcache();
+    $this->last_status = $this->_enter($dir) && substr(sprintf('%o', fileperms('.')), -4) == sprintf('%04o', $perms);
+    $this->_leave($cwd);
+
+    return $this;
+  }
+
+  /**
+   * Enter the directory $dir for real: chdir() there, or to $name from the
+   * current directory when given, then TRUE only while getcwd() names $dir,
+   * the physical path expected. A link put on the way is followed by
+   * chdir() but never passes the test, and what is then done on '.' or on a
+   * name there is done in that very directory, wherever it is renamed to.
+   */
+  function _enter($dir, $name = NULL) {
+    return @chdir($name === NULL ? $dir : $name) && getcwd() === $dir;
+  }
+
+  /**
+   * Go back to the working directory $cwd, as getcwd() returned it.
+   */
+  function _leave($cwd) {
+    if ($cwd !== FALSE) {
+      @chdir($cwd);
+    }
+  }
+
+  /**
+   * Walk the current directory depth first, calling $func (chgrp or chmod)
+   * with $arg on everything below it and then on '.', as _call_recursive()
+   * walks a path: links are neither followed nor changed.
+   *
+   * Each directory below is entered for real by name (_enter()) and the walk
+   * comes back to the physical path it left, and every other entry is
+   * changed by name in the directory it was read from, so a link put on the
+   * way during the walk is never followed. The group goes through lchgrp(),
+   * which does not follow a link put in an entry's place since it was read;
+   * PHP has no lchmod(), so a file swapped for a link between its test and
+   * chmod() is followed.
+   *
+   * @return
+   *   TRUE if every call returned TRUE.
+   */
+  function _here_recursive($func, $arg) {
+    $here = getcwd();
+    if ($here === FALSE) {
+      return FALSE;
+    }
+    $status = TRUE;
+    if ($dh = @opendir('.')) {
+      $names = array();
+      while (($name = readdir($dh)) !== FALSE) {
+        if ($name !== '.' && $name !== '..') {
+          $names[] = $name;
+        }
+      }
+      closedir($dh);
+      foreach ($names as $name) {
+        if (is_link($name)) {
+          continue;
+        }
+        if (is_dir($name)) {
+          $status = $this->_enter($here . '/' . $name, $name) && $this->_here_recursive($func, $arg) && $status;
+          if (!$this->_enter($here)) {
+            return FALSE;
+          }
+        }
+        elseif ($func == 'chgrp') {
+          $status = lchgrp($name, $arg) && $status;
+        }
+        else {
+          $status = call_user_func($func, $name, $arg) && $status;
+        }
+      }
+    }
+    $status = call_user_func($func, '.', $arg) && $status;
+    if (!$status) {
+      drush_log(dt('Failed calling :func on :path.', array(':func' => $func . '()', ':path' => $here)), 'debug');
+    }
+    return $status;
+  }
+
+  /**
    * Walk the given tree recursively (depth first), calling a function on each file
    *
    * $func is not checked for existence and called directly with $path and $arg

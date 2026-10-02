@@ -486,36 +486,64 @@ function _provision_drupal_create_directories($url = NULL) {
   drush_command_invoke_all_ref('provision_drupal_chgrp_not_recursive_alter', $chgrp_not_recursive, $url);
   drush_command_invoke_all_ref('provision_drupal_chmod_not_recursive_alter', $chmod_not_recursive, $url);
 
-  // The account owns the names in a site's files and private trees, so any
-  // of them can be a link: act only on what is the site's own.
+  // The account owns the names under sites/<uri>, and under sites/ on its
+  // own codebases, so the site dir and any name below it can be a link:
+  // judge once where each path of the site dir really is, and act only on
+  // what is the site's own, there and nowhere else.
+  $places = array();
   if ($url != 'all') {
     foreach (array_keys($mkdir + $chgrp) as $path) {
-      if (preg_match('#^sites/' . preg_quote($url, '#') . '/(files|private)(/|$)#', $path)
-        && _provision_drupal_store_skip($path, "sites/$url")) {
+      $tidy = _provision_drupal_path_tidy($path);
+      if ($tidy !== "sites/$url" && strpos($tidy, "sites/$url/") !== 0) {
+        continue;
+      }
+      $place = _provision_drupal_store_place($path, "sites/$url");
+      if ($place === FALSE) {
         unset($mkdir[$path], $chgrp[$path]);
+      }
+      else {
+        $places[$path] = $place;
       }
     }
   }
 
   foreach ($mkdir as $path => $perm) {
     if (!is_dir($path)) {
-      provision_file()->mkdir($path)
-        ->succeed('Created <code>@path</code>')
+      if (isset($places[$path])) {
+        $made = provision_file()->mkdir_in($places[$path]['dir'], $places[$path]['rest'], $path);
+      }
+      else {
+        $made = provision_file()->mkdir($path);
+      }
+      $made->succeed('Created <code>@path</code>')
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
-      provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
-        ->succeed('Changed group ownership of <code>@path</code> to @gid')
-        ->fail('Could not change group ownership <code>@path</code> to @gid');
+      if (!isset($places[$path])) {
+        provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
+          ->succeed('Changed group ownership of <code>@path</code> to @gid')
+          ->fail('Could not change group ownership <code>@path</code> to @gid');
+      }
+      elseif (!$places[$path]['link']) {
+        // As chgrp(): a link itself is left alone.
+        provision_file()->chgrp_in(_provision_drupal_place_path($places[$path]), $group, !in_array($path, $chgrp_not_recursive), $path)
+          ->succeed('Changed group ownership of <code>@path</code> to @gid')
+          ->fail('Could not change group ownership <code>@path</code> to @gid');
+      }
     }
   }
   // Apply chmod AFTER chgrp because chgrp strips special permissions.
   foreach ($mkdir as $path => $perm) {
     if ($perm !== FALSE) {
-      provision_file()->chmod($path, $perm, !in_array($path, $chmod_not_recursive))
-        ->succeed('Changed permissions of <code>@path</code> to @perm')
+      if (isset($places[$path])) {
+        $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $perm, !in_array($path, $chmod_not_recursive), $path);
+      }
+      else {
+        $done = provision_file()->chmod($path, $perm, !in_array($path, $chmod_not_recursive));
+      }
+      $done->succeed('Changed permissions of <code>@path</code> to @perm')
         ->fail('Could not change permissions <code>@path</code> to @perm');
     }
   }
@@ -545,22 +573,27 @@ function _provision_drupal_web_group_private($mkdir) {
 }
 
 /**
- * Whether to leave a path of a site's files or private tree alone.
+ * Where to act on a path of a site dir, or FALSE to leave it alone.
  *
- * TRUE when the path leads out of this account's own files store (see
- * _provision_drupal_outside_store()). Logs one warning per link it meets.
+ * FALSE when the path is not the site's own (see
+ * _provision_drupal_site_place()); logs one warning per link it meets.
  *
  * @param $path
  *   The path, relative to the platform root (the working directory) or
  *   absolute.
  * @param $site_dir
- *   The site dir, sites/<uri>.
+ *   The site dir in the same form: sites/<uri>, or
+ *   <platform root>/sites/<name>.
+ *
+ * @return
+ *   FALSE, or the place _provision_drupal_site_place() judged.
  */
-function _provision_drupal_store_skip($path, $site_dir) {
+function _provision_drupal_store_place($path, $site_dir) {
   static $told = array();
-  $out = _provision_drupal_outside_store($path, $site_dir, d('@server_master')->aegir_root);
+  $place = _provision_drupal_site_place($path, $site_dir, d('@server_master')->aegir_root);
+  $out = $place['out'];
   if ($out === FALSE) {
-    return FALSE;
+    return $place;
   }
   $key = $out['path'] . "\n" . $out['target'];
   if (empty($told[$key])) {
@@ -572,68 +605,96 @@ function _provision_drupal_store_skip($path, $site_dir) {
       drush_log(dt("STORE/SKIP @path resolves to @target, outside this account's own files store; left as it is, with everything below it", array('@path' => $out['path'], '@target' => $out['target'])), 'warning');
     }
   }
-  return TRUE;
+  return FALSE;
 }
 
 /**
- * Where a path of a site's files or private tree leads, if not the site's.
+ * Where a path of a site dir really is, judged once for the act on it.
  *
- * The account owns the names under sites/<uri>, so files, private and any
- * directory below them can be a link it planted. A path is the site's own
- * when no link lies on its way below the site dir, or when the deepest part
- * of it that exists resolves strictly below this account's own files store
+ * The account owns the names under sites/<uri>, and under sites/ on its own
+ * codebases, so the site dir itself, files, private, the site's modules,
+ * themes, libraries and vendor, and any name below them can be a link it
+ * planted. The deepest part of the path that exists is resolved once: the
+ * path is the site's own when that is where the path stands below the
+ * platform root, no link on its way from sites/ down, or when it lies
+ * strictly below this account's own files store
  * (_provision_drupal_in_own_store()). A path outside the site dir is the
- * site's own by the store rule only. A link that resolves nowhere is left to
- * the caller: mkdir, chgrp and chmod cannot pass through it, and fail on it
- * as before. A path the kernel reaches but PHP's realpath() cannot resolve
- * (it follows at most 32 links where Linux follows 40, and gives up once a
- * relative link body and its directory reach MAXPATHLEN) cannot be judged,
- * so it is not the site's own.
+ * site's own by the store rule only. The platform root itself is taken as
+ * given, as the account's own directory is.
+ *
+ * The caller acts on the physical directory judged and nowhere else: it
+ * enters it for real and makes what is missing below it by name (see
+ * Provision_FileSystem::mkdir_in()), so a link put on the way after this
+ * check is never followed.
+ *
+ * A link that resolves nowhere is left to the caller: mkdir, chgrp and chmod
+ * cannot pass through it, and fail on it as before. A path the kernel
+ * reaches but PHP's realpath() cannot resolve (it follows at most 32 links
+ * where Linux follows 40, and gives up once a relative link body and its
+ * directory reach MAXPATHLEN) cannot be judged, so it is not the site's own.
  *
  * @param $path
  *   The path, relative to the platform root (the working directory) or
  *   absolute.
  * @param $site_dir
- *   The site dir in the same form, sites/<uri>.
+ *   The site dir in the same form: sites/<uri>, or
+ *   <platform root>/sites/<name>.
  * @param $aegir_root
  *   The account's home, /data/disk/<account> or /var/aegir.
  *
  * @return
- *   FALSE when the path is the site's own or resolves nowhere; otherwise an
- *   array: 'path', the last link on the way, the one that leads out (or the
- *   path itself when it is outside the site dir), and 'target', where that
- *   resolves, or '' when PHP cannot resolve it.
+ *   An array: 'out', FALSE when the path is the site's own or resolves
+ *   nowhere, otherwise an array of 'path', the last link on the way, the one
+ *   that leads out (or the deepest part that exists when no link does), and
+ *   'target', where that resolves, or '' when PHP cannot resolve it; 'dir',
+ *   the physical path of the deepest part that exists when the path is the
+ *   site's own, else NULL; 'rest', the names below it still missing; 'link',
+ *   TRUE when the whole path exists and is itself a link.
  */
-function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
+function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
   clearstatcache(TRUE);
   $path = _provision_drupal_path_tidy($path);
   $site_dir = _provision_drupal_path_tidy($site_dir);
-  $parts = array();
-  if ($site_dir !== '' && strpos($path, $site_dir . '/') === 0) {
-    $parts = explode('/', substr($path, strlen($site_dir) + 1));
-    foreach ($parts as $part) {
-      if ($part === '' || $part === '.' || $part === '..') {
-        $parts = array();
+  // The platform root: the working directory, or above an absolute site dir.
+  $base = '.';
+  $pre = '';
+  if (strpos($site_dir, '/') === 0) {
+    $cut = strrpos($site_dir, '/sites/');
+    if ($cut === FALSE) {
+      $cut = strrpos($site_dir, '/');
+    }
+    $base = ($cut === 0) ? '/' : substr($site_dir, 0, $cut);
+    $pre = substr($site_dir, 0, $cut + 1);
+  }
+  // The names from sites/ down.
+  $names = array();
+  if ($site_dir !== '' && ($path === $site_dir || strpos($path, $site_dir . '/') === 0)) {
+    $names = explode('/', substr($path, strlen($pre)));
+    foreach ($names as $name) {
+      if ($name === '' || $name === '.' || $name === '..') {
+        $names = array();
         break;
       }
     }
   }
   $link = NULL;
   $last = NULL;
-  if ($parts) {
-    $cur = $site_dir;
-    foreach ($parts as $part) {
-      $cur .= '/' . $part;
+  $rest = array();
+  if ($names) {
+    $cur = '';
+    foreach ($names as $i => $name) {
+      $cur = ($i === 0) ? $pre . $name : $cur . '/' . $name;
       if (is_link($cur)) {
         $link = $cur;
       }
       elseif (!file_exists($cur)) {
+        $rest = array_slice($names, $i);
         break;
       }
       $last = $cur;
     }
-    if ($link === NULL) {
-      return FALSE;
+    if ($last === NULL) {
+      $last = $base;
     }
   }
   else {
@@ -645,17 +706,78 @@ function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
     // file_exists() asks the kernel, as mkdir, chmod and the .htaccess
     // update will: a dangling link or a loop fails there too.
     if (!file_exists($last)) {
-      return FALSE;
+      return array('out' => FALSE, 'dir' => NULL, 'rest' => $rest, 'link' => ($names && !$rest && $link === $last));
     }
-    return array('path' => $link, 'target' => '');
+    return array('out' => array('path' => ($link === NULL) ? $last : $link, 'target' => ''), 'dir' => NULL, 'rest' => $rest, 'link' => FALSE);
   }
-  if (_provision_drupal_in_own_store($target, $aegir_root)) {
-    return FALSE;
+  // Where the deepest part stands with no link on its way: the platform
+  // root as resolved, then the names.
+  $root = realpath($base);
+  $here = NULL;
+  if ($names && $root !== FALSE) {
+    $here = ($last === $base) ? $root : rtrim($root, '/') . '/' . substr($last, strlen($pre));
+  }
+  if ($target === $here || _provision_drupal_in_own_store($target, $aegir_root)) {
+    return array('out' => FALSE, 'dir' => $target, 'rest' => $rest, 'link' => ($names && !$rest && $link === $last));
+  }
+  if ($link === NULL) {
+    $link = $last;
   }
   // What lies past the last link is real, so that link is the one that leads
   // out: name it and where it leads, once for all the paths through it.
   $at = realpath($link);
-  return array('path' => $link, 'target' => ($at === FALSE) ? $target : $at);
+  return array('out' => array('path' => $link, 'target' => ($at === FALSE) ? $target : $at), 'dir' => NULL, 'rest' => $rest, 'link' => FALSE);
+}
+
+/**
+ * Give a just-extracted site's files, private files, config and temp trees
+ * to the web group, as a deploy does before the site is swapped in.
+ *
+ * Each tree is judged first, the extracted dir as the site dir
+ * (_provision_drupal_store_place()): one that leads out of the account's own
+ * files store is left as it is, with a STORE/SKIP warning, and one that is
+ * itself a link is left alone, as chgrp() leaves it. Each other tree is
+ * walked from inside the directory judged, every directory below it entered
+ * for real (Provision_FileSystem::chgrp_in()).
+ *
+ * @param $extract_path
+ *   The extracted site dir, <platform root>/sites/<uri> or its .restore
+ *   copy.
+ */
+function _provision_drupal_deploy_chgrp($extract_path) {
+  $group = d('@server_master')->web_group;
+  $trees = array(
+    'files' => 'files',
+    'private/files' => 'private files',
+    'private/config' => 'config files',
+    'private/temp' => 'temp files',
+  );
+  $places = array();
+  foreach ($trees as $tree => $what) {
+    $places[$tree] = _provision_drupal_store_place($extract_path . '/' . $tree, $extract_path);
+  }
+  foreach ($trees as $tree => $what) {
+    $place = $places[$tree];
+    if ($place === FALSE || $place['link']) {
+      continue;
+    }
+    // A tree that is not there gets nothing, and fails as before.
+    $dir = $place['rest'] ? NULL : $place['dir'];
+    provision_file()->chgrp_in($dir, $group, TRUE, $extract_path . '/' . $tree)
+      ->succeed('Changed group ownership of ' . $what . ' in <code>@path</code> to @gid')
+      ->fail('Could not change group ownership of ' . $what . ' in <code>@path</code> to @gid');
+  }
+}
+
+/**
+ * The physical path a judged place stands for (_provision_drupal_site_place()):
+ * its deepest directory that existed, then the names made below it since.
+ */
+function _provision_drupal_place_path($place) {
+  if ($place['dir'] === NULL || !$place['rest']) {
+    return $place['dir'];
+  }
+  return $place['dir'] . '/' . implode('/', $place['rest']);
 }
 
 /**
@@ -1060,16 +1182,11 @@ function _provision_drupal_ensure_htaccess_update() {
       'directory' => variable_get('file_temporary_path', file_directory_temp()),
     );
     foreach ($htaccess_files as $htaccess_file => $info) {
-      if (_provision_drupal_htaccess_skip($info['directory'])) {
+      $at = _provision_drupal_htaccess_dir($info['directory']);
+      if ($at === FALSE) {
         continue;
       }
-      // Check for the string which was added to the recommended .htaccess file
-      // in the latest security update.
-      if (!file_exists($htaccess_file) || !($contents = @file_get_contents($htaccess_file)) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
-
-        // Aegir specific
-        @unlink($htaccess_file);
-        file_create_htaccess($info['directory'], FALSE);
+      if (_provision_drupal_htaccess_here($at, 7)) {
         drush_log(dt('Updated @file to match http://drupal.org/SA-CORE-2013-003', array('@file' => $info['directory'] . '/.htaccess')), 'notice');
         $path = file_stream_wrapper_get_instance_by_uri($htaccess_file)->getDirectoryPath();
         d()->service('http')->sync(d()->root . '/' . $info['directory'] . '/.htaccess');
@@ -1086,17 +1203,11 @@ function _provision_drupal_ensure_htaccess_update() {
       'directory' => file_directory_temp(),
     );
     foreach ($htaccess_files as $key => $info) {
-      if (_provision_drupal_htaccess_skip($info['directory'])) {
+      $at = _provision_drupal_htaccess_dir($info['directory']);
+      if ($at === FALSE) {
         continue;
       }
-      // Check for the string which was added to the recommended .htaccess file
-      // in the latest security update.
-      $htaccess_file = $info['directory'] . '/.htaccess';
-      if (!file_exists($htaccess_file) || !($contents = @file_get_contents($htaccess_file)) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
-
-        // Aegir specific
-        @unlink($info['directory'] . '/.htaccess');
-        file_create_htaccess($info['directory'], NULL);
+      if (_provision_drupal_htaccess_here($at, 6)) {
         drush_log(dt('Updated @file to match http://drupal.org/SA-CORE-2013-003', array('@file' => $info['directory'] . '/.htaccess')), 'notice');
         d()->service('http')->sync(d()->root . '/' . $info['directory'] . '/.htaccess');
       }
@@ -1105,21 +1216,63 @@ function _provision_drupal_ensure_htaccess_update() {
 }
 
 /**
- * Whether the .htaccess update leaves one of a site's files directories alone.
+ * Where the .htaccess update acts for one of a site's files directories: its
+ * physical path, or FALSE to leave it alone.
  *
  * The directory comes from the site's own settings, so it is judged by the
- * store rule of the site's files and private trees
- * (_provision_drupal_store_skip()), in the form relative to the platform root.
- * Both are tidied first: a "<root>//sites/<uri>/..." spelling must not lose
- * its platform root and be read as "/sites/<uri>/...", which exists nowhere.
+ * store rule of the site dir (_provision_drupal_store_place()), in the form
+ * relative to the platform root. Both are tidied first: a
+ * "<root>//sites/<uri>/..." spelling must not lose its platform root and be
+ * read as "/sites/<uri>/...", which exists nowhere. A directory that does not
+ * exist gets nothing.
  */
-function _provision_drupal_htaccess_skip($dir) {
+function _provision_drupal_htaccess_dir($dir) {
   $dir = _provision_drupal_path_tidy($dir);
   $root = _provision_drupal_path_tidy(d()->root) . '/';
   if (strpos($dir, $root) === 0) {
     $dir = substr($dir, strlen($root));
   }
-  return _provision_drupal_store_skip($dir, 'sites/' . d()->uri);
+  $place = _provision_drupal_store_place($dir, 'sites/' . d()->uri);
+  if ($place === FALSE || $place['dir'] === NULL || $place['rest']) {
+    return FALSE;
+  }
+  return $place['dir'];
+}
+
+/**
+ * The .htaccess update of one directory, made inside it.
+ *
+ * The physical directory $at is entered for real (chdir(), then getcwd()
+ * must name it) and the file is read, removed and written there by name, so
+ * a link put on the way since $at was judged is never followed. A .htaccess
+ * that is itself a link is left as it is. The core's file_create_htaccess()
+ * writes ./.htaccess.
+ *
+ * @param $at
+ *   The physical path of the directory (_provision_drupal_htaccess_dir()).
+ * @param $major
+ *   The Drupal major version, 6 or 7.
+ *
+ * @return
+ *   TRUE when the file was missing or stale and written anew.
+ */
+function _provision_drupal_htaccess_here($at, $major) {
+  $cwd = getcwd();
+  $done = FALSE;
+  if (@chdir($at) && getcwd() === $at && !is_link('.htaccess')) {
+    // Check for the string which was added to the recommended .htaccess file
+    // in the latest security update.
+    if (!file_exists('.htaccess') || !($contents = @file_get_contents('.htaccess')) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
+      // Aegir specific
+      @unlink('.htaccess');
+      file_create_htaccess('.', ($major == 7) ? FALSE : NULL);
+      $done = TRUE;
+    }
+  }
+  if ($cwd !== FALSE) {
+    chdir($cwd);
+  }
+  return $done;
 }
 
 /**
