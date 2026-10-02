@@ -22,7 +22,7 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
       require_once $drupal_root . '/core/lib/Drupal/Component/Utility/Crypt.php';
-      $this->data['drupal_hash_salt_var'] = Drupal\Component\Utility\Crypt::randomBytesBase64(55);
+      $this->data['drupal_hash_salt_var'] = $this->hash_salt();
       $this->data['maintenance_var_new'] = TRUE;
     }
     elseif (drush_drupal_major_version() == 10) {
@@ -32,7 +32,7 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
       require_once $drupal_root . '/core/lib/Drupal/Component/Utility/Crypt.php';
-      $this->data['drupal_hash_salt_var'] = Drupal\Component\Utility\Crypt::randomBytesBase64(55);
+      $this->data['drupal_hash_salt_var'] = $this->hash_salt();
       $this->data['maintenance_var_new'] = TRUE;
     }
     elseif (drush_drupal_major_version() == 9) {
@@ -42,7 +42,7 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
       require_once $drupal_root . '/core/lib/Drupal/Component/Utility/Crypt.php';
-      $this->data['drupal_hash_salt_var'] = Drupal\Component\Utility\Crypt::randomBytesBase64(55);
+      $this->data['drupal_hash_salt_var'] = $this->hash_salt();
       $this->data['maintenance_var_new'] = TRUE;
     }
     elseif (drush_drupal_major_version() == 8) {
@@ -52,7 +52,7 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
       $this->data['utf8mb4_is_supported'] = $this->db_server->utf8mb4_is_supported;
       $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
       require_once $drupal_root . '/core/lib/Drupal/Component/Utility/Crypt.php';
-      $this->data['drupal_hash_salt_var'] = Drupal\Component\Utility\Crypt::randomBytesBase64(55);
+      $this->data['drupal_hash_salt_var'] = $this->hash_salt();
       $this->data['maintenance_var_new'] = TRUE;
     }
     elseif (drush_drupal_major_version() == 7) {
@@ -118,5 +118,27 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
         ->succeed('Changed permissions of <code>@path</code> to @perm')
         ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
+  }
+
+  /**
+   * The salt for the settings.php about to be written (Drupal 8 and newer).
+   *
+   * The one the site has is kept (see _provision_settings_hash_salt_read());
+   * a site without a usable one gets a new salt. A clone is a new site: its
+   * deploy is told to draw a new salt, which it does on its first write, and
+   * every later write keeps that one. The caller has loaded Drupal's Crypt.
+   */
+  function hash_salt() {
+    static $drawn = array();
+    $file = $this->filename();
+    $fresh = drush_get_option('provision_fresh_hash_salt', FALSE) && empty($drawn[$file]);
+    if (!$fresh) {
+      $existing = _provision_settings_hash_salt_read($file);
+      if ($existing !== '') {
+        return $existing;
+      }
+    }
+    $drawn[$file] = TRUE;
+    return Drupal\Component\Utility\Crypt::randomBytesBase64(55);
   }
 }

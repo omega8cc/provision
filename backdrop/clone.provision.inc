@@ -213,6 +213,10 @@ function drush_provision_backdrop_provision_clone($new_name, $platform = null) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
   }
 
+  // A clone is a new site, so its settings.php gets a hash salt of its own
+  // (see the same line in platform/clone.provision.inc).
+  $deploy_options['provision_fresh_hash_salt'] = 1;
+
   // The safety copy took its time; the unpacked copy must still fit.
   if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
     return FALSE;

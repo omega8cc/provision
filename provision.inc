@@ -320,6 +320,43 @@ function genRandStrUnlock($length = 12) {
 }
 
 /**
+ * The hash salt a settings.php written by Aegir already carries, or ''.
+ *
+ * A site's settings.php is rewritten by every Verify, Backup, Restore, Clone
+ * and Migrate, and the writers keep the salt the site has: a new one on each
+ * write voided every outstanding one-time login link, form and CSRF token,
+ * image and asset token, and whatever the site encrypted with it. The file
+ * about to be replaced can be the tenant's to plant, so it is parsed, never
+ * included, and only the exact line the settings templates write is taken:
+ * one assignment at the start of a line, a value from the base64url
+ * alphabet, the closing quote and semicolon. No quote or backslash can ride
+ * back into the new file. A file that is a link, carries two assignments or
+ * any other form answers '', and the writer draws a new salt.
+ *
+ * @return string
+ *   The salt, or '' when the file has none this reader accepts.
+ */
+function _provision_settings_hash_salt_read($file) {
+  if (is_link($file) || !is_file($file) || !is_readable($file)) {
+    return '';
+  }
+  // A settings.php is a few kilobytes; one a tenant inflated is not read.
+  $size = @filesize($file);
+  if ($size === FALSE || $size > 1048576) {
+    return '';
+  }
+  $contents = @file_get_contents($file);
+  if (!is_string($contents) || $contents === '') {
+    return '';
+  }
+  $matches = array();
+  if (preg_match_all('/^[ \t]*\$settings\[\'hash_salt\'\][ \t]*=[ \t]*\'([A-Za-z0-9_-]{43,128})\';[ \t]*$/m', $contents, $matches) !== 1) {
+    return '';
+  }
+  return $matches[1][0];
+}
+
+/**
  * The codebase's psr/log package directory, resolved the way the lock and
  * unlock bodies resolve every vendor path: <root>/vendor first, then the
  * composer layout that keeps vendor/ above the docroot. '' when there is

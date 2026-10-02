@@ -88,31 +88,31 @@ class Provision_Config_Backdrop_Settings extends Provision_Config {
    * the current file is fail-safe: any miss falls back to a fresh salt.
    */
   function hash_salt() {
-    $existing = $this->existing_hash_salt();
-    if (!empty($existing)) {
-      return $existing;
+    static $drawn = array();
+    $file = $this->filename();
+    // A clone is a new site: its deploy draws a salt once, on its first
+    // write, and every later write keeps that one.
+    $fresh = drush_get_option('provision_fresh_hash_salt', FALSE) && empty($drawn[$file]);
+    if (!$fresh) {
+      $existing = $this->existing_hash_salt();
+      if (!empty($existing)) {
+        return $existing;
+      }
     }
+    $drawn[$file] = TRUE;
     return $this->random_hash_salt();
   }
 
   /**
    * Read a non-empty $settings['hash_salt'] out of the current settings.php.
    *
-   * Returns '' when the file is absent, unreadable, or carries no salt.
+   * Returns '' when the file is absent, unreadable, or carries no salt in the
+   * exact form this template writes: the value is printed back between single
+   * quotes, so a looser match would carry a quote or a backslash from a line
+   * that is not ours into the new file.
    */
   function existing_hash_salt() {
-    $file = $this->filename();
-    if (!provision_file()->exists($file)->status()) {
-      return '';
-    }
-    $contents = @file_get_contents($file);
-    if ($contents === FALSE) {
-      return '';
-    }
-    if (preg_match("/\\\$settings\\['hash_salt'\\]\\s*=\\s*'([^']*)'/", $contents, $matches)) {
-      return $matches[1];
-    }
-    return '';
+    return _provision_settings_hash_salt_read($this->filename());
   }
 
   /**

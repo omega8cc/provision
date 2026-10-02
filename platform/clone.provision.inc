@@ -242,6 +242,13 @@ function drush_provision_drupal_provision_clone($new_name, $platform = null) {
     $deploy_options['selected_backup_mode'] = $resolved_backup_mode;
   }
 
+  // A clone is a new site, so its settings.php gets a hash salt of its own.
+  // The deploy would otherwise keep the one in the source's settings.php,
+  // which rides the safety copy, and a login link or token minted on one
+  // site would then be good on the other. Told to the deploy alone: every
+  // later task keeps what it wrote. Set after the alter hook as well.
+  $deploy_options['provision_fresh_hash_salt'] = 1;
+
   // The safety copy took its time; the unpacked copy must still fit.
   if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
     return FALSE;
