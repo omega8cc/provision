@@ -606,14 +606,8 @@ function _provision_drupal_store_skip($path, $site_dir) {
  */
 function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
   clearstatcache(TRUE);
-  $path = (string) $path;
-  while (strpos($path, './') === 0) {
-    $path = (string) substr($path, 2);
-  }
-  if (strlen($path) > 1) {
-    $path = rtrim($path, '/');
-  }
-  $site_dir = rtrim((string) $site_dir, '/');
+  $path = _provision_drupal_path_tidy($path);
+  $site_dir = _provision_drupal_path_tidy($site_dir);
   $parts = array();
   if ($site_dir !== '' && strpos($path, $site_dir . '/') === 0) {
     $parts = explode('/', substr($path, strlen($site_dir) + 1));
@@ -662,6 +656,24 @@ function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
   // out: name it and where it leads, once for all the paths through it.
   $at = realpath($link);
   return array('path' => $link, 'target' => ($at === FALSE) ? $target : $at);
+}
+
+/**
+ * A path in the one spelling the kernel walks: runs of slashes made one, and
+ * every "." name and a trailing slash dropped, so "./sites/<uri>/files",
+ * ".//sites/<uri>/files" and "sites/<uri>/./files/" all read
+ * "sites/<uri>/files". A ".." name is kept: where it leads depends on the
+ * links before it.
+ */
+function _provision_drupal_path_tidy($path) {
+  $path = (string) $path;
+  $names = array();
+  foreach (explode('/', $path) as $name) {
+    if ($name !== '' && $name !== '.') {
+      $names[] = $name;
+    }
+  }
+  return ((strpos($path, '/') === 0) ? '/' : '') . implode('/', $names);
 }
 
 /**
@@ -1098,10 +1110,12 @@ function _provision_drupal_ensure_htaccess_update() {
  * The directory comes from the site's own settings, so it is judged by the
  * store rule of the site's files and private trees
  * (_provision_drupal_store_skip()), in the form relative to the platform root.
+ * Both are tidied first: a "<root>//sites/<uri>/..." spelling must not lose
+ * its platform root and be read as "/sites/<uri>/...", which exists nowhere.
  */
 function _provision_drupal_htaccess_skip($dir) {
-  $dir = (string) $dir;
-  $root = rtrim((string) d()->root, '/') . '/';
+  $dir = _provision_drupal_path_tidy($dir);
+  $root = _provision_drupal_path_tidy(d()->root) . '/';
   if (strpos($dir, $root) === 0) {
     $dir = substr($dir, strlen($root));
   }
