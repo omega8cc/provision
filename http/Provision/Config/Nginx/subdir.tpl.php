@@ -1762,6 +1762,13 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
 
     try_files /index.php =404; ### check for existence of php file first
 
+    ###
+    ### Drupal's own 405 goes to the client as sent, with its Allow header.
+    ### The error_page 405 of the master location is for nginx's own 405s;
+    ### inherited here it took Drupal's answer back through @drupal.
+    ###
+    fastcgi_intercept_errors off;
+
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>

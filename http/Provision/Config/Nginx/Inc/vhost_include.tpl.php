@@ -2183,6 +2183,13 @@ location = /index.php {
   try_files $uri =404; ### check for existence of php file first
 
   ###
+  ### Drupal's own 405 goes to the client as sent, with its Allow header.
+  ### The server-level error_page 405 is for nginx's own 405s; inherited
+  ### here it took Drupal's answer back through @drupal.
+  ###
+  fastcgi_intercept_errors off;
+
+  ###
   ### FastCGI
   ###
 <?php if ($satellite_mode == 'boa'): ?>
