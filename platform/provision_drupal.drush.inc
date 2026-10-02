@@ -565,7 +565,12 @@ function _provision_drupal_store_skip($path, $site_dir) {
   $key = $out['path'] . "\n" . $out['target'];
   if (empty($told[$key])) {
     $told[$key] = TRUE;
-    drush_log(dt("STORE/SKIP @path resolves to @target, outside this account's own files store; left as it is, with everything below it", array('@path' => $out['path'], '@target' => $out['target'])), 'warning');
+    if ($out['target'] === '') {
+      drush_log(dt("STORE/SKIP @path cannot be resolved by PHP (too many links, or too long a path), so it cannot be checked against this account's own files store; left as it is, with everything below it", array('@path' => $out['path'])), 'warning');
+    }
+    else {
+      drush_log(dt("STORE/SKIP @path resolves to @target, outside this account's own files store; left as it is, with everything below it", array('@path' => $out['path'], '@target' => $out['target'])), 'warning');
+    }
   }
   return TRUE;
 }
@@ -580,7 +585,10 @@ function _provision_drupal_store_skip($path, $site_dir) {
  * (_provision_drupal_in_own_store()). A path outside the site dir is the
  * site's own by the store rule only. A link that resolves nowhere is left to
  * the caller: mkdir, chgrp and chmod cannot pass through it, and fail on it
- * as before.
+ * as before. A path the kernel reaches but PHP's realpath() cannot resolve
+ * (it follows at most 32 links where Linux follows 40, and gives up once a
+ * relative link body and its directory reach MAXPATHLEN) cannot be judged,
+ * so it is not the site's own.
  *
  * @param $path
  *   The path, relative to the platform root (the working directory) or
@@ -594,7 +602,7 @@ function _provision_drupal_store_skip($path, $site_dir) {
  *   FALSE when the path is the site's own or resolves nowhere; otherwise an
  *   array: 'path', the last link on the way, the one that leads out (or the
  *   path itself when it is outside the site dir), and 'target', where that
- *   resolves.
+ *   resolves, or '' when PHP cannot resolve it.
  */
 function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
   clearstatcache(TRUE);
@@ -639,7 +647,15 @@ function _provision_drupal_outside_store($path, $site_dir, $aegir_root) {
     $last = $path;
   }
   $target = realpath($last);
-  if ($target === FALSE || _provision_drupal_in_own_store($target, $aegir_root)) {
+  if ($target === FALSE) {
+    // file_exists() asks the kernel, as mkdir, chmod and the .htaccess
+    // update will: a dangling link or a loop fails there too.
+    if (!file_exists($last)) {
+      return FALSE;
+    }
+    return array('path' => $link, 'target' => '');
+  }
+  if (_provision_drupal_in_own_store($target, $aegir_root)) {
     return FALSE;
   }
   // What lies past the last link is real, so that link is the one that leads
