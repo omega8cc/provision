@@ -15,6 +15,10 @@ function drush_provision_txp_provision_enable_validate() {
   }
   if (d()->type === 'site') {
     d()->site_enabled = TRUE;
+    // The http enable hook renders the vhost from the 'site' context, which
+    // carries no db credentials here; config.php reads them from that vhost,
+    // so reload them first or the site answers with the 'none' placeholders.
+    _provision_txp_ensure_db_creds_loaded();
   }
 }
 
