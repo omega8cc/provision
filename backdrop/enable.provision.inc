@@ -15,6 +15,10 @@ function drush_provision_backdrop_provision_enable_validate() {
   if (d()->type == 'site') {
     d()->site_enabled = true;
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+    // The http enable hook renders the vhost from the 'site' context, which
+    // this bootstrap leaves without the db credentials: reload them first, or
+    // the vhost carries the 'none' placeholders until the next verify.
+    _provision_backdrop_ensure_db_creds_loaded();
   }
 }
 
