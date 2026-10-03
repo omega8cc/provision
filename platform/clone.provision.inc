@@ -26,7 +26,7 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched) {
+    if (provision_drush_local_lock_needed()) {
       drush_log(dt('CLONE/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }

@@ -946,6 +946,23 @@ function _provision_first_existing($paths) {
 }
 
 /**
+ * Whether a task must lock the site-local Drush before it bootstraps.
+ *
+ * The patch flags alone miss a codebase whose patches are on but whose
+ * psr/log is the genuine typed package again (an unlock window that died
+ * before its re-lock, a tenant composer run) and a locked tree that still
+ * owes the web its stock copies; the lock-state term sees both. Verify has
+ * asked all three for a while, while every other task asked the flags alone,
+ * so a Clone on a platform its owner had unlocked ran Drush 8 against modern
+ * code and died at class load. One predicate for every task now.
+ * provision_check_codebase_status() must have run first.
+ */
+function provision_drush_local_lock_needed() {
+  return !d()->isConsolePatched || !d()->isCorePatched
+    || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE);
+}
+
+/**
  * Derive the site-local Drush lock state purely from on-disk reality.
  *
  * No marker/pid files: state is read from the patch sentinels (set by
