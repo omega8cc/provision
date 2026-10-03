@@ -1102,11 +1102,11 @@ function _provision_first_existing($paths) {
  * provision_check_codebase_status() must have run first.
  *
  * A platform whose lock dirs are open (vendor/drush and the console Input and
- * Style dirs readable) is a different case: a command declared at
- * DRUSH_BOOTSTRAP_DRUPAL_ROOT registers the platform's autoloader before any
- * hook runs, and Drush 8 dies there on the modern console. Only a command at
- * DRUSH_BOOTSTRAP_DRUSH (verify, install, delete) reaches this test on such a
- * tree.
+ * Style dirs readable) is reached only because every site and platform task
+ * dispatches at DRUSH_BOOTSTRAP_DRUSH and bootstraps the root in a hook
+ * (provision_task_root_bootstrap()): a root bootstrap at dispatch registers
+ * the platform's autoloader before Drush 8 declares its console adapters, and
+ * the task dies there on the modern console before any hook runs.
  */
 function provision_drush_local_lock_needed() {
   return !d()->isConsolePatched || !d()->isCorePatched
