@@ -37,7 +37,7 @@ function drush_provision_drupal_provision_verify_validate() {
     // the lock converges the same way.
     if (drush_drupal_major_version() >= 8) {
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
+      if (provision_drush_local_lock_needed()) {
         drush_log(dt('VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -175,7 +175,7 @@ function drush_provision_drupal_pre_provision_verify() {
     // Lock Site-Local Drush and some Vendor Libs Early if Unlocked
     if (drush_drupal_major_version() >= 8) {
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
+      if (provision_drush_local_lock_needed()) {
         drush_log(dt('EARLY/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -552,7 +552,7 @@ function drush_provision_drupal_post_provision_verify() {
   // Lock Site-Local Drush and some Vendor Libs if Unlocked
   if (drush_drupal_major_version() >= 8) {
     provision_check_codebase_status();
-    if (!d()->isConsolePatched || !d()->isCorePatched || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE)) {
+    if (provision_drush_local_lock_needed()) {
       drush_log(dt('POST/VERIFY/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
       provision_lock_drush_local_vnd();
     }

@@ -1466,6 +1466,20 @@ port=%s
         '#/\*!50013 DEFINER=.*/#' => FALSE,
         // remove another kind of DEFINER line
         '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
+        // a trigger made under ANSI_QUOTES (Drupal 7 connects in that
+        // sql_mode) names its definer in double quotes
+        '#^(/\*!50003 CREATE\*/ )/\*!50017 DEFINER="[^"]*"@"[^"]*"\s*\*/#' => '$1',
+        // the DEFINER of an event
+        '#^(/\*!50106 CREATE\*/ )/\*!50117 DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*")\s*\*/#' => '$1',
+        // the DEFINER of a stored procedure or function, written bare at the
+        // start of its CREATE line, in double quotes under ANSI_QUOTES
+        '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
+        // a routine, event or trigger made while the database had another
+        // default collation is wrapped in ALTER DATABASE lines naming the
+        // dumped database, which the database user loading the dump into
+        // its own database may not alter (ERROR 1044); without the name
+        // they apply to the database being loaded
+        '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
         // remove broken CREATE ALGORITHM entries
         '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
       );
@@ -1498,6 +1512,44 @@ port=%s
         }
       }
     }
+  }
+
+  /**
+   * The options that put stored routines and events into a classic dump.
+   *
+   * mysqldump writes neither unless asked (triggers it writes by default),
+   * so a site that kept them (a function its queries call, a scheduled
+   * event) lost them on every Clone, on a Migrate and a Restore without
+   * MyQuick, and in a Backup's database.sql. Their definers are stripped by
+   * get_regexes(), as those of views and triggers always were, so the
+   * database user that loads the dump owns them.
+   *
+   * The dump runs as the site's own database user, and mysqldump stops the
+   * whole dump on a routine whose body that user may not read (one another
+   * user defines) and on events it may not list. So each option is asked
+   * first, as that user and with the same credentials, and left out with a
+   * warning when refused or when the question fails: the dump then runs as
+   * it did before. PHP 5.6-safe.
+   */
+  function mysqldump_objects_option($db_name) {
+    $options = '';
+    $client = 'mysql --defaults-file=/dev/fd/3 -B -N -e ';
+    $routines = "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_DEFINITION IS NULL";
+    if ($this->safe_shell_exec($client . escapeshellarg($routines) . ' ' . escapeshellarg($db_name), NULL, NULL, NULL)
+      && preg_match('/^([0-9]+)$/m', $this->safe_shell_exec_output, $match)
+      && $match[1] === '0') {
+      $options .= ' --routines';
+    }
+    else {
+      drush_log(dt('The stored routines of @db are left out of its dump: its database user cannot read every one of them (one another user defines) or could not be asked, and mysqldump would stop there.', array('@db' => $db_name)), 'warning');
+    }
+    if ($this->safe_shell_exec($client . escapeshellarg('SHOW EVENTS') . ' ' . escapeshellarg($db_name), NULL, NULL, NULL)) {
+      $options .= ' --events';
+    }
+    else {
+      drush_log(dt('The events of @db are left out of its dump: its database user may not list them or could not be asked, and mysqldump would stop there.', array('@db' => $db_name)), 'warning');
+    }
+    return $options;
   }
 
   /**
@@ -1721,7 +1773,7 @@ port=%s
       // does not know it, so the same command line works on both. The only
       // thing lost is the ANALYZE TABLE ... UPDATE HISTOGRAM statements, which
       // nothing here depends on.
-      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics %s", $gtid_option, escapeshellcmd(drush_get_option('db_name')));
+      $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics%s %s", $gtid_option, $this->mysqldump_objects_option(drush_get_option('db_name')), escapeshellcmd(drush_get_option('db_name')));
 
       // Fail if db file already exists.
       $dump_file = fopen(d()->site_path . '/database.sql', 'x');

@@ -1762,6 +1762,13 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
 
     try_files /index.php =404; ### check for existence of php file first
 
+    ###
+    ### Drupal's own 405 goes to the client as sent, with its Allow header.
+    ### The error_page 405 of the master location is for nginx's own 405s;
+    ### inherited here it took Drupal's answer back through @drupal.
+    ###
+    fastcgi_intercept_errors off;
+
 <?php if ($satellite_mode == 'boa'): ?>
     fastcgi_pass  unix:/run/$user_socket.fpm.socket;
 <?php elseif ($phpfpm_mode == 'port'): ?>
@@ -1915,6 +1922,13 @@ location @regular_<?php print $subdir_loc; ?> {
 location @modern_<?php print $subdir_loc; ?> {
   root  <?php print "{$this->root}"; ?>;
   set $location_detected "Modern";
+  ###
+  ### A method other than GET or HEAD on an existing file goes to Drupal
+  ### (see the same in the main vhost include).
+  ###
+  if ( $request_method !~ ^(?:GET|HEAD)$ ) {
+    rewrite ^ /<?php print $subdir; ?>/index.php?$query_string? last;
+  }
   try_files $uri @index_modern_<?php print $subdir_loc; ?>;
 }
 

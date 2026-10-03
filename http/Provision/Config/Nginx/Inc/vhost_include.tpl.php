@@ -2007,6 +2007,16 @@ location @regular {
 ###
 location @modern {
   set $location_detected "Modern";
+  ###
+  ### A method other than GET or HEAD on a path that is an existing file goes
+  ### to Drupal, which answers it (a 404, or its own 405 with Allow), the way
+  ### the Drupal 6 and 7 locations always did. Trying the file first handed
+  ### the request to the static handler, whose 405 came back here through
+  ### error_page, and nginx ended that loop in a 500.
+  ###
+  if ( $request_method !~ ^(?:GET|HEAD)$ ) {
+    rewrite ^ /index.php?$query_string? last;
+  }
   try_files $uri @modern_to_index;
 }
 
@@ -2080,14 +2090,16 @@ location = /index.php {
   ### effective; it is deliberately the only control here that does not
   ### classify the client, because that class cannot be classified.
   ###
-  ### $boa_perhost_anon_key and the zone are declared in the BOA-written
-  ### http-scope file, NOT in the master render, and this consumer appears only
-  ### when that file is present with the expected zone -- so no delivery order
+  ### The zone and its key maps are declared in the BOA-written http-scope
+  ### file, NOT in the master render, and this consumer appears only when
+  ### that file is present with the expected zone -- so no delivery order
   ### can produce an undeclared-zone reference, which matters because a missing
   ### zone is a whole-box nginx [emerg] and the upgrade path restarts nginx
   ### without a configtest.  (Same contract as the bgp_flood zone above.)
-  ### The key is $host for anonymous requests and EMPTY for authenticated ones,
-  ### so an editor or admin is never shed while a flood is being trimmed.
+  ### The key is $host for anonymous requests and EMPTY for authenticated
+  ### ones, by session cookie or by Authorization header, so an editor, an
+  ### admin or a token-authenticated client is never shed while a flood is
+  ### being trimmed.
   ###
   ### The shed status is the location-wide 444 set above, NOT 503:
   ### limit_conn_status is one-per-context, and the scan_nginx i18n detector
@@ -2181,6 +2193,13 @@ location = /index.php {
   add_header Referrer-Policy "no-referrer-when-downgrade";
 
   try_files $uri =404; ### check for existence of php file first
+
+  ###
+  ### Drupal's own 405 goes to the client as sent, with its Allow header.
+  ### The server-level error_page 405 is for nginx's own 405s; inherited
+  ### here it took Drupal's answer back through @drupal.
+  ###
+  fastcgi_intercept_errors off;
 
   ###
   ### FastCGI
