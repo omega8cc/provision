@@ -952,10 +952,16 @@ function _provision_first_existing($paths) {
  * psr/log is the genuine typed package again (an unlock window that died
  * before its re-lock, a tenant composer run) and a locked tree that still
  * owes the web its stock copies; the lock-state term sees both. Verify has
- * asked all three for a while, while every other task asked the flags alone,
- * so a Clone on a platform its owner had unlocked ran Drush 8 against modern
- * code and died at class load. One predicate for every task now.
+ * asked all three for a while, while every other task asked the flags alone
+ * and so bootstrapped Drupal on such a tree. One predicate for every task now.
  * provision_check_codebase_status() must have run first.
+ *
+ * A platform whose lock dirs are open (vendor/drush and the console Input and
+ * Style dirs readable) is a different case: a command declared at
+ * DRUSH_BOOTSTRAP_DRUPAL_ROOT registers the platform's autoloader before any
+ * hook runs, and Drush 8 dies there on the modern console. Only a command at
+ * DRUSH_BOOTSTRAP_DRUSH (verify, install, delete) reaches this test on such a
+ * tree.
  */
 function provision_drush_local_lock_needed() {
   return !d()->isConsolePatched || !d()->isCorePatched
