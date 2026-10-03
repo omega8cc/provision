@@ -289,7 +289,14 @@ class Provision_FileSystem extends Provision_ChainedState {
     $this->tokens = array('@path' => $path, '@target' => $target);
 
     if (is_readable($path)) {
-      if (is_writeable(dirname($target)) && !file_exists($target) && !is_dir($target)) {
+      if (is_link($target)) {
+        // A link at the target, a dangling one included, passes the tests
+        // below; mkdir and chdir then fail on it and tar unpacks into the
+        // working directory instead. Refused before anything is written.
+        $this->tokens['@reason'] = dt('@target is a symbolic link', array('@target' => $target));
+        $this->last_status = FALSE;
+      }
+      elseif (is_writeable(dirname($target)) && !file_exists($target) && !is_dir($target)) {
         // Refuse before the first member is written when the archive cannot
         // fit: the extracted tree is never smaller than the archive that holds
         // it, so free space below the archive's own size is a certain failure.
@@ -311,9 +318,22 @@ class Provision_FileSystem extends Provision_ChainedState {
           return $this;
         }
         $this->mkdir($target);
+        $made = $this->last_status;
+        // mkdir() sets its own tokens; the messages here name @path and @target
+        $this->tokens = array('@path' => $path, '@target' => $target);
         $oldcwd = getcwd();
         // we need to do this because some retarded implementations of tar (e.g. SunOS) don't support -C
-        chdir($target);
+        // tar unpacks into the working directory: only ever the directory just
+        // made, never one a link put in its place after the mkdir
+        if (!$made || is_link($target) || !@chdir($target)
+          || getcwd() !== realpath(dirname($target)) . '/' . basename($target)) {
+          if (getcwd() !== $oldcwd) {
+            chdir($oldcwd);
+          }
+          $this->tokens['@reason'] = dt('The target directory could not be made and entered');
+          $this->last_status = FALSE;
+          return $this;
+        }
 
         // Decompression is driven by tar, not through a pipe, and the
         // decompressor is chosen from the suffix exactly as the backup side
