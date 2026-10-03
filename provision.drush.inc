@@ -205,7 +205,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-import' => 'Import the site as defined by the site Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-backup'] = array(
@@ -218,7 +219,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-backup' => 'Back up the site as defined by the site Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-enable'] = array(
@@ -227,7 +229,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-enable' => 'Enable the site as defined by the site Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
   $items['provision-disable'] = array(
     'arguments' => array('domain.com' => dt('The domain of the site to disable (only if disabled).')),
@@ -236,7 +239,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-disable' => 'Disable the site as defined by the site Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-lock'] = array(
@@ -244,7 +248,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @platform provision-lock' => 'Lock the platform as defined by the platform Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-unlock'] = array(
@@ -252,7 +257,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @platform provision-unlock' => 'Unlock the platform as defined by the platform Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-dlock'] = array(
@@ -335,7 +341,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-restore ~/backups/some_site.tar.gz' => 'Restore the site to the backup in ~/backups/some_site.tar.gz.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-deploy'] = array(
@@ -349,7 +356,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-deploy ~/backups/some_site.tar.gz' => 'Deploy the site as defined by the site Drush alias, from the backup in ~/backups/some_site.tar.gz.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-migrate'] = array(
@@ -362,7 +370,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-migrate @platform_name' => 'Migrate the site as defined by the Drush alias, to the platform as defined by the platform\'s Drush alias',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-clone'] = array(
@@ -376,7 +385,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-clone @new_site @platform_name' => 'Clone the original site to the new site on a platform',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-delete'] = array(
@@ -396,7 +406,8 @@ function provision_drush_command() {
     'examples' => array(
       'drush @site provision-login-reset' => 'Generate a one-time login reset URL for the site as defined by the site Drush alias generated with provision-save.',
     ),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_ROOT
+    // The platform root is bootstrapped in a hook: provision_task_root_bootstrap().
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH
   );
 
   $items['provision-backup-delete'] = array(
@@ -487,6 +498,129 @@ function drush_provision_save($alias = NULL) {
 function drush_provision_verify() {
   provision_backend_invoke(d()->name, 'provision-save');
   d()->command_invoke('verify');
+}
+
+/**
+ * Bootstrap the platform root for a task that dispatches at the Drush level.
+ *
+ * A command declared at DRUSH_BOOTSTRAP_DRUPAL_ROOT has Drush 8 register the
+ * platform's autoloader before its own console adapters are declared. On a
+ * Drupal 10+ platform whose site-local Drush is unlocked, the platform's typed
+ * symfony/console is then the one they meet, and the task dies with
+ * "DrushInputAdapter::getFirstArgument() must be compatible" before any hook
+ * runs, so the lock every task asks for (provision_drush_local_lock_needed())
+ * can never reach. Install moved to the Drush level for that reason; the other
+ * site and platform tasks follow it here.
+ *
+ * Called from each command's own pre_validate hook, which Drush runs after it
+ * has declared its adapters and before every validate hook of every engine
+ * (Drupal, Backdrop, Grav, Textpattern, db, http), so all of them see the root
+ * bootstrapped as they did at dispatch. The root Drush selected from the alias
+ * is kept; d()->root fills it only when none was selected. Re-entry from an
+ * in-process drush_invoke() (the safety backup of a Clone, Migrate or Restore)
+ * finds the phase reached and does nothing; the safety backup of a Delete,
+ * which runs before Delete bootstraps anything, bootstraps the root here, so
+ * its Drupal 8+ lock test now runs there too.
+ *
+ * @return bool
+ *   TRUE once the root is bootstrapped, FALSE with an error set otherwise.
+ */
+function provision_task_root_bootstrap() {
+  if (drush_get_context('DRUSH_BOOTSTRAP_PHASE', -1) >= DRUSH_BOOTSTRAP_DRUPAL_ROOT) {
+    return TRUE;
+  }
+  if (!drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT') && !empty(d()->root)) {
+    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+  }
+  if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT)) {
+    return TRUE;
+  }
+  $errors = drush_get_error_log();
+  foreach ($errors as $type => &$error) {
+    $error = "$type: {$error[0]}";
+  }
+  return drush_set_error('DRUSH_INVALID_DRUPAL_ROOT',
+    dt('A codebase was not found in @path. The errors were: @errors', array(
+      '@path' => (string) drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT'),
+      '@errors' => implode('|', $errors),
+    )));
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-backup.
+ */
+function drush_provision_backup_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-restore.
+ */
+function drush_provision_restore_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-deploy.
+ */
+function drush_provision_deploy_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-migrate.
+ */
+function drush_provision_migrate_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-clone.
+ */
+function drush_provision_clone_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-import.
+ */
+function drush_provision_import_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-enable.
+ */
+function drush_provision_enable_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-disable.
+ */
+function drush_provision_disable_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-lock.
+ */
+function drush_provision_lock_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-unlock.
+ */
+function drush_provision_unlock_pre_validate() {
+  return provision_task_root_bootstrap();
+}
+
+/**
+ * Implements drush_hook_pre_validate() for provision-login-reset.
+ */
+function drush_provision_login_reset_pre_validate() {
+  return provision_task_root_bootstrap();
 }
 
 function _provision_default_web_group() {
