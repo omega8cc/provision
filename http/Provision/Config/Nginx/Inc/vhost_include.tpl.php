@@ -2007,6 +2007,16 @@ location @regular {
 ###
 location @modern {
   set $location_detected "Modern";
+  ###
+  ### A method other than GET or HEAD on a path that is an existing file goes
+  ### to Drupal, which answers it (a 404, or its own 405 with Allow), the way
+  ### the Drupal 6 and 7 locations always did. Trying the file first handed
+  ### the request to the static handler, whose 405 came back here through
+  ### error_page, and nginx ended that loop in a 500.
+  ###
+  if ( $request_method !~ ^(?:GET|HEAD)$ ) {
+    rewrite ^ /index.php?$query_string? last;
+  }
   try_files $uri @modern_to_index;
 }
 

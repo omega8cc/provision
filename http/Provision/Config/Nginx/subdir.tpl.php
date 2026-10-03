@@ -1922,6 +1922,13 @@ location @regular_<?php print $subdir_loc; ?> {
 location @modern_<?php print $subdir_loc; ?> {
   root  <?php print "{$this->root}"; ?>;
   set $location_detected "Modern";
+  ###
+  ### A method other than GET or HEAD on an existing file goes to Drupal
+  ### (see the same in the main vhost include).
+  ###
+  if ( $request_method !~ ^(?:GET|HEAD)$ ) {
+    rewrite ^ /<?php print $subdir; ?>/index.php?$query_string? last;
+  }
   try_files $uri @index_modern_<?php print $subdir_loc; ?>;
 }
 
