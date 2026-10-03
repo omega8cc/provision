@@ -196,7 +196,7 @@ function drush_provision_drupal_provision_install() {
     if (drush_drupal_major_version() > 7 && drush_drupal_major_version() < 11) {
       // Lock Site-Local Drush if Unlocked
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
+      if (provision_drush_local_lock_needed()) {
         drush_log(dt('INSTALL1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -267,7 +267,6 @@ function drush_provision_drupal_provision_install() {
           provision_lock_drush_local_vnd();
           return drush_set_error('PROVISION_PSR_LOG_RESTORE_FAILED', dt('Drupal site-install not run for @uri: the codebase still carries the de-typed Aegir psr/log the site-local Drush cannot start against (see the PSR/LOG lines above)', array('@uri' => d()->uri)));
         }
-        sleep(5);
       }
 
       // Define Drush Command
@@ -613,11 +612,10 @@ function drush_provision_drupal_provision_install() {
       // caller.
       if ($lock_unlock) {
         provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
+        if (provision_drush_local_lock_needed()) {
           drush_log(dt('D11/INSTALL/LOCAL8/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
-        sleep(5);
       }
     }
 

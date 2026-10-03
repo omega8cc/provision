@@ -107,7 +107,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
     if (drush_drupal_major_version() >= 8) {
       // Lock Site-Local Drush if Unlocked
       provision_check_codebase_status();
-      if (!d()->isConsolePatched || !d()->isCorePatched) {
+      if (provision_drush_local_lock_needed()) {
         drush_log(dt('DEPLOY1/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
         provision_lock_drush_local_vnd();
       }
@@ -295,7 +295,7 @@ function drush_provision_drupal_post_provision_deploy() {
       if (drush_drupal_major_version() >= 8) {
         // Lock Site-Local Drush if Unlocked
         provision_check_codebase_status();
-        if (!d()->isConsolePatched || !d()->isCorePatched) {
+        if (provision_drush_local_lock_needed()) {
           drush_log(dt('DEPLOY11/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
