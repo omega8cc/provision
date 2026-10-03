@@ -1867,7 +1867,7 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
 
   provision_check_codebase_status();
   $unlocked_here = FALSE;
-  if (d()->isConsolePatched || d()->isCorePatched || !is_executable($drushAbsolutePath)) {
+  if (d()->isConsolePatched || !d()->isCoreStock || !is_executable($drushAbsolutePath)) {
     drush_log(dt('@p with provision_unlock_drush_local_vnd (no site-local Drush runs on a locked platform)', array('@p' => $tag . '2/LOCAL/DRUSH/UNLOCK')), 'info');
     if (!provision_unlock_drush_local_vnd()) {
       // The genuine psr/log could not be put back (the PSR/LOG lines say
