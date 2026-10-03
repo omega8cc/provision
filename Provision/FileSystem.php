@@ -322,11 +322,14 @@ class Provision_FileSystem extends Provision_ChainedState {
         // mkdir() sets its own tokens; the messages here name @path and @target
         $this->tokens = array('@path' => $path, '@target' => $target);
         $oldcwd = getcwd();
+        // resolved before chdir() moves the directory a relative target is
+        // resolved against
+        $expected = realpath(dirname($target)) . '/' . basename($target);
         // we need to do this because some retarded implementations of tar (e.g. SunOS) don't support -C
         // tar unpacks into the working directory: only ever the directory just
         // made, never one a link put in its place after the mkdir
         if (!$made || is_link($target) || !@chdir($target)
-          || getcwd() !== realpath(dirname($target)) . '/' . basename($target)) {
+          || getcwd() !== $expected) {
           if (getcwd() !== $oldcwd) {
             chdir($oldcwd);
           }
