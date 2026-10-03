@@ -671,9 +671,9 @@ function _provision_core_logger_web_ready($root) {
  *
  * Only then is the tree 'partial'. One whose pristine psr/log is missing or
  * de-typed (the lock cannot take that copy from an overlaid package), or
- * whose four core logger files are not all de-typed the way the current
- * patch leaves them (a tree patched by an older patch), would be sent
- * through the lock body by every Verify without ever getting there.
+ * whose four core logger files do not all read de-typed (one of them
+ * missing, or in a form the reader does not know), would be sent through
+ * the lock body by every Verify without ever getting there.
  */
 function _provision_core_logger_stock_due($root) {
   $dir = _provision_core_logger_stock_dir($root);
@@ -839,6 +839,137 @@ function _provision_core_logger_stock_drop($root) {
 }
 
 /**
+ * The core patch template cut into one patch per core logger file.
+ *
+ * @return array
+ *   The relative path of each of _provision_core_logger_files() the
+ *   template changes => its own section of the template, from its "--- a/"
+ *   line to the next file. Empty when the template cannot be read.
+ */
+function _provision_core_patch_sections($patch_tpl) {
+  $text = @file_get_contents($patch_tpl);
+  if (!is_string($text) || $text === '') {
+    return array();
+  }
+  $known = _provision_core_logger_files();
+  $sections = array();
+  $current = NULL;
+  foreach (preg_split('/(?<=\n)/', $text) as $line) {
+    if (strncmp($line, 'diff ', 5) === 0) {
+      $current = NULL;
+      continue;
+    }
+    if (strncmp($line, '--- a/', 6) === 0) {
+      $path = preg_replace('/\s.*$/s', '', substr($line, 6));
+      $current = in_array($path, $known, TRUE) ? $path : NULL;
+      if ($current !== NULL) {
+        $sections[$current] = '';
+      }
+    }
+    if ($current !== NULL) {
+      $sections[$current] .= $line;
+    }
+  }
+  foreach ($sections as $rel => $section) {
+    if (strpos($section, "\n@@ ") === FALSE) {
+      unset($sections[$rel]);
+    }
+  }
+  return $sections;
+}
+
+/**
+ * Put the core patch on the core logger files, or take it off, file by file.
+ *
+ * A tree can carry the patch on some of the four files only: a platform
+ * built from a tarball that an older three-file patch had already de-typed,
+ * or one an older template patched in part. Run whole over such a tree, the
+ * patch fails its dry run both ways (a hunk already applied fails it as
+ * surely as one not applied yet), so the lock could not finish the tree and
+ * the unlock could not take it back. The template is therefore cut into one
+ * patch per file and only the files that read the other way are touched:
+ * those that read stock on the lock, those that read de-typed on the
+ * unlock. A file that reads neither way (missing, or in a form the reader
+ * does not know) is left as it is. Every file to change must pass its own
+ * dry run before any of them is changed, so a refusal leaves the tree as it
+ * found it.
+ *
+ * @param string $root
+ *   The docroot.
+ * @param string $patch_tpl
+ *   The core patch template.
+ * @param bool $reverse
+ *   TRUE to take the patch off (the unlock).
+ *
+ * @return bool
+ *   TRUE when every file that needed it was changed, or none needed it;
+ *   FALSE, with the error set, when a dry run failed or the template
+ *   carries no change for a file that needs one.
+ */
+function _provision_core_patch_files($root, $patch_tpl, $reverse) {
+  $todo = array();
+  foreach (_provision_core_logger_files() as $rel) {
+    if (_provision_core_logger_typed($root . '/' . $rel) === !$reverse) {
+      $todo[] = $rel;
+    }
+  }
+  if (empty($todo)) {
+    return TRUE;
+  }
+  $error = $reverse ? 'PROVISION_CORE_PATCH_REVERT_DRYRUN_FAILED' : 'PROVISION_CORE_PATCH_DRYRUN_FAILED';
+  $sections = _provision_core_patch_sections($patch_tpl);
+  $parts = array();
+  $refused = array();
+  foreach ($todo as $rel) {
+    if (!isset($sections[$rel])) {
+      $refused[] = $rel;
+      continue;
+    }
+    $part = drush_tempnam('provision_core_patch_');
+    if (!is_file($part) || file_put_contents($part, $sections[$rel]) === FALSE) {
+      $refused[] = $rel;
+      continue;
+    }
+    $parts[$rel] = $part;
+  }
+  // -N: a change the reader did not see is refused by the dry run, never
+  // applied twice or turned around.
+  $flags = $reverse ? '-R -N' : '-N';
+  foreach ($parts as $rel => $part) {
+    if (!drush_shell_exec('patch --dry-run ' . $flags . ' -d %s -p1 < %s', $root, $part)) {
+      $refused[] = $rel;
+    }
+  }
+  if (!empty($refused)) {
+    foreach ($parts as $part) {
+      @unlink($part);
+    }
+    if ($reverse) {
+      return drush_set_error($error, dt('Core patch would not revert cleanly in @webRoot (@files); skipping to avoid a partial revert.', array('@webRoot' => $root, '@files' => implode(', ', $refused))));
+    }
+    return drush_set_error($error, dt('Core patch would not apply cleanly in @webRoot (@files); skipping to avoid a partial patch.', array('@webRoot' => $root, '@files' => implode(', ', $refused))));
+  }
+  // A hunk that lands at an offset (an older core than the template was
+  // made from) would otherwise leave a .orig copy beside the core file.
+  foreach ($parts as $rel => $part) {
+    drush_log(dt('CORE/PATCH/@what @patchCoreTpl for @file in @webRoot', array('@what' => $reverse ? 'REVERT' : 'APPLY', '@patchCoreTpl' => $patch_tpl, '@file' => $rel, '@webRoot' => $root)), 'info');
+    $success = drush_shell_exec('patch --no-backup-if-mismatch ' . $flags . ' -d %s -p1 < %s', $root, $part);
+    $result = drush_shell_exec_output();
+    foreach ($result as $index => $line) {
+      if (!$success) { // Log the entire error as a warning.
+        $line_status = 'warning';
+      }
+      else { // Only log the last line as success.
+        $line_status = $index+1 == count($result) ? 'success' : 'notice';
+      }
+      drush_log($line, $line_status);
+    }
+    @unlink($part);
+  }
+  return TRUE;
+}
+
+/**
  * Custom helper function findAppRoot
  */
 function findAppRoot($startDir) {
@@ -867,6 +998,7 @@ function provision_check_codebase_status() {
   // idempotency predicate, the verify auto-lock guard) never read an unset
   // property on a not-yet-built or pre-D10 platform.
   d()->isCorePatched = FALSE;
+  d()->isCoreStock = TRUE;
   d()->isConsolePatched = FALSE;
   d()->isValidatorPatched = FALSE;
 
@@ -876,14 +1008,27 @@ function provision_check_codebase_status() {
     drush_log(dt('CHECK/CODE/VENDOR =@symfonyDir= FOR @webRoot', array('@symfonyDir' => d()->symfonyDir, '@webRoot' => d()->root)), 'info');
     drush_log(dt('CHECK/CODE/VALIDATOR =@appRoot= FOR @webRoot', array('@appRoot' => d()->appRoot, '@webRoot' => d()->root)), 'info');
 
-    d()->isCorePatched = FALSE;
-    $core_file_path = d()->root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
-    $core_search_string = ': void';
-    $core_file_content = file_get_contents($core_file_path);
-    if (strpos($core_file_content, $core_search_string) == false) {
-      d()->isCorePatched = TRUE;
+    // Each of the four core logger files the core patch de-types is read on
+    // its own. The patch counts as on (isCorePatched) when none of them reads
+    // stock, and as off (isCoreStock) when none reads de-typed. A tree with
+    // both (an older patch de-typed some of them) is neither: the lock
+    // finishes it and the unlock takes it back, file by file (see
+    // _provision_core_patch_files()). A file that reads neither way (missing,
+    // or in a form the reader does not know) counts for neither.
+    $core_stock = 0;
+    $core_detyped = 0;
+    foreach (_provision_core_logger_files() as $rel) {
+      $core_state = _provision_core_logger_typed(d()->root . '/' . $rel);
+      if ($core_state === TRUE) {
+        $core_stock++;
+      }
+      elseif ($core_state === FALSE) {
+        $core_detyped++;
+      }
     }
-    drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root)), 'info');
+    d()->isCorePatched = ($core_stock === 0 && $core_detyped > 0);
+    d()->isCoreStock = ($core_detyped === 0);
+    drush_log(dt('CHECK/CODE/CORE =@is_core_patched= FOR @webRoot (@detyped de-typed, @stock stock of @all)', array('@is_core_patched' => d()->isCorePatched, '@webRoot' => d()->root, '@detyped' => $core_detyped, '@stock' => $core_stock, '@all' => count(_provision_core_logger_files()))), 'info');
 
     d()->isConsolePatched = FALSE;
     $console_file_path = d()->symfonyDir . 'console/Output/Output.php';
@@ -1041,7 +1186,7 @@ function provision_drush_local_lock_state() {
       }
       return 'locked';
     }
-    if (!d()->isCorePatched && !d()->isConsolePatched && $bits_unlocked && $psr_detyped !== TRUE) {
+    if (d()->isCoreStock && !d()->isConsolePatched && $bits_unlocked && $psr_detyped !== TRUE) {
       return 'unlocked';
     }
     return 'partial';
@@ -1443,10 +1588,8 @@ function provision_unlock_drush_local_vnd() {
 
       provision_check_codebase_status();
 
-      $commandCore = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
       $commandValidator = sprintf('patch -d ' . d()->root . ' -R -p1 < ' . $patchValidatorTpl);
-      $commandCoreDry = sprintf('patch --dry-run -d ' . d()->root . ' -R -p1 < ' . $patchCoreTpl);
       $commandConsoleDry = sprintf('patch --dry-run -d ' . d()->symfonyDir . ' -R -p1 < ' . $patchConsoleTpl);
       $commandValidatorDry = sprintf('patch --dry-run -d ' . d()->root . ' -R -p1 < ' . $patchValidatorTpl);
 
@@ -1454,22 +1597,10 @@ function provision_unlock_drush_local_vnd() {
       drush_log(dt('CONSOLE/PATCH/IF4 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
       drush_log(dt('VALIDATOR/PATCH/IF4 --@isValidatorPatched-- in @webRoot', array('@isValidatorPatched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
 
-      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched && !drush_shell_exec($commandCoreDry)) {
-        drush_set_error('PROVISION_CORE_PATCH_REVERT_DRYRUN_FAILED', dt('Core patch would not revert cleanly in @webRoot; skipping to avoid a partial revert.', array('@webRoot' => d()->root)));
-      }
-      elseif (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && d()->isCorePatched) {
-        drush_log(dt('CORE/PATCH/REVERT @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
-        $success = drush_shell_exec($commandCore);
-        $result = drush_shell_exec_output();
-        foreach ($result as $index => $line) {
-          if (!$success) { // Log the entire error as a warning.
-            $line_status = 'warning';
-          }
-          else { // Only log the last line as success.
-            $line_status = $index+1 == count($result) ? 'success' : 'notice';
-          }
-          drush_log($line, $line_status);
-        }
+      // Only the files that read de-typed, each from its own part of the
+      // template: a tree an older patch de-typed in part reverts as well.
+      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCoreStock) {
+        _provision_core_patch_files(d()->root, $patchCoreTpl, TRUE);
       }
 
       if (isset($console_patch_fname) && provision_file()->exists($patchConsoleTpl)->status() && d()->isConsolePatched && !drush_shell_exec($commandConsoleDry)) {
@@ -1511,7 +1642,7 @@ function provision_unlock_drush_local_vnd() {
       // Core reads stock on disk again: the copies the lock kept for the web
       // go, so a later update of core can never meet stale ones.
       provision_check_codebase_status();
-      if (!d()->isCorePatched) {
+      if (d()->isCoreStock) {
         _provision_core_logger_stock_drop(d()->root);
       }
     }
@@ -1771,10 +1902,8 @@ function provision_lock_drush_local_vnd() {
         _provision_core_logger_stock_keep(d()->root, $patchCoreTpl);
       }
 
-      $commandCore = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
       $commandConsole = sprintf('patch -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
       $commandValidator = sprintf('patch -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
-      $commandCoreDry = sprintf('patch --dry-run -d ' . d()->root . ' -p1 < ' . $patchCoreTpl);
       $commandConsoleDry = sprintf('patch --dry-run -d ' . d()->symfonyDir . ' -p1 < ' . $patchConsoleTpl);
       $commandValidatorDry = sprintf('patch --dry-run -d ' . d()->root . ' -p1 < ' . $patchValidatorTpl);
 
@@ -1786,22 +1915,12 @@ function provision_lock_drush_local_vnd() {
       drush_log(dt('CONSOLE/PATCH/IF1 --@isConsolePatched-- in @symfonyDir', array('@isConsolePatched' => d()->isConsolePatched, '@symfonyDir' => d()->symfonyDir)), 'info');
       drush_log(dt('VALIDATOR/PATCH/IF1 --@isValidatorPatched-- in @webRoot', array('@isValidatorPatched' => d()->isValidatorPatched, '@webRoot' => d()->root)), 'info');
 
-      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched && !drush_shell_exec($commandCoreDry)) {
-        drush_set_error('PROVISION_CORE_PATCH_DRYRUN_FAILED', dt('Core patch would not apply cleanly in @webRoot; skipping to avoid a partial patch.', array('@webRoot' => d()->root)));
-      }
-      elseif (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
-        drush_log(dt('CORE/PATCH/APPLY @patchCoreTpl in @webRoot', array('@patchCoreTpl' => $patchCoreTpl, '@webRoot' => d()->root)), 'info');
-        $success = drush_shell_exec($commandCore);
-        $result = drush_shell_exec_output();
-        foreach ($result as $index => $line) {
-          if (!$success) { // Log the entire error as a warning.
-            $line_status = 'warning';
-          }
-          else { // Only log the last line as success.
-            $line_status = $index+1 == count($result) ? 'success' : 'notice';
-          }
-          drush_log($line, $line_status);
-        }
+      // Only the files that still read stock, each from its own part of the
+      // template: a tree an older patch de-typed in part is finished here.
+      // Once all four read de-typed the next lock run keeps their stock
+      // copies (_provision_core_logger_stock_due() reads it as 'partial').
+      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
+        _provision_core_patch_files(d()->root, $patchCoreTpl, FALSE);
       }
       if (provision_file()->exists($patchCoreFile)->status()) {
         provision_file()->unlink($patchCoreFile);
