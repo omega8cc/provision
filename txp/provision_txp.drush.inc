@@ -581,6 +581,34 @@ function _provision_txp_creds_from_drushrc($drushrc) {
 }
 
 /**
+ * The site directories the alias file of $uri records, read without d().
+ *
+ * d() keeps every context it loads for the life of the process, and a task's
+ * provision-save rewrites the alias in a subprocess: a context loaded here
+ * from a leftover alias would stay the leftover's (its db server, its
+ * platform) for every later d() of that name in this process. The file is
+ * included in this function's scope, the way Drush loads an alias file.
+ * Returns the recorded site_path and the recorded root's sites/<uri>, as far
+ * as they are set; an empty array when the file holds no record of $uri.
+ */
+function _provision_txp_alias_site_dirs($uri) {
+  $aliases = array();
+  $file = drush_server_home() . '/.drush/' . $uri . '.alias.drushrc.php';
+  if (!is_file($file) || (@include $file) === FALSE || !isset($aliases[$uri]) || !is_array($aliases[$uri])) {
+    return array();
+  }
+  $record = $aliases[$uri];
+  $dirs = array();
+  if (isset($record['site_path']) && is_string($record['site_path']) && $record['site_path'] !== '') {
+    $dirs[] = $record['site_path'];
+  }
+  if (isset($record['root']) && is_string($record['root']) && $record['root'] !== '') {
+    $dirs[] = rtrim($record['root'], '/') . '/sites/' . $uri;
+  }
+  return array_values(array_unique($dirs));
+}
+
+/**
  * Do two sites' credentials name one and the same database?
  *
  * The name alone does not tell. A copy placed on another database server
@@ -615,15 +643,19 @@ function _provision_txp_same_database($a, $b) {
  * context, and every place its database is recorded at: the host and port
  * the credentials name (an empty port also at the server's own port), and
  * the server context's remote_host and db_port, which is where the db
- * service connects to create or drop it.
+ * service connects to create or drop it. 'bound' tells whether the two
+ * agree: whether the server context is a server the credentials name, so
+ * its db service reaches the database they record.
  */
 function _provision_txp_db_side($creds, $context) {
   $host = isset($creds['db_host']) ? $creds['db_host'] : '';
   $port = isset($creds['db_port']) ? trim((string) $creds['db_port']) : '';
+  $named = _provision_txp_db_endpoints($host, $port);
   $side = array(
     'db_name' => isset($creds['db_name']) ? (string) $creds['db_name'] : '',
     'server' => '',
-    'endpoints' => _provision_txp_db_endpoints($host, $port),
+    'endpoints' => $named,
+    'bound' => FALSE,
   );
   $server = (is_object($context) && isset($context->db_server)) ? $context->db_server : NULL;
   if (is_object($server)) {
@@ -632,11 +664,14 @@ function _provision_txp_db_side($creds, $context) {
     }
     $server_port = isset($server->db_port) ? trim((string) $server->db_port) : '';
     if ($port === '' && $server_port !== '') {
-      $side['endpoints'] = array_merge($side['endpoints'], _provision_txp_db_endpoints($host, $server_port));
+      $named = array_merge($named, _provision_txp_db_endpoints($host, $server_port));
     }
+    $reached = array();
     if (isset($server->remote_host) && is_string($server->remote_host) && $server->remote_host !== '') {
-      $side['endpoints'] = array_merge($side['endpoints'], _provision_txp_db_endpoints($server->remote_host, $server_port));
+      $reached = _provision_txp_db_endpoints($server->remote_host, $server_port);
     }
+    $side['endpoints'] = array_merge($named, $reached);
+    $side['bound'] = (count(array_intersect($named, $reached)) > 0);
   }
   $side['endpoints'] = array_values(array_unique($side['endpoints']));
   return $side;
