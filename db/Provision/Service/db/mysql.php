@@ -1695,6 +1695,9 @@ port=%s
         // finished dump, the account's own, into this empty tmp_expim.
         $dumped = $this->broker_call('dump', array('--', $db_name));
         clearstatcache();
+        if ($dumped && is_file($oct_db_dirx . '/metadata') && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+          drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
+        }
         if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => $dumped ? 'the dump carries no metadata marker' : $this->broker_failure())));
         }
@@ -1754,6 +1757,9 @@ port=%s
           // A run that exits 0 without the final metadata marker still left
           // no restorable dump (killed mid-flight), so treat it as failed.
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+        }
+        elseif ($success && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+          drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
       }
     }
