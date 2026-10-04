@@ -730,8 +730,15 @@ function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
 }
 
 /**
- * Give a just-extracted site's files, private files, config and temp trees
- * to the web group, as a deploy does before the site is swapped in.
+ * Give a just-extracted site's files and private trees to the web group, as
+ * a deploy does before the site is swapped in.
+ *
+ * The backend user unpacks the archive, so every entry starts in its own
+ * login group, which the web server cannot read. A private dir the archive
+ * carried as a real dir is given over whole: what the web server writes
+ * there is not only private/files, config and temp (a key pair in a
+ * directory of its own, say). Where private is a link into the account's
+ * own store, its three known trees are given over, as before.
  *
  * Each tree is judged first, the extracted dir as the site dir
  * (_provision_drupal_store_place()): one that leads out of the account's own
@@ -748,6 +755,7 @@ function _provision_drupal_deploy_chgrp($extract_path) {
   $group = d('@server_master')->web_group;
   $trees = array(
     'files' => 'files',
+    'private' => 'the private store',
     'private/files' => 'private files',
     'private/config' => 'config files',
     'private/temp' => 'temp files',
@@ -756,9 +764,18 @@ function _provision_drupal_deploy_chgrp($extract_path) {
   foreach ($trees as $tree => $what) {
     $places[$tree] = _provision_drupal_store_place($extract_path . '/' . $tree, $extract_path);
   }
+  $private = $places['private'];
+  $whole = ($private !== FALSE && !$private['link'] && !$private['rest'] && $private['dir'] !== NULL);
   foreach ($trees as $tree => $what) {
     $place = $places[$tree];
     if ($place === FALSE || $place['link']) {
+      continue;
+    }
+    // The whole private dir, or its three trees: never both.
+    if ($tree === 'private' && !$whole) {
+      continue;
+    }
+    if ($whole && strpos($tree, 'private/') === 0) {
       continue;
     }
     // A tree that is not there gets nothing, and fails as before.
@@ -766,6 +783,50 @@ function _provision_drupal_deploy_chgrp($extract_path) {
     provision_file()->chgrp_in($dir, $group, TRUE, $extract_path . '/' . $tree)
       ->succeed('Changed group ownership of ' . $what . ' in <code>@path</code> to @gid')
       ->fail('Could not change group ownership of ' . $what . ' in <code>@path</code> to @gid');
+  }
+}
+
+/**
+ * Let a backup read what the site's web server wrote closed into its stores.
+ *
+ * The web server writes as the account's web user, and a file it makes 0600
+ * (a key pair from a key generator, say), or a directory it makes 0700, is
+ * closed to the backend user that packs the archive: tar fails on it, and
+ * with it the Backup and the Clone, Restore and Migrate that start with a
+ * safety copy, as does the store copy a renaming Migrate makes as the
+ * backend user. The site permissions fixer, run as root through its sudo
+ * entry point, adds group read to each such file and group read and search
+ * to each such directory in the site's own files and private stores, where
+ * the owner is one of the account's web users and the group its web group,
+ * and changes nothing else: the writer's owner, group and other bits stay,
+ * so the web server reads it as before and the backend user reads it
+ * through the web group, as it reads the rest of the store.
+ *
+ * Octopus accounts only, as the native files symlinking. Warn-not-fail:
+ * without the fixer, or with one that predates the mode, the archive is
+ * attempted as before and tar names what it could not read.
+ */
+function _provision_drupal_backup_read_preflight() {
+  $aegir_root = d('@server_master')->aegir_root;
+  if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
+    return;
+  }
+  $fixer = '/usr/local/bin/fix-drupal-site-permissions.sh';
+  if (!is_file($fixer)) {
+    return;
+  }
+  $ok = drush_shell_exec('sudo --non-interactive ' . $fixer . ' --site-path=%s --backup-read', d()->site_path);
+  $lines = array();
+  foreach (drush_shell_exec_output() as $line) {
+    if (trim($line) !== '') {
+      $lines[] = trim($line);
+    }
+  }
+  if ($ok) {
+    drush_log(dt('BACKUP/READ @line', array('@line' => $lines ? end($lines) : 'done')), 'info');
+  }
+  else {
+    drush_log(dt('BACKUP/READ the site permissions fixer did not open what the web server wrote closed (@line); the archive is attempted as it is', array('@line' => $lines ? reset($lines) : 'no output')), 'warning');
   }
 }
 
