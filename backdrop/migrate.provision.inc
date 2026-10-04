@@ -422,8 +422,9 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     // static/files/<uri> store and repoints the in-site symlinks. For a
     // same-domain platform move the store name is unchanged and the call is
     // an idempotent no-op-or-repair; for a rename it breaks the inherited
-    // cross-name link (the old-name store becomes a reported orphan).
-    // Warn-not-fail.
+    // cross-name link, and the post hook then sets the old-name store aside
+    // (RENAME/STORE lines), the way a delete does; the nightly sweep stays
+    // the safety net. Warn-not-fail.
     _provision_drupal_native_symlink($options['uri'], TRUE);
 
     if (!is_file($enable_fast_track)) {
@@ -525,6 +526,12 @@ function drush_provision_backdrop_post_provision_migrate($platform, $new_name = 
     // Use correct context for cleanup operations.
     $source_name = drush_get_option('source_name');
     drush_log(dt("LOG/RENAME source_name is @this", array('@this' => $source_name)), 'info');
+    // The renamed site has its own copy in its own store (the force-unshare
+    // after the target verify); set the old-name store aside the way a delete
+    // does, BEFORE the old alias goes (the wrapper proves ownership through
+    // it). Never a deletion; a store named by a share control file, or one a
+    // live site still reads through its link, stays, with a warning.
+    _provision_drupal_archive_static_store(ltrim(d()->uri, '@'), 'RENAME');
     // Remove the existing drush alias.
     $config = new Provision_Config_Drushrc_Alias(d()->name);
     $config->unlink();
