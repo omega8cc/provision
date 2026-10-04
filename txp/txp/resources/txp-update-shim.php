@@ -159,6 +159,9 @@ register_shutdown_function(function () use (&$txp_update_db_loaded) {
         return;
     }
     $reason = function_exists('mysqli_connect_error') ? (string) mysqli_connect_error() : '';
+    // The 503 page ends without a newline; end it, or the caller's merged
+    // stream glues this line to its "</html>".
+    echo "\n";
     fwrite(STDERR, "[ERROR]\tcould not connect to the site database: Textpattern exited while connecting"
         . ($reason === '' ? '' : ' (' . $reason . ')') . "\n");
     exit(128);
