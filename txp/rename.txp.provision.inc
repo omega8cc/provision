@@ -85,12 +85,17 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
   // mints the new-name alias; the rollback removes it only when it can see
   // it), and the cutover's documented recovery is to re-run, whose second leg
   // is this very rename. Refusing on our own debris would make that recovery
-  // impossible; the rename's own provision-save overwrites the file.
+  // impossible; the rename's own provision-save overwrites the file. The
+  // alias is read from its file, never loaded through d(): this process would
+  // keep that context, and the command reads the new name's context after its
+  // provision-save to find the moved site.
   if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
-    $leftover = d('@' . $new_uri);
-    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
-      ? $leftover->site_path : '';
-    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+    $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
+    $occupied = empty($leftover_dirs);
+    foreach ($leftover_dirs as $leftover_dir) {
+      $occupied = $occupied || provision_file()->exists($leftover_dir)->status();
+    }
+    if ($occupied) {
       return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
