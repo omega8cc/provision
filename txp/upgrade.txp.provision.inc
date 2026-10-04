@@ -493,14 +493,32 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
   }
   $prefix = _provision_txp_config_prefix($config_php);
 
+  // The copy's config.php reads its credentials from $_SERVER when they are
+  // cloaked, and this process's 'site' context holds the SOURCE's: the chain
+  // gets the copy's own, read from its persisted drushrc.php. Exporting the
+  // running context would run the chain against the source database.
+  $creds = _provision_txp_creds_from_drushrc($copy_path . '/drushrc.php');
+  if (empty($creds)) {
+    return drush_set_error('PROVISION_TXP_UPGRADE_CHAIN_FAILED',
+      dt('The deployed copy records no database credentials in !file. The source is untouched.',
+      array('!file' => $copy_path . '/drushrc.php')));
+  }
+  if ($creds['db_name'] === drush_get_option('db_name', '', 'site')) {
+    return drush_set_error('PROVISION_TXP_UPGRADE_CHAIN_FAILED',
+      dt('The deployed copy records the source\'s database !db; refusing to run the update chain against it. The source is untouched.',
+      array('!db' => $creds['db_name'])));
+  }
+
   drush_log(dt('Running the Textpattern update chain on the copy !uri (!source -> !target).',
     array('!uri' => $new_uri, '!source' => $source_version, '!target' => $target_version)), 'ok');
 
   // Captured before the chain so the update stamp it writes can be told apart
   // from one an earlier run left behind.
   $run_start = time();
+  _provision_txp_prepare_environment_subprocess($creds);
   $chain_ok = drush_shell_exec('%s %s --config-php=%s --txpath=%s --uri=%s',
     $php_bin, $shim, $config_php, $target_root . '/textpattern', $new_uri);
+  provision_clear_environment_subprocess();
   $output = (array) drush_shell_exec_output();
   $tail = array();
   $rows = array();
@@ -522,7 +540,6 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
   $dbupdatetime = isset($tail['DBUPDATETIME']) ? trim($tail['DBUPDATETIME']) : '';
 
   $connect_error = '';
-  $creds = _provision_txp_creds_from_drushrc($copy_path . '/drushrc.php');
   $mysqli = _provision_txp_db_connect($creds, $connect_error);
   if ($mysqli === FALSE) {
     // No proof can be taken, so the held-back rows are released as what they
