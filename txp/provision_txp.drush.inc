@@ -581,6 +581,102 @@ function _provision_txp_creds_from_drushrc($drushrc) {
 }
 
 /**
+ * Do two sites' credentials name one and the same database?
+ *
+ * The name alone does not tell. A copy placed on another database server
+ * takes a name from its own uri, checked for collisions on that server only,
+ * so it can carry the source's name there and still be a database of its
+ * own. The same name on the same server is the same database. The server is
+ * the same when both sides name one db server context, or when any place
+ * one side records its database at is a place the other records too (see
+ * _provision_txp_db_side()). Only a pair whose servers are told apart counts
+ * as two databases, so a teardown never reaches the source's on a guess.
+ *
+ * @param array $a
+ *   One side, as _provision_txp_db_side() returns it.
+ * @param array $b
+ *   The other side.
+ */
+function _provision_txp_same_database($a, $b) {
+  if ($a['db_name'] === '' || $a['db_name'] !== $b['db_name']) {
+    return FALSE;
+  }
+  if ($a['server'] !== '' && $a['server'] === $b['server']) {
+    return TRUE;
+  }
+  $shared = array_intersect($a['endpoints'], $b['endpoints']);
+  return !empty($shared);
+}
+
+/**
+ * One side of _provision_txp_same_database(), for a site context.
+ *
+ * The database name from the credentials, the name of the site's db server
+ * context, and every place its database is recorded at: the host and port
+ * the credentials name (an empty port also at the server's own port), and
+ * the server context's remote_host and db_port, which is where the db
+ * service connects to create or drop it.
+ */
+function _provision_txp_db_side($creds, $context) {
+  $host = isset($creds['db_host']) ? $creds['db_host'] : '';
+  $port = isset($creds['db_port']) ? trim((string) $creds['db_port']) : '';
+  $side = array(
+    'db_name' => isset($creds['db_name']) ? (string) $creds['db_name'] : '',
+    'server' => '',
+    'endpoints' => _provision_txp_db_endpoints($host, $port),
+  );
+  $server = (is_object($context) && isset($context->db_server)) ? $context->db_server : NULL;
+  if (is_object($server)) {
+    if (isset($server->name) && is_string($server->name)) {
+      $side['server'] = strtolower(ltrim($server->name, '@'));
+    }
+    $server_port = isset($server->db_port) ? trim((string) $server->db_port) : '';
+    if ($port === '' && $server_port !== '') {
+      $side['endpoints'] = array_merge($side['endpoints'], _provision_txp_db_endpoints($host, $server_port));
+    }
+    if (isset($server->remote_host) && is_string($server->remote_host) && $server->remote_host !== '') {
+      $side['endpoints'] = array_merge($side['endpoints'], _provision_txp_db_endpoints($server->remote_host, $server_port));
+    }
+  }
+  $side['endpoints'] = array_values(array_unique($side['endpoints']));
+  return $side;
+}
+
+/**
+ * The places a recorded db host and port reach a server at, as keys.
+ *
+ * An empty or non-numeric port is MySQL's default, 3306, as every client
+ * here reads it. A host provision counts as this machine
+ * (provision_is_local_host(): localhost, 127.0.0.1, its own name), any other
+ * 127.x address and ::1 are keyed by the port alone. 'localhost' is the
+ * socket, where a client never reads the port: it reaches the local server
+ * on 3306 and is keyed at the port recorded beside it too. Any other host is
+ * keyed by its name and by the address it resolves to.
+ */
+function _provision_txp_db_endpoints($host, $port) {
+  $host = strtolower(trim((string) $host, " \t[]"));
+  if ($host === '') {
+    $host = 'localhost';
+  }
+  $port = trim((string) $port);
+  $port = (preg_match('/^[0-9]+$/', $port) && (int) $port > 0) ? (string) (int) $port : '3306';
+  if ($host === 'localhost' || $host === '::1' || preg_match('/^127\.[0-9.]+$/', $host)
+    || provision_is_local_host($host)) {
+    $keys = array('local:' . $port);
+    if ($host === 'localhost') {
+      $keys[] = 'local:3306';
+    }
+    return array_values(array_unique($keys));
+  }
+  $keys = array($host . ':' . $port);
+  $ip = gethostbyname($host);
+  if (is_string($ip) && $ip !== $host && preg_match('/^[0-9.]+$/', $ip)) {
+    $keys[] = $ip . ':' . $port;
+  }
+  return $keys;
+}
+
+/**
  * Open a mysqli connection to a TXP site database, or return FALSE.
  *
  * The layer's DB idiom in one function: exception mode (so a dead connection
