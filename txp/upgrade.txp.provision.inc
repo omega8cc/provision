@@ -123,12 +123,16 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
   // it from its own directory, with nothing to roll that back. The one
   // tolerated case is the leftover that demonstrably serves nothing -- its
   // recorded site directory is gone -- which is the same orphan the cutover
-  // tolerates, and which the copy's own provision-save overwrites.
+  // tolerates, and which the copy's own provision-save overwrites. The alias
+  // is read from its file, never loaded through d(): this process would keep
+  // that context, and the copy's database decisions read the copy's.
   if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
-    $leftover = d('@' . $new_uri);
-    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
-      ? $leftover->site_path : '';
-    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+    $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
+    $occupied = empty($leftover_dirs);
+    foreach ($leftover_dirs as $leftover_dir) {
+      $occupied = $occupied || provision_file()->exists($leftover_dir)->status();
+    }
+    if ($occupied) {
       return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
@@ -426,18 +430,26 @@ function drush_provision_txp_upgrade_rollback($new_name = NULL, $platform = NULL
 
   // The copy's database, through the copy's OWN db service (a copy may have
   // been placed on another db server) and with the copy's own credentials.
+  // The test is the update chain's: the same name on another server is the
+  // copy's own database and is dropped there.
   $alias_file = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
   if ($copy_path !== '' && is_file($alias_file)) {
     $creds = _provision_txp_creds_from_drushrc($copy_path . '/drushrc.php');
-    $source_db = drush_get_option('db_name', '', 'site');
-    if (!empty($creds['db_name']) && $creds['db_name'] !== $source_db) {
+    $owner = empty($creds['db_name']) ? '' : _provision_txp_upgrade_copy_db($creds, $new_uri);
+    if ($owner === 'copy') {
       d('@' . $new_uri)->service('db')->destroy_site_database($creds);
       drush_log(dt('Dropped the copy database and revoked its grants.'), 'ok');
     }
-    elseif (!empty($creds['db_name'])) {
-      // Identical names mean the copy never got its own database; leaving the
-      // source's alone is the only safe reading.
-      drush_log(dt('The copy records the source\'s database name; left untouched.'), 'advisory');
+    elseif ($owner === 'source') {
+      // The source's own database means the copy never got its own; leaving
+      // it alone is the only safe reading.
+      drush_log(dt('The copy records the source\'s database; left untouched.'), 'advisory');
+    }
+    elseif ($owner === 'unbound') {
+      // A drop through that context would reach another server's database
+      // of the same name, never the copy's.
+      drush_log(dt('The copy\'s database !db is recorded on !host port !port, a server its db server context does not reach; left untouched.',
+        array('!db' => $creds['db_name'], '!host' => $creds['db_host'], '!port' => $creds['db_port'] === '' ? '3306' : $creds['db_port'])), 'warning');
     }
   }
 
@@ -459,6 +471,26 @@ function drush_provision_txp_upgrade_rollback($new_name = NULL, $platform = NULL
 
   drush_log(dt('provision-txp-upgrade failed; the source site !uri is untouched and still serving (it was never in the write path). The copy has been discarded — fix the cause from the log above and re-run the upgrade.',
     array('!uri' => d()->uri)), 'warning');
+}
+
+/**
+ * Whose database do the copy's credentials name?
+ *
+ * The one test the update chain's refusal and the rollback's drop share.
+ * 'source': the source's own, the copy's credentials and context against the
+ * running context, which holds the source's (the same name on another db
+ * server is the copy's own database, see _provision_txp_same_database()).
+ * 'unbound': the copy's db server context is not a server its credentials
+ * name, so its db service would reach another server's database of that
+ * name. 'copy' otherwise. The chain runs, and the rollback drops, only on
+ * 'copy'.
+ */
+function _provision_txp_upgrade_copy_db($creds, $new_uri) {
+  $copy = _provision_txp_db_side($creds, d('@' . $new_uri));
+  if (_provision_txp_same_database($copy, _provision_txp_db_side(_provision_txp_site_creds(), d()))) {
+    return 'source';
+  }
+  return $copy['bound'] ? 'copy' : 'unbound';
 }
 
 /**
@@ -503,10 +535,16 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
       dt('The deployed copy records no database credentials in !file. The source is untouched.',
       array('!file' => $copy_path . '/drushrc.php')));
   }
-  if ($creds['db_name'] === drush_get_option('db_name', '', 'site')) {
+  $owner = _provision_txp_upgrade_copy_db($creds, $new_uri);
+  if ($owner === 'source') {
     return drush_set_error('PROVISION_TXP_UPGRADE_CHAIN_FAILED',
       dt('The deployed copy records the source\'s database !db; refusing to run the update chain against it. The source is untouched.',
       array('!db' => $creds['db_name'])));
+  }
+  if ($owner !== 'copy') {
+    return drush_set_error('PROVISION_TXP_UPGRADE_CHAIN_FAILED',
+      dt('The deployed copy records its database !db on !host port !port, a server its db server context does not reach; refusing to run the update chain. The source is untouched.',
+      array('!db' => $creds['db_name'], '!host' => $creds['db_host'], '!port' => $creds['db_port'] === '' ? '3306' : $creds['db_port'])));
   }
 
   drush_log(dt('Running the Textpattern update chain on the copy !uri (!source -> !target).',

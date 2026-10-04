@@ -319,6 +319,11 @@ function drush_provision_drupal_provision_backup() {
   else {
     $command = $command_base . $command_arguments;
   }
+
+  // The archive, and the store copy a Clone or Migrate makes later in the
+  // same task, read the files and private stores as the backend user: let
+  // them read what the web server wrote closed there.
+  _provision_drupal_backup_read_preflight();
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);
   // Captured now: any later shell call overwrites Drush's last-output buffer.
