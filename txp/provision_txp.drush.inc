@@ -922,6 +922,24 @@ function provision_txp_system_map() {
 }
 
 /**
+ * Export a TXP site's db credentials into the real process environment.
+ *
+ * For a shim that includes the config.php of a site which is NOT the running
+ * context (the upgrade copy): the running context's own credentials are
+ * exported by provision_prepare_environment_subprocess(), and either set is
+ * dropped again by provision_clear_environment_subprocess(). The values are
+ * raw: the cloaked config.php decodes only the vhost-sourced set.
+ */
+function _provision_txp_prepare_environment_subprocess($creds) {
+  provision_clear_environment_subprocess();
+  foreach (array('db_host', 'db_user', 'db_passwd', 'db_name', 'db_port') as $key) {
+    if (isset($creds[$key]) && $creds[$key] !== '') {
+      putenv($key . '=' . $creds[$key]);
+    }
+  }
+}
+
+/**
  * Mint a TXP password-reset confirmation link for the admin user via the
  * token shim. Returns the full https URL, or FALSE. Lives in the shell (not
  * the reset.login hook file) because the install engine reuses it for the
@@ -938,8 +956,16 @@ function _provision_txp_mint_login_link() {
     return FALSE;
   }
   $txpath = d()->root . '/textpattern';
+  // The shim includes the site's config.php, which reads the credentials from
+  // $_SERVER when they are cloaked: export them into the environment the shim
+  // is forked with, as the install shim gets them. A Login reset bootstraps
+  // only the platform root, so its 'site' context holds no credentials until
+  // they are reloaded from the site's drushrc.php.
+  _provision_txp_ensure_db_creds_loaded();
+  provision_prepare_environment_subprocess();
   $result = drush_shell_exec('%s %s --txpath=%s --config-php=%s --user=%s',
     $php_bin, $shim, $txpath, $config_php, 'admin');
+  provision_clear_environment_subprocess();
   $output = (array) drush_shell_exec_output();
   if (!$result || empty($output)) {
     // 'advisory': visible, but it must not colour the task. Every caller

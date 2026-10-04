@@ -16,11 +16,12 @@
  * The web tier reads them
  * from the vhost's fastcgi_param db_* set (urlencode()d there, decoded here
  * via the db_creds_urlencoded marker -- same contract as the Drupal/Backdrop
- * settings.php templates); the one CLI consumer (the install shim,
- * txp-install-shim.php) reads them from the real process environment,
- * exported by provision_prepare_environment_subprocess() immediately before
- * the shim is spawned (txp/txp/install.inc) -- same mechanism the D8+ core
- * rebuild subprocess already uses for the same reason.
+ * settings.php templates); the CLI consumers (the install, token and update
+ * shims under txp/txp/resources) read them from the real process
+ * environment, exported immediately before each shim is spawned -- the
+ * running site's by provision_prepare_environment_subprocess(), the upgrade
+ * copy's by _provision_txp_prepare_environment_subprocess() -- same mechanism
+ * the D8+ core rebuild subprocess already uses for the same reason.
  */
 print '<?php' ?>
 
