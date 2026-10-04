@@ -1963,6 +1963,13 @@ port=%s
       }
     }
 
+    // The session sat idle through the dump, and a dump longer than the
+    // server's wait_timeout finds it closed: drop it, so the caller's next
+    // statement (the definer read of a carried-over database) opens a fresh
+    // one through ensure_connected() instead of meeting '2006 MySQL server
+    // has gone away'.
+    $this->close();
+
     // Reset the umask to normal permissions.
     umask(0022);
   }
