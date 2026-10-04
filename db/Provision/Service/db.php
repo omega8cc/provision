@@ -449,17 +449,18 @@ class Provision_Service_db extends Provision_Service {
    *
    * On 5.7 mydumper's default lock mode syncs its threads with FLUSH TABLES
    * WITH READ LOCK and also takes Percona's backup lock (LOCK TABLES FOR
-   * BACKUP), keeping it until the read lock is released. A write to a MyISAM
-   * table waits for that lock with its table open, and the event scheduler
-   * writes one at every event run (mysql.event is MyISAM on 5.7): the flush
-   * ahead of the read lock then waits for that table, or the read lock for
-   * the writer, and neither side gives way. The server sees no deadlock, so
-   * the dump stalls there and every write on the server queues behind it.
-   * The read lock alone still gives the dump its consistent point. Given
-   * only when the server reports 5.7 and the mydumper lists the option in
-   * its --help, read whatever that exits with (the 0.19.3 line exits 1
-   * there), so any other server, and a build without it, gets its arguments
-   * as before. PHP 5.6-safe.
+   * BACKUP), keeping it until the dump ends, past the release of the read
+   * lock. A write to a MyISAM table waits for that lock with its table open,
+   * and the event scheduler writes one at every event run (mysql.event is
+   * MyISAM on 5.7): the flush ahead of the read lock then waits for that
+   * table, or the read lock for the writer, and neither side gives way. The
+   * server sees no deadlock, so the dump stalls there and every write on the
+   * server queues behind it. The read lock alone still gives the dump its
+   * consistent point. Given only when the server reports 5.7 and the
+   * mydumper lists the option in its --help, read whatever that exits with
+   * (a build that cannot parse its defaults file prints the help, then exits
+   * 1), so any other server, and a build without it, gets its arguments as
+   * before. PHP 5.6-safe.
    */
   function mydumper_backup_locks_option($mydumper_path) {
     $version = $this->server_version();
