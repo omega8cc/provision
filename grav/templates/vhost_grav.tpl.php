@@ -132,11 +132,16 @@ if (strpos($grav_zones_body, '$boa_grav_fe_https') !== FALSE) {
   root  <?php print $grav_capsule; ?>;
   <?php print $extra_config; ?>
 <?php
+// hosting_le's vhost hook puts the challenge location into $extra_config,
+// printed just above: a second one in this server block fails nginx -t for
+// the whole box. The redirect branches print it only when that hook did not.
+$grav_acme_own = $satellite_mode == 'boa'
+  && strpos((string) $extra_config, '/.well-known/acme-challenge') === FALSE;
 if ($this->redirection || $ssl_redirection) {
   if ($ssl_redirection && !$this->redirection) {
     print "  access_log off;\n";
     print "  log_not_found off;\n";
-    if ($satellite_mode == 'boa') {
+    if ($grav_acme_own) {
       print "  location ^~ /.well-known/acme-challenge {\n";
       print "    allow all;\n";
       print "    alias {$aegir_root}/tools/le/.acme-challenges;\n";
@@ -150,7 +155,7 @@ if ($this->redirection || $ssl_redirection) {
   elseif ($ssl_redirection && $this->redirection) {
     print "  access_log off;\n";
     print "  log_not_found off;\n";
-    if ($satellite_mode == 'boa') {
+    if ($grav_acme_own) {
       print "  location ^~ /.well-known/acme-challenge {\n";
       print "    allow all;\n";
       print "    alias {$aegir_root}/tools/le/.acme-challenges;\n";
