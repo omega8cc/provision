@@ -85,9 +85,10 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
   // mints the new-name alias; the rollback removes it only when it can see
   // it), and the cutover's documented recovery is to re-run, whose second leg
   // is this very rename. Refusing on our own debris would make that recovery
-  // impossible; the rename's own provision-save overwrites the file. The
-  // alias is read from its file, never loaded through d(): this process would
-  // keep that context, and the command reads the new name's context after its
+  // impossible. The command removes the file before its own provision-save,
+  // which would otherwise build the new context on top of it. The alias is
+  // read from its file, never loaded through d(): this process would keep
+  // that context, and the command reads the new name's context after its
   // provision-save to find the moved site.
   if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
     $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
@@ -99,7 +100,8 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
       return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
-    drush_log(dt('A stale !uri alias with no site directory is left over (a rolled-back rename); this rename overwrites it.',
+    drush_set_option('txp_rename_stale_alias', TRUE);
+    drush_log(dt('A stale !uri alias with no site directory is left over; this rename removes it before saving its own.',
       array('!uri' => $new_uri)), 'info');
   }
 }
@@ -177,6 +179,23 @@ function drush_provision_txp_rename($new_name = NULL) {
   // aliases and redirection reset, CDN dropped: a name change invalidates all
   // three, and carrying them would point the new name at the old one's
   // certificate and redirects.
+  //
+  // A stale alias of the new name that validate let through goes first.
+  // provision-save builds the context on top of the record it finds, and the
+  // resets below never replace what that record holds: an empty array does
+  // not reach the subprocess and a 0 is filtered out there. The earlier
+  // holder's aliases, redirection, encryption and extra Drush aliases would
+  // become this site's.
+  if (drush_get_option('txp_rename_stale_alias', FALSE)) {
+    $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
+    drush_invoke_process('@none', 'provision-save', array('@' . $new_uri), array('delete' => TRUE));
+    clearstatcache();
+    if (file_exists($stale_alias)) {
+      return drush_set_error('PROVISION_TXP_RENAME_FAILED',
+        dt('Could not remove the stale !uri alias; the new context would inherit its settings.', array('!uri' => $new_uri)));
+    }
+    drush_log(dt('Removed the stale !uri alias.', array('!uri' => $new_uri)), 'ok');
+  }
   $options = d()->options;
   $options['uri'] = $new_uri;
   $hash_name = drush_get_option('#name') ? '#name' : 'name';
