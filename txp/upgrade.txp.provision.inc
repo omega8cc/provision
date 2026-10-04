@@ -123,8 +123,9 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
   // it from its own directory, with nothing to roll that back. The one
   // tolerated case is the leftover that demonstrably serves nothing -- its
   // recorded site directory is gone -- which is the same orphan the cutover
-  // tolerates, and which the copy's own provision-save overwrites. The alias
-  // is read from its file, never loaded through d(): this process would keep
+  // tolerates. The command removes the file before the copy's provision-save,
+  // which would otherwise build the copy's context on top of it. The alias is
+  // read from its file, never loaded through d(): this process would keep
   // that context, and the copy's database decisions read the copy's.
   if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
     $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
@@ -136,7 +137,8 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
       return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
-    drush_log(dt('A stale !uri alias with no site directory is left over; the copy\'s own context overwrites it.',
+    drush_set_option('txp_upgrade_stale_alias', TRUE);
+    drush_log(dt('A stale !uri alias with no site directory is left over; the upgrade removes it before saving the copy\'s own.',
       array('!uri' => $new_uri)), 'info');
   }
   if (is_dir($target_root . '/sites/' . $new_uri)) {
@@ -341,6 +343,23 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
 
   if ($db_server = drush_get_option('new_db_server', FALSE)) {
     $options['db_server'] = $db_server;
+  }
+
+  // A stale alias of the copy's name that validate let through goes first.
+  // provision-save builds the context on top of the record it finds, and the
+  // resets above never replace what that record holds: an empty array does
+  // not reach the subprocess, a 0 is filtered out there and an unset key is
+  // not sent at all. The earlier holder's aliases, redirection, encryption
+  // and extra Drush aliases would become the copy's.
+  if (drush_get_option('txp_upgrade_stale_alias', FALSE)) {
+    $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
+    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
+    clearstatcache();
+    if (file_exists($stale_alias)) {
+      return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',
+        dt('Could not remove the stale !uri alias; the copy\'s context would inherit its settings.', array('!uri' => $new_uri)));
+    }
+    drush_log(dt('Removed the stale !uri alias.', array('!uri' => $new_uri)), 'ok');
   }
 
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
