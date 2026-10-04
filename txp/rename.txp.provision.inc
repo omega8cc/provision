@@ -178,7 +178,8 @@ function drush_provision_txp_rename($new_name = NULL) {
   // 2. The new context. Encryption off (keys are bound to the old name),
   // aliases and redirection reset, CDN dropped: a name change invalidates all
   // three, and carrying them would point the new name at the old one's
-  // certificate and redirects.
+  // certificate and redirects. The extra Drush aliases are kept: they name
+  // the site, and this save rewrites their alias files at the new uri.
   //
   // A stale alias of the new name that validate let through goes first.
   // provision-save builds the context on top of the record it finds, and the
@@ -206,6 +207,11 @@ function drush_provision_txp_rename($new_name = NULL) {
   unset($options['ssl_key']);
   $options['cdn'] = 0;
   unset($options['cdn']);
+  // The subprocess gets its options on the command line, where an array
+  // never arrives, so the extra Drush aliases go as the comma-separated list
+  // provision-save takes for them. An empty list leaves the new context
+  // with none.
+  $options['drush_aliases'] = implode(',', (array) d()->drush_aliases);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   // The context must resolve to the directory we just created, or everything
