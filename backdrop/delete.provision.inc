@@ -54,6 +54,13 @@ function drush_provision_backdrop_provision_delete() {
 
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
 
+    // Set the site's per-account static store aside BEFORE its alias goes,
+    // as the Drupal delete does: the privileged wrapper proves the caller
+    // owns the site through that alias, and the final backup keeps
+    // files/private as symlinks, so the store holds the only copy (archived
+    // under static/files/.archived, never deleted).
+    _provision_drupal_archive_static_store(d()->uri);
+
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {
       drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
