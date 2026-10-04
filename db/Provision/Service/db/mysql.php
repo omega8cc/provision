@@ -350,6 +350,26 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
   }
 
   /**
+   * The version this server reports (SELECT VERSION()), or FALSE.
+   *
+   * Read over this service's own connection, so it is the server the site
+   * uses, remote ones included. FALSE when the read is refused. PHP
+   * 5.6-safe.
+   */
+  function server_version() {
+    $this->ensure_connected();
+    $result = $this->conn ? $this->query("SELECT VERSION()") : FALSE;
+    if (!$result) {
+      return FALSE;
+    }
+    $row = $result->fetch();
+    if (!$row || !isset($row[0])) {
+      return FALSE;
+    }
+    return (string) $row[0];
+  }
+
+  /**
    * A verify-probe database name scoped to this account.
    *
    * The create and grant probes below build a throwaway database (and, for the
@@ -1734,6 +1754,9 @@ port=%s
             $rows_opt = '';
           }
         }
+        // Percona 5.7: the read lock without the backup lock (see
+        // mydumper_backup_locks_option()); any other server as before.
+        $locks_opt = $this->mydumper_backup_locks_option($mydumper_path);
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value with escapeshellarg().
@@ -1744,7 +1767,7 @@ port=%s
           . ' --password=' . escapeshellarg($oct_db_pass)
           . ' --port=' . escapeshellarg($oct_db_port)
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
-          . $rows_opt . $this->mydumper_objects_option($mydumper_path)
+          . $rows_opt . $this->mydumper_objects_option($mydumper_path) . $locks_opt
           . ' --build-empty-files --threads=' . escapeshellarg($threads)
           . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
         if (provision_file()->exists($myquick_creds_log)->status()) {
