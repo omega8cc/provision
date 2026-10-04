@@ -328,7 +328,8 @@ function drush_provision_txp_rename($new_name = NULL) {
  *
  * Put the site back under its old name. The old context was never deleted at
  * any point a rollback can reach (the retirement is the last step and is not
- * fatal), so restoring the site is a move back plus a re-save; the new name's
+ * fatal), so restoring the site is a move back, its database and
+ * private/config.php put back on the old name, plus a re-save; the new name's
  * half-built context and vhost are discarded.
  *
  * Discarded only once the tree is demonstrably back at the old path, though.
@@ -355,6 +356,13 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
     $restored = TRUE;
     drush_log(dt('Moved the site directory back to !old.', array('!old' => $old_path)), 'ok');
     _provision_txp_rename_rollback_repoint($old_uri, $old_path);
+    // The command re-renders private/config.php for the new name (its
+    // multisite root and admin URL) before the steps that can still fail.
+    // Nothing else renders it again until the next Verify, so the restored
+    // site's config.php would keep naming the new name's directory, which
+    // is gone, and its admin URL.
+    _provision_txp_config_from_drushrc(dt('Re-rendered private/config.php for !old: its root path and admin URL name it again.',
+      array('!old' => $old_uri)));
   }
 
   if (!$restored) {
