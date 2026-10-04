@@ -302,6 +302,10 @@ function provision_drupal_fetch_site($alias = NULL) {
  * Generate a settings file for the site.
  */
 function _provision_drupal_create_settings_file() {
+  // The gate that converts a de-typed platform judges the settings.php files
+  // PHP-FPM may still be running, so it reads them before one is rewritten
+  // (see _provision_lock_stock_sites()).
+  _provision_lock_stock_sites_before_write(d()->root);
   $config = new Provision_Config_Drupal_Settings(d()->name, drush_get_context('site'));
   $config->write();
 }
