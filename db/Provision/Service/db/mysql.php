@@ -1367,9 +1367,18 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
     else {
+      $load_file = $this->classic_load_file($dump_file);
+      if ($load_file === FALSE) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: the dump carries statement lines the site\'s own login cannot run as written, and no rewritten copy could be written to the backup directory'));
+        return;
+      }
+
       $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file);
+      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+      if ($load_file !== $dump_file) {
+        @unlink($load_file);
+      }
 
       drush_log(sprintf("Importing database using command: %s", $cmd));
 
@@ -1486,20 +1495,7 @@ port=%s
         '#/\*!50013 DEFINER=.*/#' => FALSE,
         // remove another kind of DEFINER line
         '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
-        // a trigger made under ANSI_QUOTES (Drupal 7 connects in that
-        // sql_mode) names its definer in double quotes
-        '#^(/\*!50003 CREATE\*/ )/\*!50017 DEFINER="[^"]*"@"[^"]*"\s*\*/#' => '$1',
-        // the DEFINER of an event
-        '#^(/\*!50106 CREATE\*/ )/\*!50117 DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*")\s*\*/#' => '$1',
-        // the DEFINER of a stored procedure or function, written bare at the
-        // start of its CREATE line, in double quotes under ANSI_QUOTES
-        '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
-        // a routine, event or trigger made while the database had another
-        // default collation is wrapped in ALTER DATABASE lines naming the
-        // dumped database, which the database user loading the dump into
-        // its own database may not alter (ERROR 1044); without the name
-        // they apply to the database being loaded
-        '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
+      ) + $this->get_statement_regexes() + array(
         // remove broken CREATE ALGORITHM entries
         '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
       );
@@ -1508,6 +1504,112 @@ port=%s
       drush_command_invoke_all_ref('provision_mysql_regex_alter', $regexes);
     }
     return $regexes;
+  }
+
+  /**
+   * The entries of get_regexes() that match a statement from the start of
+   * its line, where no data row starts. A classic load applies them as well
+   * (classic_load_file()), since a dump made before an entry was added still
+   * carries the line it rewrites.
+   */
+  function get_statement_regexes() {
+    return array(
+      // a trigger made under ANSI_QUOTES (Drupal 7 connects in that
+      // sql_mode) names its definer in double quotes
+      '#^(/\*!50003 CREATE\*/ )/\*!50017 DEFINER="[^"]*"@"[^"]*"\s*\*/#' => '$1',
+      // the DEFINER of an event
+      '#^(/\*!50106 CREATE\*/ )/\*!50117 DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*")\s*\*/#' => '$1',
+      // the DEFINER of a stored procedure or function, written bare at the
+      // start of its CREATE line, in double quotes under ANSI_QUOTES
+      '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
+      // a routine, event or trigger made while the database had another
+      // default collation is wrapped in ALTER DATABASE lines naming the
+      // dumped database, which the database user loading the dump into
+      // its own database may not alter (ERROR 1044); without the name
+      // they apply to the database being loaded
+      '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
+    );
+  }
+
+  /**
+   * The dump file a classic load reads: the file itself, or a copy with
+   * get_statement_regexes() applied when a line of it still needs them.
+   *
+   * An archive made before the dump filter rewrote those statements keeps
+   * ALTER DATABASE lines naming the dumped database around an object made
+   * under another collation, and a trigger definer in double quotes; the
+   * site's own login may run neither (ERROR 1044, ERROR 1227), so its
+   * Restore failed and rolled back. A dump made since needs no copy. Only a
+   * piece that starts a line is matched: every data row starts with its
+   * INSERT, and a long row is read in pieces. The copy is written to the
+   * instance's backup directory, readable by its owner only, and the caller
+   * removes it after the load. FALSE when the copy cannot be written.
+   * PHP 5.6-safe.
+   */
+  function classic_load_file($dump_file) {
+    $regexes = $this->get_statement_regexes();
+    $in = @fopen($dump_file, 'rb');
+    if ($in === FALSE) {
+      // The load reports the missing or unreadable file as before.
+      return $dump_file;
+    }
+    $needs = FALSE;
+    $start = TRUE;
+    while (!$needs && ($piece = fgets($in, 1048576)) !== FALSE) {
+      if ($start && $this->statement_line($piece, $regexes) !== $piece) {
+        $needs = TRUE;
+      }
+      $start = substr($piece, -1) === "\n";
+    }
+    if (!$needs) {
+      fclose($in);
+      return $dump_file;
+    }
+    $copy = rtrim(d('@server_master')->backup_path, '/') . '/.classic-load-' . getmypid() . '.sql';
+    @unlink($copy);
+    $out = @fopen($copy, 'xb');
+    if ($out === FALSE) {
+      fclose($in);
+      return FALSE;
+    }
+    @chmod($copy, 0600);
+    rewind($in);
+    $ok = TRUE;
+    $start = TRUE;
+    $rewritten = 0;
+    while (($piece = fgets($in, 1048576)) !== FALSE) {
+      $line = $start ? $this->statement_line($piece, $regexes) : $piece;
+      if ($line !== $piece) {
+        $rewritten++;
+      }
+      $start = substr($piece, -1) === "\n";
+      $written = fwrite($out, $line);
+      if ($written === FALSE || $written < strlen($line)) {
+        $ok = FALSE;
+        break;
+      }
+    }
+    fclose($in);
+    if (!fclose($out) || !$ok) {
+      @unlink($copy);
+      return FALSE;
+    }
+    drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
+    return $copy;
+  }
+
+  /**
+   * One line with the given statement regexes applied; a regex that fails
+   * leaves the line as it was.
+   */
+  function statement_line($line, $regexes) {
+    foreach ($regexes as $find => $replace) {
+      $new = preg_replace($find, $replace, $line);
+      if (is_string($new)) {
+        $line = $new;
+      }
+    }
+    return $line;
   }
 
   function filter_line(&$line) {
