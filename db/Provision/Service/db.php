@@ -311,6 +311,19 @@ class Provision_Service_db extends Provision_Service {
    * an object or a file kept the dump's own mode; the dump stands either way.
    */
   function mydumper_object_modes($db_name, $dump_dir) {
+    return $this->mydumper_object_modes_apply($this->mydumper_object_modes_read($db_name), $dump_dir);
+  }
+
+  /**
+   * The mode each stored object of $db_name was made under, as the server
+   * stored it (mode words 8.x refuses left out), keyed by type and hex name;
+   * FALSE when the name is not a plain one or the modes cannot be read.
+   *
+   * A fast dump reads them before mydumper runs: the service's connection
+   * then sits idle through the whole dump, and one longer than the server's
+   * wait_timeout finds it closed afterwards.
+   */
+  function mydumper_object_modes_read($db_name) {
     if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $db_name)) {
       return FALSE;
     }
@@ -336,6 +349,18 @@ class Provision_Service_db extends Provision_Service {
         }
       }
       $modes[$row[0] . ' ' . strtolower($row[1])] = implode(',', $keep);
+    }
+    return $modes;
+  }
+
+  /**
+   * Rewrites the object files of the dump in $dump_dir with the modes
+   * mydumper_object_modes_read() gave. Returns FALSE when those were not
+   * read, or when an object or a file kept the dump's own mode.
+   */
+  function mydumper_object_modes_apply($modes, $dump_dir) {
+    if (!is_array($modes)) {
+      return FALSE;
     }
     if (empty($modes)) {
       return TRUE;

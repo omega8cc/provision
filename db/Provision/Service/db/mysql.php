@@ -1712,10 +1712,13 @@ port=%s
 
       if ($this->broker_mode() && is_dir($oct_db_dirx) && $db_name) {
         // The broker dumps as root into its own staging and moves the
-        // finished dump, the account's own, into this empty tmp_expim.
+        // finished dump, the account's own, into this empty tmp_expim. The
+        // objects' modes are read first, while this connection is live: it
+        // sits idle through the dump.
+        $modes = $this->mydumper_object_modes_read($db_name);
         $dumped = $this->broker_call('dump', array('--', $db_name));
         clearstatcache();
-        if ($dumped && is_file($oct_db_dirx . '/metadata') && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+        if ($dumped && is_file($oct_db_dirx . '/metadata') && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
         if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
@@ -1737,6 +1740,9 @@ port=%s
         if ($non_trx_result && ($non_trx_row = $non_trx_result->fetch()) && intval($non_trx_row[0]) > 0) {
           $trx_opt = ' --trx-tables=0';
         }
+        // The objects' modes are read now, while this connection is live: it
+        // sits idle through the dump.
+        $modes = $this->mydumper_object_modes_read($db_name);
         // mydumper 1.x fixed the adaptive chunker (0.21.x truncated a chunk's
         // file to 0 bytes when a split landed past the last existing key,
         // exiting clean), so on 1.x tables are chunked and dumped in parallel
@@ -1781,7 +1787,7 @@ port=%s
           // no restorable dump (killed mid-flight), so treat it as failed.
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
-        elseif ($success && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+        elseif ($success && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
       }
