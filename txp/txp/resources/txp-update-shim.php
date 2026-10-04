@@ -148,7 +148,23 @@ $loader->register();
 $loader = new \Textpattern\Loader(txpath . '/lib');
 $loader->register();
 
+// txplib_db.php connects while it is being included, and DB::__construct()
+// answers a failed connect with die(db_down()): Textpattern's 503 page and
+// exit status 0, before the $connected check below and before the chain's
+// shutdown handler exists, so the caller would read a clean run. This turns
+// that exit into the refusal it is.
+$txp_update_db_loaded = false;
+register_shutdown_function(function () use (&$txp_update_db_loaded) {
+    if ($txp_update_db_loaded) {
+        return;
+    }
+    $reason = function_exists('mysqli_connect_error') ? (string) mysqli_connect_error() : '';
+    fwrite(STDERR, "[ERROR]\tcould not connect to the site database: Textpattern exited while connecting"
+        . ($reason === '' ? '' : ' (' . $reason . ')') . "\n");
+    exit(128);
+});
 include txpath . '/lib/txplib_db.php';
+$txp_update_db_loaded = true;
 include txpath . '/lib/txplib_forms.php';
 include txpath . '/lib/txplib_html.php';
 include txpath . '/lib/admin_config.php';
