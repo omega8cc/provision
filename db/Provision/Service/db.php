@@ -298,6 +298,127 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
+   * Gives every stored object of a fast dump its own sql_mode back.
+   *
+   * mydumper writes a database's triggers, routines and events under one
+   * file-wide sql_mode, so an object made under another one (Drupal's own
+   * connections use ANSI_QUOTES and PIPES_AS_CONCAT) failed a fast import,
+   * or was imported and then behaved otherwise. Each object gets a plain SET
+   * of the mode the server stored for it before its CREATE and the file's
+   * mode after it (myloader stops on a versioned-comment SET in the middle
+   * of a file); mode words 8.x refuses are left out, so a 5.7 dump still
+   * loads there. The same rewrite as BOA's dump tools. Returns FALSE when
+   * an object or a file kept the dump's own mode; the dump stands either way.
+   */
+  function mydumper_object_modes($db_name, $dump_dir) {
+    if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $db_name)) {
+      return FALSE;
+    }
+    $result = $this->query("SELECT 'TRIGGER', HEX(TRIGGER_NAME), SQL_MODE FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '%s'"
+      . " UNION ALL SELECT ROUTINE_TYPE, HEX(ROUTINE_NAME), SQL_MODE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '%s'"
+      . " UNION ALL SELECT 'EVENT', HEX(EVENT_NAME), SQL_MODE FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '%s'",
+      $db_name, $db_name, $db_name);
+    if (!$result) {
+      return FALSE;
+    }
+    $gone = '/^(?:NO_AUTO_CREATE_USER|NO_FIELD_OPTIONS|NO_KEY_OPTIONS|NO_TABLE_OPTIONS|DB2|MAXDB|MSSQL|MYSQL323|MYSQL40|ORACLE|POSTGRESQL)$/';
+    $modes = array();
+    while ($row = $result->fetch(PDO::FETCH_NUM)) {
+      if (!preg_match('/^(?:TRIGGER|FUNCTION|PROCEDURE|EVENT)$/', (string) $row[0])
+        || !preg_match('/^[0-9A-Fa-f]+$/', (string) $row[1])
+        || !preg_match('/^[A-Z0-9_,]*$/', (string) $row[2])) {
+        continue;
+      }
+      $keep = array();
+      foreach (explode(',', (string) $row[2]) as $word) {
+        if ($word !== '' && !preg_match($gone, $word)) {
+          $keep[] = $word;
+        }
+      }
+      $modes[$row[0] . ' ' . strtolower($row[1])] = implode(',', $keep);
+    }
+    if (empty($modes)) {
+      return TRUE;
+    }
+    $ok = TRUE;
+    $files = array_merge((array) glob($dump_dir . '/*-schema-post.sql'), (array) glob($dump_dir . '/*-schema-triggers.sql'));
+    foreach (array_filter($files) as $file) {
+      if (is_link($file) || (is_file($file) && $this->mydumper_object_modes_file($file, $modes) !== 0)) {
+        $ok = FALSE;
+      }
+    }
+    return $ok;
+  }
+
+  /**
+   * The rewrite of mydumper_object_modes() on one object file.
+   *
+   * Returns 0 when written (or written before), 1 when the file is left as
+   * it was (no line could be placed), 2 when written with an object that
+   * had no mode to give.
+   */
+  function mydumper_object_modes_file($file, $modes) {
+    $lines = @file($file);
+    if ($lines === FALSE) {
+      return 1;
+    }
+    $file_mode = NULL;
+    foreach (array_slice($lines, 0, 10) as $line) {
+      if ($file_mode === NULL && preg_match("/^\\/\\*!40101 SET SQL_MODE='([A-Z0-9_,]*)'\\*\\/;$/", $line, $m)) {
+        $file_mode = $m[1];
+      }
+    }
+    if ($file_mode === NULL) {
+      return 1;
+    }
+    $out = array();
+    $pending = FALSE;
+    $missing = FALSE;
+    $count = count($lines);
+    for ($i = 0; $i < $count; $i++) {
+      $line = $lines[$i];
+      if ($pending && preg_match('/^SET character_set_client = @PREV_CHARACTER_SET_CLIENT;$/', $line)) {
+        $out[] = "SET SQL_MODE='" . $file_mode . "';\n";
+        $pending = FALSE;
+      }
+      $out[] = $line;
+      if (!preg_match('/^DROP (TRIGGER|FUNCTION|PROCEDURE|EVENT) IF EXISTS `((?:[^`]|``)+)`;$/', $line, $m)) {
+        continue;
+      }
+      if ($i < $count - 1 && strpos($lines[$i + 1], 'SET SQL_MODE=') === 0) {
+        return 0;
+      }
+      $key = $m[1] . ' ' . bin2hex(str_replace('``', '`', $m[2]));
+      if (isset($modes[$key])) {
+        $out[] = "SET SQL_MODE='" . $modes[$key] . "';\n";
+        $pending = TRUE;
+      }
+      else {
+        $missing = TRUE;
+      }
+    }
+    if ($pending) {
+      return 1;
+    }
+    $tmp = $file . '.modes';
+    $handle = @fopen($tmp, 'x');
+    if ($handle === FALSE) {
+      return 1;
+    }
+    $data = implode('', $out);
+    $written = fwrite($handle, $data);
+    fclose($handle);
+    $perms = @fileperms($file);
+    if ($written !== strlen($data)
+      || ($perms !== FALSE && !@chmod($tmp, $perms & 07777))
+      || !@rename($tmp, $file)) {
+      @unlink($tmp);
+      return 1;
+    }
+    return $missing ? 2 : 0;
+  }
+
+  /**
    * The options that hand a fast import's views, triggers, routines and
    * events to the site's own database user.
    *

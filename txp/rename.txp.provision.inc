@@ -178,7 +178,8 @@ function drush_provision_txp_rename($new_name = NULL) {
   // 2. The new context. Encryption off (keys are bound to the old name),
   // aliases and redirection reset, CDN dropped: a name change invalidates all
   // three, and carrying them would point the new name at the old one's
-  // certificate and redirects.
+  // certificate and redirects. The extra Drush aliases are kept: they name
+  // the site, and this save rewrites their alias files at the new uri.
   //
   // A stale alias of the new name that validate let through goes first.
   // provision-save builds the context on top of the record it finds, and the
@@ -206,6 +207,11 @@ function drush_provision_txp_rename($new_name = NULL) {
   unset($options['ssl_key']);
   $options['cdn'] = 0;
   unset($options['cdn']);
+  // The subprocess gets its options on the command line, where an array
+  // never arrives, so the extra Drush aliases go as the comma-separated list
+  // provision-save takes for them. An empty list leaves the new context
+  // with none.
+  $options['drush_aliases'] = implode(',', (array) d()->drush_aliases);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   // The context must resolve to the directory we just created, or everything
@@ -322,7 +328,8 @@ function drush_provision_txp_rename($new_name = NULL) {
  *
  * Put the site back under its old name. The old context was never deleted at
  * any point a rollback can reach (the retirement is the last step and is not
- * fatal), so restoring the site is a move back plus a re-save; the new name's
+ * fatal), so restoring the site is a move back, its database and
+ * private/config.php put back on the old name, plus a re-save; the new name's
  * half-built context and vhost are discarded.
  *
  * Discarded only once the tree is demonstrably back at the old path, though.
@@ -349,6 +356,13 @@ function drush_provision_txp_rename_rollback($new_name = NULL) {
     $restored = TRUE;
     drush_log(dt('Moved the site directory back to !old.', array('!old' => $old_path)), 'ok');
     _provision_txp_rename_rollback_repoint($old_uri, $old_path);
+    // The command re-renders private/config.php for the new name (its
+    // multisite root and admin URL) before the steps that can still fail.
+    // Nothing else renders it again until the next Verify, so the restored
+    // site's config.php would keep naming the new name's directory, which
+    // is gone, and its admin URL.
+    _provision_txp_config_from_drushrc(dt('Re-rendered private/config.php for !old: its root path and admin URL name it again.',
+      array('!old' => $old_uri)));
   }
 
   if (!$restored) {
