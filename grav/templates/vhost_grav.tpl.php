@@ -10,7 +10,7 @@
  * grav_locations.tpl.php, shared with the https template.
  *
  * Enforced PHP: the enforced-version FPM socket is pinned at
- * render time (BOA default 8.4; 8.5 then the 8.3 floor as fallbacks; bare
+ * render time (BOA default 8.4; 8.5, 8.6, then the 8.3 floor as fallbacks; bare
  * socket last resort) -- never the instance's per-site-selectable pool, and
  * the per-site fpm.info/multi-fpm.info machinery is deliberately not
  * consulted.
@@ -27,7 +27,7 @@ if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
 $user_socket = '/run/' . $script_user . '.fpm.socket';
-foreach (array('84', '85', '83') as $grav_php_ver) {
+foreach (array('84', '85', '86', '83') as $grav_php_ver) {
   if (file_exists('/run/' . $script_user . '.' . $grav_php_ver . '.fpm.socket')) {
     $user_socket = '/run/' . $script_user . '.' . $grav_php_ver . '.fpm.socket';
     break;

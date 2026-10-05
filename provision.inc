@@ -370,6 +370,518 @@ function _provision_psr_log_dir($root) {
 }
 
 /**
+ * Whether every Drush 8 on this box binds the typed psr/log interface.
+ *
+ * From PHP 8.0 on, a Drush 8 that carries includes/psr_log.inc binds the
+ * psr/log 2.0 interface and logger base before anything else, and a stock
+ * Drupal 10 or 11 core with the codebase's own psr/log 3 loads in it as it
+ * is. The lock then needs neither the psr/log copy nor the core logger
+ * patch, and takes both off a tree an earlier lock left them on. That holds
+ * only while every Drush 8 that can bootstrap a site here does it: the
+ * system copy (a tenant's drush8, BOA's own scripts, the commands a task
+ * runs), the master copy, the account's own (its task queue) and the one
+ * running. Different passes refresh them, so each copy present is read for
+ * the binder, its call at preflight and the three files it loads. This
+ * process must have bound the typed interface itself, which also rules out
+ * PHP below 8.0. Anything else keeps the copy and the patch.
+ *
+ * @return bool
+ *   TRUE when the lock can leave psr/log and the core logger files stock.
+ */
+function _provision_drush8_psr_log_typed() {
+  static $typed = NULL;
+  if ($typed !== NULL) {
+    return $typed;
+  }
+  $typed = FALSE;
+  if (PHP_VERSION_ID < 80000 || !interface_exists('Psr\Log\LoggerInterface', FALSE)) {
+    return $typed;
+  }
+  $method = new ReflectionMethod('Psr\Log\LoggerInterface', 'log');
+  $params = $method->getParameters();
+  if (!isset($params[1]) || !$params[1]->hasType()) {
+    drush_log(dt('PSR/LOG the Drush 8 at @copy binds the untyped psr/log; the lock keeps the psr/log copy and the core logger patch', array('@copy' => DRUSH_BASE_PATH)), 'info');
+    return $typed;
+  }
+  $copies = array('/opt/tools/drush/8/drush', '/var/aegir/drush', DRUSH_BASE_PATH);
+  $user = provision_current_user();
+  if ($user !== 'aegir' && preg_match('/^[a-z][a-z0-9_.-]*$/', (string) $user)) {
+    $copies[] = '/data/disk/' . $user . '/tools/drush';
+  }
+  $needs = array(
+    'includes/psr_log.inc',
+    'lib/psr-log-2/src/LoggerInterface.php',
+    'lib/psr-log-2/src/LoggerTrait.php',
+    'lib/psr-log-2/src/AbstractLogger.php',
+  );
+  foreach (array_unique($copies) as $copy) {
+    if (!is_file($copy . '/drush.php')) {
+      continue;
+    }
+    $missing = '';
+    foreach ($needs as $rel) {
+      if (!is_file($copy . '/' . $rel)) {
+        $missing = $rel;
+        break;
+      }
+    }
+    $preflight = @file_get_contents($copy . '/includes/preflight.inc');
+    if ($missing === '' && (!is_string($preflight) || strpos($preflight, 'drush_psr_log_bind()') === FALSE)) {
+      $missing = 'the drush_psr_log_bind() call in includes/preflight.inc';
+    }
+    if ($missing !== '') {
+      drush_log(dt('PSR/LOG the Drush 8 at @copy does not bind the typed psr/log yet (no @file); the lock keeps the psr/log copy and the core logger patch until every Drush 8 on this box does', array('@copy' => $copy, '@file' => $missing)), 'info');
+      return $typed;
+    }
+  }
+  $typed = TRUE;
+  return $typed;
+}
+
+/**
+ * Whether the lock leaves this codebase's psr/log and core logger files stock.
+ *
+ * See _provision_lock_stock_regime(): TRUE only for 'typed'.
+ *
+ * @return bool
+ *   TRUE when the locked state of this tree is the stock one.
+ */
+function _provision_lock_keeps_stock($root) {
+  return _provision_lock_stock_regime($root) === 'typed';
+}
+
+/**
+ * Which locked state a Drupal 10+ tree takes now, and why.
+ *
+ * - 'untyped': a Drush 8 here still binds the untyped psr/log (see
+ *   _provision_drush8_psr_log_typed()); the lock keeps the psr/log copy and
+ *   the core logger patch.
+ * - 'typed': the lock leaves psr/log and the core logger files stock, and
+ *   gives them back to a tree an earlier lock de-typed.
+ * - 'typed-refused': the lock already failed to give them back to this very
+ *   tree (core logger files the core patch does not reverse on, a genuine
+ *   psr/log that could not be put back, stock copies to serve the web while
+ *   it converts that it could not build); the note beside the stock copies
+ *   says so. The tree keeps the de-typed lock, and reads locked in it,
+ *   instead of sending every task through the lock body again; a new core,
+ *   an edited file or a psr/log put back by hand is a new tree and is tried
+ *   again.
+ * - 'typed-deferred': the tree is de-typed and a served site may still have
+ *   its de-typed files in PHP-FPM's opcache, so converting it now could mix
+ *   them with the ones that replace them (see _provision_lock_stock_defer()).
+ *   It keeps the de-typed lock, with no refusal note, and the next task that
+ *   asks for the lock tries again.
+ * In each state, a longer opcache.revalidate_freq the sites of a tree in the
+ * lock's de-typed form run with is noted first (_provision_lock_stock_freq()).
+ *
+ * @param string $root
+ *   The docroot.
+ * @param string $why
+ *   Set to the reason of a deferral, '' otherwise.
+ *
+ * @return string
+ *   'untyped', 'typed', 'typed-refused' or 'typed-deferred'.
+ */
+function _provision_lock_stock_regime($root, &$why = NULL) {
+  $why = '';
+  // Whatever the Drush 8 copies bind and whatever becomes of the tree, a
+  // longer revalidate time its sites run with is noted first: a site that
+  // leaves the platform before the tree can be converted still counts then.
+  if (_provision_lock_tree_detyped($root)) {
+    _provision_lock_stock_freq($root);
+  }
+  if (!_provision_drush8_psr_log_typed()) {
+    return 'untyped';
+  }
+  $dir = _provision_core_logger_stock_dir($root);
+  if ($dir !== '') {
+    $refused = @file_get_contents($dir . '.refused');
+    if (is_string($refused) && trim($refused) === trim(_provision_lock_stock_tree_mark($root))) {
+      return 'typed-refused';
+    }
+  }
+  $why = _provision_lock_stock_defer($root);
+  return ($why === '') ? 'typed' : 'typed-deferred';
+}
+
+/**
+ * Whether a tree carries the lock's de-typed form where the settings.php
+ * block reads it: the psr/log interface and RfcLoggerTrait.php both read
+ * de-typed. While they do, the block in each site's settings.php serves the
+ * web the stock classes from the copies beside the package; once either
+ * reads typed it steps aside and the web loads the tree's own files.
+ */
+function _provision_lock_tree_detyped($root) {
+  $log = _provision_psr_log_dir($root);
+  return $log !== ''
+    && _provision_psr_log_detyped($log) === TRUE
+    && _provision_core_logger_typed($root . '/core/lib/Drupal/Core/Logger/RfcLoggerTrait.php') === FALSE;
+}
+
+/**
+ * Seconds a de-typed tree waits, after the last change that can have had a
+ * served site load its logger files from the tree, before it is converted.
+ *
+ * PHP-FPM's opcache checks a compiled file against the disk again only in a
+ * request that starts more than opcache.revalidate_freq seconds after the
+ * request that last checked it, the frequency being the one in force in that
+ * earlier request when it checked. A site's settings.php is checked before
+ * anything in the request can change the frequency, so the pool's 60 s
+ * applies to it: one rewritten at T can still run in its old form in a
+ * request that starts at T+60. What that request loads after BOA's global
+ * settings ran is checked with the frequency they set (60 on a live URL, 180
+ * on a /civicrm one, 0 on a dev URL), or with the one the site's own
+ * settings set after them (see _provision_lock_stock_sites()), and can stay
+ * unchecked until T+60+$freq. The settle time adds 60 s of margin to that.
+ *
+ * @param int $freq
+ *   The longest opcache.revalidate_freq a request on the platform can run
+ *   with; never taken below BOA's own 180.
+ *
+ * @return int
+ *   Seconds.
+ */
+function _provision_lock_stock_settle($freq = 180) {
+  return 60 + max(180, (int) $freq) + 60;
+}
+
+/**
+ * The largest opcache.revalidate_freq a settings file sets, read as the
+ * number written after the name in it (ini_set('opcache.revalidate_freq',
+ * '600')); -1 when it names none, cannot be read, or is over 1 MB. A value
+ * the file computes is not read.
+ */
+function _provision_lock_stock_freq_in($file) {
+  if (!is_file($file) || !is_readable($file)) {
+    return -1;
+  }
+  $size = @filesize($file);
+  if ($size === FALSE || $size > 1048576) {
+    return -1;
+  }
+  $body = @file_get_contents($file);
+  $found = array();
+  if (!is_string($body) || !preg_match_all('/opcache\.revalidate_freq[\'"]\s*,\s*[\'"]?\s*([0-9]+)/', $body, $found)) {
+    return -1;
+  }
+  $freq = -1;
+  foreach ($found[1] as $value) {
+    $value = (strlen($value) > 9) ? 999999999 : (int) $value;
+    if ($value > $freq) {
+      $freq = $value;
+    }
+  }
+  return $freq;
+}
+
+/**
+ * The vhost directory of the instance's web server, '' when it cannot be
+ * read off the server context.
+ */
+function _provision_lock_stock_vhostd() {
+  $server = d('@server_master');
+  if (is_object($server) && !empty($server->http_vhostd_path) && is_string($server->http_vhostd_path)) {
+    return $server->http_vhostd_path;
+  }
+  return '';
+}
+
+/**
+ * When a site's vhost became the one Disable writes, or 0 while it is not.
+ *
+ * That vhost serves a static page from outside the platform and never passes
+ * a request to PHP, so nothing of the platform is loaded for the site; it
+ * stopped loading anything when Disable wrote the vhost. Read as the task
+ * asks, not from the snapshot: an Enable that rewrites the vhost makes the
+ * site a served one again at once. 0 too when the vhost cannot be read.
+ */
+function _provision_lock_stock_disabled($vhostd, $sub) {
+  if ($vhostd === '') {
+    return 0;
+  }
+  $vhost = @file_get_contents($vhostd . '/' . $sub);
+  if (!is_string($vhost) || strpos($vhost, '### Do not reveal Aegir front-end URL here.') === FALSE) {
+    return 0;
+  }
+  return max(1, (int) @filemtime($vhostd . '/' . $sub));
+}
+
+/**
+ * The site directories of a platform: each directory under sites/ with a
+ * settings.php, neither 'default' nor 'all', nor a link; sorted.
+ */
+function _provision_lock_stock_site_dirs($root) {
+  $subs = array();
+  $dir = @opendir($root . '/sites');
+  if ($dir === FALSE) {
+    return $subs;
+  }
+  while (FALSE !== ($sub = readdir($dir))) {
+    if ($sub === '.' || $sub === '..' || $sub === 'default' || $sub === 'all') {
+      continue;
+    }
+    $path = $root . '/sites/' . $sub;
+    if (is_link($path) || !is_file($path . '/settings.php')) {
+      continue;
+    }
+    $subs[] = $sub;
+  }
+  closedir($dir);
+  sort($subs);
+  return $subs;
+}
+
+/**
+ * The longest opcache.revalidate_freq a request on a platform can run with,
+ * as this process first read it, and the note that keeps it.
+ *
+ * The largest of BOA's own 180 (a /civicrm request, see
+ * _provision_lock_stock_settle()) and any number an ini_set() of
+ * opcache.revalidate_freq sets in the files a site's settings.php loads
+ * after BOA's global settings: the server's settings.global.inc and
+ * override.global.inc, the platform's sites/all/platform.settings.php and
+ * sites/all/settings.php, and each site's settings.php and
+ * local.settings.php.
+ *
+ * A frequency above 180 is noted beside the stock copies (._orig_core.freq,
+ * once the lock has kept a pristine psr/log or stock copies there, or an
+ * earlier unlock left the pristine psr/log inside the package) and
+ * counts until the tree converts, so a site that set it keeps counting after
+ * it left the platform. It is read and noted by every task that asks for
+ * the lock state of a de-typed tree (_provision_lock_stock_regime()) or
+ * writes a settings.php in one, whatever the Drush 8 copies bind, whether
+ * the tree was refused and whether its pristine psr/log is there. A value
+ * only a site removed before any such task read it had set is not noted. A
+ * longer value raises the note; creating the note changes vendor/psr, one
+ * of the gate's marks, and raising it does not.
+ *
+ * Read once per platform and process, before a settings.php is written (see
+ * _provision_lock_stock_sites()).
+ *
+ * @return array
+ *   'freq': seconds; 'from': the file that sets it, '' when it is BOA's own.
+ */
+function _provision_lock_stock_freq($root) {
+  static $seen = array();
+  $real = realpath($root);
+  $key = ($real !== FALSE) ? $real : rtrim($root, '/');
+  if (isset($seen[$key])) {
+    return $seen[$key];
+  }
+  $files = array(
+    '/data/conf/settings.global.inc',
+    '/data/conf/override.global.inc',
+    $root . '/sites/all/platform.settings.php',
+    $root . '/sites/all/settings.php',
+  );
+  foreach (_provision_lock_stock_site_dirs($root) as $sub) {
+    $files[] = $root . '/sites/' . $sub . '/settings.php';
+    $files[] = $root . '/sites/' . $sub . '/local.settings.php';
+  }
+  $freq = 180;
+  $from = '';
+  foreach ($files as $file) {
+    $set = _provision_lock_stock_freq_in($file);
+    if ($set > $freq) {
+      $freq = $set;
+      $from = $file;
+    }
+  }
+  $log = _provision_psr_log_dir($root);
+  if ($log !== '') {
+    $psr = dirname($log);
+    $note = $psr . '/._orig_core.freq';
+    $kept = @file_get_contents($note);
+    $found = array();
+    $kept_freq = (is_string($kept) && preg_match('/^([0-9]{1,9}) (.*)$/m', $kept, $found)) ? (int) $found[1] : 0;
+    if ($kept_freq > $freq) {
+      $freq = $kept_freq;
+      $from = $found[2];
+    }
+    elseif ($freq > 180 && $freq > $kept_freq && (is_dir($psr . '/._orig_log') || is_dir($log . '/._orig_log') || is_dir($psr . '/._orig_core'))) {
+      @file_put_contents($note, $freq . ' ' . $from . "\n");
+    }
+  }
+  $seen[$key] = array('freq' => $freq, 'from' => $from);
+  return $seen[$key];
+}
+
+/**
+ * The sites of a platform as the stock-copy gate first saw them in this
+ * process, and the longest opcache.revalidate_freq their requests can run
+ * with (_provision_lock_stock_freq()).
+ *
+ * Each site directory (_provision_lock_stock_site_dirs()) is one site:
+ * whether its settings.php carries the block that serves the web from the
+ * stock copies, and that file's mtime.
+ *
+ * Read once per platform and process, and before the task writes a
+ * settings.php (_provision_drupal_create_settings_file() asks first): a site
+ * Verify rewrites its own settings.php before it locks, and the gate must
+ * judge the file PHP-FPM may still be running, not the one just written. A
+ * site created by this process was never served before, so it is not missed.
+ *
+ * @return array
+ *   'sites': site directory => array('block' => bool, 'mtime' => int),
+ *   sorted; 'freq': seconds; 'freq_from': the file that sets the frequency,
+ *   '' when it is BOA's own.
+ */
+function _provision_lock_stock_sites($root) {
+  static $seen = array();
+  $real = realpath($root);
+  $key = ($real !== FALSE) ? $real : rtrim($root, '/');
+  if (isset($seen[$key])) {
+    return $seen[$key];
+  }
+  $sites = array();
+  foreach (_provision_lock_stock_site_dirs($root) as $sub) {
+    $path = $root . '/sites/' . $sub;
+    $body = @file_get_contents($path . '/settings.php');
+    $sites[$sub] = array(
+      'block' => is_string($body) && strpos($body, "'/._orig_core/'") !== FALSE,
+      'mtime' => (int) @filemtime($path . '/settings.php'),
+    );
+  }
+  $freq = _provision_lock_stock_freq($root);
+  $seen[$key] = array('sites' => $sites, 'freq' => $freq['freq'], 'freq_from' => $freq['from']);
+  return $seen[$key];
+}
+
+/**
+ * Read a de-typed platform for the stock-copy gate before a settings.php is
+ * written: the revalidate time its sites run with always, and the sites
+ * themselves when the gate can be asked later in this process (every Drush 8
+ * binds the typed psr/log).
+ */
+function _provision_lock_stock_sites_before_write($root) {
+  if (_provision_lock_tree_detyped($root)) {
+    _provision_lock_stock_freq($root);
+    if (_provision_drush8_psr_log_typed()) {
+      _provision_lock_stock_sites($root);
+    }
+  }
+}
+
+/**
+ * Why a de-typed tree is not given its stock files back yet, or '' when it
+ * can be now.
+ *
+ * The rule: the tree is converted only when no served site can still have
+ * its de-typed files in any PHP-FPM opcache on the box. Converting rewrites
+ * the psr/log package and the four core logger files, which every site of
+ * the platform loads from the tree once the settings.php block steps aside;
+ * a stale de-typed file served beside a fresh typed one kills every request
+ * that creates a logger, on every site of the platform, until opcache checks
+ * the stale one again.
+ *
+ * A site loads those files from the tree only while its settings.php has no
+ * block, or while the block has nothing to load (no stock copies of this
+ * core, no pristine psr/log). So the last moment a served site can have
+ * loaded them is no later than the newest of:
+ * - the mtime of each served site's settings.php that has the block now (a
+ *   Verify writes it; the old file runs on for up to 60 s, see
+ *   _provision_lock_stock_settle());
+ * - the mtime of the stock copies and of vendor/psr itself (copies built, a
+ *   pristine package put back beside the package);
+ * - the mtime of sites/ itself: Install, Clone, Delete, Migrate and a rename
+ *   add or remove a directory there, and a site that left the platform is
+ *   no longer listed;
+ * - the mtime of each disabled site's vhost: from the Disable that writes it
+ *   on, the site runs no PHP (see _provision_lock_stock_disabled()), so its
+ *   settings.php is not judged; an Enable makes it a served site again.
+ * The tree is converted only when the pristine psr/log and the stock copies
+ * of this core are in place, every served site's settings.php, as this
+ * process first saw it, carries the block, and that newest moment is longer
+ * ago than _provision_lock_stock_settle() allows for the longest
+ * opcache.revalidate_freq the platform's requests can run with.
+ *
+ * Missing or stale copies are built by the lock of a deferred tree, and the
+ * tree then waits out the settle time after them. When no lock would build
+ * them (one already failed for this very tree, or the core logger files are
+ * not all de-typed; see _provision_core_logger_stock_due()), there is nothing
+ * to wait for: '' sends the tree through the lock body, which names the
+ * cause and notes the tree refused.
+ *
+ * A tree that is not in the de-typed form the block reads (one already half
+ * stock) has nothing to protect: its sites load its files from the tree
+ * either way, and it is converted in place.
+ *
+ * @return string
+ *   The reason, for the task log; '' when the tree can be converted now.
+ */
+function _provision_lock_stock_defer($root) {
+  if (!_provision_lock_tree_detyped($root)) {
+    return '';
+  }
+  $log = _provision_psr_log_dir($root);
+  $psr = dirname($log);
+  $orig = $psr . '/._orig_log';
+  if (_provision_psr_log_detyped($orig) !== FALSE) {
+    return dt('no pristine psr/log at @orig to swap in; the platform\'s Unlock task puts the genuine package back in place (with composer when no copy is left), and the Lock after it keeps it', array('@orig' => $orig));
+  }
+  $snap = _provision_lock_stock_sites($root);
+  $settle = _provision_lock_stock_settle($snap['freq']);
+  $freq = ($snap['freq_from'] === '') ? '' : dt(' (opcache.revalidate_freq @n, set in @file)', array('@file' => $snap['freq_from'], '@n' => $snap['freq']));
+  $stock = _provision_core_logger_stock_dir($root);
+  if (!_provision_core_logger_stock_ok($root)) {
+    if (!_provision_core_logger_stock_due($root)) {
+      return '';
+    }
+    return dt('no stock copies of this core\'s logger files at @dir yet; the lock builds them, and the tree is converted at a task @settle s after that@freq', array('@dir' => $stock, '@settle' => $settle, '@freq' => $freq));
+  }
+  clearstatcache();
+  $marks = array(
+    'the stock copies' => (int) @filemtime($stock . '/VERSION'),
+    $psr => (int) @filemtime($psr),
+    $root . '/sites' => (int) @filemtime($root . '/sites'),
+  );
+  $vhostd = _provision_lock_stock_vhostd();
+  $bare = array();
+  $served = 0;
+  foreach ($snap['sites'] as $sub => $site) {
+    $disabled = _provision_lock_stock_disabled($vhostd, $sub);
+    if ($disabled > 0) {
+      $marks['the vhost of the disabled site ' . $sub] = $disabled;
+      continue;
+    }
+    $served++;
+    if (!$site['block']) {
+      $bare[] = $sub;
+    }
+    else {
+      $marks['sites/' . $sub . '/settings.php'] = $site['mtime'];
+    }
+  }
+  if (!empty($bare)) {
+    return dt('the settings.php of @n of @all served sites lacks the block that serves the stock copies (sites/@site); a Verify of that site writes it, and the tree is converted at a task @settle s after the last such change@freq', array('@n' => count($bare), '@all' => $served, '@site' => $bare[0], '@settle' => $settle, '@freq' => $freq));
+  }
+  $newest = 0;
+  $what = '';
+  foreach ($marks as $mark => $mtime) {
+    if ($mtime > $newest) {
+      $newest = $mtime;
+      $what = $mark;
+    }
+  }
+  $age = time() - $newest;
+  if ($age < $settle) {
+    return dt('@what changed @age s ago, and a site may still have de-typed files it loaded from the tree in PHP-FPM\'s opcache; the tree is converted at a task @settle s after that@freq', array('@what' => $what, '@age' => max(0, $age), '@settle' => $settle, '@freq' => $freq));
+  }
+  return '';
+}
+
+/**
+ * What identifies the tree a lock could not give back its stock files: the
+ * core logger files, the psr/log interface on disk and the pristine copy's.
+ */
+function _provision_lock_stock_tree_mark($root) {
+  $log = _provision_psr_log_dir($root);
+  return _provision_core_logger_tree_mark($root)
+    . ' ' . @md5_file($log . '/src/LoggerInterface.php')
+    . ' ' . @md5_file(dirname($log) . '/._orig_log/src/LoggerInterface.php');
+}
+
+/**
  * Whether a psr/log package directory carries the de-typed Aegir overlay.
  *
  * Read from the interface itself, never from a marker file: the overlay is
@@ -833,8 +1345,10 @@ function _provision_core_logger_stock_drop($root) {
       drush_log(dt('CORE/STOCK removed @dir', array('@dir' => $gone)), 'info');
     }
   }
-  if (is_file($dir . '.failed')) {
-    @unlink($dir . '.failed');
+  foreach (array($dir . '.failed', $dir . '.freq') as $note) {
+    if (is_file($note)) {
+      @unlink($note);
+    }
   }
 }
 
@@ -900,15 +1414,23 @@ function _provision_core_patch_sections($patch_tpl) {
  *   The core patch template.
  * @param bool $reverse
  *   TRUE to take the patch off (the unlock).
+ * @param bool $check_only
+ *   TRUE to run the dry runs only: nothing is changed and no error is set.
+ * @param array $skip
+ *   Files (relative to the docroot) to leave as they are.
  *
  * @return bool
- *   TRUE when every file that needed it was changed, or none needed it;
- *   FALSE, with the error set, when a dry run failed or the template
- *   carries no change for a file that needs one.
+ *   TRUE when every file that needed it was changed (or, checking only,
+ *   would be), or none needed it; FALSE when a dry run failed or the
+ *   template carries no change for a file that needs one, with the error
+ *   set unless only checking.
  */
-function _provision_core_patch_files($root, $patch_tpl, $reverse) {
+function _provision_core_patch_files($root, $patch_tpl, $reverse, $check_only = FALSE, $skip = array()) {
   $todo = array();
   foreach (_provision_core_logger_files() as $rel) {
+    if (in_array($rel, $skip, TRUE)) {
+      continue;
+    }
     if (_provision_core_logger_typed($root . '/' . $rel) === !$reverse) {
       $todo[] = $rel;
     }
@@ -940,9 +1462,12 @@ function _provision_core_patch_files($root, $patch_tpl, $reverse) {
       $refused[] = $rel;
     }
   }
-  if (!empty($refused)) {
+  if (!empty($refused) || $check_only) {
     foreach ($parts as $part) {
       @unlink($part);
+    }
+    if ($check_only) {
+      return empty($refused);
     }
     if ($reverse) {
       return drush_set_error($error, dt('Core patch would not revert cleanly in @webRoot (@files); skipping to avoid a partial revert.', array('@webRoot' => $root, '@files' => implode(', ', $refused))));
@@ -966,6 +1491,191 @@ function _provision_core_patch_files($root, $patch_tpl, $reverse) {
     }
     @unlink($part);
   }
+  return TRUE;
+}
+
+/**
+ * Every regular file under a path: the path itself when it is a file. Links
+ * are not followed.
+ */
+function _provision_lock_stock_files($path) {
+  if (is_link($path)) {
+    return array();
+  }
+  if (is_file($path)) {
+    return array($path);
+  }
+  $files = array();
+  if (is_dir($path)) {
+    $walk = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS));
+    foreach ($walk as $file) {
+      if (!$file->isLink() && $file->isFile()) {
+        $files[] = $file->getPathname();
+      }
+    }
+  }
+  sort($files);
+  return $files;
+}
+
+/**
+ * Give everything about to be renamed into place an mtime the files it
+ * replaces never had.
+ *
+ * PHP-FPM's opcache tells a file from the one it compiled by mtime alone, in
+ * whole seconds. A file renamed into place with its predecessor's mtime is
+ * never compiled again: the stock copy of RfcLoggerTrait.php is taken in the
+ * same second the core patch de-types the tree, so the stock trait renamed in
+ * with the copy's mtime left opcache serving the de-typed one beside stock
+ * DbLog and SysLog until PHP-FPM restarted. The files being replaced are
+ * touched first (no compile is kept while a file is younger than
+ * opcache.file_update_protection, so one compiled in the instant between the
+ * two renames is not kept either); then every new file is stamped one second
+ * past now and past every file it replaces.
+ *
+ * @param array $pairs
+ *   Target path => the new file or directory that replaces it.
+ *
+ * @return bool
+ *   FALSE when a new file did not take the stamp.
+ */
+function _provision_lock_stock_stamp($pairs) {
+  $old = array();
+  $new = array();
+  foreach ($pairs as $target => $fresh) {
+    $old = array_merge($old, _provision_lock_stock_files($target));
+    $new = array_merge($new, _provision_lock_stock_files($fresh));
+  }
+  if (empty($new)) {
+    return FALSE;
+  }
+  foreach ($old as $file) {
+    @touch($file);
+  }
+  clearstatcache();
+  $stamp = time();
+  foreach ($old as $file) {
+    $mtime = @filemtime($file);
+    if ($mtime !== FALSE && $mtime > $stamp) {
+      $stamp = $mtime;
+    }
+  }
+  $stamp++;
+  foreach ($new as $file) {
+    if (!@touch($file, $stamp)) {
+      return FALSE;
+    }
+  }
+  clearstatcache();
+  foreach ($new as $file) {
+    if (@filemtime($file) !== $stamp) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Give a de-typed locked tree its genuine psr/log and stock core logger
+ * files back by rename.
+ *
+ * While a tree reads de-typed, the block in each site's settings.php serves
+ * the web from the stock copies, and it steps aside the moment either the
+ * psr/log interface or RfcLoggerTrait.php on disk reads typed. Changed one
+ * after the other in place, the files left a moment in which the web read a
+ * typed psr/log beside de-typed core, and PHP-FPM's opcache kept what it
+ * compiled then for up to a minute: every site of the platform answered 500
+ * for that minute. So the three core files the block does not read are
+ * reverted first, the genuine package and the stock RfcLoggerTrait.php are
+ * built beside their targets, stamped (see _provision_lock_stock_stamp()),
+ * and renamed into place one right after the other. That is clean only for a
+ * tree no site has loaded those files from lately, which the caller makes
+ * sure of (see _provision_lock_stock_defer()).
+ *
+ * @return bool
+ *   TRUE when the tree reads stock now; FALSE when it is not a de-typed tree
+ *   with a pristine psr/log and stock copies of this core, or a step failed,
+ *   with the tree left or put back de-typed.
+ */
+function _provision_lock_stock_swap($root, $patch_tpl) {
+  $log = _provision_psr_log_dir($root);
+  $psr = dirname($log);
+  $trait_rel = 'core/lib/Drupal/Core/Logger/RfcLoggerTrait.php';
+  $trait = $root . '/' . $trait_rel;
+  if (!_provision_lock_tree_detyped($root)
+    || _provision_psr_log_detyped($psr . '/._orig_log') !== FALSE
+    || !_provision_core_logger_stock_ok($root)) {
+    drush_log(dt('PSR/LOG @root is not a de-typed tree with a pristine psr/log and stock copies of this core beside it, so nothing is swapped into place', array('@root' => $root)), 'advisory');
+    return FALSE;
+  }
+  $new_log = $psr . '/.log.new';
+  $old_log = $psr . '/.log.old';
+  $new_trait = $trait . '.new';
+  foreach (array($new_log, $old_log) as $gone) {
+    if (is_dir($gone)) {
+      _provision_recursive_delete($gone);
+    }
+  }
+  @unlink($new_trait);
+  drush_shell_exec('cp -a %s %s', $psr . '/._orig_log', $new_log);
+  foreach (array($new_log . '/src/Test', $new_log . '/._orig_log') as $gone) {
+    if (is_dir($gone)) {
+      _provision_recursive_delete($gone);
+    }
+  }
+  drush_shell_exec('cp %s %s', _provision_core_logger_stock_dir($root) . '/' . $trait_rel, $new_trait);
+  if (is_file($new_trait)) {
+    @chmod($new_trait, fileperms($trait) & 0777);
+  }
+  if (_provision_psr_log_detyped($new_log) !== FALSE || _provision_core_logger_typed($new_trait) !== TRUE) {
+    drush_log(dt('PSR/LOG could not build the genuine psr/log at @new and the stock @file beside their targets in @root (is @psr writable by @user?)', array('@new' => $new_log, '@file' => $trait_rel, '@root' => $root, '@psr' => $psr, '@user' => provision_current_user())), 'advisory');
+    if (is_dir($new_log)) {
+      _provision_recursive_delete($new_log);
+    }
+    @unlink($new_trait);
+    return FALSE;
+  }
+  // The block still serves the web from the copies while these three
+  // change. A refused dry run changes none of them (and sets the error).
+  if (!_provision_core_patch_files($root, $patch_tpl, TRUE, FALSE, array($trait_rel))) {
+    _provision_recursive_delete($new_log);
+    @unlink($new_trait);
+    return FALSE;
+  }
+  if (!_provision_lock_stock_stamp(array($log => $new_log, $trait => $new_trait))) {
+    drush_log(dt('PSR/LOG could not give the genuine psr/log at @new and the stock @file a new mtime in @root; the tree stays de-typed', array('@new' => $new_log, '@file' => $trait_rel, '@root' => $root)), 'advisory');
+    _provision_core_patch_files($root, $patch_tpl, FALSE, FALSE, array($trait_rel));
+    _provision_recursive_delete($new_log);
+    @unlink($new_trait);
+    return FALSE;
+  }
+  $swapped = FALSE;
+  if (@rename($log, $old_log)) {
+    if (!@rename($new_log, $log)) {
+      @rename($old_log, $log);
+    }
+    elseif (!@rename($new_trait, $trait)) {
+      @rename($log, $new_log);
+      @rename($old_log, $log);
+    }
+    else {
+      $swapped = TRUE;
+    }
+  }
+  if (!$swapped) {
+    // Back to the de-typed tree the block serves the web from.
+    _provision_core_patch_files($root, $patch_tpl, FALSE, FALSE, array($trait_rel));
+    foreach (array($new_log, $old_log) as $gone) {
+      if (is_dir($gone)) {
+        _provision_recursive_delete($gone);
+      }
+    }
+    @unlink($new_trait);
+    drush_log(dt('PSR/LOG could not swap the genuine psr/log and the stock @file into place in @root; the tree stays de-typed', array('@file' => $trait_rel, '@root' => $root)), 'advisory');
+    return FALSE;
+  }
+  _provision_recursive_delete($old_log);
+  drush_log(dt('PSR/LOG genuine psr/log and stock core logger files swapped into place in @root', array('@root' => $root)), 'success');
   return TRUE;
 }
 
@@ -1069,6 +1779,9 @@ function provision_check_codebase_status() {
     }
     drush_log(dt('CHECK/CODE/PSRLOG =@state= FOR @dir', array('@state' => $psr_state, '@dir' => ($psr_dir === '') ? d()->root : $psr_dir)), 'info');
     drush_log(dt('CHECK/CODE/STOCK =@state= FOR @dir', array('@state' => _provision_core_logger_web_ready(d()->root) ? 'kept' : 'none', '@dir' => ($psr_dir === '') ? d()->root : dirname($psr_dir) . '/._orig_core')), 'info');
+    $drush8_why = '';
+    $drush8_state = _provision_lock_stock_regime(d()->root, $drush8_why);
+    drush_log(dt('CHECK/CODE/DRUSH8 =@state= FOR @webRoot@why', array('@state' => $drush8_state, '@webRoot' => d()->root, '@why' => ($drush8_why === '') ? '' : ': ' . $drush8_why)), 'info');
   }
   else {
     drush_log(dt('CHECK/CODE/VERSION =@coreVersion= FOR @webRoot', array('@coreVersion' => drush_drupal_major_version(), '@webRoot' => d()->root)), 'info');
@@ -1107,8 +1820,19 @@ function _provision_first_existing($paths) {
  * (provision_task_root_bootstrap()): a root bootstrap at dispatch registers
  * the platform's autoloader before Drush 8 declares its console adapters, and
  * the task dies there on the modern console before any hook runs.
+ *
+ * Where every Drush 8 binds the typed psr/log (_provision_lock_keeps_stock())
+ * a locked Drupal 10 or 11 tree keeps its core logger files stock, so the
+ * core term asks for stock files instead of patched ones. A de-typed tree
+ * whose conversion is deferred (see _provision_lock_stock_regime()) is asked
+ * the de-typed way and needs no lock until it can be converted.
  */
 function provision_drush_local_lock_needed() {
+  $version = drush_drupal_major_version();
+  if (($version == 10 || $version == 11) && _provision_lock_keeps_stock(d()->root)) {
+    return !d()->isConsolePatched || !d()->isCoreStock
+      || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE);
+  }
   return !d()->isConsolePatched || !d()->isCorePatched
     || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE);
 }
@@ -1169,12 +1893,23 @@ function provision_drush_local_lock_state() {
     }
   }
 
+  // Where every Drush 8 binds the typed psr/log, a locked tree keeps the
+  // genuine package and, on Drupal 10 and 11, stock core logger files: only
+  // the console patch and the modes tell locked from unlocked. A de-typed
+  // tree whose conversion is deferred reads as the de-typed lock reads it.
+  $typed_drush = ($version >= 10) && _provision_lock_keeps_stock(d()->root);
+
   if ($version == 10 || $version == 11) {
     // Built-state gate: trust the patch flags only on a demonstrably built tree.
     if (!is_dir(d()->symfonyDir)) {
       return 'unknown';
     }
-    if (d()->isCorePatched && d()->isConsolePatched && $bits_locked && $psr_detyped !== FALSE) {
+    if ($typed_drush) {
+      if (d()->isCoreStock && d()->isConsolePatched && $bits_locked && $psr_detyped !== TRUE) {
+        return 'locked';
+      }
+    }
+    elseif (d()->isCorePatched && d()->isConsolePatched && $bits_locked && $psr_detyped !== FALSE) {
       // The web serves a locked codebase from the stock copies the lock
       // keeps of the core logger files. A locked tree without them (locked
       // before they existed, core moved on since) is one the lock body still
@@ -1193,7 +1928,7 @@ function provision_drush_local_lock_state() {
   }
 
   // Pre-D10 and D12+: no patch templates; the lock is the chmod alone.
-  if ($bits_locked && $psr_detyped !== FALSE) {
+  if ($bits_locked && ($typed_drush ? $psr_detyped !== TRUE : $psr_detyped !== FALSE)) {
     return 'locked';
   }
   if ($bits_unlocked && $psr_detyped !== TRUE) {
@@ -1831,26 +2566,6 @@ function provision_lock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
-      if ($this_user == 'aegir' ) {
-        $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
-      }
-      else {
-        $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
-      }
-
-      // The overlay in place, judged by content, with the pristine copy kept
-      // beside the package for the unlock (see _provision_psr_log_overlay()).
-      // Without it the patches must not go on: de-typed core over a typed
-      // psr/log is a codebase the web cannot serve, the stock one still is.
-      // A missing Drush 8 template is one of the ways the overlay cannot land
-      // (the helper says so), not a reason to skip it and patch anyway.
-      if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
-        // vendor/drush is already at 0400 here: the sites still need their
-        // rebuild, in the stock state this aborted lock leaves.
-        _provision_drush_local_relock_rebuild($closes_foreign_window);
-        return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
-      }
-
       // D10 has no validator patch, but the name is still concatenated into the
       // template paths below; define it so a D10 pass does not log an
       // undefined-variable notice (the apply sites are gated on == 11 first).
@@ -1882,6 +2597,76 @@ function provision_lock_drush_local_vnd() {
         $patchValidatorTpl = '/data/conf/patches/' . $validator_patch_fname;
       }
 
+      // Where every Drush 8 on the box binds the typed psr/log, the codebase
+      // keeps its genuine psr/log and stock core logger files, and a tree an
+      // earlier lock de-typed gets both back (see
+      // _provision_lock_stock_regime()). The core files must be able to come
+      // off the patch before the package goes back: a typed psr/log under
+      // de-typed core is a codebase the web cannot serve. A tree in the
+      // de-typed form the settings.php block serves from the stock copies is
+      // converted by the swap (see _provision_lock_stock_swap()), and only
+      // once no served site can still have the tree's de-typed files in
+      // PHP-FPM's opcache (see _provision_lock_stock_defer()): until then it
+      // reads 'typed-deferred' and takes the de-typed lock below, the stock
+      // copies built when it has none. A de-typed tree whose copies no lock
+      // could build reaches this point without them: it is refused, and the
+      // de-typed lock below tries the build once more. A tree already half
+      // stock, which the block does not serve, is converted in place. A step
+      // refused leaves the tree to the de-typed lock below, as before, and
+      // the tree is noted below so that later tasks read it locked so.
+      $typed_drush = _provision_lock_keeps_stock(d()->root);
+      $typed_refused = FALSE;
+      $typed_nocopies = FALSE;
+      $typed_swap = $typed_drush && isset($core_patch_fname) && _provision_lock_tree_detyped(d()->root);
+      if ($typed_drush && isset($core_patch_fname) && !_provision_core_patch_files(d()->root, $patchCoreTpl, TRUE, TRUE)) {
+        drush_log(dt('PSR/LOG the core logger files in @root would not come off the core patch @tpl cleanly, so this lock keeps the psr/log copy and the patch although every Drush 8 here binds the typed psr/log', array('@root' => d()->root, '@tpl' => $patchCoreTpl)), 'advisory');
+        $typed_refused = TRUE;
+      }
+      elseif ($typed_swap && !_provision_core_logger_stock_ok(d()->root)) {
+        drush_log(dt('PSR/LOG @root has no stock copies of its core logger files at @dir to serve the web while it is converted, and an earlier lock could not build them for this tree (see the CORE/STOCK lines), so this lock keeps the psr/log copy and the core logger patch and tries to build them again', array('@root' => d()->root, '@dir' => _provision_core_logger_stock_dir(d()->root))), 'advisory');
+        $typed_refused = TRUE;
+        $typed_nocopies = TRUE;
+      }
+      elseif ($typed_swap && !_provision_lock_stock_swap(d()->root, $patchCoreTpl)) {
+        $typed_refused = TRUE;
+      }
+      elseif ($typed_drush && !$typed_swap && !_provision_psr_log_restore(d()->root)) {
+        drush_log(dt('PSR/LOG the genuine psr/log could not be put back in @root (see the PSR/LOG lines above), so this lock keeps the psr/log copy and the core logger patch', array('@root' => d()->root)), 'advisory');
+        $typed_refused = TRUE;
+      }
+      $stock_dir = _provision_core_logger_stock_dir(d()->root);
+      if ($typed_refused) {
+        $typed_drush = FALSE;
+        if ($stock_dir !== '') {
+          @file_put_contents($stock_dir . '.refused', _provision_lock_stock_tree_mark(d()->root) . "\n");
+        }
+      }
+      elseif ($typed_drush && $stock_dir !== '' && is_file($stock_dir . '.refused')) {
+        @unlink($stock_dir . '.refused');
+      }
+
+      if (!$typed_drush) {
+        if ($this_user == 'aegir' ) {
+          $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
+        }
+        else {
+          $psr_tpl = '/data/disk/' . $this_user . '/tools/drush/vendor/psr/log/Psr/Log';
+        }
+
+        // The overlay in place, judged by content, with the pristine copy kept
+        // beside the package for the unlock (see _provision_psr_log_overlay()).
+        // Without it the patches must not go on: de-typed core over a typed
+        // psr/log is a codebase the web cannot serve, the stock one still is.
+        // A missing Drush 8 template is one of the ways the overlay cannot land
+        // (the helper says so), not a reason to skip it and patch anyway.
+        if (!_provision_psr_log_overlay(d()->root, $psr_tpl)) {
+          // vendor/drush is already at 0400 here: the sites still need their
+          // rebuild, in the stock state this aborted lock leaves.
+          _provision_drush_local_relock_rebuild($closes_foreign_window);
+          return drush_set_error('PROVISION_PSR_LOG_OVERLAY_FAILED', dt('Lock aborted before the Aegir patches: the psr/log overlay could not be applied in @root (see the PSR/LOG lines above); the codebase keeps its stock files', array('@root' => d()->root)));
+        }
+      }
+
       $patchCoreFile = d()->root . '/' . $core_patch_fname;
       $patchConsoleFile = d()->root . '/' . $console_patch_fname;
       $patchValidatorFile = d()->root . '/' . $validator_patch_fname;
@@ -1893,12 +2678,23 @@ function provision_lock_drush_local_vnd() {
 
       provision_check_codebase_status();
 
+      if ($typed_drush) {
+        // The core logger files back to stock, each from its own part of the
+        // template; then the copies kept for the web go, as on the unlock.
+        if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCoreStock) {
+          _provision_core_patch_files(d()->root, $patchCoreTpl, TRUE);
+          provision_check_codebase_status();
+        }
+        if (d()->isCoreStock) {
+          _provision_core_logger_stock_drop(d()->root);
+        }
+      }
       // The stock copies of the core logger files, which each site's
       // settings.php serves the web from while the tree is de-typed (see
       // _provision_core_logger_stock_keep()): taken before the patch goes
       // on, or rebuilt from the patched files when an earlier lock left
       // none or core has moved on since.
-      if (isset($core_patch_fname) && (!d()->isCorePatched || !_provision_core_logger_stock_ok(d()->root))) {
+      elseif (isset($core_patch_fname) && (!d()->isCorePatched || !_provision_core_logger_stock_ok(d()->root))) {
         _provision_core_logger_stock_keep(d()->root, $patchCoreTpl);
       }
 
@@ -1919,7 +2715,7 @@ function provision_lock_drush_local_vnd() {
       // template: a tree an older patch de-typed in part is finished here.
       // Once all four read de-typed the next lock run keeps their stock
       // copies (_provision_core_logger_stock_due() reads it as 'partial').
-      if (isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
+      if (!$typed_drush && isset($core_patch_fname) && provision_file()->exists($patchCoreTpl)->status() && !d()->isCorePatched) {
         _provision_core_patch_files(d()->root, $patchCoreTpl, FALSE);
       }
       if (provision_file()->exists($patchCoreFile)->status()) {
@@ -1965,6 +2761,20 @@ function provision_lock_drush_local_vnd() {
               $line_status = $index+1 == count($result) ? 'success' : 'notice';
           }
           drush_log($line, $line_status);
+        }
+      }
+
+      // The note of a refused tree describes it as this lock leaves it. A
+      // tree refused for want of stock copies is not noted once this lock
+      // has built them, or left a tree a later lock can build them for: the
+      // gate then converts it at a later task.
+      if ($typed_refused && $stock_dir !== '') {
+        if ($typed_nocopies && (_provision_core_logger_stock_ok(d()->root) || _provision_core_logger_stock_due(d()->root))) {
+          @unlink($stock_dir . '.refused');
+          drush_log(dt('PSR/LOG @root is not noted refused: its stock copies are in place now, or a later lock can build them', array('@root' => d()->root)), 'info');
+        }
+        else {
+          @file_put_contents($stock_dir . '.refused', _provision_lock_stock_tree_mark(d()->root) . "\n");
         }
       }
     }

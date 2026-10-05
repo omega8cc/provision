@@ -253,7 +253,7 @@ function _provision_grav_php_bin() {
   if (!is_null($bin)) {
     return $bin;
   }
-  $candidates = array('/opt/php84/bin/php', '/opt/php85/bin/php', '/opt/php83/bin/php');
+  $candidates = array('/opt/php84/bin/php', '/opt/php85/bin/php', '/opt/php86/bin/php', '/opt/php83/bin/php');
   foreach ($candidates as $candidate) {
     if (is_executable($candidate)) {
       $bin = $candidate;
