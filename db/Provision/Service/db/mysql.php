@@ -1328,25 +1328,30 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           // SECURITY: $db_name derives from alias context; $oct_db_* originate
           // in BOA root control files but may contain shell-special characters.
           // Escape every interpolated value with escapeshellarg().
-          $command = $myloader_path
-            . ' --database=' . escapeshellarg($db_name)
-            . ' --host=' . escapeshellarg($oct_db_host)
-            . ' --user=' . escapeshellarg($oct_db_user)
-            . ' --password=' . escapeshellarg($oct_db_pass)
-            . ' --port=' . escapeshellarg($oct_db_port)
-            . ' --directory=' . escapeshellarg($oct_db_dirx)
-            . ' --threads=' . escapeshellarg($threads)
-            . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
-            . $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx)
-            . ' --verbose=2';
-          if (provision_file()->exists($myquick_creds_log)->status()) {
-            drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
-          }
-          $success = provision_shell_exec_secret($command, array($oct_db_pass));
+          // FALSE: the import would lose the dump's stored objects, and the
+          // error is set; myloader is not run.
+          $definer_option = $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx);
+          if ($definer_option !== FALSE) {
+            $command = $myloader_path
+              . ' --database=' . escapeshellarg($db_name)
+              . ' --host=' . escapeshellarg($oct_db_host)
+              . ' --user=' . escapeshellarg($oct_db_user)
+              . ' --password=' . escapeshellarg($oct_db_pass)
+              . ' --port=' . escapeshellarg($oct_db_port)
+              . ' --directory=' . escapeshellarg($oct_db_dirx)
+              . ' --threads=' . escapeshellarg($threads)
+              . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+              . $definer_option
+              . ' --verbose=2';
+            if (provision_file()->exists($myquick_creds_log)->status()) {
+              drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
+            }
+            $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
-          if (!$success) {
-            // Never interpolate $command into messages: it carries --password.
-            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            if (!$success) {
+              // Never interpolate $command into messages: it carries --password.
+              drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            }
           }
         }
 
@@ -1367,9 +1372,18 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
     else {
+      $load_file = $this->classic_load_file($dump_file);
+      if ($load_file === FALSE) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: the dump carries statement lines the site\'s own login cannot run as written, and no rewritten copy could be written to the backup directory'));
+        return;
+      }
+
       $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $dump_file);
+      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+      if ($load_file !== $dump_file) {
+        @unlink($load_file);
+      }
 
       drush_log(sprintf("Importing database using command: %s", $cmd));
 
@@ -1486,20 +1500,7 @@ port=%s
         '#/\*!50013 DEFINER=.*/#' => FALSE,
         // remove another kind of DEFINER line
         '#/\*!50017 DEFINER=`[^`]*`@`[^`]*`\s*\*/#' => '',
-        // a trigger made under ANSI_QUOTES (Drupal 7 connects in that
-        // sql_mode) names its definer in double quotes
-        '#^(/\*!50003 CREATE\*/ )/\*!50017 DEFINER="[^"]*"@"[^"]*"\s*\*/#' => '$1',
-        // the DEFINER of an event
-        '#^(/\*!50106 CREATE\*/ )/\*!50117 DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*")\s*\*/#' => '$1',
-        // the DEFINER of a stored procedure or function, written bare at the
-        // start of its CREATE line, in double quotes under ANSI_QUOTES
-        '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
-        // a routine, event or trigger made while the database had another
-        // default collation is wrapped in ALTER DATABASE lines naming the
-        // dumped database, which the database user loading the dump into
-        // its own database may not alter (ERROR 1044); without the name
-        // they apply to the database being loaded
-        '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
+      ) + $this->get_statement_regexes() + array(
         // remove broken CREATE ALGORITHM entries
         '#/\*!50001 CREATE ALGORITHM=UNDEFINED \*/#' => "/*!50001 CREATE */",
       );
@@ -1508,6 +1509,155 @@ port=%s
       drush_command_invoke_all_ref('provision_mysql_regex_alter', $regexes);
     }
     return $regexes;
+  }
+
+  /**
+   * The entries of get_regexes() that match a statement from the start of
+   * its line, where no data row starts. A classic load applies them as well
+   * (classic_load_file()), since a dump made before an entry was added still
+   * carries the line it rewrites.
+   */
+  function get_statement_regexes() {
+    return array(
+      // a trigger made under ANSI_QUOTES (Drupal 7 connects in that
+      // sql_mode) names its definer in double quotes
+      '#^(/\*!50003 CREATE\*/ )/\*!50017 DEFINER="[^"]*"@"[^"]*"\s*\*/#' => '$1',
+      // the DEFINER of an event
+      '#^(/\*!50106 CREATE\*/ )/\*!50117 DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*")\s*\*/#' => '$1',
+      // the DEFINER of a stored procedure or function, written bare at the
+      // start of its CREATE line, in double quotes under ANSI_QUOTES
+      '#^CREATE DEFINER=(`[^`]*`|"[^"]*")@(`[^`]*`|"[^"]*") (PROCEDURE|FUNCTION) #' => 'CREATE $3 ',
+      // a routine, event or trigger made while the database had another
+      // default collation is wrapped in ALTER DATABASE lines naming the
+      // dumped database, which the database user loading the dump into
+      // its own database may not alter (ERROR 1044); without the name
+      // they apply to the database being loaded
+      '#^ALTER DATABASE (`[^`]*`|"[^"]*") (CHARACTER SET [A-Za-z0-9_]+ COLLATE [A-Za-z0-9_]+ ;+)$#' => 'ALTER DATABASE $2',
+    );
+  }
+
+  /**
+   * The dump file a classic load reads: the file itself, or a copy with
+   * get_statement_regexes() applied when a line of it still needs them.
+   *
+   * An archive made before the dump filter rewrote those statements keeps
+   * ALTER DATABASE lines naming the dumped database around an object made
+   * under another collation, and a trigger definer in double quotes; the
+   * site's own login may run neither (ERROR 1044, ERROR 1227), so its
+   * Restore failed and rolled back. A dump made since needs no copy. Only a
+   * piece that starts a line is matched: every data row starts with its
+   * INSERT, and a long row is read in pieces. The copy is written to the
+   * instance's backup directory, readable by its owner only, and the caller
+   * removes it after the load; a copy a killed load left there goes at the
+   * next classic load (classic_load_sweep()). The copy is written only when
+   * the filesystem keeps the headroom the space check keeps
+   * (provision_space_margin()) after it. FALSE when the copy cannot be
+   * written. PHP 5.6-safe.
+   */
+  function classic_load_file($dump_file) {
+    $regexes = $this->get_statement_regexes();
+    $dir = rtrim(d('@server_master')->backup_path, '/');
+    $this->classic_load_sweep($dir);
+    $in = @fopen($dump_file, 'rb');
+    if ($in === FALSE) {
+      // The load reports the missing or unreadable file as before.
+      return $dump_file;
+    }
+    $needs = FALSE;
+    $start = TRUE;
+    while (!$needs && ($piece = fgets($in, 1048576)) !== FALSE) {
+      if ($start && $this->statement_line($piece, $regexes) !== $piece) {
+        $needs = TRUE;
+      }
+      $start = substr($piece, -1) === "\n";
+    }
+    if (!$needs) {
+      fclose($in);
+      return $dump_file;
+    }
+    $need = (float) @filesize($dump_file);
+    $free = @disk_free_space($dir);
+    if (!is_file('/data/conf/disable_space_preflight.cnf') && function_exists('provision_space_margin') && $free !== FALSE) {
+      $margin = provision_space_margin($dir);
+      if ($free < $need + $margin) {
+        fclose($in);
+        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+          '@need' => round(($need + $margin) / 1073741824, 1),
+          '@dir' => $dir,
+          '@margin' => round($margin / 1073741824, 1),
+          '@free' => round($free / 1073741824, 1),
+        )), 'warning');
+        return FALSE;
+      }
+    }
+    $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
+    @unlink($copy);
+    $out = @fopen($copy, 'xb');
+    if ($out === FALSE) {
+      fclose($in);
+      return FALSE;
+    }
+    @chmod($copy, 0600);
+    rewind($in);
+    $ok = TRUE;
+    $start = TRUE;
+    $rewritten = 0;
+    while (($piece = fgets($in, 1048576)) !== FALSE) {
+      $line = $start ? $this->statement_line($piece, $regexes) : $piece;
+      if ($line !== $piece) {
+        $rewritten++;
+      }
+      $start = substr($piece, -1) === "\n";
+      $written = fwrite($out, $line);
+      if ($written === FALSE || $written < strlen($line)) {
+        $ok = FALSE;
+        break;
+      }
+    }
+    fclose($in);
+    if (!fclose($out) || !$ok) {
+      @unlink($copy);
+      return FALSE;
+    }
+    if ($rewritten == 1) {
+      drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
+    }
+    else {
+      drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
+    }
+    return $copy;
+  }
+
+  /**
+   * Removes from $dir the copies classic_load_file() made for a load whose
+   * process is gone: one killed during the load, or by a reboot, leaves its
+   * copy, a dot name no backup purge reaches. A copy whose process number
+   * runs again stays until a later load finds it gone. PHP 5.6-safe.
+   */
+  function classic_load_sweep($dir) {
+    $left = @glob($dir . '/.classic-load-*.sql');
+    if (!is_array($left)) {
+      return;
+    }
+    foreach ($left as $old) {
+      if (preg_match('#/\.classic-load-([0-9]+)\.sql$#', $old, $m) && $m[1] != getmypid() && !file_exists('/proc/' . $m[1])) {
+        @unlink($old);
+      }
+    }
+  }
+
+  /**
+   * One line with the given statement regexes applied; a regex that fails
+   * leaves the line as it was.
+   */
+  function statement_line($line, $regexes) {
+    foreach ($regexes as $find => $replace) {
+      $new = preg_replace($find, $replace, $line);
+      if (is_string($new)) {
+        $line = $new;
+      }
+    }
+    return $line;
   }
 
   function filter_line(&$line) {
@@ -1712,10 +1862,13 @@ port=%s
 
       if ($this->broker_mode() && is_dir($oct_db_dirx) && $db_name) {
         // The broker dumps as root into its own staging and moves the
-        // finished dump, the account's own, into this empty tmp_expim.
+        // finished dump, the account's own, into this empty tmp_expim. The
+        // objects' modes are read first, while this connection is live: it
+        // sits idle through the dump.
+        $modes = $this->mydumper_object_modes_read($db_name);
         $dumped = $this->broker_call('dump', array('--', $db_name));
         clearstatcache();
-        if ($dumped && is_file($oct_db_dirx . '/metadata') && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+        if ($dumped && is_file($oct_db_dirx . '/metadata') && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
         if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
@@ -1737,6 +1890,9 @@ port=%s
         if ($non_trx_result && ($non_trx_row = $non_trx_result->fetch()) && intval($non_trx_row[0]) > 0) {
           $trx_opt = ' --trx-tables=0';
         }
+        // The objects' modes are read now, while this connection is live: it
+        // sits idle through the dump.
+        $modes = $this->mydumper_object_modes_read($db_name);
         // mydumper 1.x fixed the adaptive chunker (0.21.x truncated a chunk's
         // file to 0 bytes when a split landed past the last existing key,
         // exiting clean), so on 1.x tables are chunked and dumped in parallel
@@ -1781,7 +1937,7 @@ port=%s
           // no restorable dump (killed mid-flight), so treat it as failed.
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
         }
-        elseif ($success && !$this->mydumper_object_modes($db_name, $oct_db_dirx)) {
+        elseif ($success && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
       }
@@ -1854,6 +2010,13 @@ port=%s
         drush_set_error('PROVISION_BACKUP_FAILED', dt('Could not generate database backup from mysqldump. (error: %msg)', array('%msg' => $err)));
       }
     }
+
+    // The session sat idle through the dump, and a dump longer than the
+    // server's wait_timeout finds it closed: drop it, so the caller's next
+    // statement (the definer read of a carried-over database) opens a fresh
+    // one through ensure_connected() instead of meeting '2006 MySQL server
+    // has gone away'.
+    $this->close();
 
     // Reset the umask to normal permissions.
     umask(0022);

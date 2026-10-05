@@ -75,6 +75,11 @@ class Provision_Service_db_pdo extends Provision_Service_db {
       $args = $args[0];
     }
     $this->ensure_connected();
+    if (!$this->conn) {
+      // The connect was refused and set its own error: no session to quote
+      // or query through.
+      return FALSE;
+    }
     $this->query_callback($args, TRUE);
     $query = preg_replace_callback(PROVISION_QUERY_REGEXP, array($this, 'query_callback'), $query);
 
