@@ -1328,25 +1328,30 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           // SECURITY: $db_name derives from alias context; $oct_db_* originate
           // in BOA root control files but may contain shell-special characters.
           // Escape every interpolated value with escapeshellarg().
-          $command = $myloader_path
-            . ' --database=' . escapeshellarg($db_name)
-            . ' --host=' . escapeshellarg($oct_db_host)
-            . ' --user=' . escapeshellarg($oct_db_user)
-            . ' --password=' . escapeshellarg($oct_db_pass)
-            . ' --port=' . escapeshellarg($oct_db_port)
-            . ' --directory=' . escapeshellarg($oct_db_dirx)
-            . ' --threads=' . escapeshellarg($threads)
-            . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
-            . $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx)
-            . ' --verbose=2';
-          if (provision_file()->exists($myquick_creds_log)->status()) {
-            drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
-          }
-          $success = provision_shell_exec_secret($command, array($oct_db_pass));
+          // FALSE: the import would lose the dump's stored objects, and the
+          // error is set; myloader is not run.
+          $definer_option = $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx);
+          if ($definer_option !== FALSE) {
+            $command = $myloader_path
+              . ' --database=' . escapeshellarg($db_name)
+              . ' --host=' . escapeshellarg($oct_db_host)
+              . ' --user=' . escapeshellarg($oct_db_user)
+              . ' --password=' . escapeshellarg($oct_db_pass)
+              . ' --port=' . escapeshellarg($oct_db_port)
+              . ' --directory=' . escapeshellarg($oct_db_dirx)
+              . ' --threads=' . escapeshellarg($threads)
+              . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+              . $definer_option
+              . ' --verbose=2';
+            if (provision_file()->exists($myquick_creds_log)->status()) {
+              drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
+            }
+            $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
-          if (!$success) {
-            // Never interpolate $command into messages: it carries --password.
-            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            if (!$success) {
+              // Never interpolate $command into messages: it carries --password.
+              drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            }
           }
         }
 

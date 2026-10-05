@@ -488,17 +488,45 @@ class Provision_Service_db extends Provision_Service {
    * runs with its definer's rights. A myloader without --replace-definer
    * (the 0.19.3 line) loads the tables and views as before and leaves the
    * triggers, routines and events out, as before.
+   *
+   * With a myloader that takes --replace-definer, a dump that carries such
+   * objects and no usable host for the login, the import stops instead
+   * (FALSE, the error set): leaving them out lost them for good where the
+   * task then drops the database they came from, as a Restore that carries
+   * the current database over does. A dump carries them when its trigger or
+   * post file holds a CREATE: mydumper 1.0.5 writes a trigger file of its
+   * header alone for a database without any. A compressed or unreadable
+   * file counts as carrying them.
    */
   function myloader_definer_option($myloader_path, $db_user, $dump_dir) {
     $help = '';
     if (drush_shell_exec($myloader_path . ' --help')) {
       $help = implode("\n", drush_shell_exec_output());
     }
+    $carried = 0;
+    foreach (array_merge((array) glob($dump_dir . '/*-schema-triggers.sql*'), (array) glob($dump_dir . '/*-schema-post.sql*')) as $file) {
+      if (!is_string($file) || !is_file($file)) {
+        continue;
+      }
+      $text = (substr($file, -4) === '.sql') ? @file_get_contents($file) : FALSE;
+      if ($text === FALSE || preg_match('/^\s*CREATE\s/mi', $text)) {
+        $carried++;
+      }
+    }
     if (preg_match('/^\s+--replace-definer(\s|=)/m', $help)
       && preg_match('/^[A-Za-z0-9_]+$/', (string) $db_user)) {
       $host = $this->definer_host($db_user);
       if (is_string($host) && preg_match('/^[A-Za-z0-9_.:%-]+$/', $host)) {
         return ' --replace-definer=' . escapeshellarg('`' . $db_user . '`@`' . $host . '`');
+      }
+      if ($carried) {
+        if (is_string($host) && $host !== '') {
+          $why = dt('its host @host is not a form this import can give as the DEFINER', array('@host' => $host));
+        }
+        else {
+          $why = dt('its host could not be read (the read was refused, or no such login was found)');
+        }
+        return drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('The dump carries triggers, routines or events for the database login @user, but @why: the import is stopped, so none of them is lost.', array('@user' => $db_user, '@why' => $why)));
       }
     }
     $options = '';
@@ -507,8 +535,7 @@ class Provision_Service_db extends Provision_Service {
         $options .= ' ' . $option;
       }
     }
-    $carried = array_merge((array) glob($dump_dir . '/*-schema-triggers.sql*'), (array) glob($dump_dir . '/*-schema-post.sql*'));
-    if ($options !== '' && count(array_filter($carried))) {
+    if ($options !== '' && $carried) {
       drush_log(dt('The dump carries triggers, routines or events, and this myloader cannot hand them to @user: they are left out of the import.', array('@user' => $db_user)), 'warning');
     }
     return $options;
@@ -740,25 +767,30 @@ class Provision_Service_db extends Provision_Service {
           // $oct_db_dirx originate in BOA root control files but may contain
           // shell-special characters in passwords. Escape every interpolated
           // value with escapeshellarg() before shell exec.
-          $command = $myloader_path
-            . ' --database=' . escapeshellarg($db_name)
-            . ' --host=' . escapeshellarg($oct_db_host)
-            . ' --user=' . escapeshellarg($oct_db_user)
-            . ' --password=' . escapeshellarg($oct_db_pass)
-            . ' --port=' . escapeshellarg($oct_db_port)
-            . ' --directory=' . escapeshellarg($oct_db_dirx)
-            . ' --threads=' . escapeshellarg($threads)
-            . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
-            . $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx)
-            . ' --verbose=2';
-          if (provision_file()->exists($myquick_creds_log)->status()) {
-            drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
-          }
-          $success = provision_shell_exec_secret($command, array($oct_db_pass));
+          // FALSE: the import would lose the dump's stored objects, and the
+          // error is set; myloader is not run.
+          $definer_option = $this->myloader_definer_option($myloader_path, $db_user, $oct_db_dirx);
+          if ($definer_option !== FALSE) {
+            $command = $myloader_path
+              . ' --database=' . escapeshellarg($db_name)
+              . ' --host=' . escapeshellarg($oct_db_host)
+              . ' --user=' . escapeshellarg($oct_db_user)
+              . ' --password=' . escapeshellarg($oct_db_pass)
+              . ' --port=' . escapeshellarg($oct_db_port)
+              . ' --directory=' . escapeshellarg($oct_db_dirx)
+              . ' --threads=' . escapeshellarg($threads)
+              . ' --drop-table=DROP' . $this->myloader_binlog_option($myloader_path)
+              . $definer_option
+              . ' --verbose=2';
+            if (provision_file()->exists($myquick_creds_log)->status()) {
+              drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
+            }
+            $success = provision_shell_exec_secret($command, array($oct_db_pass));
 
-          if (!$success) {
-            // Never interpolate $command into messages: it carries --password.
-            drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            if (!$success) {
+              // Never interpolate $command into messages: it carries --password.
+              drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Database import failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+            }
           }
         }
 
