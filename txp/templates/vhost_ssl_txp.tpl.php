@@ -44,11 +44,11 @@ if (!$script_user && $server->script_user) {
   $script_user = $server->script_user;
 }
 // Enforced PHP: pin the enforced-version FPM socket
-// (BOA default 8.4; 8.5 fallback), never the instance's per-site-selectable
+// (BOA default 8.4; 8.5 then 8.6 as fallbacks), never the instance's per-site-selectable
 // pool. The bare socket is the last resort on topologies without versioned
 // pools. Render-time file checks: this runs on the box.
 $user_socket = '/run/' . $script_user . '.fpm.socket';
-foreach (array('84', '85') as $txp_php_ver) {
+foreach (array('84', '85', '86') as $txp_php_ver) {
   if (file_exists('/run/' . $script_user . '.' . $txp_php_ver . '.fpm.socket')) {
     $user_socket = '/run/' . $script_user . '.' . $txp_php_ver . '.fpm.socket';
     break;

@@ -236,7 +236,7 @@ function _provision_txp_php_bin() {
   if (version_compare(PHP_VERSION, '8.4.0', '>=') && defined('PHP_BINARY') && PHP_BINARY) {
     return PHP_BINARY;
   }
-  $candidates = array('/opt/php85/bin/php', '/opt/php84/bin/php');
+  $candidates = array('/opt/php86/bin/php', '/opt/php85/bin/php', '/opt/php84/bin/php');
   foreach ($candidates as $bin) {
     if (is_executable($bin)) {
       return $bin;
