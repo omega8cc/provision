@@ -458,9 +458,9 @@ class Provision_Service_db extends Provision_Service {
    * server queues behind it. The read lock alone still gives the dump its
    * consistent point. Given only when the server reports 5.7 and the
    * mydumper lists the option in its --help, read whatever that exits with
-   * (a build that cannot parse its defaults file prints the help, then exits
-   * 1), so any other server, and a build without it, gets its arguments as
-   * before. PHP 5.6-safe.
+   * (the 0.19.3 line, when it cannot parse its defaults file, prints the help
+   * and then exits 1), so any other server, and a build without it, gets its
+   * arguments as before. PHP 5.6-safe.
    */
   function mydumper_backup_locks_option($mydumper_path) {
     $version = $this->server_version();
