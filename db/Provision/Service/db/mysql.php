@@ -1548,11 +1548,16 @@ port=%s
    * piece that starts a line is matched: every data row starts with its
    * INSERT, and a long row is read in pieces. The copy is written to the
    * instance's backup directory, readable by its owner only, and the caller
-   * removes it after the load. FALSE when the copy cannot be written.
-   * PHP 5.6-safe.
+   * removes it after the load; a copy a killed load left there goes at the
+   * next classic load (classic_load_sweep()). The copy is written only when
+   * the filesystem keeps the headroom the space check keeps
+   * (provision_space_margin()) after it. FALSE when the copy cannot be
+   * written. PHP 5.6-safe.
    */
   function classic_load_file($dump_file) {
     $regexes = $this->get_statement_regexes();
+    $dir = rtrim(d('@server_master')->backup_path, '/');
+    $this->classic_load_sweep($dir);
     $in = @fopen($dump_file, 'rb');
     if ($in === FALSE) {
       // The load reports the missing or unreadable file as before.
@@ -1570,7 +1575,22 @@ port=%s
       fclose($in);
       return $dump_file;
     }
-    $copy = rtrim(d('@server_master')->backup_path, '/') . '/.classic-load-' . getmypid() . '.sql';
+    $need = (float) @filesize($dump_file);
+    $free = @disk_free_space($dir);
+    if (!is_file('/data/conf/disable_space_preflight.cnf') && function_exists('provision_space_margin') && $free !== FALSE) {
+      $margin = provision_space_margin($dir);
+      if ($free < $need + $margin) {
+        fclose($in);
+        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+          '@need' => round(($need + $margin) / 1073741824, 1),
+          '@dir' => $dir,
+          '@margin' => round($margin / 1073741824, 1),
+          '@free' => round($free / 1073741824, 1),
+        )), 'warning');
+        return FALSE;
+      }
+    }
+    $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
     @unlink($copy);
     $out = @fopen($copy, 'xb');
     if ($out === FALSE) {
@@ -1599,8 +1619,31 @@ port=%s
       @unlink($copy);
       return FALSE;
     }
-    drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
+    if ($rewritten == 1) {
+      drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
+    }
+    else {
+      drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
+    }
     return $copy;
+  }
+
+  /**
+   * Removes from $dir the copies classic_load_file() made for a load whose
+   * process is gone: one killed during the load, or by a reboot, leaves its
+   * copy, a dot name no backup purge reaches. A copy whose process number
+   * runs again stays until a later load finds it gone. PHP 5.6-safe.
+   */
+  function classic_load_sweep($dir) {
+    $left = @glob($dir . '/.classic-load-*.sql');
+    if (!is_array($left)) {
+      return;
+    }
+    foreach ($left as $old) {
+      if (preg_match('#/\.classic-load-([0-9]+)\.sql$#', $old, $m) && $m[1] != getmypid() && !file_exists('/proc/' . $m[1])) {
+        @unlink($old);
+      }
+    }
   }
 
   /**
