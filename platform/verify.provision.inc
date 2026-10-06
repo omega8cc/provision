@@ -189,7 +189,7 @@ function drush_provision_drupal_pre_provision_verify() {
     $sitesfile = "sites/sites.php";
     if (drush_drupal_major_version() >= 8 && !file_exists($sitesfile)) {
       if (!drush_op('copy', 'sites/example.sites.php', $sitesfile) && !drush_get_context('DRUSH_SIMULATE')) {
-        return drush_set_error(dt('Failed to copy sites/sites.php to @sitesfile', array('@sitesfile' => $sitesfile)));
+        return drush_set_error(dt('Failed to copy sites/example.sites.php to @sitesfile', array('@sitesfile' => $sitesfile)));
       }
     }
 
