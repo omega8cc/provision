@@ -28,6 +28,30 @@ class Provision_Config_Drushrc_Site extends Provision_Config_Drushrc {
     if (provision_is_hostmaster_site()) {
       $this->mode = 0400;
     }
+    $this->fill_db_port();
     return parent::process();
+  }
+
+  /**
+   * An imported site takes its credentials from its own settings, which name
+   * no port, so its drushrc.php had none and the settings file's command-line
+   * read of the credentials left the port unset: every task on the site ended
+   * with a warning. Take the port of the site's database server, as Install
+   * does when it makes the credentials; a site written without one gets it on
+   * its next write.
+   */
+  function fill_db_port() {
+    if (empty($this->data['db_name'])) {
+      return;
+    }
+    if (isset($this->data['db_port']) && $this->data['db_port'] !== '') {
+      return;
+    }
+    $server = isset($this->context->db_server) ? $this->context->db_server : NULL;
+    if (!is_object($server) || empty($server->db_port)) {
+      return;
+    }
+    $this->data['db_port'] = (string) $server->db_port;
+    drush_set_option('db_port', $this->data['db_port'], 'site');
   }
 }

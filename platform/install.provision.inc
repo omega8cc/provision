@@ -527,7 +527,7 @@ function drush_provision_drupal_provision_install() {
           }
           if ($login_link !== '') {
             drush_set_option('login_link', $login_link);
-            drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'success');
+            drush_log('D11/INSTALL/LOCAL/DRUSH/ULI ' . provision_login_link_message(), 'success');
           }
           else {
             drush_log(dt('D11/INSTALL/LOCAL/DRUSH/ULI could not derive a one-time login link from user:login output'), 'warning');

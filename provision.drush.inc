@@ -828,6 +828,9 @@ function provision_hosting_feature_enabled($feature) {
 
 /**
  * Generate one-time login link
+ *
+ * Returns an empty string when the user-login child printed no reset URL: a
+ * failed or silent child returns FALSE or stray output, never a link.
  */
 function provision_generate_login_reset() {
   $uri = d()->redirection ?: d()->uri;
@@ -837,10 +840,30 @@ function provision_generate_login_reset() {
   // name, then point the link at the subdirectory address.
   $subdir = is_string($uri) && strpos($uri, '/') !== FALSE;
   $result = drush_invoke_process(d()->name, 'user-login', array(), array('uri' => $subdir ? d()->uri : $uri, 'no-browser' => TRUE));
-  $link = $result['output'];
-  if ($subdir) {
+  $output = (is_array($result) && isset($result['output'])) ? (string) $result['output'] : '';
+  $link = '';
+  // The child prints the URL with a trailing newline, which must not reach
+  // the panel's redirect.
+  foreach (explode("\n", $output) as $line) {
+    $line = trim($line);
+    if ($line !== '' && strpos($line, '/user/reset/') !== FALSE) {
+      $link = $line;
+      break;
+    }
+  }
+  if ($link !== '' && $subdir) {
     $link = str_replace('://' . d()->uri . '/', '://' . $uri . '/', $link);
   }
 
   return $link;
+}
+
+/**
+ * Task log line for a generated one-time login link.
+ *
+ * The link stays out of the log, which every login allowed to read the site's
+ * tasks can see; the line names where the panel offers it instead.
+ */
+function provision_login_link_message() {
+  return dt('One-time login link generated: use the "Log in to" link at the top of the site page in the control panel. It works once, within 24 hours.');
 }
