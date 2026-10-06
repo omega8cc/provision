@@ -178,8 +178,13 @@ function install_main() {
   // user to their new site.
 
   $onetime = provision_generate_login_reset();
-  drush_set_option('login_link', $onetime);
-  drush_log(dt('One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'message');
+  if ($onetime !== '') {
+    drush_set_option('login_link', $onetime);
+    drush_log(provision_login_link_message(), 'message');
+  }
+  else {
+    drush_log(dt('Drush user-login returned no one-time login link; the site page offers none.'), 'warning');
+  }
 
 /*
   if ($client_email) {

@@ -43,6 +43,10 @@ function drush_provision_drupal_provision_login_reset() {
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  drush_set_option('login_link', provision_generate_login_reset());
-  drush_log(dt('One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'success');
+  $link = provision_generate_login_reset();
+  if ($link === '') {
+    return drush_set_error('PROVISION_LOGIN_RESET_FAILED', dt('Drush user-login returned no one-time login link; the site page offers none.'));
+  }
+  drush_set_option('login_link', $link);
+  drush_log(provision_login_link_message(), 'success');
 }

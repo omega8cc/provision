@@ -126,9 +126,9 @@ if (!$installed) {
 
 // Capture the one-time admin login link (mirror install_7.inc / the D11 shape).
 $onetime = provision_generate_login_reset();
-if (!empty($onetime)) {
+if ($onetime !== '') {
   drush_set_option('login_link', $onetime);
-  drush_log(dt('One-time login link generated; the site page offers it for 24 hours to users allowed to reset the password.'), 'success');
+  drush_log(provision_login_link_message(), 'success');
 }
 else {
   drush_log(dt('Could not derive a one-time login link (user-login).'), 'warning');
