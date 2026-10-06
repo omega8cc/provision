@@ -368,9 +368,9 @@ function install_main() {
 
   $client_email = install_validate_client_email(drush_get_option('client_email', FALSE));
 
-/*
+  // The installer leaves user 1 blocked with no password; this activates it,
+  // without the welcome mail, so the one-time login link can log in.
   $account = install_create_admin_user($client_email);
- */
 
   // If a redirect is defined, the symlink to the alias needs to exist before
   // we generate the login link, below.
