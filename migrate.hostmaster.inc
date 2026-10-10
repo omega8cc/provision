@@ -52,6 +52,14 @@ We are making the following assumptions:
   if (is_readable($alias_file)) {
     provision_backend_invoke('@server_master', 'provision-verify');
     provision_backend_invoke('@hostmaster', 'provision-verify');
+    // A panel that does not verify (its site cannot bootstrap, its server
+    // context is broken) is not migrated: the new platform would be built
+    // and verified, the site never moved, and the failure would surface
+    // only as a later command that cannot find the site. Stop here, with
+    // the verify's own error above this line.
+    if (drush_get_error()) {
+      return drush_set_error('PROVISION_HOSTMASTER_VERIFY_FAILED', dt('The server or the hostmaster site did not verify: nothing is migrated. Make @site bootstrap again (drush @site status) and run the upgrade again.', array('@site' => '@hostmaster')));
+    }
 
     drush_set_option('site_name', '@hostmaster');
     drush_set_option('old_platform', d('@hostmaster')->platform->name);
