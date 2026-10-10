@@ -56,19 +56,19 @@ function _provision_backdrop_deploy_replace($old_url, $new_url) {
       // Replace in all known text fields.
       if (in_array($info['type'], array('text_long', 'text_with_summary'))) {
         drush_log('Replacing in ' . $key, 'debug');
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_value     = REPLACE(${tablekey}_value,   :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_value = REPLACE(${tablekey}_value,   :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_value     = REPLACE(${tablekey}_value,   :old, :new)", $replace_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_value = REPLACE(${tablekey}_value,   :old, :new)", $replace_patterns);
+        db_query("UPDATE {field_data_{$tablekey}} SET {$tablekey}_value     = REPLACE({$tablekey}_value,   :old, :new)", $replace_abs_patterns);
+        db_query("UPDATE {field_revision_{$tablekey}} SET {$tablekey}_value = REPLACE({$tablekey}_value,   :old, :new)", $replace_abs_patterns);
+        db_query("UPDATE {field_data_{$tablekey}} SET {$tablekey}_value     = REPLACE({$tablekey}_value,   :old, :new)", $replace_patterns);
+        db_query("UPDATE {field_revision_{$tablekey}} SET {$tablekey}_value = REPLACE({$tablekey}_value,   :old, :new)", $replace_patterns);
       }
 
       // Replace in the optional summary.
       if ($info['type'] == 'text_with_summary') {
         drush_log('Replacing summary in ' . $key, 'debug');
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_summary     = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_summary = REPLACE(${tablekey}_summary, :old, :new)", $replace_abs_patterns);
-        db_query("UPDATE {field_data_${tablekey}} SET ${tablekey}_summary     = REPLACE(${tablekey}_summary, :old, :new)", $replace_patterns);
-        db_query("UPDATE {field_revision_${tablekey}} SET ${tablekey}_summary = REPLACE(${tablekey}_summary, :old, :new)", $replace_patterns);
+        db_query("UPDATE {field_data_{$tablekey}} SET {$tablekey}_summary     = REPLACE({$tablekey}_summary, :old, :new)", $replace_abs_patterns);
+        db_query("UPDATE {field_revision_{$tablekey}} SET {$tablekey}_summary = REPLACE({$tablekey}_summary, :old, :new)", $replace_abs_patterns);
+        db_query("UPDATE {field_data_{$tablekey}} SET {$tablekey}_summary     = REPLACE({$tablekey}_summary, :old, :new)", $replace_patterns);
+        db_query("UPDATE {field_revision_{$tablekey}} SET {$tablekey}_summary = REPLACE({$tablekey}_summary, :old, :new)", $replace_patterns);
       }
     }
   }
