@@ -43,6 +43,12 @@ function provision_grav_drush_init() {
 }
 
 /**
+ * The shelf the BOA channel stages the official admin-bundle zips on: one
+ * directory of root's for the whole server (staticbuild -> mirrors -> box).
+ */
+define('PROVISION_GRAV_RELEASES_DIR', '/data/all/000/grav-releases');
+
+/**
  * Implements hook_drush_command().
  *
  * The mirror-fed Grav upgrade, copy-upgrade, rename and cutover commands.
@@ -60,7 +66,7 @@ function provision_grav_drush_command() {
   $items['provision-grav-upgrade'] = array(
     'description' => 'Upgrade a Grav site capsule in place to a staged official admin-bundle release (mirror-fed; safety backup first; user content, accounts and configuration survive).',
     'arguments' => array(
-      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged under <aegir_root>/static/grav-releases/.'),
+      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged on the shelf of the server, /data/all/000/grav-releases/.'),
     ),
     'allow-additional-options' => TRUE,
     'examples' => array(
@@ -76,7 +82,7 @@ function provision_grav_drush_command() {
     ),
     'options' => array(
       'new_db_server' => dt('Ignored for Grav: a capsule has no database and the copy keeps the source\'s "none" server. Accepted so the frontend dialog can pass its usual option set.'),
-      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged under <aegir_root>/static/grav-releases/.'),
+      'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged on the shelf of the server, /data/all/000/grav-releases/.'),
     ),
     'allow-additional-options' => TRUE,
     'examples' => array(
@@ -117,18 +123,39 @@ function provision_grav_drush_command() {
 /**
  * Resolve the newest staged official admin-bundle artefact.
  *
- * The BOA channel (staticbuild -> mirrors -> box) stages the
- * official grav-admin-v*.zip files under <aegir_root>/static/grav-releases/;
- * newest by version sort wins. Returns FALSE when nothing is staged.
+ * The BOA channel (staticbuild -> mirrors -> box) stages the official
+ * grav-admin-v*.zip files on PROVISION_GRAV_RELEASES_DIR, one shelf of
+ * root's for the whole server; the newest version the file name claims
+ * wins. The per-account shelf an earlier BOA release staged under
+ * <aegir_root>/static/grav-releases/ is still read until the account's next
+ * BOA run removes it, so an upgrade queued across that change still finds
+ * its artefact. Returns FALSE when nothing is staged.
  */
 function _provision_grav_newest_artefact() {
-  $dir = d('@server_master')->aegir_root . '/static/grav-releases';
-  $candidates = glob($dir . '/grav-admin-v*.zip');
-  if (!is_array($candidates) || empty($candidates)) {
-    return FALSE;
+  $dirs = array(PROVISION_GRAV_RELEASES_DIR);
+  $server = d('@server_master');
+  if (!empty($server->aegir_root)) {
+    $dirs[] = $server->aegir_root . '/static/grav-releases';
   }
-  usort($candidates, 'version_compare');
-  return end($candidates);
+  $best = FALSE;
+  $best_version = '';
+  foreach ($dirs as $dir) {
+    $candidates = glob($dir . '/grav-admin-v*.zip');
+    if (!is_array($candidates)) {
+      continue;
+    }
+    foreach ($candidates as $candidate) {
+      $version = _provision_grav_artefact_filename_version($candidate);
+      if ($version === '') {
+        continue;
+      }
+      if ($best === FALSE || version_compare($version, $best_version, '>')) {
+        $best = $candidate;
+        $best_version = $version;
+      }
+    }
+  }
+  return $best;
 }
 
 /**
@@ -1590,7 +1617,7 @@ function _provision_grav_resolve_artefact($capsule_version, $artefact = NULL) {
     $artefact = _provision_grav_newest_artefact();
     if ($artefact === FALSE) {
       drush_set_error('PROVISION_GRAV_NO_ARTEFACT',
-        dt('No staged official release found under <aegir_root>/static/grav-releases/ and no artefact argument given.'));
+        dt('No staged official release found on /data/all/000/grav-releases/ and no artefact argument given.'));
       return FALSE;
     }
   }
