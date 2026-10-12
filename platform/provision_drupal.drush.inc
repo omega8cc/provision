@@ -438,7 +438,8 @@ function _provision_drupal_create_directories($url = NULL) {
     // Private files, and the CiviCRM stores nginx denies, keep no world bits
     // once the account runs in its own web group (BOA's wg-<account>): the
     // account's pools reach them through it, and nginx never serves them
-    // directly.
+    // directly. Which of them are narrowed is kept: one that really lies
+    // outside the account's tree is widened back below.
     if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
       $wide = $mkdir;
       $mkdir = _provision_drupal_web_group_private($mkdir);
@@ -529,15 +530,10 @@ function _provision_drupal_create_directories($url = NULL) {
   // Each path takes its group where it really is (the place judged, or the
   // path): one outside the account's tree keeps the shared web group rather
   // than the account's own (provision_path_web_group()).
-  $kept = array();
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
       $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
-      $given = provision_path_web_group(($at === NULL) ? $path : $at, $group);
-      if ($given !== $group) {
-        $kept[$path] = TRUE;
-        $group = $given;
-      }
+      $group = provision_path_web_group(($at === NULL) ? $path : $at, $group);
       if (!isset($places[$path])) {
         provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
@@ -554,10 +550,14 @@ function _provision_drupal_create_directories($url = NULL) {
   // Apply chmod AFTER chgrp because chgrp strips special permissions.
   foreach ($mkdir as $path => $perm) {
     if ($perm !== FALSE) {
-      // A mode narrowed only for the account's own web group goes back where
-      // the path kept the shared web group.
-      if (isset($kept[$path]) && isset($narrowed[$path]) && $perm === $narrowed[$path]) {
-        $perm = $wide[$path];
+      // A mode narrowed above only because the account runs in its own web
+      // group stays wide where the path really lies outside the account's
+      // tree, as the group it takes there does.
+      if (isset($narrowed[$path]) && $perm === $narrowed[$path]) {
+        $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
+        if (strpos((string) provision_path_web_group(($at === NULL) ? $path : $at), 'wg-') !== 0) {
+          $perm = $wide[$path];
+        }
       }
       if (isset($places[$path])) {
         $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $perm, !in_array($path, $chmod_not_recursive), $path);
@@ -576,9 +576,7 @@ function _provision_drupal_create_directories($url = NULL) {
  *
  * Every private path, and the CiviCRM log and custom-field upload stores
  * under files/, which nginx denies (a case-insensitive prefix): each one
- * created at 02775 is narrowed to 02770, where the path takes the account's
- * own web group (provision_path_web_group()). One that really lies outside
- * the account's tree keeps the shared web group and its 02775.
+ * created at 02775 is narrowed to 02770.
  *
  * @param array $mkdir
  *   The directories to create, path => mode.
@@ -589,8 +587,7 @@ function _provision_drupal_create_directories($url = NULL) {
 function _provision_drupal_web_group_private($mkdir) {
   foreach ($mkdir as $path => $perm) {
     if ($perm === 02775 && (preg_match('#/private(/|$)#', $path)
-      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))
-      && strpos((string) provision_path_web_group($path), 'wg-') === 0) {
+      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))) {
       $mkdir[$path] = 02770;
     }
   }
