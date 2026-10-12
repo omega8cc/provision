@@ -3127,7 +3127,9 @@ function _provision_path_web_group_real($path) {
     }
   }
   $rest = array();
-  clearstatcache();
+  // The realpath cache too: a link re-pointed since this process last
+  // resolved it must be judged where it leads now.
+  clearstatcache(TRUE);
   while (TRUE) {
     $cur = ($abs ? '/' : '') . implode('/', $names);
     if ($cur === '') {
@@ -3182,7 +3184,7 @@ function _provision_path_web_group_store($aegir_root) {
     return '';
   }
   $store = $mnt . '/files/' . $acct . '/static/files';
-  clearstatcache();
+  clearstatcache(TRUE);
   if (!is_dir($store) || is_link($store)) {
     return '';
   }
