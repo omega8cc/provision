@@ -91,6 +91,9 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
     // tree, drushrc.php included, carries the account's own group (the
     // per-instance group once the instance is converted, the box-wide 'users'
     // before that) so the pool identity can never read the site credentials.
+    //
+    // write() gives the file this group, or the shared web group where the
+    // file really lies outside the account's tree (provision_path_web_group()).
     $this->group = $this->platform->server->web_group;
 
     // Add a handy variable indicating if the site is being backed up, we can
@@ -109,9 +112,10 @@ class Provision_Config_Drupal_Settings extends Provision_Config {
         ->fail('Could not generate ' . $local_description);
     }
 
-    // Set permissions on local.settings.php, if it exists.
+    // Set permissions on local.settings.php, if it exists: the group where it
+    // really is, as for settings.php (Provision_Config::write()).
     if (provision_file()->exists($local_settings)->status()) {
-      provision_file()->chgrp($local_settings, $this->group)
+      provision_file()->chgrp($local_settings, provision_path_web_group($local_settings, $this->group))
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
       provision_file()->chmod($local_settings, $this->mode | 0440)

@@ -340,6 +340,7 @@ function _provision_drupal_create_directories($url = NULL) {
   );
 
   $chgrp = array();
+  $wide = $narrowed = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
     $mkdir["sites/$url/files"]            = 02775;
@@ -439,7 +440,9 @@ function _provision_drupal_create_directories($url = NULL) {
     // account's pools reach them through it, and nginx never serves them
     // directly.
     if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
+      $wide = $mkdir;
       $mkdir = _provision_drupal_web_group_private($mkdir);
+      $narrowed = array_diff_assoc($mkdir, $wide);
     }
   }
 
@@ -523,8 +526,18 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
+  // Each path takes its group where it really is (the place judged, or the
+  // path): one outside the account's tree keeps the shared web group rather
+  // than the account's own (provision_path_web_group()).
+  $kept = array();
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
+      $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
+      $given = provision_path_web_group(($at === NULL) ? $path : $at, $group);
+      if ($given !== $group) {
+        $kept[$path] = TRUE;
+        $group = $given;
+      }
       if (!isset($places[$path])) {
         provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
@@ -541,6 +554,11 @@ function _provision_drupal_create_directories($url = NULL) {
   // Apply chmod AFTER chgrp because chgrp strips special permissions.
   foreach ($mkdir as $path => $perm) {
     if ($perm !== FALSE) {
+      // A mode narrowed only for the account's own web group goes back where
+      // the path kept the shared web group.
+      if (isset($kept[$path]) && isset($narrowed[$path]) && $perm === $narrowed[$path]) {
+        $perm = $wide[$path];
+      }
       if (isset($places[$path])) {
         $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $perm, !in_array($path, $chmod_not_recursive), $path);
       }
@@ -558,7 +576,9 @@ function _provision_drupal_create_directories($url = NULL) {
  *
  * Every private path, and the CiviCRM log and custom-field upload stores
  * under files/, which nginx denies (a case-insensitive prefix): each one
- * created at 02775 is narrowed to 02770.
+ * created at 02775 is narrowed to 02770, where the path takes the account's
+ * own web group (provision_path_web_group()). One that really lies outside
+ * the account's tree keeps the shared web group and its 02775.
  *
  * @param array $mkdir
  *   The directories to create, path => mode.
@@ -569,7 +589,8 @@ function _provision_drupal_create_directories($url = NULL) {
 function _provision_drupal_web_group_private($mkdir) {
   foreach ($mkdir as $path => $perm) {
     if ($perm === 02775 && (preg_match('#/private(/|$)#', $path)
-      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))) {
+      || preg_match('#/files/civicrm/(configandlog|custom)[^/]*$#i', $path))
+      && strpos((string) provision_path_web_group($path), 'wg-') === 0) {
       $mkdir[$path] = 02770;
     }
   }
@@ -752,7 +773,8 @@ function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
  * files store is left as it is, with a STORE/SKIP warning, and one that is
  * itself a link is left alone, as chgrp() leaves it. Each other tree is
  * walked from inside the directory judged, every directory below it entered
- * for real (Provision_FileSystem::chgrp_in()).
+ * for real (Provision_FileSystem::chgrp_in()), and takes the group
+ * provision_path_web_group() gives the directory judged.
  *
  * @param $extract_path
  *   The extracted site dir, <platform root>/sites/<uri> or its .restore
@@ -787,7 +809,8 @@ function _provision_drupal_deploy_chgrp($extract_path) {
     }
     // A tree that is not there gets nothing, and fails as before.
     $dir = $place['rest'] ? NULL : $place['dir'];
-    provision_file()->chgrp_in($dir, $group, TRUE, $extract_path . '/' . $tree)
+    // Where it really lies outside the account's tree, the shared web group.
+    provision_file()->chgrp_in($dir, provision_path_web_group(($dir === NULL) ? $extract_path . '/' . $tree : $dir, $group), TRUE, $extract_path . '/' . $tree)
       ->succeed('Changed group ownership of ' . $what . ' in <code>@path</code> to @gid')
       ->fail('Could not change group ownership of ' . $what . ' in <code>@path</code> to @gid');
   }

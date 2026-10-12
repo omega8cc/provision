@@ -77,7 +77,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       }
     }
     foreach (_provision_grav_writable_dirs() as $dir) {
-      provision_file()->chgrp($extract_path . '/' . $dir, $web_group, TRUE)
+      provision_file()->chgrp($extract_path . '/' . $dir, provision_path_web_group($extract_path . '/' . $dir, $web_group), TRUE)
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }

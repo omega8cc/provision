@@ -219,24 +219,32 @@ function _provision_backdrop_create_directories($url = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
+  // Each dir takes its group where it really is: one outside the account's
+  // tree keeps the shared web group rather than the account's own
+  // (provision_path_web_group()).
+  $groups = array();
+  foreach ($config_dirs as $path) {
+    $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
+    $groups[$path] = provision_path_web_group(($at === NULL) ? $path : $at, $web_group);
+  }
   foreach ($config_dirs as $path) {
     if (!isset($places[$path])) {
-      provision_file()->chgrp($path, $web_group)
+      provision_file()->chgrp($path, $groups[$path])
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership <code>@path</code> to @gid');
     }
     elseif (!$places[$path]['link']) {
       // As chgrp(): a link itself is left alone.
-      provision_file()->chgrp_in(_provision_drupal_place_path($places[$path]), $web_group, FALSE, $path)
+      provision_file()->chgrp_in(_provision_drupal_place_path($places[$path]), $groups[$path], FALSE, $path)
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership <code>@path</code> to @gid');
     }
   }
   // chmod AFTER chgrp because chgrp strips the setgid bit. No world bits once
   // the account runs in its own web group (BOA's wg-<account>), as for the
-  // rest of private/.
-  $config_mode = (strpos((string) $web_group, 'wg-') === 0) ? 02770 : 02775;
+  // rest of private/: keyed on the group each dir took.
   foreach ($config_dirs as $path) {
+    $config_mode = (strpos((string) $groups[$path], 'wg-') === 0) ? 02770 : 02775;
     if (isset($places[$path])) {
       $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $config_mode, FALSE, $path);
     }

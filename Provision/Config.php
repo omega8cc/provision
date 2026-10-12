@@ -224,8 +224,10 @@ class Provision_Config {
             ->succeed('Changed permissions of @path to @perm')
             ->fail('Could not change permissions of @path to @perm');
         }
+        // Where the file really lies outside the account's tree, the shared
+        // web group rather than the account's own.
         if (!is_null($this->group)) {
-          provision_file()->chgrp($filename, $this->group)
+          provision_file()->chgrp($filename, provision_path_web_group($filename, $this->group))
             ->succeed('Change group ownership of @path to @gid')
             ->fail('Could not change group ownership of @path to @gid');
         }
