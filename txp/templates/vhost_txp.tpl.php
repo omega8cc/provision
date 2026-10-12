@@ -33,7 +33,9 @@
  * (upload-dir execution protection); front controller keeps the query string;
  * admin path-mapped via alias with the FULL fastcgi param set re-declared
  * in-location (nginx param inheritance is all-or-nothing); the four admin
- * symlinks need disable_symlinks left off (BOA default).
+ * symlinks lead into the platform's own textpattern/ tree and are made by
+ * the account that owns it, so they pass BOA's nginx link check
+ * (disable_symlinks if_not_owner, docs/NGINX-LINKS.md in BOA).
  */
 $this->root = provision_auto_fix_platform_root($this->root);
 $site_public = "{$this->root}/sites/{$this->uri}/public";
