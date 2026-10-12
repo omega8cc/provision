@@ -3209,9 +3209,10 @@ function _provision_path_web_group_store($aegir_root) {
 
 /**
  * The one real mount point right below /mnt, as BOA's own tools take it
- * (naming-agnostic): a directory there listed as a mount point, or on
- * another device than /mnt; '' when there is none or more than one. Read
- * once a process for each mount table and directory.
+ * (naming-agnostic): a directory there listed as a mount point, itself or
+ * where it leads (mountpoint -q follows a final link), or on another device
+ * than /mnt; '' when there is none or more than one. Read once a process
+ * for each mount table and directory.
  *
  * @param $mounts
  *   The mount table to read; NULL for /proc/self/mounts.
@@ -3257,7 +3258,9 @@ function _provision_path_web_group_mnt($mounts = NULL, $mnt = NULL) {
       continue;
     }
     $stat = @lstat($dir);
-    if (isset($mounted[$dir]) || ($stat !== FALSE && $stat['dev'] != $base['dev'])) {
+    $real = realpath($dir);
+    if (isset($mounted[$dir]) || ($real !== FALSE && isset($mounted[$real]))
+      || ($stat !== FALSE && $stat['dev'] != $base['dev'])) {
       $hits[] = $dir;
     }
   }
