@@ -3200,20 +3200,32 @@ function _provision_path_web_group_store($aegir_root) {
  * The one real mount point right below /mnt, as BOA's own tools take it
  * (naming-agnostic): a directory there listed as a mount point, or on
  * another device than /mnt; '' when there is none or more than one. Read
- * once a process.
+ * once a process for each mount table and directory.
+ *
+ * @param $mounts
+ *   The mount table to read; NULL for /proc/self/mounts.
+ * @param $mnt
+ *   The directory whose children are looked at; NULL for /mnt.
  */
-function _provision_path_web_group_mnt() {
-  static $mnt = NULL;
-  if ($mnt !== NULL) {
-    return $mnt;
+function _provision_path_web_group_mnt($mounts = NULL, $mnt = NULL) {
+  static $found = array();
+  if ($mounts === NULL) {
+    $mounts = '/proc/self/mounts';
   }
-  $mnt = '';
-  $base = @lstat('/mnt');
+  if ($mnt === NULL) {
+    $mnt = '/mnt';
+  }
+  $key = $mounts . "\n" . $mnt;
+  if (isset($found[$key])) {
+    return $found[$key];
+  }
+  $found[$key] = '';
+  $base = @lstat($mnt);
   if ($base === FALSE) {
-    return $mnt;
+    return '';
   }
   $mounted = array();
-  $table = @file('/proc/self/mounts');
+  $table = @file($mounts);
   if (is_array($table)) {
     foreach ($table as $line) {
       $fields = explode(' ', $line);
@@ -3227,7 +3239,7 @@ function _provision_path_web_group_mnt() {
       }
     }
   }
-  $dirs = glob('/mnt/*');
+  $dirs = glob($mnt . '/*');
   $hits = array();
   foreach (is_array($dirs) ? $dirs : array() as $dir) {
     if (!is_dir($dir)) {
@@ -3239,9 +3251,9 @@ function _provision_path_web_group_mnt() {
     }
   }
   if (count($hits) === 1) {
-    $mnt = $hits[0];
+    $found[$key] = $hits[0];
   }
-  return $mnt;
+  return $found[$key];
 }
 
 /**
