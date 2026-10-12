@@ -755,8 +755,7 @@ class Provision_FileSystem extends Provision_ChainedState {
    * changed by name in the directory it was read from, so a link put on the
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
-   * PHP has no lchmod(), so a file swapped for a link between its test and
-   * chmod() is followed.
+   * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod().
    *
    * @return
    *   TRUE if every call returned TRUE.
@@ -775,6 +774,7 @@ class Provision_FileSystem extends Provision_ChainedState {
         }
       }
       closedir($dh);
+      $files = array();
       foreach ($names as $name) {
         if (is_link($name)) {
           continue;
@@ -788,9 +788,15 @@ class Provision_FileSystem extends Provision_ChainedState {
         elseif ($func == 'chgrp') {
           $status = lchgrp($name, $arg) && $status;
         }
+        elseif ($func == 'chmod') {
+          $files[] = $name;
+        }
         else {
           $status = call_user_func($func, $name, $arg) && $status;
         }
+      }
+      if ($files) {
+        $status = $this->_chmod_here_nofollow($files, $arg) && $status;
       }
     }
     $status = call_user_func($func, '.', $arg) && $status;
@@ -798,6 +804,57 @@ class Provision_FileSystem extends Provision_ChainedState {
       drush_log(dt('Failed calling :func on :path.', array(':func' => $func . '()', ':path' => $here)), 'debug');
     }
     return $status;
+  }
+
+  /**
+   * Change the mode of the regular files $names of the current directory to
+   * $mode without following a link: a perl helper started here (it inherits
+   * this very directory) opens each name with O_NOFOLLOW and changes the
+   * mode through the handle, as PHP has no lchmod() or fchmod(). A name
+   * swapped for a link since it was read, or that is no regular file, is
+   * left as it is and fails the call. In groups of 200 names a run.
+   *
+   * @return
+   *   TRUE if every file was changed.
+   */
+  function _chmod_here_nofollow($names, $mode) {
+    $pl = 'use Fcntl; my $m = oct(shift); my $ok = 1; for my $n (@ARGV) { my $h; next if sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) && -f $h && chmod($m, $h); $ok = 0 } exit($ok ? 0 : 1)';
+    $status = TRUE;
+    foreach (array_chunk($names, 200) as $group) {
+      $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
+      foreach ($group as $name) {
+        $cmd .= ' ' . escapeshellarg($name);
+      }
+      $out = array();
+      $rc = 1;
+      exec($cmd . ' 2>/dev/null', $out, $rc);
+      $status = ($rc === 0) && $status;
+    }
+    return $status;
+  }
+
+  /**
+   * Create the file $name in the current directory with $data and the mode
+   * $mode, refusing any name there, a link included: a perl helper started
+   * here (it inherits this very directory) opens it with O_CREAT, O_EXCL and
+   * O_NOFOLLOW and sets the mode through the handle. PHP's fopen() cannot do
+   * it: it resolves a link at the name itself before open(), so even its 'x'
+   * mode creates the target of a dangling link.
+   *
+   * @return
+   *   TRUE if the file was created and written whole.
+   */
+  function _create_here($name, $data, $mode) {
+    $pl = 'use Fcntl; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; sysopen(my $h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or exit 1; (print {$h} $d) or exit 1; chmod($m, $h) or exit 1; close($h) or exit 1; exit 0';
+    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
+    $pipes = array();
+    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('file', '/dev/null', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
+    if (!is_resource($proc)) {
+      return FALSE;
+    }
+    fwrite($pipes[0], $data);
+    fclose($pipes[0]);
+    return proc_close($proc) === 0;
   }
 
   /**
