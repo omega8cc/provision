@@ -3167,10 +3167,13 @@ function _provision_path_web_group_below($real, $top) {
  * group conversion takes it: <mount>/files/<account>/static/files, where
  * <mount> is the one real mount point right below /mnt
  * (_provision_path_web_group_mnt()) with no directory named files or static
- * in it, and the store a real directory owned by root or by the account
- * (migratefs keeps a moved store's owner, root's for a store BOA made in
- * the account's home). Never the tenant-writable link at ~/static/files.
- * '' for the master, or when there is none.
+ * in it, and the store a real directory reached with no link on the way
+ * below the mount point (its real path is the mount point's own
+ * files/<account>/static/files, as BOA's autosymlink takes the store) and
+ * owned by root or by the account (migratefs keeps a moved store's owner,
+ * root's for a store BOA made in the account's home). Never the
+ * tenant-writable link at ~/static/files. '' for the master, or when there
+ * is none.
  *
  * @param $aegir_root
  *   The account's home, /data/disk/<account> or /var/aegir.
@@ -3189,6 +3192,11 @@ function _provision_path_web_group_store($aegir_root) {
   if (!is_dir($store) || is_link($store)) {
     return '';
   }
+  $real = realpath($store);
+  $root = realpath($mnt);
+  if ($real === FALSE || $root === FALSE || $real !== $root . '/files/' . $acct . '/static/files') {
+    return '';
+  }
   $owner = fileowner($store);
   if ($owner === FALSE) {
     return '';
@@ -3196,8 +3204,7 @@ function _provision_path_web_group_store($aegir_root) {
   if ($owner !== 0 && (!is_array(posix_getpwuid($owner)) || provision_posix_username($owner) !== $acct)) {
     return '';
   }
-  $real = realpath($store);
-  return ($real === FALSE) ? '' : $real;
+  return $real;
 }
 
 /**
