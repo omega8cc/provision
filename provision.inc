@@ -3167,9 +3167,10 @@ function _provision_path_web_group_below($real, $top) {
  * group conversion takes it: <mount>/files/<account>/static/files, where
  * <mount> is the one real mount point right below /mnt
  * (_provision_path_web_group_mnt()) with no directory named files or static
- * in it, and the store a real directory the account owns. Never the
- * tenant-writable link at ~/static/files. '' for the master, or when there
- * is none.
+ * in it, and the store a real directory owned by root or by the account
+ * (migratefs keeps a moved store's owner, root's for a store BOA made in
+ * the account's home). Never the tenant-writable link at ~/static/files.
+ * '' for the master, or when there is none.
  *
  * @param $aegir_root
  *   The account's home, /data/disk/<account> or /var/aegir.
@@ -3189,7 +3190,10 @@ function _provision_path_web_group_store($aegir_root) {
     return '';
   }
   $owner = fileowner($store);
-  if ($owner === FALSE || !is_array(posix_getpwuid($owner)) || provision_posix_username($owner) !== $acct) {
+  if ($owner === FALSE) {
+    return '';
+  }
+  if ($owner !== 0 && (!is_array(posix_getpwuid($owner)) || provision_posix_username($owner) !== $acct)) {
     return '';
   }
   $real = realpath($store);
