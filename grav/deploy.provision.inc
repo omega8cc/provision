@@ -56,7 +56,9 @@ function drush_provision_grav_provision_deploy_validate($backup_file = NULL) {
     drush_set_option('extract_path', d()->site_path . '.restore');
   }
   elseif ($copy) {
-    drush_set_option('extract_path', d()->site_path . '.copy');
+    // A hidden name: never a site's (a domain has no leading dot) and never
+    // matched by the platform's site list, which globs sites/*.
+    drush_set_option('extract_path', dirname(d()->site_path) . '/.' . basename(d()->site_path) . '.copy');
   }
   else {
     drush_set_option('extract_path', d()->site_path);
@@ -152,7 +154,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       // file only when its source was a copy itself; it is written again
       // either way, naming this copy's source.
       if (_provision_grav_has_db()) {
-        _provision_grav_mark_copy($extract_path, (string) drush_get_option('old_uri', ''));
+        _provision_grav_mark_copy($extract_path, _provision_grav_copy_source($extract_path, (string) drush_get_option('old_uri', '')));
         if (!is_file(_provision_grav_copy_marker($extract_path))) {
           return drush_set_error('PROVISION_GRAV_COPY_MARK',
             dt('Could not hold the copy at @path before moving it into place.', array('@path' => $extract_path)));

@@ -730,6 +730,20 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
  * root: nginx never serves it, and it travels with the capsule on Rename and
  * in its backups.
  */
+function _provision_grav_copy_source($site_path, $fallback) {
+  // The live store a copy stands in for: a copy of a copy keeps the name its
+  // source's marker carries (the store both duplicate), so Cutover lifts the
+  // hold only when it retires that store.
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    $name = strtolower(trim((string) @file_get_contents($marker)));
+    if (preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $name)) {
+      return $name;
+    }
+  }
+  return (string) $fallback;
+}
+
 function _provision_grav_copy_marker($site_path) {
   return $site_path . '/.boa-copy';
 }
@@ -864,16 +878,18 @@ function provision_grav_find_sites($root = NULL) {
         || is_link($capsule)) {
         continue;
       }
-      // A copy unpacked beside its final path (<uri>.copy) whose task died
-      // before moving it in: its drushrc.php names the SOURCE's database, so
-      // reporting it would have the panel import a second site running on
-      // the source store. Never a site; named so it gets removed.
-      if (substr($uri, -5) === '.copy') {
-        drush_log(dt('@path is a copy whose task never finished (it names its source\'s database); it is not a site. Remove it.',
-          array('@path' => $capsule)), 'warning');
-        continue;
-      }
       $sites[$uri] = $uri;
+    }
+  }
+  // A copy is unpacked as sites/.<uri>.copy and moved in only once it is
+  // held; a task that died before the move leaves it there. The glob above
+  // never sees a hidden name, so it is named here to get it removed: its
+  // drushrc.php names the SOURCE store's database.
+  $unfinished = glob($root . '/sites/.*.copy/system/defines.php');
+  if (is_array($unfinished)) {
+    foreach ($unfinished as $marker) {
+      drush_log(dt('@path is a copy whose task never finished (it names its source\'s database); it is not a site. Remove it.',
+        array('@path' => dirname(dirname($marker)))), 'warning');
     }
   }
   return $sites;
@@ -2239,11 +2255,12 @@ function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option 
   }
 
   $capsule = $target_root . '/sites/' . $new_uri;
-  // The copy is unpacked beside its final path and moved in only once it is
+  // The copy is unpacked as sites/.<uri>.copy and moved in only once it is
   // held: a deploy that died before the move leaves it there.
-  if (is_dir($capsule . '.copy') && !is_link($capsule . '.copy')) {
-    if (_provision_grav_remove_tree_or_park($capsule . '.copy', $new_uri . '-copy-unpacked') && !is_dir($capsule . '.copy')) {
-      drush_log(dt('Removed the unpacked copy at @path.', array('@path' => $capsule . '.copy')), 'ok');
+  $unpacked = $target_root . '/sites/.' . $new_uri . '.copy';
+  if (is_dir($unpacked) && !is_link($unpacked)) {
+    if (_provision_grav_remove_tree_or_park($unpacked, $new_uri . '-copy-unpacked') && !is_dir($unpacked)) {
+      drush_log(dt('Removed the unpacked copy at @path.', array('@path' => $unpacked)), 'ok');
     }
   }
   if (is_dir($capsule) && !is_link($capsule)) {
