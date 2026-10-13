@@ -693,7 +693,8 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   resolves nowhere: then nothing is changed, and the operation fails as
    *   chmod() fails on a missing path.
    * @param $perms
-   *   An octal value denoting the desired file permissions.
+   *   An octal value denoting the desired file permissions; NULL with
+   *   $recursive and $fileperms to leave every directory's mode as it is.
    * @param $recursive
    *   TRUE to descend into subdirectories.
    * @param $path
@@ -704,9 +705,10 @@ class Provision_FileSystem extends Provision_ChainedState {
    */
   function chmod_in($dir, $perms, $recursive, $path, $fileperms = NULL) {
     $this->_clear_state();
-    $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $perms));
-    if ($dir === NULL) {
-      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
+    $files_only = ($perms === NULL);
+    $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $files_only ? $fileperms : $perms));
+    if ($dir === NULL || ($files_only && (!$recursive || $fileperms === NULL))) {
+      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => $this->tokens['@perm'], '@path' => $path));
       $this->last_status = FALSE;
       return $this;
     }
@@ -725,10 +727,10 @@ class Provision_FileSystem extends Provision_ChainedState {
       $done = @chmod('.', $perms);
     }
     if (!$done) {
-      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $perms), '@path' => $path));
+      $this->tokens['@reason'] = dt('chmod to @perm failed on @path', array('@perm' => $this->tokens['@perm'], '@path' => $path));
     }
     clearstatcache();
-    $this->last_status = $this->_enter($dir) && substr(sprintf('%o', fileperms('.')), -4) == sprintf('%04o', $perms);
+    $this->last_status = $this->_enter($dir) && ($files_only ? $done : substr(sprintf('%o', fileperms('.')), -4) == sprintf('%04o', $perms));
     $this->_leave($cwd);
 
     return $this;
@@ -780,7 +782,8 @@ class Provision_FileSystem extends Provision_ChainedState {
    * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod(), and
    * only to directories and regular files.
    * With $filearg the files get it instead of $arg (a chmod with one mode
-   * for directories and another for files).
+   * for directories and another for files); with $arg NULL as well, the
+   * directories are left as they are.
    *
    * @return
    *   TRUE if every call returned TRUE.
@@ -827,7 +830,9 @@ class Provision_FileSystem extends Provision_ChainedState {
         $status = $this->_chmod_here_nofollow($files, $filearg === NULL ? $arg : $filearg) && $status;
       }
     }
-    $status = call_user_func($func, '.', $arg) && $status;
+    if ($arg !== NULL || $func !== 'chmod') {
+      $status = call_user_func($func, '.', $arg) && $status;
+    }
     if (!$status) {
       drush_log(dt('Failed calling :func on :path.', array(':func' => $func . '()', ':path' => $here)), 'debug');
     }
@@ -851,7 +856,7 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE if every file was changed.
    */
   function _chmod_here_nofollow($names, $mode) {
-    $pl = 'use Fcntl; use Config; my $m = oct(shift); my $p = ($Config{archname} =~ /^(x86_64|aarch64)-linux/) ? 010000000 : 0; my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); next if $p && sysopen($h, $n, $p | O_NOFOLLOW) && -f $h && chmod($m, "/proc/self/fd/" . fileno($h)); push @bad, $n } print map { $_ . "\0" } @bad; print "ok"; exit(@bad ? 1 : 0)';
+    $pl = 'use Fcntl; use Config; my $m = oct(shift); my $p = ($Config{archname} =~ /^(x86_64|aarch64)-linux/) ? 010000000 : 0; my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); next if $p && sysopen($h, $n, $p | O_NOFOLLOW) && -f $h && chmod($m, "/proc/self/fd/" . fileno($h)); push @bad, $n } print "\0\0"; print map { $_ . "\0" } @bad; print "ok"; exit(@bad ? 1 : 0)';
     $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
@@ -866,10 +871,12 @@ class Provision_FileSystem extends Provision_ChainedState {
       fclose($pipes[1]);
       $rc = proc_close($proc);
     }
-    // The helper names each file it left, then says "ok": without that word
-    // it did not start, or did not finish, whatever its exit code (a shell
-    // that refuses a command can end 1 as well).
-    $bad = explode("\0", $out);
+    // The helper's answer ends its output: two NULs (never inside the list,
+    // whose names are not empty), each file it left with a NUL, then "ok".
+    // Without it the helper did not start, or did not finish, whatever its
+    // exit code (a shell that refuses a command can end 1 as well).
+    $at = strrpos($out, "\0\0");
+    $bad = ($at === FALSE) ? array('') : explode("\0", substr($out, $at + 2));
     $ran = (array_pop($bad) === 'ok');
     foreach ($bad as $name) {
       drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
@@ -888,31 +895,43 @@ class Provision_FileSystem extends Provision_ChainedState {
    * it: it resolves a link at the name itself before open(), so even its 'x'
    * mode creates the target of a dangling link.
    *
+   * @param $made
+   *   Set to TRUE when the helper made the file, whatever came after: a
+   *   caller that renames it removes it when this returns FALSE. A write
+   *   cut short (a full disk, a quota) removes it here already.
+   *
    * @return
    *   TRUE if the file was created and written whole.
    */
-  function _create_here($name, $data, $mode) {
-    $pl = 'use Fcntl; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; my $s = sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) && (print {$h} $d) && chmod($m, $h) && close($h); print($s ? "ok" : "no"); exit($s ? 0 : 1)';
+  function _create_here($name, $data, $mode, &$made = NULL) {
+    $pl = 'use Fcntl; $| = 1; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or do { print "no"; exit 1 }; print "+"; my $s = (print {$h} $d) && chmod($m, $h) && close($h); unlink($n) unless $s; print($s ? "ok" : "no"); exit($s ? 0 : 1)';
     $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
     $rc = -1;
     $out = '';
     if (is_resource($proc)) {
-      // perl writes its one word only once it has read all the data.
+      // perl answers only once it has read all the data.
       fwrite($pipes[0], $data);
       fclose($pipes[0]);
       $out = (string) stream_get_contents($pipes[1]);
       fclose($pipes[1]);
       $rc = proc_close($proc);
     }
-    // The helper says "ok", or "no" when the name is refused or the write
-    // cut short: without a word it did not start, or did not finish,
-    // whatever its exit code (a shell that refuses a command can end 1).
-    if ($out !== 'ok' && $out !== 'no') {
+    // The helper's answer ends its output: "no" when the name is refused;
+    // "+" the moment it made the file, then "ok", or "no" when the write was
+    // cut short (it removes the file then). Without an answer it did not
+    // start, whatever its exit code (a shell that refuses a command can end
+    // 1); with "+" alone it was stopped after making the file.
+    $word = preg_match('/(\+?)(ok|no)?$/', $out, $m) ? $m[1] . (isset($m[2]) ? $m[2] : '') : '';
+    $made = (strpos($word, '+') === 0);
+    if ($word === '') {
       drush_log(dt('Could not create @path: the helper did not run', array('@path' => getcwd() . '/' . $name)), 'warning');
     }
-    return $out === 'ok' && $rc === 0;
+    elseif ($word === '+') {
+      drush_log(dt('Could not create @path: the helper did not finish', array('@path' => getcwd() . '/' . $name)), 'warning');
+    }
+    return $word === '+ok' && $rc === 0;
   }
 
   /**

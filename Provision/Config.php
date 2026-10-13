@@ -271,8 +271,10 @@ class Provision_Config {
    * followed, and a hard link at the name keeps its other file as it was.
    * With no mode set, an existing file's mode is kept, as writing it in
    * place kept it; where the group cannot be given, an existing file's
-   * group is, or the existing file stays. A site dir that cannot be written
-   * gets nothing, as write() by path gave it.
+   * group is, or the existing file stays. With no group set (drushrc.php),
+   * the file has the writer's own group, the one BOA's site ownership fix
+   * gives it. A site dir that cannot be written gets nothing, as write() by
+   * path gave it.
    */
   function _write_in_site_dir($filename, $site_dir) {
     $fs = provision_file();
@@ -316,8 +318,8 @@ class Provision_Config {
         $mode = 0666 & ~umask();
       }
       $tmp = '.' . $name . '.provision-' . getmypid() . '-' . mt_rand();
-      $made = $fs->_create_here($tmp, $contents, $mode);
-      $status = $made;
+      $made = FALSE;
+      $status = $fs->_create_here($tmp, $contents, $mode, $made);
       if ($status && !is_null($this->group)) {
         // Where the file really lies outside the account's tree, the shared
         // web group rather than the account's own: judged on the new file,
@@ -338,7 +340,8 @@ class Provision_Config {
         }
       }
       $status = $status && @rename($tmp, $name);
-      // Only a file this write made: a name already there was refused.
+      // Only a file this write made (the helper says so as it makes it): a
+      // name already there was refused.
       if (!$status && $made) {
         @unlink($tmp);
       }

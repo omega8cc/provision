@@ -821,9 +821,10 @@ function _provision_grav_secure_secrets($site_path) {
  * capsule as the site dir) and walked from inside it with directories
  * 02770 and files 0660 (Provision_FileSystem::chmod_in()); the root .env
  * and drushrc.php are changed by name in the capsule entered for real.
- * A secret tree that is itself a link is narrowed where it leads only when
- * the place rule finds that inside the account's own files store, as the
- * by-path walk narrowed it; a secret file that is a link is left alone.
+ * A secret tree that is itself a link has its files narrowed where it
+ * leads, its directories left as they are, only when the place rule finds
+ * that inside the account's own files store, as the by-path walk narrowed
+ * it; a secret file that is a link is left alone.
  */
 function _provision_grav_secure_secrets_in($site_path, $web_group) {
   $fs = provision_file();
@@ -836,7 +837,7 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
     if ($place === FALSE || $place['dir'] === NULL || $place['rest']) {
       continue;
     }
-    $fs->chmod_in($place['dir'], 02770, TRUE, $path, 0660)
+    $fs->chmod_in($place['dir'], $place['link'] ? NULL : 02770, TRUE, $path, 0660)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
   }
