@@ -24,6 +24,14 @@ function drush_provision_grav_provision_restore_validate($restore_file = null) {
   if (!_provision_grav_refuse_unrecorded('restore')) {
     return FALSE;
   }
+  // The http layer builds the site's vhost data once per process, from the
+  // 'site' context as it stands then (its pre hook runs before this layer's).
+  // Every vhost this process renders -- the maintenance one, the failure
+  // branch, the rollback -- must carry the store's database settings, so they
+  // are loaded here, before any pre hook.
+  if (_provision_grav_has_db()) {
+    _provision_grav_ensure_db_creds_loaded();
+  }
   // Backup mode ctrl file cleanup: on the serial queue any file present at
   // task start is a dead leftover by definition (same rationale as the
   // Drupal flow); the safety copy below force-defines its own mode.
