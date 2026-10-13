@@ -3,14 +3,17 @@
 /**
  * Provision backup command (Grav layer).
  *
- * Fork of backdrop/backup.provision.inc collapsed to the DB-less capsule
- * reality: no sqldump, no credential cloaking, no MyQuick tmp_expim machinery.
- * The archive is the whole capsule minus the volatile set; every
- * files-carrying mode dereferences for a self-contained archive (capsules
- * carry no store symlinks today, so this is future-proofing, not behaviour).
- * backup_mysqldump_only is REFUSED outright: meaningless for a DB-less site,
- * and its Drupal exclusion list tags ./vendor -- a leftover exclude.tag there
- * would silently strip the autoloader from every later archive.
+ * Fork of backdrop/backup.provision.inc for the capsule: the archive is the
+ * whole capsule minus the volatile set; every files-carrying mode
+ * dereferences for a self-contained archive (capsules carry no store
+ * symlinks today, so this is future-proofing, not behaviour). A site with a
+ * database gets its dump from the db layer's pre hook (database.sql at the
+ * capsule root, inside the archive, removed by the db post hook) or, modeless
+ * with MyQuick, in tmp_expim, rotated to a dated directory as the Textpattern
+ * layer does. A site on the 'none' server has no dump at all.
+ * backup_mysqldump_only is REFUSED outright: the Drupal exclusion list it
+ * would need tags ./vendor -- a leftover exclude.tag there would silently
+ * strip the autoloader from every later archive.
  */
 
 /**
@@ -24,8 +27,10 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   // No bootstrap and no CMS code: the tarball is filesystem work. The site
   // drushrc is not auto-loaded on a bare `drush @site provision-backup`
   // (proven on the TXP track), so restore the persisted 'installed' flag
-  // before the guard below.
-  _provision_grav_ensure_installed_loaded();
+  // before the guard below, and the db credentials NOW: the db service's pre
+  // hook dumps through fetch_site_credentials() before any other hook here
+  // runs, and an empty context means a silently dump-less backup.
+  _provision_grav_ensure_db_creds_loaded();
   if (!drush_get_option('installed') && !drush_get_option('force', false)) {
      drush_set_error('PROVISION_DRUPAL_SITE_NOT_FOUND');
   }
@@ -47,12 +52,12 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
       @unlink(AEGIR_BACKUP_MODE_CTRL);
     }
     return drush_set_error('PROVISION_GRAV_BACKUP_MODE_INVALID',
-      dt('backup_mysqldump_only is not available for Grav sites (no database in phase 1).'));
+      dt('backup_mysqldump_only is not available for Grav sites; use a mode that carries the site files.'));
   }
   // Truthful label note: the mysqldump-carrying mode cannot add a database
-  // that does not exist. The archive is files-only either way.
-  if ($backup_mode == 'site_files_with_mysqldump') {
-    drush_log(dt('DB-less Grav site: the archive carries the full site tree and no database dump.'), 'info');
+  // that does not exist. On the 'none' server the archive is files-only.
+  if ($backup_mode == 'site_files_with_mysqldump' && !_provision_grav_has_db()) {
+    drush_log(dt('Grav site without a database: the archive carries the full site tree and no database dump.'), 'info');
   }
 
   if ($backup_file) {
@@ -74,29 +79,6 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   // (same semantics and same rationale as the Backdrop fork).
   if (defined('AEGIR_BACKUP_MODE_CTRL_READ') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
     @unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
-}
-
-/**
- * Reload the persisted 'installed' flag from the site drushrc (regex, no
- * include). Namespaced copy of the TXP helper, minus the DB credentials a
- * phase-1 Grav site does not have.
- */
-function _provision_grav_ensure_installed_loaded() {
-  if (d()->type !== 'site') {
-    return;
-  }
-  if (drush_get_option('installed')) {
-    return;
-  }
-  $drushrc = d()->site_path . '/drushrc.php';
-  if (!is_readable($drushrc)) {
-    return;
-  }
-  $body = file_get_contents($drushrc);
-  if ($body !== FALSE
-    && preg_match('/\\$options\\s*\\[\\s*[\'"]installed[\'"]\\s*\\]\\s*=\\s*(TRUE|true|1)\\s*;/', $body)) {
-    drush_set_option('installed', TRUE, 'site');
   }
 }
 
@@ -362,6 +344,31 @@ function drush_provision_grav_post_provision_backup() {
   }
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
 
+  // A modeless (MyQuick) backup of a site with a database: rotate tmp_expim
+  // into the dated per-site dump dir, the dated DB retention every other CMS
+  // gets; a stale tmp_expim left behind would feed a LATER clone or migrate
+  // fast-import with the wrong database. Never for an internal backup, whose
+  // deploy reads it.
+  if (_provision_grav_has_db()) {
+    $backup_path = d('@server_master')->backup_path;
+    $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+    $backup_mode = provision_backup_mode_resolve();
+    if (!is_file($internal_backup_flag) && empty($backup_mode)) {
+      $oct_db_dirx = $backup_path . '/tmp_expim';
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
+      $enable_myquick = d('@server_master')->aegir_root . '/static/control/MyQuick.info';
+      if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata')) {
+        provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
+          ->succeed('Moving the Post-DB-Backup @path1 to @path2 was successful.')
+          ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
+        if (is_dir($uri_db_dirz)) {
+          _provision_recursive_delete($oct_db_dirx);
+          drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_grav_post_provision_backup @var", array('@var' => $oct_db_dirx)), 'info');
+        }
+      }
+    }
+  }
+
   if (d()->client_name) {
     $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
     provision_file()->create_dir($backup_dir, dt('Client backup directory for @client', array('@client' => d()->client_name)), 0750);
@@ -379,6 +386,26 @@ function drush_provision_grav_provision_backup_rollback() {
     return;
   }
   $backup_file = drush_get_option('backup_file');
+  // tmp_expim is ACCOUNT-SHARED: act only on a modeless run of a site with a
+  // database that produced an archive, and keep the dump by rotating it to a
+  // dated dir rather than deleting it (a concurrent clone's in-flight dump
+  // lives there too).
+  $backup_mode = provision_backup_mode_resolve();
+  if (_provision_grav_has_db() && empty($backup_mode) && $backup_file && is_file($backup_file)) {
+    $backup_path = d('@server_master')->backup_path;
+    $oct_db_dirx = $backup_path . '/tmp_expim';
+    $enable_myquick = d('@server_master')->aegir_root . '/static/control/MyQuick.info';
+    if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata')) {
+      $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
+      provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
+        ->succeed('Moving the rollback DB dump @path1 to @path2 was successful.')
+        ->fail('Moving the rollback DB dump @path1 to @path2 has failed.');
+      if (is_dir($uri_db_dirz)) {
+        _provision_recursive_delete($oct_db_dirx);
+        drush_log(dt("MyQuick tmp_expim dir rotated in drush_provision_grav_provision_backup_rollback @var", array('@var' => $uri_db_dirz)), 'info');
+      }
+    }
+  }
   if (is_readable($backup_file) && is_file($backup_file)) {
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')

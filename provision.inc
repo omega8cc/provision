@@ -3550,7 +3550,12 @@ function _provision_leftover_parse_foreign_cms($dir) {
       return $result;
     }
   }
-  // (grav arm lands here in the grav track's unit.)
+  // Grav: a capsule (sites/<name>/system/defines.php) carries no settings
+  // file; one with a database names it in its own drushrc.php, one on the
+  // 'none' server names none.
+  if (is_file($dir . '/system/defines.php')) {
+    return _provision_leftover_parse_drushrc($dir, $result);
+  }
   return $result;
 }
 

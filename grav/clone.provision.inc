@@ -11,10 +11,12 @@
  * target-context wiring, the identity scrub the deploy engine runs for the
  * clone class (grav/grav/deploy.inc), and the rollback of a half-built copy.
  *
- * Mirrors txp/clone.provision.inc minus everything database: a phase-1 Grav
- * capsule is DB-less by design, its truthful safety-copy mode is
- * site_files_without_db_backup, and the copy keeps the source's database
- * server on purpose (the 'none' service) whatever the task says.
+ * Mirrors txp/clone.provision.inc. A site on the 'none' server is cloned
+ * files only and its copy keeps that server whatever the task says. A site
+ * with a database is cloned with its dump inside the safety copy; the copy's
+ * deploy makes a database of its own (on the server the task names, never the
+ * 'none' one) and imports the dump, and a failed clone drops that database
+ * with the copy.
  */
 
 function drush_provision_grav_provision_clone_validate($new_name = NULL, $platform = NULL) {
@@ -46,13 +48,8 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }
-  // A Grav capsule carries no database yet, so its archives are files-only.
-  // Attached to a real database server the copy's deploy would provision a
-  // database and look for a dump the backup never wrote; refuse up front
-  // with the way out, exactly as the restore does.
-  if (!(d()->service('db') instanceof Provision_Service_null)) {
-    return drush_set_error('PROVISION_GRAV_CLONE_DB_SERVER',
-      dt('This Grav site is attached to a database server, and its files-only archive cannot be deployed through the database machinery. Attach the site to the "none" database server (hosting_grav) and retry.'));
+  if (!_provision_grav_copy_db_server_valid('clone')) {
+    return FALSE;
   }
   // The deploy keys its replace path on directory existence: a target that
   // already carries a capsule would be swapped out as if this were a
@@ -90,17 +87,10 @@ function drush_provision_grav_pre_provision_clone($new_name, $platform = NULL) {
     return;
   }
   // The pre-clone copy is registered in the panel as "Pre-clone backup" and
-  // offered as a restore point, so it must be self-contained. Force the
-  // truthful grav-restorable mode (full tree, no dump; the dereferencing tar
-  // branch), the same way the restore and delete safety copies do. No
-  // database.sql pre-clear and no internal-backup flag: both are MyQuick
-  // machinery for a database this site does not have.
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_without_db_backup');
-  drush_set_option('backup_mode', 'site_files_without_db_backup');
-  drush_log(dt('Clone safety copy forced to the grav-restorable mode: site_files_without_db_backup'), 'info');
+  // offered as a restore point, so it must be self-contained, the same way
+  // the restore and delete safety copies are. The deploy half below is
+  // switched to match: both halves MUST agree on the transport.
+  _provision_grav_force_safety_mode('Clone', TRUE);
   drush_log(dt('Invoking drush provision-backup in drush_provision_grav_pre_provision_clone'));
   drush_invoke('provision-backup');
 }
@@ -115,6 +105,7 @@ function drush_provision_grav_pre_provision_clone_rollback($new_name, $platform 
       ->succeed('Removed unused clone site package')
       ->fail('Could not remove unused clone site package');
   }
+  _provision_grav_internal_backup_flag(FALSE);
 }
 
 function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
@@ -125,8 +116,8 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
 
   // One authority for both copy commands (clone and copy-upgrade): the new
   // uri and name, the target platform, no aliases, no redirection, no
-  // Encryption, no CDN, no inherited migration source, and the DB-less pin
-  // that keeps the copy on the source's 'none' server.
+  // Encryption, no CDN, no inherited migration source, and the database
+  // server of the copy.
   $options = _provision_grav_copy_options($new_name, $platform, 'clone');
 
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
@@ -148,11 +139,21 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   $deploy_options['deploy_class'] = 'clone';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
 
-  provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  // What the deploy is about to create on the target, for a site with a
+  // database: the rollback drops the copy's database with the copy.
+  $has_db = _provision_grav_has_db();
+  if ($has_db) {
+    provision_target_copy_probe('clone_target_copy', $options['root'], $options['uri'], isset($options['db_server']) ? $options['db_server'] : '');
+  }
+  $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  if ($has_db) {
+    provision_target_copy_deployed('clone_target_copy', $deploy_result);
+  }
 
   if (!drush_get_error()) {
     provision_backend_invoke($new_name, 'provision-verify');
   }
+  _provision_grav_internal_backup_flag(FALSE);
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
 }
@@ -165,6 +166,8 @@ function drush_provision_grav_provision_clone_rollback($new_name, $platform = NU
   if (!provision_platform_is_grav(d())) {
     return;
   }
-  // The same set a failed copy-upgrade discards: capsule, vhost, context.
-  _provision_grav_discard_copy($new_name, $platform);
+  // The same set a failed copy-upgrade discards: capsule, vhost, context,
+  // and for a site with a database the database the copy's deploy made.
+  _provision_grav_discard_copy($new_name, $platform, 'clone_target_copy');
+  _provision_grav_internal_backup_flag(FALSE);
 }

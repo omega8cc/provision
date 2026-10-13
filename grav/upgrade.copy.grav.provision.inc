@@ -51,13 +51,9 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
     return drush_set_error('PROVISION_GRAV_SITE_NOT_FOUND',
       dt('No Grav capsule found at !site.', array('!site' => d()->site_path)));
   }
-  // A Grav capsule carries no database yet, so its archives are files-only.
-  // Attached to a real database server the copy's deploy would provision a
-  // database and look for a dump the backup never wrote; refuse up front
-  // with the way out, exactly as the clone does.
-  if (!(d()->service('db') instanceof Provision_Service_null)) {
-    return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_DB_SERVER',
-      dt('This Grav site is attached to a database server, and its files-only archive cannot be deployed through the database machinery. Attach the site to the "none" database server (hosting_grav) and retry.'));
+  // A site with a database: its copy needs a database server too.
+  if (!_provision_grav_copy_db_server_valid('copy')) {
+    return FALSE;
   }
 
   // The target platform, tested with THIS layer's own predicate and never the
@@ -150,17 +146,12 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
 /**
  * Implements drush_hook_pre_COMMAND() (doubled name -- not collapsed).
  *
- * The safety copy of the LIVE source, in the truthful grav-restorable mode:
- * it is both the archive the copy is built from and the restore point the
- * front end registers on the source.
+ * The safety copy of the LIVE source, in the mode that restores everything
+ * the site has: it is both the archive the copy is built from and the
+ * restore point the front end registers on the source.
  */
 function drush_provision_grav_pre_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_without_db_backup');
-  drush_set_option('backup_mode', 'site_files_without_db_backup');
-  drush_log(dt('Pre-upgrade safety copy of the source, forced to the grav-restorable mode: site_files_without_db_backup'), 'info');
+  _provision_grav_force_safety_mode('Pre-upgrade (source)', TRUE);
   drush_invoke('provision-backup');
 }
 
@@ -174,6 +165,7 @@ function drush_provision_grav_pre_provision_grav_copy_upgrade_rollback($new_name
       ->succeed('Removed unused copy site package')
       ->fail('Could not remove unused copy site package');
   }
+  _provision_grav_internal_backup_flag(FALSE);
 }
 
 /**
@@ -213,7 +205,17 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   $deploy_options['deploy_class'] = 'upgrade';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
 
-  provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  // What the deploy is about to create on the target, for a site with a
+  // database: the rollback drops the copy's database with the copy.
+  $has_db = _provision_grav_has_db();
+  if ($has_db) {
+    provision_target_copy_probe('copy_upgrade_target_copy', $options['root'], $new_uri, isset($options['db_server']) ? $options['db_server'] : '');
+  }
+  $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
+  if ($has_db) {
+    provision_target_copy_deployed('copy_upgrade_target_copy', $deploy_result);
+  }
+  _provision_grav_internal_backup_flag(FALSE);
 
   if (!drush_get_error()) {
     $copy_path = $options['root'] . '/sites/' . $new_uri;
@@ -258,7 +260,8 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
  * and its pre-upgrade safety copy stays registered as a restore point.
  */
 function drush_provision_grav_copy_upgrade_rollback($new_name = NULL, $platform = NULL) {
-  _provision_grav_discard_copy($new_name, $platform);
+  _provision_grav_discard_copy($new_name, $platform, 'copy_upgrade_target_copy');
+  _provision_grav_internal_backup_flag(FALSE);
   drush_log(dt('provision-grav-copy-upgrade failed; the source site @uri is untouched and still serving at its own domain.',
     array('@uri' => d()->uri)), 'advisory');
 }
