@@ -85,6 +85,12 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
     unlink(AEGIR_BACKUP_MODE_CTRL);
   }
+  // The vhost data is built once per process from the 'site' context: the
+  // rollback re-renders the old vhost from it, so it must carry the store's
+  // database settings from the start.
+  if (_provision_grav_has_db()) {
+    _provision_grav_ensure_db_creds_loaded();
+  }
 }
 
 /**

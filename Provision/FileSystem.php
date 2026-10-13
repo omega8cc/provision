@@ -761,6 +761,24 @@ class Provision_FileSystem extends Provision_ChainedState {
   }
 
   /**
+   * Remove the name $name of the current directory only while it is a
+   * regular file of the user this runs as: a temp file a helper made, never
+   * a name the account put in its place (another owner), a link or a
+   * directory.
+   *
+   * @return
+   *   TRUE if the name was removed.
+   */
+  function _remove_own_here($name) {
+    clearstatcache();
+    $st = @lstat($name);
+    if (!is_array($st) || ($st['mode'] & 0170000) !== 0100000 || $st['uid'] !== posix_geteuid()) {
+      return FALSE;
+    }
+    return @unlink($name);
+  }
+
+  /**
    * Go back to the working directory $cwd, as getcwd() returned it.
    */
   function _leave($cwd) {
@@ -780,7 +798,8 @@ class Provision_FileSystem extends Provision_ChainedState {
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
    * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod(), and
-   * only to directories and regular files.
+   * only to directories and to the regular files of the user this runs as
+   * (another owner's file is passed over without a warning).
    * With $filearg the files get it instead of $arg (a chmod with one mode
    * for directories and another for files); with $arg NULL as well, the
    * directories are left as they are.
@@ -817,8 +836,13 @@ class Provision_FileSystem extends Provision_ChainedState {
           $status = lchgrp($name, $arg) && $status;
         }
         elseif ($func == 'chmod') {
-          // Regular files only: a FIFO, socket or device keeps its mode.
-          if (is_file($name)) {
+          // Regular files of the user this runs as only: a FIFO, socket or
+          // device keeps its mode, and so, without a warning, does a file of
+          // another owner (the web server's own files in a site's writable
+          // dirs), as chmod() by path failed on it quietly; root's site
+          // permissions fix sets those.
+          $st = @lstat($name);
+          if (is_array($st) && ($st['mode'] & 0170000) === 0100000 && $st['uid'] === posix_geteuid()) {
             $files[] = $name;
           }
         }
@@ -856,7 +880,7 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE if every file was changed.
    */
   function _chmod_here_nofollow($names, $mode) {
-    $pl = 'use Fcntl; use Config; my $m = oct(shift); my $p = ($Config{archname} =~ /^(x86_64|aarch64)-linux/) ? 010000000 : 0; my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); next if $p && sysopen($h, $n, $p | O_NOFOLLOW) && -f $h && chmod($m, "/proc/self/fd/" . fileno($h)); push @bad, $n } print "\0\0"; print map { $_ . "\0" } @bad; print "ok"; exit(@bad ? 1 : 0)';
+    $pl = 'use Fcntl; use Config; my $m = oct(shift); my $p = ($Config{archname} =~ /^(x86_64|aarch64)-linux/) ? 010000000 : 0; my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); next if $p && sysopen($h, $n, $p | O_NOFOLLOW) && -f $h && chmod($m, "/proc/self/fd/" . fileno($h)); push @bad, $n } print "\0\0"; print scalar(@bad), "\0"; print map { $_ . "\0" } @bad; print "ok\0"; exit(@bad ? 1 : 0)';
     $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
@@ -872,13 +896,16 @@ class Provision_FileSystem extends Provision_ChainedState {
       $rc = proc_close($proc);
     }
     // The helper's answer is the end of its output: two NULs (never inside
-    // the list, whose names are not empty), each file it left with a NUL,
-    // then "ok" (what a shell prints after that is not read). Without it the
-    // helper did not start, or did not finish, whatever its exit code (a
+    // the list, whose names are not empty), the count of files it left, each
+    // of them and "ok", every part ended by a NUL (what a shell prints after
+    // that is not read). Without a whole answer, a list cut short included,
+    // the helper did not start or did not finish, whatever its exit code (a
     // shell that refuses a command can end 1 as well).
     $at = strrpos($out, "\0\0");
-    $bad = ($at === FALSE) ? array('') : explode("\0", substr($out, $at + 2));
-    $ran = (strncmp(array_pop($bad), 'ok', 2) === 0);
+    $parts = ($at === FALSE) ? array() : explode("\0", substr($out, $at + 2));
+    $count = $parts ? array_shift($parts) : '';
+    $ran = (preg_match('/^[0-9]+$/', $count) && count($parts) > (int) $count && $parts[(int) $count] === 'ok');
+    $bad = $ran ? array_slice($parts, 0, (int) $count) : array();
     foreach ($bad as $name) {
       drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
     }
@@ -897,16 +924,18 @@ class Provision_FileSystem extends Provision_ChainedState {
    * mode creates the target of a dangling link.
    *
    * @param $made
-   *   Set to TRUE when the file the helper made is still there: a caller
-   *   that renames it removes it when this returns FALSE. A write cut short
-   *   (a full disk, a quota) is removed by the helper itself, which is the
-   *   only clean-up for a caller that creates at the file's own name.
+   *   Set to TRUE when the file the helper made may still be there (it made
+   *   it, or was stopped as it opened the name): a caller that renames it
+   *   removes it with _remove_own_here() when this returns FALSE. A write
+   *   cut short (a full disk, a quota) is removed by the helper itself,
+   *   which is the only clean-up for a caller that creates at the file's own
+   *   name.
    *
    * @return
    *   TRUE if the file was created and written whole.
    */
   function _create_here($name, $data, $mode, &$made = NULL) {
-    $pl = 'use Fcntl; $| = 1; print "\0\0"; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or do { print "no"; exit 1 }; print "+"; my $s = (print {$h} $d) && chmod($m, $h) && close($h); unlink($n) unless $s; print($s ? "ok" : "no"); exit($s ? 0 : 1)';
+    $pl = 'use Fcntl; $| = 1; print "\0\0"; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; print "?"; sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or do { print "no\0"; exit 1 }; print "+"; if ((print {$h} $d) && chmod($m, $h) && close($h)) { print "ok\0"; exit 0 } print "-"; unlink($n); print "no\0"; exit 1';
     $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
@@ -921,21 +950,23 @@ class Provision_FileSystem extends Provision_ChainedState {
       $rc = proc_close($proc);
     }
     // The helper's answer follows the two NULs it prints first (so nothing a
-    // shell prints before or after counts): "no" when the name is refused;
-    // "+" the moment it made the file, then "ok", or "no" once it removed a
-    // write cut short. Without an answer it did not start, whatever its exit
-    // code (a shell that refuses a command can end 1); with "+" alone it was
-    // stopped after making the file, which is then still there.
+    // shell prints before or after counts): "?" as it opens the name, then
+    // "no" when the name is refused, or "+" the moment it made the file and
+    // then "ok", or "-" as it removes a write cut short and "no" once that is
+    // done; "no" and "ok" end with a NUL. Without "?" the helper did not
+    // start, whatever its exit code (a shell that refuses a command can end
+    // 1); an answer cut short ("?", "+", "-") is a helper stopped on the way,
+    // and its file may still be there unless "-" said it was being removed.
     $at = strrpos($out, "\0\0");
-    $word = ($at !== FALSE && preg_match('/^(no|\+ok|\+no|\+)/', substr($out, $at + 2), $m)) ? $m[1] : '';
-    $made = ($word === '+' || $word === '+ok');
+    $word = ($at !== FALSE && preg_match('/^\?(no\x00|\+ok\x00|\+-no\x00|\+-|\+|)/', substr($out, $at + 2), $m)) ? '?' . rtrim($m[1], "\0") : '';
+    $made = ($word === '?' || $word === '?+' || $word === '?+ok');
     if ($word === '') {
       drush_log(dt('Could not create @path: the helper did not run', array('@path' => getcwd() . '/' . $name)), 'warning');
     }
-    elseif ($word === '+') {
+    elseif ($word === '?' || $word === '?+' || $word === '?+-') {
       drush_log(dt('Could not create @path: the helper did not finish', array('@path' => getcwd() . '/' . $name)), 'warning');
     }
-    return $word === '+ok' && $rc === 0;
+    return $word === '?+ok' && $rc === 0;
   }
 
   /**

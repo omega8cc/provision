@@ -230,6 +230,14 @@ if ($identity_changes) {
     drush_log(dt('No contact addresses to re-point on the copy.'), 'ok');
   }
 
+  // ---- (g) a store's signing secret: the copy makes its own ----
+  if (_provision_grav_has_db() && !_provision_grav_rotate_store_secret()) {
+    return FALSE;
+  }
+  if (_provision_grav_blank_licences_signing_secret($site_path) > 0) {
+    drush_log(dt('The copy signs licence responses with no key until one is rotated on the copy (the licences add-on\'s signing secret was the source\'s).'), 'ok');
+  }
+
   // ---- (e) source-bound state that must be a decision, not a silent copy ----
   if (is_file($site_path . '/user/data/licenses.yaml')) {
     drush_log(dt('The copy carries user/data/licenses.yaml (premium licence keys) from the source; keep or remove it deliberately.'), 'advisory');
@@ -287,6 +295,12 @@ foreach ($config_dirs as $config_dir) {
   if ($done && @file_put_contents($system_yaml, implode('', $lines), LOCK_EX) !== FALSE) {
     drush_log(dt('Set errors.display to false (the archive had error display on).'), 'ok');
   }
+}
+
+// ---- (i) a copy of a store: its scheduler is held ----
+if (($deploy_class === 'clone' || $deploy_class === 'upgrade') && _provision_grav_has_db()
+  && $old_uri !== '' && $old_uri !== $uri) {
+  _provision_grav_mark_copy($site_path, _provision_grav_copy_source($site_path, $old_uri));
 }
 
 // ---- (f) modes last, after every write above ----
