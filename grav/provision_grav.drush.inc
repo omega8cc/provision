@@ -1355,7 +1355,7 @@ function _provision_grav_secure_secrets($site_path) {
   // no world bits.
   $licenses = $site_path . '/user/data/licenses.yaml';
   if (is_file($licenses) && !is_link($licenses)) {
-    provision_file()->chgrp($licenses, provision_path_web_group($licenses, $web_group));
+    provision_path_web_group_chgrp($licenses, $web_group);
     provision_file()->chmod($licenses, 0660);
   }
 }
@@ -1412,7 +1412,7 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
       if ($fs->_enter($place['dir'])) {
         clearstatcache();
         if (is_file('licenses.yaml') && !is_link('licenses.yaml')) {
-          $fs->_lchgrp_here('licenses.yaml', provision_path_web_group($licenses_dir . '/licenses.yaml', $web_group));
+          $fs->_lchgrp_here('licenses.yaml', provision_path_web_group($place['dir'] . '/licenses.yaml', $web_group, TRUE));
           $fs->_chmod_here_nofollow(array('licenses.yaml'), 0660);
         }
       }
