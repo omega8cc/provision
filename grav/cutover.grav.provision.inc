@@ -187,6 +187,17 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
+  // The copy takes over from here: the store it was held for is retired.
+  // Lifted before the rename leg, whose own safety backup would otherwise
+  // carry the hold onto the live store's Backups tab; put back below when
+  // the rename does not complete.
+  $copy_marker = _provision_grav_copy_marker(d()->site_path);
+  $copy_held = is_file($copy_marker) && !is_link($copy_marker);
+  $copy_source = $copy_held ? trim((string) @file_get_contents($copy_marker)) : '';
+  if ($copy_held) {
+    _provision_grav_unmark_copy(d()->site_path);
+  }
+
   // Leg 2 — rename this site to the freed domain via a REAL grav_rename task,
   // so the rename leg plus the frontend post-task bookkeeping (node retitle,
   // context re-registration, Encryption auto-disable, follow-up verify) all
@@ -203,6 +214,13 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     || !provision_file()->exists($new_alias_file)->status()
     || provision_file()->exists($old_alias_file)->status()
     || ($vhost_scheme_ok && !provision_file()->exists($vhostd_path . '/' . $target_domain)->status())) {
+    if ($copy_held) {
+      foreach (array(d()->site_path, d()->root . '/sites/' . $target_domain) as $copy_path) {
+        if (is_dir($copy_path) && !is_link($copy_path)) {
+          _provision_grav_mark_copy($copy_path, $copy_source);
+        }
+      }
+    }
     return drush_set_error('PROVISION_GRAV_CUTOVER_RENAME_FAILED',
       dt('The rename to !domain did not complete. The retired source is preserved in its pre-delete backup; if the rename rolled back, this site still answers at !old. Fix the cause from the rename task log, then re-run cutover — with !domain free it degrades to a plain rename (a stale leftover !domain alias from a rollback is detected and overwritten).',
       array('!domain' => $target_domain, '!old' => ltrim($old_name, '@'))));

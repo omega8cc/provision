@@ -105,6 +105,26 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {
+      // The hold follows the tree being replaced, never the archive: a
+      // backup taken while the site was a copy (Cutover's own pre-rename
+      // copy among them) would otherwise hold a live store's worker for
+      // good, and a copy restored from its source's backup would lose it.
+      $held_marker = _provision_grav_copy_marker(d()->site_path);
+      $staged_marker = _provision_grav_copy_marker($extract_path);
+      if (is_file($held_marker) && !is_link($held_marker)) {
+        if (!is_file($staged_marker) || is_link($staged_marker)) {
+          if (is_link($staged_marker)) {
+            @unlink($staged_marker);
+          }
+          _provision_grav_mark_copy($extract_path, trim((string) @file_get_contents($held_marker)));
+        }
+      }
+      elseif (file_exists($staged_marker) || is_link($staged_marker)) {
+        provision_file()->unlink($staged_marker)
+          ->succeed('The archive was taken while this site was a copy; its hold marker is not restored: the site stays as it was')
+          ->fail('Could not remove the archive\'s copy marker @path');
+      }
+
       $old = d()->site_path . '.restore';
       $new = d()->site_path;
 
