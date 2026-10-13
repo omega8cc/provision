@@ -35,14 +35,28 @@ function drush_provision_grav_provision_deploy_validate($backup_file = NULL) {
     ->succeed('Replacing the existing site at @path')
     ->status();
 
+  // A copy (Clone, Upgrade a copy) is unpacked beside its final path and
+  // moved in whole once it is held (see the pre hook): BOA's minute runner
+  // ticks any enabled site whose tree carries the store plugin, the copy's
+  // alias is already saved enabled, and until its drushrc.php is rewritten
+  // the archive's names the SOURCE's database.
+  $deploy_class = (string) drush_get_option('deploy_class', '');
+  $old_uri = (string) drush_get_option('old_uri', '');
+  $copy = ($deploy_class === 'clone' || $deploy_class === 'upgrade')
+    && $old_uri !== '' && $old_uri !== d()->uri;
+
   if ($exists) {
     drush_set_option('extract_path', d()->site_path . '.restore');
+  }
+  elseif ($copy) {
+    drush_set_option('extract_path', d()->site_path . '.copy');
   }
   else {
     drush_set_option('extract_path', d()->site_path);
   }
 
   drush_set_option('deploy_replace_site', $exists);
+  drush_set_option('deploy_copy_staged', !$exists && $copy);
 }
 
 /**
@@ -58,7 +72,8 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
   // A pre-existing extract path is stale debris from an older failed deploy
   // (on the serial queue, by definition): extracting over its web-owned 0755
   // cache subdirs fails. Park it first so extraction always starts clean.
-  if (is_dir($extract_path) && drush_get_option('deploy_replace_site', FALSE)) {
+  if (is_dir($extract_path)
+    && (drush_get_option('deploy_replace_site', FALSE) || drush_get_option('deploy_copy_staged', FALSE))) {
     if (!_provision_grav_remove_tree_or_park($extract_path, d()->uri . '-stale-extract')) {
       return FALSE;
     }
@@ -103,6 +118,28 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       else {
         return FALSE;
       }
+    }
+    elseif (drush_get_option('deploy_copy_staged', FALSE)) {
+      // Held before it becomes visible: the marker is in the staged tree
+      // when the rename puts it at the site path. The archive carries the
+      // file only when its source was a copy itself; it is written again
+      // either way, naming this copy's source.
+      if (_provision_grav_has_db()) {
+        _provision_grav_mark_copy($extract_path, (string) drush_get_option('old_uri', ''));
+        if (!is_file(_provision_grav_copy_marker($extract_path))) {
+          return drush_set_error('PROVISION_GRAV_COPY_MARK',
+            dt('Could not hold the copy at @path before moving it into place.', array('@path' => $extract_path)));
+        }
+      }
+      if (file_exists(d()->site_path) || is_link(d()->site_path)) {
+        return drush_set_error('PROVISION_GRAV_COPY_TARGET',
+          dt('@path appeared while the copy was being unpacked; refusing to move the copy over it.', array('@path' => d()->site_path)));
+      }
+      if (!@rename($extract_path, d()->site_path)) {
+        return drush_set_error('PROVISION_GRAV_COPY_MOVE',
+          dt('Could not move the unpacked copy from @from to @to.', array('@from' => $extract_path, '@to' => d()->site_path)));
+      }
+      drush_set_option('deploy_copy_moved', TRUE);
     }
 
     provision_prepare_environment();
@@ -149,6 +186,10 @@ function drush_provision_grav_pre_provision_deploy_rollback() {
     }
   }
 
+  if (drush_get_option('deploy_copy_moved', FALSE) && !drush_get_option('deploy_replace_site', FALSE)
+    && is_dir(d()->site_path) && !is_link(d()->site_path)) {
+    _provision_grav_remove_tree_or_park(d()->site_path, d()->uri . '-copy');
+  }
   if (provision_file()->exists(drush_get_option('extract_path'))->status()) {
     _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-extract');
   }
