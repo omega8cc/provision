@@ -823,20 +823,28 @@ class Provision_FileSystem extends Provision_ChainedState {
     $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
-    if (!is_resource($proc)) {
-      return FALSE;
+    $rc = 1;
+    $bad = '';
+    if (is_resource($proc)) {
+      // perl reports what it could not change only once it has read every
+      // name, so neither side waits on a full pipe.
+      fwrite($pipes[0], implode("\0", $names) . "\0");
+      fclose($pipes[0]);
+      $bad = (string) stream_get_contents($pipes[1]);
+      fclose($pipes[1]);
+      $rc = proc_close($proc);
     }
-    // perl reports what it could not change only once it has read every
-    // name, so neither side waits on a full pipe.
-    fwrite($pipes[0], implode("\0", $names) . "\0");
-    fclose($pipes[0]);
-    $bad = stream_get_contents($pipes[1]);
-    fclose($pipes[1]);
-    $rc = proc_close($proc);
-    foreach (explode("\0", (string) $bad) as $name) {
+    $told = 0;
+    foreach (explode("\0", $bad) as $name) {
       if ($name !== '') {
+        $told++;
         drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
       }
+    }
+    // A helper that did not start, or ended without naming what it left,
+    // left every name as it was.
+    if ($rc !== 0 && !$told) {
+      drush_log(dt('chmod to @perm failed on @count file(s) in @path: the helper did not run', array('@perm' => sprintf('%o', $mode), '@count' => count($names), '@path' => getcwd())), 'warning');
     }
     return $rc === 0;
   }
