@@ -14,8 +14,12 @@
  * every command and the guards make them mutually exclusive.
  *
  * Grav is the mirror image of TXP: it ships a first-class CLI (bin/grav,
- * bin/gpm, bin/plugin -- the automation seam) but NO database at all in
- * phase 1. No drush bootstrap of the CMS ever happens (GravBoot exists only to
+ * bin/gpm, bin/plugin -- the automation seam) and keeps its pages in flat
+ * files. A site on hosting_grav's 'none' server has no database at all; one
+ * created on a MySQL server (a shop) has a database and a login, carried
+ * through every task the way the Textpattern layer carries them
+ * (_provision_grav_has_db() gates each database branch). No drush bootstrap
+ * of the CMS ever happens (GravBoot exists only to
  * satisfy the bootstrap-phase gate); every Grav CLI call runs in a separate
  * enforced-PHP process as the instance user with umask 0002 (both spike-proven
  * requirements).
@@ -81,7 +85,7 @@ function provision_grav_drush_command() {
       '@platform_name' => dt('The Drush alias of the target Grav platform.'),
     ),
     'options' => array(
-      'new_db_server' => dt('Ignored for Grav: a capsule has no database and the copy keeps the source\'s "none" server. Accepted so the frontend dialog can pass its usual option set.'),
+      'new_db_server' => dt('The database server of the copy, for a site with a database (never the "none" server). A site on the "none" server keeps it for its copy and this option is ignored.'),
       'artefact' => dt('Optional path to the official grav-admin-v*.zip. Default: the newest one staged on the shelf of the server, /data/all/000/grav-releases/.'),
     ),
     'allow-additional-options' => TRUE,
@@ -303,6 +307,174 @@ function _provision_grav_php_bin() {
  */
 function _provision_grav_site_exists() {
   return is_readable(d()->site_path . '/system/defines.php');
+}
+
+/**
+ * Does this site have a database of its own?
+ *
+ * A Grav site on hosting_grav's 'none' server (Provision_Service_null) has no
+ * database at all. One created on a MySQL server (a shop) has a database and
+ * a login of its own, which every task carries the way the Textpattern layer
+ * does. Every database branch in this layer is gated on this test, so a site
+ * on the 'none' server behaves exactly as it did before.
+ */
+function _provision_grav_has_db() {
+  $db = d()->service('db');
+  return is_object($db) && !($db instanceof Provision_Service_null);
+}
+
+/**
+ * Read the db credentials out of a persisted site drushrc.php into an array.
+ *
+ * Regex parse (no include, so the file's side effects never run). Returns the
+ * db_* subset found, or an empty array. For the flows that must NOT pass the
+ * credentials through the 'site' option context: a deploy, where that context
+ * is about to hold a NEW database's credentials, and a forced reinstall.
+ */
+function _provision_grav_drushrc_creds($drushrc) {
+  $creds = array();
+  if (!is_readable($drushrc)) {
+    return $creds;
+  }
+  $body = file_get_contents($drushrc);
+  if ($body === FALSE) {
+    return $creds;
+  }
+  foreach (array('db_type', 'db_user', 'db_passwd', 'db_host', 'db_name', 'db_port') as $key) {
+    if (preg_match('/\\$options\\s*\\[\\s*[\'"]' . $key . '[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+      $creds[$key] = $m[1];
+    }
+  }
+  return $creds;
+}
+
+/**
+ * Reload persisted site options (db credentials + installed flag).
+ *
+ * Provision commands dispatch at the Drush bootstrap level, so GravBoot never
+ * reaches the site phase that would load the site drushrc.php: the db
+ * credentials enter the 'site' context only at install. A later task that
+ * ends with the exit hook's drushrc write (verify, backup) or acts on the
+ * database (delete, restore) must reload them first, or the drushrc is
+ * rewritten without them and Delete leaves the database and its login
+ * behind. Namespaced copy of the Textpattern helper; on a site with no
+ * database it restores the installed flag alone.
+ */
+function _provision_grav_ensure_db_creds_loaded() {
+  if (d()->type !== 'site') {
+    return;
+  }
+  $drushrc = d()->site_path . '/drushrc.php';
+  if (!is_readable($drushrc)) {
+    return;
+  }
+  $body = file_get_contents($drushrc);
+  if ($body === FALSE) {
+    return;
+  }
+  if (!(drush_get_option('db_name', '', 'site') && drush_get_option('db_passwd', '', 'site'))) {
+    foreach (array('db_type', 'db_user', 'db_passwd', 'db_host', 'db_name', 'db_port') as $key) {
+      if (drush_get_option($key, '', 'site')) {
+        continue;
+      }
+      if (preg_match('/\\$options\\s*\\[\\s*[\'"]' . $key . '[\'"]\\s*\\]\\s*=\\s*[\'"]([^\'"]*)[\'"]/', $body, $m)) {
+        drush_set_option($key, $m[1], 'site');
+      }
+    }
+  }
+  if (!drush_get_option('installed')
+    && preg_match('/\\$options\\s*\\[\\s*[\'"]installed[\'"]\\s*\\]\\s*=\\s*(TRUE|true|1)\\s*;/', $body)) {
+    drush_set_option('installed', TRUE, 'site');
+  }
+}
+
+/**
+ * Set or clear the internal-backup flag a copying task's safety copy uses.
+ *
+ * The flag tells the db layer that this backup feeds a deploy (a clone or a
+ * restore): it dumps whatever mode a concurrent panel task leaked in, and the
+ * dated tmp_expim retention leaves the dump alone. A leftover flag silently
+ * ends that retention on the account, so every path that sets it clears it.
+ */
+function _provision_grav_internal_backup_flag($on) {
+  $flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
+  if ($on) {
+    if (!provision_file()->exists($flag)->status()) {
+      provision_file()->file_put_contents($flag, "Internal-DB-Backup \n")
+        ->succeed('Generated blank Internal-DB-Backup Flag-File (grav)')
+        ->fail('Could not generate Internal-DB-Backup Flag-File (grav)');
+    }
+    return;
+  }
+  if (is_file($flag)) {
+    provision_file()->unlink($flag)
+      ->succeed('Removed Internal-DB-Backup Flag-File (grav)')
+      ->fail('Could not remove Internal-DB-Backup Flag-File (grav)');
+  }
+}
+
+/**
+ * Force the self-contained mode of a safety copy, for what this site is.
+ *
+ * A safety copy is registered in the panel as a real backup of the site, so
+ * it must restore everything the site has: a site on the 'none' server is
+ * files only (site_files_without_db_backup, the label that tells the truth
+ * and whose tar dereferences), a site with a database carries its dump inside
+ * the archive (site_files_with_mysqldump, the Textpattern contract). The
+ * classic dump creates database.sql with fopen('x'), which fails on a file a
+ * killed earlier backup left behind, so that goes first. $internal raises the
+ * internal-backup flag for a copy that feeds a deploy (clone, restore,
+ * copy-upgrade); the caller clears it.
+ *
+ * @return string
+ *   The mode forced.
+ */
+function _provision_grav_force_safety_mode($what, $internal = FALSE) {
+  $mode = _provision_grav_has_db() ? 'site_files_with_mysqldump' : 'site_files_without_db_backup';
+  if ($mode === 'site_files_with_mysqldump') {
+    _provision_grav_ensure_db_creds_loaded();
+    if (is_file(d()->site_path . '/database.sql')) {
+      provision_file()->unlink(d()->site_path . '/database.sql')
+        ->succeed('Removed a stale database.sql before the safety copy')
+        ->fail('Could not remove a stale database.sql before the safety copy');
+    }
+    if ($internal) {
+      _provision_grav_internal_backup_flag(TRUE);
+    }
+  }
+  if (!defined('SELECTED_BACKUP_MODE')) {
+    define('SELECTED_BACKUP_MODE', $mode);
+  }
+  drush_set_option('selected_backup_mode', $mode);
+  drush_set_option('backup_mode', $mode);
+  drush_log(dt('@what safety copy forced to the restorable mode: @mode', array('@what' => $what, '@mode' => $mode)), 'info');
+  return $mode;
+}
+
+/**
+ * Refuse a copy of a site with a database onto the 'none' server.
+ *
+ * The copy of a shop needs a database to hold the shop: on the 'none' server
+ * its deploy would create none and the archive's dump would be thrown away.
+ * A site on the 'none' server keeps that server for its copy (see
+ * _provision_grav_copy_options()), so only the database-backed direction
+ * is checked.
+ */
+function _provision_grav_copy_db_server_valid($what) {
+  if (!_provision_grav_has_db()) {
+    return TRUE;
+  }
+  $new_db_server = drush_get_option('new_db_server', FALSE);
+  if (!$new_db_server) {
+    return TRUE;
+  }
+  $server = d($new_db_server);
+  if (is_object($server) && $server->service('db') instanceof Provision_Service_null) {
+    return drush_set_error('PROVISION_GRAV_COPY_DB_NONE',
+      dt('This Grav site has a database; its @what needs a database server too, not @server.',
+      array('@what' => $what, '@server' => $new_db_server)));
+  }
+  return TRUE;
 }
 
 /**
@@ -768,8 +940,9 @@ function _provision_grav_create_directories() {
  * SMTP/API credentials) and user/env are group-rw for FPM and owner-rw for
  * the CLI, with NO world bits: dirs 02770, files 0660. nginx never serves
  * or reads them (the vhost denies the paths; only FPM does, via group).
- * The root .env (phase 2 carries DB credentials) is 0640 with the web
- * group, so FPM keeps its read once the world bit is gone. Runs after every
+ * The root .env is 0640 with the web group, so FPM keeps its read once the
+ * world bit is gone; it never carries database credentials, because tenant
+ * pools share the web group. Runs after every
  * generic pass that would re-widen (install, deploy, verify, and mirrored
  * in the sudo heal scripts) -- the cross-track review caught the same class
  * on the TXP side (private/config.php widened 0440 -> 0644 on every heal).
@@ -1629,16 +1802,21 @@ function _provision_grav_copy_options($new_name, $platform = NULL, $label = 'clo
     $options['profile'] = $profile;
   }
 
-  // DB-less pin: the copy keeps the source's database server (the 'none'
-  // null service the validate hook asserted). A different server named by
-  // the task would make the copy's deploy provision a database and grants
-  // for a site that has none, so it is deliberately not honoured; said once
-  // here rather than silently dropped. Gated on the source's service being
-  // the null one, so database-backed Grav (the coming cart) is unaffected.
+  // A site with a database: its copy gets a database of its own, on the
+  // server the task names (the validate refused the 'none' one) or else the
+  // source's. A site on the 'none' server: the copy keeps that server, since
+  // a different one would make the copy's deploy provision a database and
+  // grants for a site that has none; said once here rather than silently
+  // dropped.
   $new_db_server = drush_get_option('new_db_server', FALSE);
-  if ($new_db_server && isset($options['db_server'])
+  if (_provision_grav_has_db()) {
+    if ($new_db_server) {
+      $options['db_server'] = $new_db_server;
+    }
+  }
+  elseif ($new_db_server && isset($options['db_server'])
     && ltrim($new_db_server, '@') !== ltrim($options['db_server'], '@')) {
-    drush_log(dt('The database server @server requested for the copy is ignored: a Grav capsule has no database and keeps the source\'s "none" server.',
+    drush_log(dt('The database server @server requested for the copy is ignored: this Grav site has no database and its copy keeps the "none" server.',
       array('@server' => $new_db_server)), 'ok');
   }
 
@@ -1651,11 +1829,20 @@ function _provision_grav_copy_options($new_name, $platform = NULL, $label = 'clo
  * capsule the platform-delete guard counts as a live site and a context the
  * front end never registered. Shared by the clone and copy-upgrade rollbacks
  * so both discard exactly the same set.
+ *
+ * $copy_option names the record provision_target_copy_probe() kept for a
+ * copy of a site with a database: the copy's database goes first, through
+ * provision_remove_unfinished_target_copy() and its guards (never the
+ * source's database, never one another site names), while the copy still
+ * names it on disk.
  */
-function _provision_grav_discard_copy($new_name, $platform = NULL) {
+function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option = '') {
   $new_uri = ltrim($new_name, '@');
   if ($new_uri === '' || $new_uri === d()->uri) {
     return;
+  }
+  if ($copy_option !== '' && _provision_grav_has_db()) {
+    provision_remove_unfinished_target_copy($copy_option);
   }
   // Context names carry the leading @ whatever the caller was handed.
   $new_name = '@' . $new_uri;

@@ -3,10 +3,11 @@
  * @file
  * Provision hooks for the provision install command (Grav layer).
  *
- * Fork of txp/install.provision.inc minus everything database: a phase-1 Grav
- * site is DB-less by design (site-capsule model), so there is no db
- * drop on force-reinstall and no credential plumbing -- install is capsule
- * materialisation + the .env + the first admin account.
+ * Fork of txp/install.provision.inc: install is capsule materialisation + the
+ * .env + the first admin account. A site on the 'none' server has no
+ * database at all; one created on a MySQL server gets a database and a login
+ * from the db layer's pre-install hook, recorded in its drushrc.php by the
+ * main hook below, and a forced reinstall drops both as the txp one does.
  */
 
 /**
@@ -25,20 +26,35 @@ function drush_provision_grav_provision_install_validate() {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
       dt('No PHP >= 8.3 binary found; Grav tasks refuse to run below the enforced floor.'));
   }
-  // A Grav capsule carries no database yet (the coming cart brings one, and
-  // with it the database backup/restore contract). The panel offers the
-  // MySQL node by default while hosting_grav provides the 'none' server:
-  // a site attached to a real database server installs, but its files-only
-  // archives cannot be restored through the database deploy until then.
-  // Said once, here, where the operator reads it.
-  if (!(d()->service('db') instanceof Provision_Service_null)) {
-    drush_log(dt('This Grav site is attached to a database server, but Grav carries no database yet: its backups are files-only and cannot be restored until database support ships. Attach Grav sites to the "none" database server (hosting_grav) for now.'), 'warning');
-  }
   if (_provision_grav_site_exists()) {
 
     if (drush_get_option('force-reinstall', FALSE)) {
 
       drush_log(dt('Forcing reinstall...'), 'ok');
+
+      // A site with a database has a database and a login of the same name,
+      // which a site delete drops; drop them here too, or the install below
+      // leaves both behind (the old password, a grant on the old database)
+      // and moves the site to a suffixed name. With the database gone,
+      // destroy_site_database() only revokes, through the path a site delete
+      // takes. Read from the drushrc without including it; on the 'none'
+      // server it names no database and nothing runs.
+      $old = _provision_grav_drushrc_creds(d()->site_path . '/drushrc.php');
+      $old_db_name = isset($old['db_name']) ? $old['db_name'] : '';
+      if ($old_db_name !== '' && _provision_grav_has_db()) {
+        if (d()->service('db')->database_exists($old_db_name)) {
+          d()->service('db')->drop_database($old_db_name);
+          drush_log(dt('Dropped database @database.', array(
+            '@database' => $old_db_name,
+          )), 'ok');
+        }
+        if (!empty($old['db_user']) && !d()->service('db')->database_exists($old_db_name)) {
+          d()->service('db')->destroy_site_database(array(
+            'db_name' => $old_db_name,
+            'db_user' => $old['db_user'],
+          ));
+        }
+      }
 
       if (file_exists(d()->site_path)) {
         provision_file()->chmod(d()->site_path, 0755, TRUE);

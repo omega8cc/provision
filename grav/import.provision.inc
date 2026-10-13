@@ -27,6 +27,9 @@ function drush_provision_grav_provision_import() {
     }
     drush_log(dt('Importing Grav capsule !site (@version).',
       array('!site' => d()->site_path, '@version' => _provision_grav_get_version(d()->site_path))), 'ok');
+    // A capsule with a database names it in its own drushrc.php: carry it
+    // into the drushrc the post hook writes.
+    _provision_grav_ensure_db_creds_loaded();
     drush_set_option('installed', TRUE, 'site');
   }
 }

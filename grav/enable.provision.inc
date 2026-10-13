@@ -13,6 +13,9 @@ function drush_provision_grav_provision_enable_validate() {
   }
   if (d()->type == 'site') {
     d()->site_enabled = true;
+    // The http enable hook renders the vhost from the 'site' context; a site
+    // with a database needs its persisted credentials there first.
+    _provision_grav_ensure_db_creds_loaded();
   }
 }
 

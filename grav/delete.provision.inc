@@ -5,9 +5,11 @@
  *
  * The platform-delete refusal plus the site/platform delete
  * implementations, forked from platform/delete.provision.inc minus everything
- * database and Drupal-alias-shaped. The shared Drupal hooks early-return on
- * the foreign-CMS union, so without these a grav delete would be a silent
- * no-op (site) or unreachable (platform).
+ * Drupal-alias-shaped. The shared Drupal hooks early-return on the foreign-CMS
+ * union, so without these a grav delete would be a silent no-op (site) or
+ * unreachable (platform). A site with a database has its credentials loaded
+ * and its dump in the final safety copy; the db layer's delete hook then
+ * drops the database and revokes its login.
  */
 
 /**
@@ -52,6 +54,12 @@ function drush_provision_grav_pre_provision_delete($backup_file = NULL) {
     // backup; unlinking there would destroy a concurrent backup task's mode).
     if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
       unlink(AEGIR_BACKUP_MODE_CTRL);
+    }
+    // A site with a database: its credentials for the db layer's drop, and
+    // its dump in the last copy of the site, as the Textpattern delete does.
+    // A site on the 'none' server keeps its mode-less final copy.
+    if (_provision_grav_has_db()) {
+      _provision_grav_force_safety_mode('Final');
     }
     drush_set_option('force', true, 'process');
     if (!empty($backup_file) && substr($backup_file, 0, 1) !== '/') {
