@@ -809,28 +809,36 @@ class Provision_FileSystem extends Provision_ChainedState {
   /**
    * Change the mode of the regular files $names of the current directory to
    * $mode without following a link: a perl helper started here (it inherits
-   * this very directory) opens each name with O_NOFOLLOW and changes the
-   * mode through the handle, as PHP has no lchmod() or fchmod(). A name
-   * swapped for a link since it was read, or that is no regular file, is
-   * left as it is and fails the call. In groups of 200 names a run.
+   * this very directory) reads the names, NUL-separated, on its standard
+   * input, opens each with O_NOFOLLOW (for reading, or else for writing) and
+   * changes the mode through the handle, as PHP has no lchmod() or fchmod().
+   * A name swapped for a link since it was read, or that is no regular file,
+   * is left as it is; each name not changed is logged and fails the call.
    *
    * @return
    *   TRUE if every file was changed.
    */
   function _chmod_here_nofollow($names, $mode) {
-    $pl = 'use Fcntl; my $m = oct(shift); my $ok = 1; for my $n (@ARGV) { my $h; next if sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) && -f $h && chmod($m, $h); $ok = 0 } exit($ok ? 0 : 1)';
-    $status = TRUE;
-    foreach (array_chunk($names, 200) as $group) {
-      $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
-      foreach ($group as $name) {
-        $cmd .= ' ' . escapeshellarg($name);
-      }
-      $out = array();
-      $rc = 1;
-      exec($cmd . ' 2>/dev/null', $out, $rc);
-      $status = ($rc === 0) && $status;
+    $pl = 'use Fcntl; my $m = oct(shift); my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); push @bad, $n } print map { $_ . "\0" } @bad; exit(@bad ? 1 : 0)';
+    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
+    $pipes = array();
+    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
+    if (!is_resource($proc)) {
+      return FALSE;
     }
-    return $status;
+    // perl reports what it could not change only once it has read every
+    // name, so neither side waits on a full pipe.
+    fwrite($pipes[0], implode("\0", $names) . "\0");
+    fclose($pipes[0]);
+    $bad = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $rc = proc_close($proc);
+    foreach (explode("\0", (string) $bad) as $name) {
+      if ($name !== '') {
+        drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
+      }
+    }
+    return $rc === 0;
   }
 
   /**

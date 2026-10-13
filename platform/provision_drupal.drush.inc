@@ -1348,9 +1348,11 @@ function _provision_drupal_htaccess_dir($dir) {
  * a link put on the way since $at was judged is never followed. A .htaccess
  * that is itself a link is left as it is. The core's file_create_htaccess()
  * makes the file in a directory of the backend's own
- * (_provision_drupal_htaccess_made()); it is then created here with what the
- * core wrote and its mode (Provision_FileSystem::_create_here()), which
- * fails on any name there, a link planted since the removal included.
+ * (_provision_drupal_htaccess_made()) before the old one is removed; it is
+ * then created here with what the core wrote and its mode
+ * (Provision_FileSystem::_create_here()), which fails on any name there, a
+ * link planted since the removal included. Without such a directory the old
+ * file stays, with a warning.
  *
  * @param $at
  *   The physical path of the directory (_provision_drupal_htaccess_dir()).
@@ -1367,13 +1369,22 @@ function _provision_drupal_htaccess_here($at, $major) {
     // Check for the string which was added to the recommended .htaccess file
     // in the latest security update.
     if (!file_exists('.htaccess') || !($contents = @file_get_contents('.htaccess')) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
-      // Aegir specific
-      @unlink('.htaccess');
+      // What the core writes is made first: the old file stays until the new
+      // one can take its place.
       $made = _provision_drupal_htaccess_made($major);
-      if ($made !== NULL && @chdir($at) && getcwd() === $at && !provision_file()->_create_here('.htaccess', $made['lines'], $made['mode'])) {
-        drush_log(dt('Could not write @path', array('@path' => $at . '/.htaccess')), 'warning');
+      if ($made === FALSE) {
+        drush_log(dt('Could not update @path: no usable temporary directory', array('@path' => $at . '/.htaccess')), 'warning');
       }
-      $done = TRUE;
+      elseif (@chdir($at) && getcwd() === $at && !is_link('.htaccess')) {
+        // Aegir specific
+        @unlink('.htaccess');
+        // A name still there (not removable) is left, as the core leaves a
+        // file it finds.
+        if ($made !== NULL && !file_exists('.htaccess') && !is_link('.htaccess') && !provision_file()->_create_here('.htaccess', $made['lines'], $made['mode'])) {
+          drush_log(dt('Could not write @path', array('@path' => $at . '/.htaccess')), 'warning');
+        }
+        $done = TRUE;
+      }
     }
   }
   if ($cwd !== FALSE) {
@@ -1385,8 +1396,9 @@ function _provision_drupal_htaccess_here($at, $major) {
 /**
  * What the core's file_create_htaccess() writes for a directory with no
  * .htaccess, made in a new 0700 directory of the backend's own: an array of
- * 'lines' and 'mode', or NULL when the core writes nothing (BOA's own cores
- * under Drush) or the directory cannot be made and entered.
+ * 'lines' and 'mode', NULL when the core writes nothing (BOA's own cores
+ * under Drush), or FALSE when that directory cannot be made, entered and
+ * judged the backend's alone.
  *
  * The core writes and changes the mode by path, so in a site's directory a
  * link planted at the name after the update removed the old file is
@@ -1400,15 +1412,16 @@ function _provision_drupal_htaccess_here($at, $major) {
 function _provision_drupal_htaccess_made($major) {
   $base = realpath(sys_get_temp_dir());
   if ($base === FALSE) {
-    return NULL;
+    return FALSE;
   }
   $tmp = rtrim($base, '/') . '/provision-htaccess-' . getmypid() . '-' . mt_rand();
   if (!@mkdir($tmp, 0700)) {
-    return NULL;
+    return FALSE;
   }
-  $made = NULL;
+  $made = FALSE;
   clearstatcache();
   if (@chdir($tmp) && getcwd() === $tmp && fileowner('.') === posix_geteuid() && !(fileperms('.') & 0077)) {
+    $made = NULL;
     file_create_htaccess('.', ($major == 7) ? FALSE : NULL);
     clearstatcache();
     if (is_file('.htaccess') && !is_link('.htaccess') && ($lines = @file_get_contents('.htaccess')) !== FALSE) {
