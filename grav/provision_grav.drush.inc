@@ -649,6 +649,58 @@ function _provision_grav_rotate_store_secret() {
 }
 
 /**
+ * Blank the licences add-on's response signing secret in a copy's config.
+ *
+ * KahunaCart's licences add-on signs its validate and activate responses with
+ * api.signing_secret, which the merchant's shipped software trusts; empty
+ * means unsigned. A Clone that kept it would sign as the live store. The
+ * site's own config and every host overlay are covered; a line-level edit
+ * inside the top-level api: block, the file's owner and mode kept. Returns
+ * the number of files changed.
+ */
+function _provision_grav_blank_licences_signing_secret($site_path) {
+  $files = array($site_path . '/user/config/plugins/kahunacart-licenses.yaml');
+  $overlays = glob($site_path . '/user/env/*/config/plugins/kahunacart-licenses.yaml');
+  if (is_array($overlays)) {
+    $files = array_merge($files, $overlays);
+  }
+  $changed = 0;
+  foreach ($files as $file) {
+    if (!is_file($file) || is_link($file)) {
+      continue;
+    }
+    $lines = file($file);
+    if ($lines === FALSE) {
+      continue;
+    }
+    $in_api = FALSE;
+    $done = FALSE;
+    foreach ($lines as $i => $line) {
+      $bare = rtrim($line, "\r\n");
+      if (preg_match('/^api:\s*(#.*)?$/', $bare)) {
+        $in_api = TRUE;
+        continue;
+      }
+      if ($in_api && preg_match('/^\S/', $bare)) {
+        $in_api = FALSE;
+      }
+      if ($in_api && preg_match('/^(\s+signing_secret:)\s*(.*)$/', $bare, $m)) {
+        $value = trim(preg_replace('/\s+#.*$/', '', $m[2]));
+        if ($value !== '' && $value !== "''" && $value !== '""' && $value !== '~' && $value !== 'null') {
+          $lines[$i] = $m[1] . " ''" . substr($line, strlen($bare));
+          $done = TRUE;
+        }
+        break;
+      }
+    }
+    if ($done && @file_put_contents($file, implode('', $lines), LOCK_EX) !== FALSE) {
+      $changed++;
+    }
+  }
+  return $changed;
+}
+
+/**
  * The marker a copy of a store carries: <capsule>/.boa-copy, naming the
  * site it was copied from.
  *

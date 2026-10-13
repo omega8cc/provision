@@ -234,6 +234,9 @@ if ($identity_changes) {
   if (_provision_grav_has_db() && !_provision_grav_rotate_store_secret()) {
     return FALSE;
   }
+  if (_provision_grav_blank_licences_signing_secret($site_path) > 0) {
+    drush_log(dt('The copy signs licence responses with no key until one is rotated on the copy (the licences add-on\'s signing secret was the source\'s).'), 'ok');
+  }
 
   // ---- (e) source-bound state that must be a decision, not a silent copy ----
   if (is_file($site_path . '/user/data/licenses.yaml')) {
