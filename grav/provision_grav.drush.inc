@@ -316,11 +316,54 @@ function _provision_grav_site_exists() {
  * database at all. One created on a MySQL server (a shop) has a database and
  * a login of its own, which every task carries the way the Textpattern layer
  * does. Every database branch in this layer is gated on this test, so a site
- * on the 'none' server behaves exactly as it did before.
+ * on the 'none' server behaves exactly as it did before. The database must
+ * also be on record, in the running context or the site's drushrc.php (read,
+ * never loaded): see _provision_grav_db_unrecorded() for a site that has the
+ * server but not the record.
  */
 function _provision_grav_has_db() {
+  if (!_provision_grav_db_service_real()) {
+    return FALSE;
+  }
+  if (drush_get_option('db_name', '', 'site') !== '') {
+    return TRUE;
+  }
+  $creds = _provision_grav_drushrc_creds(d()->site_path . '/drushrc.php');
+  return !empty($creds['db_name']);
+}
+
+/**
+ * Whether the site's db service is a real one (not the 'none' server).
+ */
+function _provision_grav_db_service_real() {
   $db = d()->service('db');
   return is_object($db) && !($db instanceof Provision_Service_null);
+}
+
+/**
+ * A site on a database server with no database on record.
+ *
+ * A Grav site created on a MySQL server before the Grav tasks carried a
+ * database got one at install, and its first Verify or Backup rewrote
+ * drushrc.php without the credentials. Nothing can find that database again,
+ * so the site is files-only: its safety copies and backups carry no dump, and
+ * the copying tasks, which would make the copy a database it cannot fill,
+ * refuse it.
+ */
+function _provision_grav_db_unrecorded() {
+  return _provision_grav_db_service_real() && !_provision_grav_has_db();
+}
+
+/**
+ * The refusal of a copying task on a site with no database on record.
+ */
+function _provision_grav_refuse_unrecorded($what) {
+  if (!_provision_grav_db_unrecorded()) {
+    return TRUE;
+  }
+  return drush_set_error('PROVISION_GRAV_DB_UNRECORDED',
+    dt('This Grav site is on a database server but no database is on record for it (it was created before Grav tasks carried a database, and its drushrc.php no longer names one), so its @what cannot be built through the database deploy. Move the site to the "none" database server, or put its db_* lines back into drushrc.php, and retry.',
+    array('@what' => $what)));
 }
 
 /**
@@ -452,6 +495,281 @@ function _provision_grav_force_safety_mode($what, $internal = FALSE) {
 }
 
 /**
+ * The database settings of a site with a database, as Grav config overrides.
+ *
+ * KahunaCart reads its connection from plugins.kahunacart.database. Grav
+ * applies GRAV_CONFIG__<key, dots as __> from $_SERVER/$_ENV on every
+ * request and command once GRAV_CONFIG is set, and its admin never writes
+ * such a value back to disk, so the credentials live only in the root-owned
+ * vhost and, for one CLI call, in that call's environment -- never in a file
+ * the shared web group can read. 'localhost' with a port other than 3306
+ * becomes 127.0.0.1: PDO takes 'localhost' as the socket and would skip the
+ * port (ProxySQL). auto_migrate stays manual: Verify migrates.
+ *
+ * @return array
+ *   name => value; empty when the credentials are incomplete.
+ */
+function _provision_grav_db_overrides($db_name, $db_user, $db_passwd, $db_host, $db_port) {
+  $db_name = (string) $db_name;
+  $db_user = (string) $db_user;
+  $db_passwd = (string) $db_passwd;
+  if ($db_name === '' || $db_user === '' || $db_passwd === '') {
+    return array();
+  }
+  $port = ((string) $db_port === '') ? '3306' : (string) $db_port;
+  $host = ((string) $db_host === '') ? 'localhost' : (string) $db_host;
+  if ($host === 'localhost' && $port !== '3306') {
+    $host = '127.0.0.1';
+  }
+  $key = 'GRAV_CONFIG__plugins__kahunacart__database__';
+  return array(
+    'GRAV_CONFIG' => '1',
+    $key . 'type' => 'mysql',
+    $key . 'auto_migrate' => 'manual',
+    $key . 'mysql__host' => $host,
+    $key . 'mysql__port' => $port,
+    $key . 'mysql__dbname' => $db_name,
+    $key . 'mysql__username' => $db_user,
+    $key . 'mysql__password' => $db_passwd,
+  );
+}
+
+/**
+ * The same overrides as server-level fastcgi_param lines, for the vhost.
+ *
+ * Every value must be one nginx takes unquoted (provision's own names and
+ * passwords always are); one that is not drops the whole set rather than
+ * write a line that could break the nginx reload of every site on the box.
+ * A site on the 'none' server has no credentials and gets no line at all.
+ */
+function _provision_grav_db_fastcgi_lines($db_name, $db_user, $db_passwd, $db_host, $db_port) {
+  $out = '';
+  foreach (_provision_grav_db_overrides($db_name, $db_user, $db_passwd, $db_host, $db_port) as $name => $value) {
+    if (!preg_match('/^[A-Za-z0-9._:-]+$/', $value)) {
+      return '';
+    }
+    $out .= '  fastcgi_param ' . $name . ' ' . $value . ";\n";
+  }
+  return $out;
+}
+
+/**
+ * Whether a capsule carries KahunaCart, switched on.
+ *
+ * The plugin tree is the test; a plugin switched off in the capsule's own
+ * config or its host overlay registers no command, so it counts as absent.
+ */
+function _provision_grav_kahunacart_present($site_path, $uri) {
+  if (!is_file($site_path . '/user/plugins/kahunacart/kahunacart.php')) {
+    return FALSE;
+  }
+  foreach (array($site_path . '/user/env/' . $uri . '/config/plugins/kahunacart.yaml',
+    $site_path . '/user/config/plugins/kahunacart.yaml') as $yaml) {
+    if (is_file($yaml) && is_readable($yaml)) {
+      $body = file_get_contents($yaml);
+      if ($body !== FALSE && preg_match('/^enabled:\s*(\S+)/m', $body, $m)) {
+        return !in_array(strtolower(trim($m[1], '\'"')), array('false', '0', 'no', 'off'), TRUE);
+      }
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Bring a capsule's KahunaCart schema up to date (Verify's step).
+ *
+ * KahunaCart never migrates a server database by itself, and its migrations
+ * only go forward, so every task that ends with a Verify (install, restore,
+ * clone, both upgrades, a client's plugin update followed by Verify) applies
+ * them here, as the instance user with the capsule's own credentials. A
+ * failure fails the task: a store on a stale schema answers 500s.
+ */
+function _provision_grav_kahunacart_migrate($site_path, $uri) {
+  if (!_provision_grav_kahunacart_present($site_path, $uri)) {
+    return TRUE;
+  }
+  if (!_provision_grav_cli('plugin', 'kahunacart migrate -n', $site_path)) {
+    return drush_set_error('PROVISION_GRAV_KAHUNACART_MIGRATE',
+      dt('The KahunaCart schema of !uri could not be brought up to date; see the Grav CLI row above.', array('!uri' => $uri)));
+  }
+  drush_log(dt('KahunaCart schema of !uri is up to date.', array('!uri' => $uri)), 'ok');
+  return TRUE;
+}
+
+/**
+ * Make a cloned store sign with a secret of its own.
+ *
+ * KahunaCart keeps its per-site signing secret in its own database
+ * (kahunacart_settings, name security.secret, the empty namespace) and
+ * derives from it the key that seals the payment provider credentials in its
+ * settings files. A clone that kept it would sign links the source honours
+ * and could decrypt, and use, the source's live payment keys. Deleting the
+ * row is the vendor's own rotation: the copy makes a fresh secret on first
+ * use, and its provider keys are entered again before it can take a payment.
+ * Runs in the copy's deploy, on the copy's database; a database without the
+ * table (no store yet) is left alone.
+ */
+function _provision_grav_rotate_store_secret() {
+  $db_name = drush_get_option('db_name', '', 'site');
+  $db_user = drush_get_option('db_user', '', 'site');
+  if ($db_name === '' || $db_user === '' || !function_exists('mysqli_init')) {
+    return TRUE;
+  }
+  $db_port = drush_get_option('db_port', '', 'site');
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+  try {
+    $mysqli = mysqli_init();
+    $mysqli->real_connect(
+      drush_get_option('db_host', 'localhost', 'site'),
+      $db_user,
+      drush_get_option('db_passwd', '', 'site'),
+      $db_name,
+      ((string) $db_port === '') ? 3306 : (int) $db_port
+    );
+    $table = $mysqli->query("SHOW TABLES LIKE 'kahunacart_settings'");
+    if (!$table || $table->num_rows === 0) {
+      $mysqli->close();
+      return TRUE;
+    }
+    $namespaced = $mysqli->query("SHOW COLUMNS FROM kahunacart_settings LIKE 'namespace'");
+    $sql = ($namespaced && $namespaced->num_rows > 0)
+      ? "DELETE FROM kahunacart_settings WHERE name = 'security.secret' AND namespace = ''"
+      : "DELETE FROM kahunacart_settings WHERE name = 'security.secret'";
+    $mysqli->query($sql);
+    $removed = $mysqli->affected_rows;
+    $mysqli->close();
+  }
+  catch (Exception $e) {
+    return drush_set_error('PROVISION_GRAV_STORE_SECRET',
+      dt('Could not rotate the store signing secret of the copy: @error', array('@error' => $e->getMessage())));
+  }
+  drush_log(dt('The copy\'s store signs with a secret of its own (@n source secret removed); its payment provider keys must be entered again before it takes a payment.',
+    array('@n' => $removed)), 'ok');
+  return TRUE;
+}
+
+/**
+ * Blank the licences add-on's response signing secret in a copy's config.
+ *
+ * KahunaCart's licences add-on signs its validate and activate responses with
+ * api.signing_secret, which the merchant's shipped software trusts; empty
+ * means unsigned. A Clone that kept it would sign as the live store. The
+ * site's own config and every host overlay are covered; a line-level edit
+ * inside the top-level api: block, the file's owner and mode kept. Returns
+ * the number of files changed.
+ */
+function _provision_grav_blank_licences_signing_secret($site_path) {
+  $files = array($site_path . '/user/config/plugins/kahunacart-licenses.yaml');
+  // Host overlays: user/env/<host>/ and, where user/env/ does not exist, the
+  // Grav 1.6 shape user/<host>/ that Grav still falls back to.
+  foreach (array('/user/env/*/config/plugins/kahunacart-licenses.yaml', '/user/*/config/plugins/kahunacart-licenses.yaml') as $pattern) {
+    $found = glob($site_path . $pattern);
+    if (is_array($found)) {
+      $files = array_merge($files, $found);
+    }
+  }
+  $changed = 0;
+  foreach (array_unique($files) as $file) {
+    if (is_link($file)) {
+      drush_log(dt('@file is a link, so the copy\'s licence signing secret there was not cleared; replace it with a file of the copy\'s own and rotate the secret.', array('@file' => $file)), 'warning');
+      continue;
+    }
+    if (!is_file($file)) {
+      continue;
+    }
+    $lines = file($file);
+    if ($lines === FALSE) {
+      drush_log(dt('Could not read @file to clear the copy\'s licence signing secret; rotate it on the copy.', array('@file' => $file)), 'warning');
+      continue;
+    }
+    $in_api = FALSE;
+    $done = FALSE;
+    foreach ($lines as $i => $line) {
+      $bare = rtrim($line, "\r\n");
+      if (preg_match('/^api:\s*(#.*)?$/', $bare)) {
+        $in_api = TRUE;
+        continue;
+      }
+      if ($in_api && preg_match('/^\S/', $bare)) {
+        $in_api = FALSE;
+      }
+      if ($in_api && preg_match('/^(\s+signing_secret:)\s*(.*)$/', $bare, $m)) {
+        $value = trim(preg_replace('/\s+#.*$/', '', $m[2]));
+        if ($value !== '' && $value !== "''" && $value !== '""' && $value !== '~' && $value !== 'null') {
+          $lines[$i] = $m[1] . " ''" . substr($line, strlen($bare));
+          $done = TRUE;
+        }
+        break;
+      }
+    }
+    if (!$done) {
+      continue;
+    }
+    if (@file_put_contents($file, implode('', $lines), LOCK_EX) !== FALSE) {
+      $changed++;
+    }
+    else {
+      drush_log(dt('Could not write @file: the copy still signs licence responses with the source\'s secret there; rotate it on the copy.', array('@file' => $file)), 'warning');
+    }
+  }
+  return $changed;
+}
+
+/**
+ * The marker a copy of a store carries: <capsule>/.boa-copy, naming the
+ * site it was copied from.
+ *
+ * A store's worker sends its mail and runs its renewals on every scheduler
+ * tick, paused or not. A copy (a Clone, an Upgrade a copy) shares the
+ * source's customers and subscriptions, so BOA's scheduler leaves its
+ * worker alone while the marker is there: a staging copy must not mail or
+ * bill the live store's customers, and an upgraded copy must not run the
+ * same renewals as the source it will replace. Cutover removes the marker
+ * from the copy that takes over; an owner releases a copy that should run
+ * with the control file the scheduler documents. A dotfile at the capsule
+ * root: nginx never serves it, and it travels with the capsule on Rename and
+ * in its backups.
+ */
+function _provision_grav_copy_source($site_path, $fallback) {
+  // The live store a copy stands in for: a copy of a copy keeps the name its
+  // source's marker carries (the store both duplicate), so Cutover lifts the
+  // hold only when it retires that store.
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    $name = strtolower(trim((string) @file_get_contents($marker)));
+    if (preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $name)) {
+      return $name;
+    }
+  }
+  return (string) $fallback;
+}
+
+function _provision_grav_copy_marker($site_path) {
+  return $site_path . '/.boa-copy';
+}
+
+function _provision_grav_mark_copy($site_path, $source_uri, $mtime = NULL) {
+  $marker = _provision_grav_copy_marker($site_path);
+  provision_file()->file_put_contents($marker, (string) $source_uri . "\n")
+    ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
+    ->fail('Could not mark the copy at @path');
+  // A hold put back keeps its old time: BOA counts a release file only when
+  // it is newer than the marker, so a release given before stays given.
+  if ($mtime !== NULL && $mtime !== FALSE && is_file($marker)) {
+    @touch($marker, (int) $mtime);
+  }
+}
+
+function _provision_grav_unmark_copy($site_path) {
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    provision_file()->unlink($marker)
+      ->succeed('Removed the copy marker @path: this site is the live store now')
+      ->fail('Could not remove the copy marker @path');
+  }
+}
+
+/**
  * Refuse a copy of a site with a database onto the 'none' server.
  *
  * The copy of a shop needs a database to hold the shop: on the 'none' server
@@ -475,6 +793,38 @@ function _provision_grav_copy_db_server_valid($what) {
       array('@what' => $what, '@server' => $new_db_server)));
   }
   return TRUE;
+}
+
+/**
+ * Whether this site runs a KahunaCart store with no database on record.
+ *
+ * Given no database server, KahunaCart keeps its store in its own SQLite file
+ * inside the capsule (its shipped default). The copy safeguards (a signing
+ * secret of its own, a paused store, a held scheduler) act on a database on
+ * record, and BOA's scheduler runs only such a store, so a store on its own
+ * file gets none of them.
+ */
+function _provision_grav_file_store() {
+  if (_provision_grav_has_db()) {
+    return FALSE;
+  }
+  return _provision_grav_kahunacart_present(d()->site_path, d()->uri);
+}
+
+/**
+ * The refusal of a Clone of a store with no database on record.
+ *
+ * The copy would carry the source's signing secret in the copied SQLite file,
+ * and with it the key that seals the source's payment provider credentials:
+ * a staging copy could use the live store's payment keys.
+ */
+function _provision_grav_refuse_file_store($what) {
+  if (!_provision_grav_file_store()) {
+    return TRUE;
+  }
+  return drush_set_error('PROVISION_GRAV_FILE_STORE',
+    dt('This Grav site runs a KahunaCart store on its own SQLite file, with no database server: its @what would sign with the source store\'s secret and could use its payment keys. A shop belongs on a site created on a database server.',
+    array('@what' => $what)));
 }
 
 /**
@@ -529,6 +879,17 @@ function provision_grav_find_sites($root = NULL) {
         continue;
       }
       $sites[$uri] = $uri;
+    }
+  }
+  // A copy is unpacked as sites/.<uri>.copy and moved in only once it is
+  // held; a task that died before the move leaves it there. The glob above
+  // never sees a hidden name, so it is named here to get it removed: its
+  // drushrc.php names the SOURCE store's database.
+  $unfinished = glob($root . '/sites/.*.copy/system/defines.php');
+  if (is_array($unfinished)) {
+    foreach ($unfinished as $marker) {
+      drush_log(dt('@path is a copy whose task never finished (it names its source\'s database); it is not a site. Remove it.',
+        array('@path' => dirname(dirname($marker)))), 'warning');
     }
   }
   return $sites;
@@ -985,6 +1346,14 @@ function _provision_grav_secure_secrets($site_path) {
   if (is_file($drushrc)) {
     provision_file()->chmod($drushrc, 0440);
   }
+  // Premium licence keys: written by the admin's licence manager (FPM) and
+  // read by GPM (the CLI owner), so group-rw for FPM like the account files,
+  // no world bits.
+  $licenses = $site_path . '/user/data/licenses.yaml';
+  if (is_file($licenses) && !is_link($licenses)) {
+    provision_file()->chgrp($licenses, provision_path_web_group($licenses, $web_group));
+    provision_file()->chmod($licenses, 0660);
+  }
 }
 
 /**
@@ -1031,6 +1400,21 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
     }
   }
   $fs->_leave($cwd);
+  // Premium licence keys (see above), judged where the file really is.
+  $licenses_dir = $site_path . '/user/data';
+  if (is_dir($licenses_dir) && is_file($licenses_dir . '/licenses.yaml')) {
+    $place = _provision_drupal_store_place($licenses_dir, $site_path);
+    if ($place !== FALSE && $place['dir'] !== NULL && !$place['rest'] && !$place['link']) {
+      if ($fs->_enter($place['dir'])) {
+        clearstatcache();
+        if (is_file('licenses.yaml') && !is_link('licenses.yaml')) {
+          $fs->_lchgrp_here('licenses.yaml', provision_path_web_group($licenses_dir . '/licenses.yaml', $web_group));
+          $fs->_chmod_here_nofollow(array('licenses.yaml'), 0660);
+        }
+      }
+      $fs->_leave($cwd);
+    }
+  }
 }
 
 /**
@@ -1110,9 +1494,25 @@ function _provision_grav_cli($tool, $args, $site_path = NULL) {
     drush_log(dt('@home/.grav exists -- GPM would silently prefer symlink-from-local-checkout mode; remove it if package operations misbehave.',
       array('@home' => $home)), 'warning');
   }
+  // A capsule with a database: its own credentials (read from its own
+  // drushrc.php, so a copy never runs with the source's) reach the child as
+  // config overrides for this one call, and are taken away again after it.
+  $creds = _provision_grav_drushrc_creds($site_path . '/drushrc.php');
+  $env = _provision_grav_db_overrides(
+    isset($creds['db_name']) ? $creds['db_name'] : '',
+    isset($creds['db_user']) ? $creds['db_user'] : '',
+    isset($creds['db_passwd']) ? $creds['db_passwd'] : '',
+    isset($creds['db_host']) ? $creds['db_host'] : '',
+    isset($creds['db_port']) ? $creds['db_port'] : '');
+  foreach ($env as $name => $value) {
+    putenv($name . '=' . $value);
+  }
   $old_umask = umask(02);
   $result = drush_shell_cd_and_exec($site_path, $bin . ' bin/' . $tool . ' ' . $args);
   umask($old_umask);
+  foreach (array_keys($env) as $name) {
+    putenv($name);
+  }
   if (!$result) {
     $output = implode("\n", drush_shell_exec_output());
     drush_log(dt('Grav CLI failed: bin/!tool !args -- !output',
@@ -1855,6 +2255,14 @@ function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option 
   }
 
   $capsule = $target_root . '/sites/' . $new_uri;
+  // The copy is unpacked as sites/.<uri>.copy and moved in only once it is
+  // held: a deploy that died before the move leaves it there.
+  $unpacked = $target_root . '/sites/.' . $new_uri . '.copy';
+  if (is_dir($unpacked) && !is_link($unpacked)) {
+    if (_provision_grav_remove_tree_or_park($unpacked, $new_uri . '-copy-unpacked') && !is_dir($unpacked)) {
+      drush_log(dt('Removed the unpacked copy at @path.', array('@path' => $unpacked)), 'ok');
+    }
+  }
   if (is_dir($capsule) && !is_link($capsule)) {
     // The helper reports its own outcome (deleted silently, parked in one
     // row, or a cleanup error); only a tree that is really gone is "removed".

@@ -187,6 +187,27 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
+  // The copy takes over only from the store it was made from: the hold is
+  // lifted when leg 1 retired exactly that site (the marker names it), and
+  // before the rename leg, whose own safety backup would otherwise carry the
+  // hold onto the live store's Backups tab. It stays lifted when the rename
+  // does not complete: that store is gone, this copy is the only one left. A
+  // cutover that retires another site, or claims a free domain, leaves the
+  // source running its own worker: the copy stays held until the account
+  // releases it.
+  $copy_marker = _provision_grav_copy_marker(d()->site_path);
+  $copy_held = is_file($copy_marker) && !is_link($copy_marker);
+  $copy_source = $copy_held ? trim((string) @file_get_contents($copy_marker)) : '';
+  $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
+  $copy_lift = $copy_held && $copy_source !== '' && $retired !== '' && strtolower($copy_source) === $retired;
+  if ($copy_lift) {
+    _provision_grav_unmark_copy(d()->site_path);
+  }
+  elseif ($copy_held) {
+    drush_log(dt('[cutover] The copy stays held: it was made from !src, which this cutover does not retire, and that store still runs its own worker. Release the copy with ~/static/control/kahunacart-run.!domain.info once !src no longer takes orders.',
+      array('!src' => $copy_source !== '' ? $copy_source : dt('an unnamed source'), '!domain' => $target_domain)), 'warning');
+  }
+
   // Leg 2 — rename this site to the freed domain via a REAL grav_rename task,
   // so the rename leg plus the frontend post-task bookkeeping (node retitle,
   // context re-registration, Encryption auto-disable, follow-up verify) all
@@ -203,6 +224,9 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     || !provision_file()->exists($new_alias_file)->status()
     || provision_file()->exists($old_alias_file)->status()
     || ($vhost_scheme_ok && !provision_file()->exists($vhostd_path . '/' . $target_domain)->status())) {
+    // The hold is not put back: the store it was held for is retired, so
+    // this copy is the only one left, and a re-run (a plain rename by then,
+    // with no source to match) could never lift it again.
     return drush_set_error('PROVISION_GRAV_CUTOVER_RENAME_FAILED',
       dt('The rename to !domain did not complete. The retired source is preserved in its pre-delete backup; if the rename rolled back, this site still answers at !old. Fix the cause from the rename task log, then re-run cutover — with !domain free it degrades to a plain rename (a stale leftover !domain alias from a rollback is detected and overwritten).',
       array('!domain' => $target_domain, '!old' => ltrim($old_name, '@'))));
@@ -210,6 +234,10 @@ function drush_provision_grav_cutover($target_domain = NULL) {
 
   drush_log(dt('[cutover] !old now answers at !domain',
     array('!old' => ltrim($old_name, '@'), '!domain' => $target_domain)), 'ok');
+  // The copy took over from its source: its store worker runs from now on.
+  if ($copy_lift) {
+    _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
+  }
   drush_log(dt('[cutover] Encryption is OFF for !domain (the rename disables it — keys are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!domain' => $target_domain)), 'advisory');
 }

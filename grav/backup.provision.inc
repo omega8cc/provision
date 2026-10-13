@@ -39,6 +39,19 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
     drush_set_error('PROVISION_BACKUP_PATH_NOT_FOUND');
   }
 
+  // A site on a database server with no database on record has nothing to
+  // dump: the archive is files-only whatever mode was asked for (a dump
+  // with empty credentials would fail the whole backup). The ctrl file
+  // this backup was asked through is consumed here, as the resolver's own
+  // read would have.
+  if (_provision_grav_db_unrecorded() && !defined('SELECTED_BACKUP_MODE')) {
+    define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
+    if (defined('AEGIR_BACKUP_MODE_CTRL') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+      @unlink(AEGIR_BACKUP_MODE_CTRL);
+    }
+    drush_log(dt('This Grav site is on a database server but no database is on record for it; the archive is files-only.'), 'warning');
+  }
+
   // Latch the mode up front so both filename branches behave identically
   // (the once-only resolver; never re-read the ctrl file).
   $backup_mode = provision_backup_mode_resolve();
