@@ -340,6 +340,7 @@ function _provision_drupal_create_directories($url = NULL) {
   );
 
   $chgrp = array();
+  $wide = $narrowed = array();
   // special case: platform. do not handle files dir
   if ($url != 'all') {
     $mkdir["sites/$url/files"]            = 02775;
@@ -437,9 +438,12 @@ function _provision_drupal_create_directories($url = NULL) {
     // Private files, and the CiviCRM stores nginx denies, keep no world bits
     // once the account runs in its own web group (BOA's wg-<account>): the
     // account's pools reach them through it, and nginx never serves them
-    // directly.
+    // directly. Which of them are narrowed is kept: one that really lies
+    // outside the account's tree is widened back below.
     if (strpos((string) d('@server_master')->web_group, 'wg-') === 0) {
+      $wide = $mkdir;
       $mkdir = _provision_drupal_web_group_private($mkdir);
+      $narrowed = array_diff_assoc($mkdir, $wide);
     }
   }
 
@@ -523,8 +527,13 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
+  // Each path takes its group where it really is (the place judged, or the
+  // path): one outside the account's tree keeps the shared web group rather
+  // than the account's own (provision_path_web_group()).
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
+      $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
+      $group = provision_path_web_group(($at === NULL) ? $path : $at, $group);
       if (!isset($places[$path])) {
         provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
@@ -541,6 +550,15 @@ function _provision_drupal_create_directories($url = NULL) {
   // Apply chmod AFTER chgrp because chgrp strips special permissions.
   foreach ($mkdir as $path => $perm) {
     if ($perm !== FALSE) {
+      // A mode narrowed above only because the account runs in its own web
+      // group stays wide where the path really lies outside the account's
+      // tree, as the group it takes there does.
+      if (isset($narrowed[$path]) && $perm === $narrowed[$path]) {
+        $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
+        if (strpos((string) provision_path_web_group(($at === NULL) ? $path : $at), 'wg-') !== 0) {
+          $perm = $wide[$path];
+        }
+      }
       if (isset($places[$path])) {
         $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $perm, !in_array($path, $chmod_not_recursive), $path);
       }
@@ -623,8 +641,10 @@ function _provision_drupal_store_place($path, $site_dir) {
  * platform root, no link on its way from sites/ down, or when it lies
  * strictly below this account's own files store
  * (_provision_drupal_in_own_store()). A path outside the site dir is the
- * site's own by the store rule only. The platform root itself is taken as
- * given, as the account's own directory is.
+ * site's own by the store rule only. The platform root counts as the site's
+ * place only where it resolves inside the account's home or the trees BOA
+ * shares between accounts (_provision_drupal_platform_root_ok()): a root a
+ * link above it re-points elsewhere leaves the store rule alone to judge.
  *
  * The caller acts on the physical directory judged and nowhere else: it
  * enters it for real and makes what is missing below it by name (see
@@ -715,10 +735,11 @@ function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
     return array('out' => array('path' => ($link === NULL) ? $last : $link, 'target' => ''), 'dir' => NULL, 'rest' => $rest, 'link' => FALSE);
   }
   // Where the deepest part stands with no link on its way: the platform
-  // root as resolved, then the names.
+  // root as resolved, then the names. A root that resolves outside the
+  // account's home and the shared trees stands for no place of the site.
   $root = realpath($base);
   $here = NULL;
-  if ($names && $root !== FALSE) {
+  if ($names && $root !== FALSE && _provision_drupal_platform_root_ok($root, $aegir_root)) {
     $here = ($last === $base) ? $root : rtrim($root, '/') . '/' . substr($last, strlen($pre));
   }
   if ($target === $here || _provision_drupal_in_own_store($target, $aegir_root)) {
@@ -749,7 +770,8 @@ function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
  * files store is left as it is, with a STORE/SKIP warning, and one that is
  * itself a link is left alone, as chgrp() leaves it. Each other tree is
  * walked from inside the directory judged, every directory below it entered
- * for real (Provision_FileSystem::chgrp_in()).
+ * for real (Provision_FileSystem::chgrp_in()), and takes the group
+ * provision_path_web_group() gives the directory judged.
  *
  * @param $extract_path
  *   The extracted site dir, <platform root>/sites/<uri> or its .restore
@@ -784,7 +806,8 @@ function _provision_drupal_deploy_chgrp($extract_path) {
     }
     // A tree that is not there gets nothing, and fails as before.
     $dir = $place['rest'] ? NULL : $place['dir'];
-    provision_file()->chgrp_in($dir, $group, TRUE, $extract_path . '/' . $tree)
+    // Where it really lies outside the account's tree, the shared web group.
+    provision_file()->chgrp_in($dir, provision_path_web_group(($dir === NULL) ? $extract_path . '/' . $tree : $dir, $group), TRUE, $extract_path . '/' . $tree)
       ->succeed('Changed group ownership of ' . $what . ' in <code>@path</code> to @gid')
       ->fail('Could not change group ownership of ' . $what . ' in <code>@path</code> to @gid');
   }
@@ -913,6 +936,39 @@ function _provision_drupal_in_own_store($res, $aegir_root) {
     return FALSE;
   }
   return $top !== '' && $top[0] !== '.';
+}
+
+/**
+ * Whether a resolved platform root lies where a platform of this account
+ * may: inside the account's home, as given or resolved, or in the trees BOA
+ * shares between accounts, as BOA's nightly judges a platform before its
+ * site steps. A root re-pointed by a link above it, into another account's
+ * tree say, does not.
+ *
+ * @param $root
+ *   The platform root, resolved (realpath()).
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ */
+function _provision_drupal_platform_root_ok($root, $aegir_root) {
+  $all = '/data/all/';
+  $disk_all = '/data/disk/all/';
+  $anchors = array($all, $disk_all);
+  $home = rtrim((string) $aegir_root, '/');
+  if ($home !== '') {
+    $anchors[] = $home . '/';
+    $real = realpath($home);
+    if ($real !== FALSE && rtrim($real, '/') !== '') {
+      $anchors[] = rtrim($real, '/') . '/';
+    }
+  }
+  $root = rtrim((string) $root, '/') . '/';
+  foreach ($anchors as $anchor) {
+    if (strpos($root, $anchor) === 0) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 /**
@@ -1311,7 +1367,12 @@ function _provision_drupal_htaccess_dir($dir) {
  * must name it) and the file is read, removed and written there by name, so
  * a link put on the way since $at was judged is never followed. A .htaccess
  * that is itself a link is left as it is. The core's file_create_htaccess()
- * writes ./.htaccess.
+ * makes the file in a directory of the backend's own
+ * (_provision_drupal_htaccess_made()) before the old one is removed; it is
+ * then created here with what the core wrote and its mode
+ * (Provision_FileSystem::_create_here()), which fails on any name there, a
+ * link planted since the removal included. Without such a directory the old
+ * file stays, with a warning.
  *
  * @param $at
  *   The physical path of the directory (_provision_drupal_htaccess_dir()).
@@ -1328,16 +1389,69 @@ function _provision_drupal_htaccess_here($at, $major) {
     // Check for the string which was added to the recommended .htaccess file
     // in the latest security update.
     if (!file_exists('.htaccess') || !($contents = @file_get_contents('.htaccess')) || strpos($contents, 'Drupal_Security_Do_Not_Remove_See_SA_2013_003') === FALSE) {
-      // Aegir specific
-      @unlink('.htaccess');
-      file_create_htaccess('.', ($major == 7) ? FALSE : NULL);
-      $done = TRUE;
+      // What the core writes is made first: the old file stays until the new
+      // one can take its place.
+      $made = _provision_drupal_htaccess_made($major);
+      if ($made === FALSE) {
+        drush_log(dt('Could not update @path: no usable temporary directory', array('@path' => $at . '/.htaccess')), 'warning');
+      }
+      elseif (@chdir($at) && getcwd() === $at && !is_link('.htaccess')) {
+        // Aegir specific
+        @unlink('.htaccess');
+        // A name still there (not removable) is left, as the core leaves a
+        // file it finds.
+        if ($made !== NULL && !file_exists('.htaccess') && !is_link('.htaccess') && !provision_file()->_create_here('.htaccess', $made['lines'], $made['mode'])) {
+          drush_log(dt('Could not write @path', array('@path' => $at . '/.htaccess')), 'warning');
+        }
+        $done = TRUE;
+      }
     }
   }
   if ($cwd !== FALSE) {
     chdir($cwd);
   }
   return $done;
+}
+
+/**
+ * What the core's file_create_htaccess() writes for a directory with no
+ * .htaccess, made in a new 0700 directory of the backend's own: an array of
+ * 'lines' and 'mode', NULL when the core writes nothing (BOA's own cores
+ * under Drush), or FALSE when that directory cannot be made, entered and
+ * judged the backend's alone.
+ *
+ * The core writes and changes the mode by path, so in a site's directory a
+ * link planted at the name after the update removed the old file is
+ * followed. The new directory is entered for real and checked (this user's,
+ * nothing for group or other) before the core runs there on '.'; it is left
+ * by path and removed.
+ *
+ * @param $major
+ *   The Drupal major version, 6 or 7.
+ */
+function _provision_drupal_htaccess_made($major) {
+  $base = realpath(sys_get_temp_dir());
+  if ($base === FALSE) {
+    return FALSE;
+  }
+  $tmp = rtrim($base, '/') . '/provision-htaccess-' . getmypid() . '-' . mt_rand();
+  if (!@mkdir($tmp, 0700)) {
+    return FALSE;
+  }
+  $made = FALSE;
+  clearstatcache();
+  if (@chdir($tmp) && getcwd() === $tmp && fileowner('.') === posix_geteuid() && !(fileperms('.') & 0077)) {
+    $made = NULL;
+    file_create_htaccess('.', ($major == 7) ? FALSE : NULL);
+    clearstatcache();
+    if (is_file('.htaccess') && !is_link('.htaccess') && ($lines = @file_get_contents('.htaccess')) !== FALSE) {
+      $made = array('lines' => $lines, 'mode' => fileperms('.htaccess') & 0666);
+    }
+    @unlink('.htaccess');
+  }
+  @chdir($base);
+  @rmdir($tmp);
+  return $made;
 }
 
 /**

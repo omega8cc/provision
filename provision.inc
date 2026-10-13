@@ -3058,6 +3058,219 @@ function provision_posix_groupname($group) {
 }
 
 /**
+ * The group to give a path of a site: $group, or the box's shared web group
+ * (_provision_default_web_group(), www-data on BOA) where $group is an
+ * account's own web group (BOA's wg-<account>) and the path really lies
+ * outside the account's own tree.
+ *
+ * The account's own web group goes when the account returns to the shared
+ * one, and that return walks the account's own tree only: a path elsewhere
+ * (a site on the shared /data/all trees, or in another account's tree) that
+ * took the group would keep its number with no group behind it. Such a path
+ * keeps the shared web group, and a caller that picks a mode only because
+ * the group is an account's own web group keys that mode on this answer, so
+ * the path keeps the modes the shared group gives it as well.
+ *
+ * Inside is where the path really is (realpath(); for a path not there yet,
+ * its deepest part that exists, then the names below it) at or below the
+ * account's home (aegir_root, resolved), or at or below the account's store
+ * on attached storage (_provision_path_web_group_store()). A path that
+ * cannot be resolved is outside. Any other group is returned as it is.
+ *
+ * @param $path
+ *   The path, relative to the working directory or absolute.
+ * @param $group
+ *   The group the caller would give; NULL for the server's web_group.
+ *
+ * @return
+ *   The group to give the path.
+ */
+function provision_path_web_group($path, $group = NULL) {
+  if ($group === NULL) {
+    $group = d('@server_master')->web_group;
+  }
+  if (strpos((string) $group, 'wg-') !== 0) {
+    return $group;
+  }
+  $real = _provision_path_web_group_real($path);
+  if ($real !== FALSE) {
+    $aegir_root = (string) d('@server_master')->aegir_root;
+    $home = ($aegir_root === '') ? FALSE : realpath($aegir_root);
+    if ($home !== FALSE && _provision_path_web_group_below($real, $home)) {
+      return $group;
+    }
+    $store = _provision_path_web_group_store($aegir_root);
+    if ($store !== '' && _provision_path_web_group_below($real, $store)) {
+      return $group;
+    }
+  }
+  $shared = _provision_default_web_group();
+  if (empty($shared) || strpos((string) $shared, 'wg-') === 0) {
+    // A box with no shared web group: the caller's group, as before.
+    return $group;
+  }
+  return $shared;
+}
+
+/**
+ * Where a path really is: realpath() of the path, or of its deepest part
+ * that exists with the names below it added, FALSE when that cannot be
+ * resolved (a dangling link on the way, a loop) or a missing name is "..".
+ */
+function _provision_path_web_group_real($path) {
+  $path = (string) $path;
+  $abs = (strpos($path, '/') === 0);
+  $names = array();
+  foreach (explode('/', $path) as $name) {
+    if ($name !== '' && $name !== '.') {
+      $names[] = $name;
+    }
+  }
+  $rest = array();
+  // The realpath cache too: a link re-pointed since this process last
+  // resolved it must be judged where it leads now.
+  clearstatcache(TRUE);
+  while (TRUE) {
+    $cur = ($abs ? '/' : '') . implode('/', $names);
+    if ($cur === '') {
+      $cur = '.';
+    }
+    if ($cur === '/' || $cur === '.' || file_exists($cur) || is_link($cur)) {
+      break;
+    }
+    $name = array_pop($names);
+    if ($name === '..') {
+      return FALSE;
+    }
+    array_unshift($rest, $name);
+  }
+  $real = realpath($cur);
+  if ($real === FALSE) {
+    return FALSE;
+  }
+  if ($rest) {
+    $real = rtrim($real, '/') . '/' . implode('/', $rest);
+  }
+  return $real;
+}
+
+/**
+ * Whether the resolved path $real is $top or lies below it.
+ */
+function _provision_path_web_group_below($real, $top) {
+  $top = rtrim((string) $top, '/');
+  return $real === $top || strpos($real, $top . '/') === 0;
+}
+
+/**
+ * The resolved path of an account's store on attached storage, as the web
+ * group conversion takes it: <mount>/files/<account>/static/files, where
+ * <mount> is the one real mount point right below /mnt
+ * (_provision_path_web_group_mnt()) with no directory named files or static
+ * in it, and the store a real directory reached with no link on the way
+ * below the mount point (its real path is the mount point's own
+ * files/<account>/static/files, as BOA's autosymlink takes the store) and
+ * owned by root or by the account (migratefs keeps a moved store's owner,
+ * root's for a store BOA made in the account's home). Never the
+ * tenant-writable link at ~/static/files. '' for the master, or when there
+ * is none.
+ *
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ */
+function _provision_path_web_group_store($aegir_root) {
+  if (!preg_match('#/data/disk/([a-z0-9][a-z0-9-]*)$#', rtrim((string) $aegir_root, '/'), $match)) {
+    return '';
+  }
+  $acct = $match[1];
+  $mnt = _provision_path_web_group_mnt();
+  if ($mnt === '' || strpos($mnt, '/files/') !== FALSE || strpos($mnt, '/static/') !== FALSE) {
+    return '';
+  }
+  $store = $mnt . '/files/' . $acct . '/static/files';
+  clearstatcache(TRUE);
+  if (!is_dir($store) || is_link($store)) {
+    return '';
+  }
+  $real = realpath($store);
+  $root = realpath($mnt);
+  if ($real === FALSE || $root === FALSE || $real !== $root . '/files/' . $acct . '/static/files') {
+    return '';
+  }
+  $owner = fileowner($store);
+  if ($owner === FALSE) {
+    return '';
+  }
+  if ($owner !== 0 && (!is_array(posix_getpwuid($owner)) || provision_posix_username($owner) !== $acct)) {
+    return '';
+  }
+  return $real;
+}
+
+/**
+ * The one real mount point right below /mnt, as BOA's own tools take it
+ * (naming-agnostic): a directory there listed as a mount point, itself or
+ * where it leads (mountpoint -q follows a final link), or on another device
+ * than /mnt; '' when there is none or more than one. Read once a process
+ * for each mount table and directory.
+ *
+ * @param $mounts
+ *   The mount table to read; NULL for /proc/self/mounts.
+ * @param $mnt
+ *   The directory whose children are looked at; NULL for /mnt.
+ */
+function _provision_path_web_group_mnt($mounts = NULL, $mnt = NULL) {
+  static $found = array();
+  if ($mounts === NULL) {
+    $mounts = '/proc/self/mounts';
+  }
+  if ($mnt === NULL) {
+    $mnt = '/mnt';
+  }
+  $key = $mounts . "\n" . $mnt;
+  if (isset($found[$key])) {
+    return $found[$key];
+  }
+  $found[$key] = '';
+  $base = @lstat($mnt);
+  if ($base === FALSE) {
+    return '';
+  }
+  $mounted = array();
+  $table = @file($mounts);
+  if (is_array($table)) {
+    foreach ($table as $line) {
+      $fields = explode(' ', $line);
+      if (isset($fields[1])) {
+        // The table writes a space, a tab, a newline and a backslash in a
+        // mount point as an octal escape.
+        $point = preg_replace_callback('#\\\\([0-7]{3})#', function ($m) {
+          return chr(octdec($m[1]));
+        }, $fields[1]);
+        $mounted[$point] = TRUE;
+      }
+    }
+  }
+  $dirs = glob($mnt . '/*');
+  $hits = array();
+  foreach (is_array($dirs) ? $dirs : array() as $dir) {
+    if (!is_dir($dir)) {
+      continue;
+    }
+    $stat = @lstat($dir);
+    $real = realpath($dir);
+    if (isset($mounted[$dir]) || ($real !== FALSE && isset($mounted[$real]))
+      || ($stat !== FALSE && $stat['dev'] != $base['dev'])) {
+      $hits[] = $dir;
+    }
+  }
+  if (count($hits) === 1) {
+    $found[$key] = $hits[0];
+  }
+  return $found[$key];
+}
+
+/**
  * Generate a random alphanumeric password.
  *
  * This is a copy of Drupal core's user_password() function. We keep it

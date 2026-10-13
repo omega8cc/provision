@@ -194,6 +194,11 @@ class Provision_Config {
    */
   function write() {
     $filename = $this->filename();
+    // A file of a site's own directory is written where that directory
+    // really is (_write_in_site_dir()).
+    if ($filename && ($site_dir = $this->_site_dir_of($filename)) !== NULL) {
+      return $this->_write_in_site_dir($filename, $site_dir);
+    }
     // Make directory structure if it does not exist.
     if ($filename && !provision_file()->exists(dirname($filename))->status()) {
       provision_file()->mkdir(dirname($filename))
@@ -224,14 +229,161 @@ class Provision_Config {
             ->succeed('Changed permissions of @path to @perm')
             ->fail('Could not change permissions of @path to @perm');
         }
+        // Where the file really lies outside the account's tree, the shared
+        // web group rather than the account's own.
         if (!is_null($this->group)) {
-          provision_file()->chgrp($filename, $this->group)
+          provision_file()->chgrp($filename, provision_path_web_group($filename, $this->group))
             ->succeed('Change group ownership of @path to @gid')
             ->fail('Could not change group ownership of @path to @gid');
         }
       }
     }
     return $status;
+  }
+
+  /**
+   * The site directory $filename lies in, directly (settings.php,
+   * drushrc.php), when this is a site's configuration and the site dir's
+   * place rule is loaded; NULL otherwise.
+   */
+  function _site_dir_of($filename) {
+    if (!function_exists('_provision_drupal_store_place') || !is_object($this->context) || $this->context->type !== 'site') {
+      return NULL;
+    }
+    $site_dir = rtrim((string) $this->context->site_path, '/');
+    if ($site_dir === '' || rtrim(dirname($filename), '/') !== $site_dir) {
+      return NULL;
+    }
+    return $site_dir;
+  }
+
+  /**
+   * Write a file of a site's own directory where that directory really is.
+   *
+   * The account owns the names in the site dir, and the site dir itself can
+   * be a link it planted, so the directory is judged once by the place rule
+   * (_provision_drupal_store_place(), which logs a STORE/SKIP warning for one
+   * that leads out of the account's own places), entered for real, and the
+   * contents go into a temporary file made there by
+   * Provision_FileSystem::_create_here() with the file's mode, given its
+   * group by name and renamed over the name. Neither a link planted at the
+   * name (rename() replaces the link itself) nor one at the site dir is
+   * followed, and a hard link at the name keeps its other file as it was.
+   * With no mode set, an existing file's mode is kept, as writing it in
+   * place kept it.
+   */
+  function _write_in_site_dir($filename, $site_dir) {
+    $fs = provision_file();
+    $name = basename($filename);
+    $label = empty($this->description) ? $filename : $this->description . ' (' . $filename . ')';
+    $place = _provision_drupal_store_place($site_dir, $site_dir);
+    if ($place === FALSE || $place['dir'] === NULL) {
+      drush_log(dt('Could not generate in write(): @label: @dir is not the site\'s own', array('@label' => $label, '@dir' => $site_dir)), 'warning');
+      return FALSE;
+    }
+    $dir = $place['dir'];
+    if ($place['rest']) {
+      if (!$fs->mkdir_in($place['dir'], $place['rest'], $site_dir)->succeed('Created directory @path.')->fail('Could not create directory @path.')->status()) {
+        return FALSE;
+      }
+      $dir .= '/' . implode('/', $place['rest']);
+    }
+    $this->process();
+    $template = $this->load_template();
+    if (!$template) {
+      return FALSE;
+    }
+    $contents = $this->render_template($template, $this->data);
+    $cwd = getcwd();
+    $status = FALSE;
+    if ($fs->_enter($dir)) {
+      clearstatcache();
+      if (!is_null($this->mode)) {
+        $mode = $this->mode;
+      }
+      elseif (is_file($name) && !is_link($name)) {
+        $mode = fileperms($name) & 07777;
+      }
+      else {
+        $mode = 0666 & ~umask();
+      }
+      $tmp = '.' . $name . '.provision-' . getmypid() . '-' . mt_rand();
+      $status = $fs->_create_here($tmp, $contents, $mode);
+      if ($status && !is_null($this->group)) {
+        // Where the file really lies outside the account's tree, the shared
+        // web group rather than the account's own.
+        $group = provision_path_web_group($filename, $this->group);
+        if (@lchgrp($tmp, $group)) {
+          drush_log(dt('Change group ownership of @path to @gid', array('@path' => $filename, '@gid' => $group)), 'success');
+        }
+        else {
+          drush_log(dt('Could not change group ownership of @path to @gid', array('@path' => $filename, '@gid' => $group)), 'warning');
+        }
+      }
+      $status = $status && @rename($tmp, $name);
+      if (!$status) {
+        @unlink($tmp);
+      }
+    }
+    else {
+      drush_log(dt('@path is not where it was checked', array('@path' => $site_dir)), 'warning');
+    }
+    $fs->_leave($cwd);
+    if ($status) {
+      drush_log(dt('Generated config in write(): @label', array('@label' => $label)), 'success');
+    }
+    else {
+      drush_log(dt('Could not generate in write(): @label', array('@label' => $label)), 'warning');
+    }
+    return $status;
+  }
+
+  /**
+   * The site's local.settings.php, handled where the site dir really is (as
+   * _write_in_site_dir() writes): a blank one created when no name is there
+   * and the option asks for it, then the group (the shared web group where
+   * the file really lies outside the account's tree) and the mode
+   * $this->mode | 0440, by name in the directory entered; a link at the name
+   * is left alone.
+   *
+   * @param $description
+   *   The file's description, for the log.
+   */
+  function _local_settings_here($description) {
+    $site_dir = rtrim((string) $this->site_path, '/');
+    $local = $site_dir . '/local.settings.php';
+    $place = _provision_drupal_store_place($site_dir, $site_dir);
+    if ($place === FALSE || $place['dir'] === NULL || $place['rest']) {
+      return;
+    }
+    $fs = provision_file();
+    $cwd = getcwd();
+    if ($fs->_enter($place['dir'])) {
+      clearstatcache();
+      if (!file_exists('local.settings.php') && !is_link('local.settings.php') && drush_get_option('provision_create_local_settings_file', TRUE)) {
+        if ($fs->_create_here('local.settings.php', "<?php # local settings.php \n", 0666 & ~umask())) {
+          drush_log(dt('Generated blank @desc', array('@desc' => $description)), 'success');
+        }
+        else {
+          drush_log(dt('Could not generate @desc', array('@desc' => $description)), 'warning');
+        }
+      }
+      clearstatcache();
+      if (is_file('local.settings.php') && !is_link('local.settings.php')) {
+        $group = provision_path_web_group($local, $this->group);
+        if (@lchgrp('local.settings.php', $group)) {
+          drush_log(dt('Changed group ownership of <code>@path</code> to @gid', array('@path' => $local, '@gid' => $group)), 'success');
+        }
+        else {
+          drush_log(dt('Could not change group ownership <code>@path</code> to @gid', array('@path' => $local, '@gid' => $group)), 'warning');
+        }
+        $perm = $this->mode | 0440;
+        if ($fs->_chmod_here_nofollow(array('local.settings.php'), $perm)) {
+          drush_log(dt('Changed permissions of <code>@path</code> to @perm', array('@path' => $local, '@perm' => sprintf('%o', $perm))), 'success');
+        }
+      }
+    }
+    $fs->_leave($cwd);
   }
 
   // allow overriding w.r.t locking

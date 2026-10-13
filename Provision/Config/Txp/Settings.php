@@ -41,6 +41,8 @@ class Provision_Config_Txp_Settings extends Provision_Config {
     // is nothing left in the file for another tenant's pool to read.
     $this->cloaked = drush_get_option('provision_db_cloaking', $this->context->service('http')->cloaked_db_creds());
 
+    // write() gives the file this group, or the shared web group where the
+    // file really lies outside the account's tree (provision_path_web_group()).
     $this->group = $this->platform->server->web_group;
   }
 }
