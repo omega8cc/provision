@@ -316,11 +316,54 @@ function _provision_grav_site_exists() {
  * database at all. One created on a MySQL server (a shop) has a database and
  * a login of its own, which every task carries the way the Textpattern layer
  * does. Every database branch in this layer is gated on this test, so a site
- * on the 'none' server behaves exactly as it did before.
+ * on the 'none' server behaves exactly as it did before. The database must
+ * also be on record, in the running context or the site's drushrc.php (read,
+ * never loaded): see _provision_grav_db_unrecorded() for a site that has the
+ * server but not the record.
  */
 function _provision_grav_has_db() {
+  if (!_provision_grav_db_service_real()) {
+    return FALSE;
+  }
+  if (drush_get_option('db_name', '', 'site') !== '') {
+    return TRUE;
+  }
+  $creds = _provision_grav_drushrc_creds(d()->site_path . '/drushrc.php');
+  return !empty($creds['db_name']);
+}
+
+/**
+ * Whether the site's db service is a real one (not the 'none' server).
+ */
+function _provision_grav_db_service_real() {
   $db = d()->service('db');
   return is_object($db) && !($db instanceof Provision_Service_null);
+}
+
+/**
+ * A site on a database server with no database on record.
+ *
+ * A Grav site created on a MySQL server before the Grav tasks carried a
+ * database got one at install, and its first Verify or Backup rewrote
+ * drushrc.php without the credentials. Nothing can find that database again,
+ * so the site is files-only: its safety copies and backups carry no dump, and
+ * the copying tasks, which would make the copy a database it cannot fill,
+ * refuse it.
+ */
+function _provision_grav_db_unrecorded() {
+  return _provision_grav_db_service_real() && !_provision_grav_has_db();
+}
+
+/**
+ * The refusal of a copying task on a site with no database on record.
+ */
+function _provision_grav_refuse_unrecorded($what) {
+  if (!_provision_grav_db_unrecorded()) {
+    return TRUE;
+  }
+  return drush_set_error('PROVISION_GRAV_DB_UNRECORDED',
+    dt('This Grav site is on a database server but no database is on record for it (it was created before Grav tasks carried a database, and its drushrc.php no longer names one), so its @what cannot be built through the database deploy. Move the site to the "none" database server, or put its db_* lines back into drushrc.php, and retry.',
+    array('@what' => $what)));
 }
 
 /**

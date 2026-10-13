@@ -48,6 +48,9 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }
+  if (!_provision_grav_refuse_unrecorded('clone')) {
+    return FALSE;
+  }
   if (!_provision_grav_copy_db_server_valid('clone')) {
     return FALSE;
   }

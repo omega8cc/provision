@@ -52,6 +52,9 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
       dt('No Grav capsule found at !site.', array('!site' => d()->site_path)));
   }
   // A site with a database: its copy needs a database server too.
+  if (!_provision_grav_refuse_unrecorded('copy')) {
+    return FALSE;
+  }
   if (!_provision_grav_copy_db_server_valid('copy')) {
     return FALSE;
   }

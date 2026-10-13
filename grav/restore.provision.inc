@@ -20,6 +20,10 @@ function drush_provision_grav_provision_restore_validate($restore_file = null) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
+  // A database deploy needs a database on record to replace.
+  if (!_provision_grav_refuse_unrecorded('restore')) {
+    return FALSE;
+  }
   // Backup mode ctrl file cleanup: on the serial queue any file present at
   // task start is a dead leftover by definition (same rationale as the
   // Drupal flow); the safety copy below force-defines its own mode.
