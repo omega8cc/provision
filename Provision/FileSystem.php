@@ -798,7 +798,8 @@ class Provision_FileSystem extends Provision_ChainedState {
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
    * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod(), and
-   * only to directories and regular files.
+   * only to directories and to the regular files of the user this runs as
+   * (another owner's file is passed over without a warning).
    * With $filearg the files get it instead of $arg (a chmod with one mode
    * for directories and another for files); with $arg NULL as well, the
    * directories are left as they are.
@@ -835,8 +836,13 @@ class Provision_FileSystem extends Provision_ChainedState {
           $status = lchgrp($name, $arg) && $status;
         }
         elseif ($func == 'chmod') {
-          // Regular files only: a FIFO, socket or device keeps its mode.
-          if (is_file($name)) {
+          // Regular files of the user this runs as only: a FIFO, socket or
+          // device keeps its mode, and so, without a warning, does a file of
+          // another owner (the web server's own files in a site's writable
+          // dirs), as chmod() by path failed on it quietly; root's site
+          // permissions fix sets those.
+          $st = @lstat($name);
+          if (is_array($st) && ($st['mode'] & 0170000) === 0100000 && $st['uid'] === posix_geteuid()) {
             $files[] = $name;
           }
         }
