@@ -699,12 +699,29 @@ function _provision_grav_create_directories() {
   // release, the nightly or an old archive left, then lay down the writable
   // set.
   _provision_grav_drop_boa_ini_dir($site_path . '/modules', 'boa_site_control.ini');
-  $mkdirs = array();
+
+  // The account owns the names in its capsule, so each writable dir is
+  // judged once where it really is (_provision_drupal_store_place(), the
+  // capsule as the site dir, which logs STORE/SKIP for one that leads out of
+  // the account's own places) and is made, given the group and the modes
+  // from inside the directory entered (Provision_FileSystem's *_in()
+  // helpers). A writable dir that is itself a link is left alone, as chgrp
+  // and the mode walk leave a link. By path only where the place rule is not
+  // loaded.
+  $judge = function_exists('_provision_drupal_store_place');
+  $places = array();
   foreach (_provision_grav_writable_dirs() as $dir) {
-    $mkdirs[] = $site_path . '/' . $dir;
-  }
-  foreach ($mkdirs as $path) {
-    if (!is_dir($path)) {
+    $path = $site_path . '/' . $dir;
+    $places[$dir] = $judge ? _provision_drupal_store_place($path, $site_path) : NULL;
+    if (is_dir($path) || $places[$dir] === FALSE) {
+      continue;
+    }
+    if ($judge) {
+      provision_file()->mkdir_in($places[$dir]['dir'], $places[$dir]['rest'], $path)
+        ->succeed('Created <code>@path</code>')
+        ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
+    }
+    else {
       provision_file()->mkdir($path)
         ->succeed('Created <code>@path</code>')
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
@@ -717,12 +734,19 @@ function _provision_grav_create_directories() {
   // chmod AFTER chgrp (chgrp strips setgid).
   foreach (_provision_grav_writable_dirs() as $dir) {
     $path = $site_path . '/' . $dir;
-    provision_file()->chgrp($path, provision_path_web_group($path, $web_group), TRUE)
-      ->succeed('Changed group ownership of <code>@path</code> to @gid')
-      ->fail('Could not change group ownership of <code>@path</code> to @gid');
+    if (!$judge) {
+      provision_file()->chgrp($path, provision_path_web_group($path, $web_group), TRUE)
+        ->succeed('Changed group ownership of <code>@path</code> to @gid')
+        ->fail('Could not change group ownership of <code>@path</code> to @gid');
+    }
+    elseif ($places[$dir] !== FALSE && !$places[$dir]['link']) {
+      provision_file()->chgrp_in(_provision_drupal_place_path($places[$dir]), provision_path_web_group($path, $web_group), TRUE, $path)
+        ->succeed('Changed group ownership of <code>@path</code> to @gid')
+        ->fail('Could not change group ownership of <code>@path</code> to @gid');
+    }
   }
   foreach (_provision_grav_writable_dirs() as $dir) {
-    _provision_grav_chmod_tree($site_path . '/' . $dir);
+    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path);
   }
 
   // AFTER the generic writable pass (which would re-widen them): the secret
@@ -752,6 +776,13 @@ function _provision_grav_create_directories() {
  */
 function _provision_grav_secure_secrets($site_path) {
   $web_group = d('@server_master')->web_group;
+  // Judged where each really is, the capsule as the site dir, and changed
+  // from inside the directory entered (as _provision_grav_create_directories()
+  // does); by path only where the place rule is not loaded.
+  if (function_exists('_provision_drupal_store_place')) {
+    _provision_grav_secure_secrets_in($site_path, $web_group);
+    return;
+  }
   foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
     $path = $site_path . '/' . $dir;
     if (!is_dir($path)) {
@@ -781,6 +812,49 @@ function _provision_grav_secure_secrets($site_path) {
   if (is_file($drushrc)) {
     provision_file()->chmod($drushrc, 0440);
   }
+}
+
+/**
+ * _provision_grav_secure_secrets() where each secret really is.
+ *
+ * Each secret tree is judged once (_provision_drupal_store_place(), the
+ * capsule as the site dir) and walked from inside it with directories
+ * 02770 and files 0660 (Provision_FileSystem::chmod_in()); the root .env
+ * and drushrc.php are changed by name in the capsule entered for real.
+ * A secret tree or file that is itself a link is left alone.
+ */
+function _provision_grav_secure_secrets_in($site_path, $web_group) {
+  $fs = provision_file();
+  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+    $path = $site_path . '/' . $dir;
+    if (!is_dir($path)) {
+      continue;
+    }
+    $place = _provision_drupal_store_place($path, $site_path);
+    if ($place === FALSE || $place['dir'] === NULL || $place['rest'] || $place['link']) {
+      continue;
+    }
+    $fs->chmod_in($place['dir'], 02770, TRUE, $path, 0660)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+  }
+  $place = _provision_drupal_store_place($site_path, $site_path);
+  if ($place === FALSE || $place['dir'] === NULL || $place['rest']) {
+    return;
+  }
+  $cwd = getcwd();
+  if ($fs->_enter($place['dir'])) {
+    clearstatcache();
+    if (is_file('.env') && !is_link('.env')) {
+      @lchgrp('.env', provision_path_web_group($site_path . '/.env', $web_group));
+      $fs->_chmod_here_nofollow(array('.env'), 0640);
+    }
+    // 0440, matching Provision_Config_Drushrc's own $mode (see above).
+    if (is_file('drushrc.php') && !is_link('drushrc.php')) {
+      $fs->_chmod_here_nofollow(array('drushrc.php'), 0440);
+    }
+  }
+  $fs->_leave($cwd);
 }
 
 /**
@@ -966,8 +1040,21 @@ function provision_grav_system_map() {
  * walks, so 02775 landed on the files too: user content world-executable
  * and setgid after every verify. Links are left alone (chmod follows them).
  */
-function _provision_grav_chmod_tree($path, $log = TRUE) {
+function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
   if (!is_dir($path) || is_link($path)) {
+    return;
+  }
+  // Given the capsule it lies in, the tree is judged once where it really is
+  // and walked from inside it (Provision_FileSystem::chmod_in() with a mode
+  // for the files), so a link on the way is never followed.
+  if ($site_dir !== NULL && function_exists('_provision_drupal_store_place')) {
+    $place = _provision_drupal_store_place($path, $site_dir);
+    if ($place === FALSE || $place['dir'] === NULL || $place['rest'] || $place['link']) {
+      return;
+    }
+    if (provision_file()->chmod_in($place['dir'], 02775, TRUE, $path, 0664)->status() && $log) {
+      drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
+    }
     return;
   }
   $it = new RecursiveIteratorIterator(

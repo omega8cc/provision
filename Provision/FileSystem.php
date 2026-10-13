@@ -692,8 +692,11 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE to descend into subdirectories.
    * @param $path
    *   The path this stands for, for the log.
+   * @param $fileperms
+   *   With $recursive, the mode for the files below instead of $perms (the
+   *   directories keep $perms).
    */
-  function chmod_in($dir, $perms, $recursive, $path) {
+  function chmod_in($dir, $perms, $recursive, $path, $fileperms = NULL) {
     $this->_clear_state();
     $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $perms));
     if ($dir === NULL) {
@@ -710,7 +713,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       return $this;
     }
     if ($recursive) {
-      $done = $this->_here_recursive('chmod', $perms);
+      $done = $this->_here_recursive('chmod', $perms, $fileperms);
     }
     else {
       $done = @chmod('.', $perms);
@@ -756,11 +759,13 @@ class Provision_FileSystem extends Provision_ChainedState {
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
    * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod().
+   * With $filearg the files get it instead of $arg (a chmod with one mode
+   * for directories and another for files).
    *
    * @return
    *   TRUE if every call returned TRUE.
    */
-  function _here_recursive($func, $arg) {
+  function _here_recursive($func, $arg, $filearg = NULL) {
     $here = getcwd();
     if ($here === FALSE) {
       return FALSE;
@@ -780,7 +785,7 @@ class Provision_FileSystem extends Provision_ChainedState {
           continue;
         }
         if (is_dir($name)) {
-          $status = $this->_enter($here . '/' . $name, $name) && $this->_here_recursive($func, $arg) && $status;
+          $status = $this->_enter($here . '/' . $name, $name) && $this->_here_recursive($func, $arg, $filearg) && $status;
           if (!$this->_enter($here)) {
             return FALSE;
           }
@@ -796,7 +801,7 @@ class Provision_FileSystem extends Provision_ChainedState {
         }
       }
       if ($files) {
-        $status = $this->_chmod_here_nofollow($files, $arg) && $status;
+        $status = $this->_chmod_here_nofollow($files, $filearg === NULL ? $arg : $filearg) && $status;
       }
     }
     $status = call_user_func($func, '.', $arg) && $status;
