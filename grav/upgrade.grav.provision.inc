@@ -58,15 +58,12 @@ function drush_provision_grav_upgrade_validate($artefact = NULL) {
 }
 
 /**
- * Safety copy before touching the capsule (the truthful grav mode).
+ * Safety copy before touching the capsule, in the mode that restores
+ * everything the site has: for a site with a database the dump goes inside,
+ * the only way back from a plugin's forward-only schema change.
  */
 function drush_provision_grav_pre_provision_grav_upgrade($artefact = NULL) {
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_without_db_backup');
-  drush_set_option('backup_mode', 'site_files_without_db_backup');
-  drush_log(dt('Pre-upgrade safety copy (site_files_without_db_backup)'), 'info');
+  _provision_grav_force_safety_mode('Pre-upgrade');
   drush_invoke('provision-backup');
 }
 

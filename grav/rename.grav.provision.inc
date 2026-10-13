@@ -6,7 +6,9 @@
  *
  * A Grav site IS its directory (sites/<uri>/ is a complete,
  * self-contained install), so a rename on the same platform is a move plus a
- * re-point plus new front-end plumbing -- no archive, no deploy, no database.
+ * re-point plus new front-end plumbing -- no archive and no deploy. A site
+ * with a database keeps it: its drushrc.php moves with the capsule and names
+ * the same database, which the new name's verify carries on.
  * That is the whole reason this command exists next to the copy upgrade: the
  * generic migrate path would build a backup, deploy it into a second tree and
  * delete the first, for a capsule that only needs to change its name.
@@ -89,12 +91,7 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
  * Implements drush_hook_pre_COMMAND() (doubled name -- not collapsed).
  */
 function drush_provision_grav_pre_provision_grav_rename($new_name = NULL) {
-  if (!defined('SELECTED_BACKUP_MODE')) {
-    define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
-  }
-  drush_set_option('selected_backup_mode', 'site_files_without_db_backup');
-  drush_set_option('backup_mode', 'site_files_without_db_backup');
-  drush_log(dt('Pre-rename safety copy (site_files_without_db_backup)'), 'info');
+  _provision_grav_force_safety_mode('Pre-rename');
   drush_invoke('provision-backup');
 }
 

@@ -4,12 +4,15 @@
  * @file
  * Deploy command implementation (Grav layer).
  *
- * Fork of backdrop/deploy.provision.inc collapsed to the DB-less capsule: the
- * CMS-agnostic extract/swap/rollback scaffolding is kept byte-similar (the
- * rollback swap-back is load-bearing -- a failed replace-deploy must never
- * leave the extracted archive serving); everything database (old-db capture,
- * updatedb, schema comparison, sites.php) is gone. Restore drives this via
- * provision-deploy exactly as the Drupal/Backdrop flows do.
+ * Fork of backdrop/deploy.provision.inc for the capsule: the CMS-agnostic
+ * extract/swap/rollback scaffolding is kept byte-similar (the rollback
+ * swap-back is load-bearing -- a failed replace-deploy must never leave the
+ * extracted archive serving); updatedb, schema comparison and sites.php are
+ * gone. For a site with a database the db layer creates the new database and
+ * imports the dump around these hooks; a replace-deploy records the old
+ * database here and drops it once the new site is in place, as the
+ * Textpattern deploy does. Restore drives this via provision-deploy exactly
+ * as the Drupal/Backdrop flows do.
  */
 
 /**
@@ -33,6 +36,14 @@ function drush_provision_grav_provision_deploy_validate($backup_file = NULL) {
 
   if ($exists) {
     drush_set_option('extract_path', d()->site_path . '.restore');
+    // The database the replaced site runs on, dropped after a successful
+    // replace. Read from its own drushrc.php into the option, never into the
+    // 'site' context: the db layer's pre hook fills that with the NEW
+    // database's credentials, and its rollback drops whatever is there.
+    if (_provision_grav_has_db()) {
+      $old = _provision_grav_drushrc_creds(d()->site_path . '/drushrc.php');
+      drush_set_option('old_db_name', isset($old['db_name']) ? $old['db_name'] : '');
+    }
   }
   else {
     drush_set_option('extract_path', d()->site_path);
@@ -131,7 +142,17 @@ function drush_provision_grav_pre_provision_deploy_rollback() {
          ->fail('Swapping the @path1 and @path2 directories has failed.', 'DRUSH_PERM_ERROR');
 
        _provision_grav_write_env();
-       provision_save_site_data();
+       if (_provision_grav_has_db()) {
+         // The original capsule is back with its own drushrc.php, which names
+         // the database it runs on. The 'site' context holds the credentials
+         // of the database this deploy made and its rollback drops: writing
+         // them, here or in the exit hook, would point the original site at a
+         // dropped database.
+         drush_set_option('provision_save_config', FALSE);
+       }
+       else {
+         provision_save_site_data();
+       }
     }
   }
 
@@ -176,5 +197,21 @@ function drush_provision_grav_post_provision_deploy() {
   // Remove the restore directory (or park web-owned residue).
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
     _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-restore');
+  }
+
+  // Drop the replaced site's database (mirrors the Textpattern deploy; the
+  // shared post hook that would have done it is union-guarded away, so
+  // without this every replace-deploy leaves an orphaned database behind).
+  // Never the database this deploy just made.
+  if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE) && _provision_grav_has_db()) {
+    $old_database = drush_get_option('old_db_name', '');
+    if ($old_database !== '' && $old_database !== drush_get_option('db_name', '', 'site')) {
+      if (!d()->service('db')->drop_database($old_database)) {
+        drush_log(dt('Failed to drop database @old_database', array('@old_database' => $old_database)), 'warning');
+      }
+      else {
+        drush_log(dt('Dropped the old database (@old_database).', array('@old_database' => $old_database)), 'info');
+      }
+    }
   }
 }

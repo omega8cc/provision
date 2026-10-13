@@ -3,12 +3,13 @@
  * @file
  * Code related to verify tasks (Grav layer).
  *
- * Fork of txp/verify.provision.inc minus the DB half entirely: a phase-1 Grav
- * site has no database, so verify is capsule integrity (vendor/ present,
- * version readable), tree/perms repair on the group model, the .env re-render,
- * and the frontend reporting contract (sites + packages + the 'grav' signal --
- * re-reported EVERY run or the per-platform instance-sync wipe removes the
- * synthetic profile).
+ * Fork of txp/verify.provision.inc: verify is capsule integrity (vendor/
+ * present, version readable), tree/perms repair on the group model, the .env
+ * re-render, and the frontend reporting contract (sites + packages + the
+ * 'grav' signal -- re-reported EVERY run or the per-platform instance-sync
+ * wipe removes the synthetic profile). A site with a database has its
+ * credentials reloaded first, so the drushrc.php the exit hook rewrites
+ * keeps them.
  */
 
 /**
@@ -19,6 +20,11 @@ function drush_provision_grav_provision_verify_validate() {
     return;
   }
   if (d()->type === 'site') {
+    // The exit hook rewrites drushrc.php from the 'site' context once the
+    // post hook marks the site installed; without the persisted credentials
+    // in that context the rewrite drops them, and Delete then leaves the
+    // database and its login behind.
+    _provision_grav_ensure_db_creds_loaded();
     provision_prepare_environment();
     provision_drupal_push_site();
     drush_errors_on();
@@ -99,6 +105,8 @@ function drush_provision_grav_provision_verify() {
     provision_drupal_push_site();
   }
   elseif (d()->type === 'site') {
+    _provision_grav_ensure_db_creds_loaded();
+
     // Verify is the operator's heal action: hand every web-owned entry (the
     // FPM-minted secrets, atomically rewritten account files, cache subdirs)
     // back to the instance user first, then the unprivileged repair below can
