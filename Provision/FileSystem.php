@@ -871,13 +871,14 @@ class Provision_FileSystem extends Provision_ChainedState {
       fclose($pipes[1]);
       $rc = proc_close($proc);
     }
-    // The helper's answer ends its output: two NULs (never inside the list,
-    // whose names are not empty), each file it left with a NUL, then "ok".
-    // Without it the helper did not start, or did not finish, whatever its
-    // exit code (a shell that refuses a command can end 1 as well).
+    // The helper's answer is the end of its output: two NULs (never inside
+    // the list, whose names are not empty), each file it left with a NUL,
+    // then "ok" (what a shell prints after that is not read). Without it the
+    // helper did not start, or did not finish, whatever its exit code (a
+    // shell that refuses a command can end 1 as well).
     $at = strrpos($out, "\0\0");
     $bad = ($at === FALSE) ? array('') : explode("\0", substr($out, $at + 2));
-    $ran = (array_pop($bad) === 'ok');
+    $ran = (strncmp(array_pop($bad), 'ok', 2) === 0);
     foreach ($bad as $name) {
       drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
     }
@@ -896,15 +897,16 @@ class Provision_FileSystem extends Provision_ChainedState {
    * mode creates the target of a dangling link.
    *
    * @param $made
-   *   Set to TRUE when the helper made the file, whatever came after: a
-   *   caller that renames it removes it when this returns FALSE. A write
-   *   cut short (a full disk, a quota) removes it here already.
+   *   Set to TRUE when the file the helper made is still there: a caller
+   *   that renames it removes it when this returns FALSE. A write cut short
+   *   (a full disk, a quota) is removed by the helper itself, which is the
+   *   only clean-up for a caller that creates at the file's own name.
    *
    * @return
    *   TRUE if the file was created and written whole.
    */
   function _create_here($name, $data, $mode, &$made = NULL) {
-    $pl = 'use Fcntl; $| = 1; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or do { print "no"; exit 1 }; print "+"; my $s = (print {$h} $d) && chmod($m, $h) && close($h); unlink($n) unless $s; print($s ? "ok" : "no"); exit($s ? 0 : 1)';
+    $pl = 'use Fcntl; $| = 1; print "\0\0"; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or do { print "no"; exit 1 }; print "+"; my $s = (print {$h} $d) && chmod($m, $h) && close($h); unlink($n) unless $s; print($s ? "ok" : "no"); exit($s ? 0 : 1)';
     $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
@@ -918,13 +920,15 @@ class Provision_FileSystem extends Provision_ChainedState {
       fclose($pipes[1]);
       $rc = proc_close($proc);
     }
-    // The helper's answer ends its output: "no" when the name is refused;
-    // "+" the moment it made the file, then "ok", or "no" when the write was
-    // cut short (it removes the file then). Without an answer it did not
-    // start, whatever its exit code (a shell that refuses a command can end
-    // 1); with "+" alone it was stopped after making the file.
-    $word = preg_match('/(\+?)(ok|no)?$/', $out, $m) ? $m[1] . (isset($m[2]) ? $m[2] : '') : '';
-    $made = (strpos($word, '+') === 0);
+    // The helper's answer follows the two NULs it prints first (so nothing a
+    // shell prints before or after counts): "no" when the name is refused;
+    // "+" the moment it made the file, then "ok", or "no" once it removed a
+    // write cut short. Without an answer it did not start, whatever its exit
+    // code (a shell that refuses a command can end 1); with "+" alone it was
+    // stopped after making the file, which is then still there.
+    $at = strrpos($out, "\0\0");
+    $word = ($at !== FALSE && preg_match('/^(no|\+ok|\+no|\+)/', substr($out, $at + 2), $m)) ? $m[1] : '';
+    $made = ($word === '+' || $word === '+ok');
     if ($word === '') {
       drush_log(dt('Could not create @path: the helper did not run', array('@path' => getcwd() . '/' . $name)), 'warning');
     }
