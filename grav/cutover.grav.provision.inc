@@ -210,6 +210,8 @@ function drush_provision_grav_cutover($target_domain = NULL) {
 
   drush_log(dt('[cutover] !old now answers at !domain',
     array('!old' => ltrim($old_name, '@'), '!domain' => $target_domain)), 'ok');
+  // The copy took over: its store worker runs from now on.
+  _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
   drush_log(dt('[cutover] Encryption is OFF for !domain (the rename disables it — keys are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!domain' => $target_domain)), 'advisory');
 }

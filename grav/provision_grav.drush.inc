@@ -649,6 +649,41 @@ function _provision_grav_rotate_store_secret() {
 }
 
 /**
+ * The marker a copy of a store carries: <capsule>/.boa-copy, naming the
+ * site it was copied from.
+ *
+ * A store's worker sends its mail and runs its renewals on every scheduler
+ * tick, paused or not. A copy (a Clone, an Upgrade a copy) shares the
+ * source's customers and subscriptions, so BOA's scheduler leaves its
+ * worker alone while the marker is there: a staging copy must not mail or
+ * bill the live store's customers, and an upgraded copy must not run the
+ * same renewals as the source it will replace. Cutover removes the marker
+ * from the copy that takes over; an owner releases a copy that should run
+ * with the control file the scheduler documents. A dotfile at the capsule
+ * root: nginx never serves it, and it travels with the capsule on Rename and
+ * in its backups.
+ */
+function _provision_grav_copy_marker($site_path) {
+  return $site_path . '/.boa-copy';
+}
+
+function _provision_grav_mark_copy($site_path, $source_uri) {
+  $marker = _provision_grav_copy_marker($site_path);
+  provision_file()->file_put_contents($marker, (string) $source_uri . "\n")
+    ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
+    ->fail('Could not mark the copy at @path');
+}
+
+function _provision_grav_unmark_copy($site_path) {
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    provision_file()->unlink($marker)
+      ->succeed('Removed the copy marker @path: this site is the live store now')
+      ->fail('Could not remove the copy marker @path');
+  }
+}
+
+/**
  * Refuse a copy of a site with a database onto the 'none' server.
  *
  * The copy of a shop needs a database to hold the shop: on the 'none' server
