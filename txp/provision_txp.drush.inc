@@ -1006,8 +1006,8 @@ function _provision_txp_create_directories() {
   }
 
   // Ownership model. chmod AFTER chgrp (chgrp strips setgid). The web group
-  // where each path really is: outside the account's tree, the shared one
-  // (provision_path_web_group()).
+  // where each path really is, decided for the place it lands on: outside
+  // the account's tree, the shared one (provision_path_web_group_chgrp()).
   $writable = array(
     $site_path . '/tmp',
     $site_path . '/public/files',
@@ -1017,7 +1017,7 @@ function _provision_txp_create_directories() {
     $site_path . '/admin/plugins',
   );
   foreach ($writable as $path) {
-    provision_file()->chgrp($path, provision_path_web_group($path, $web_group))
+    provision_path_web_group_chgrp($path, $web_group)
       ->succeed('Changed group ownership of <code>@path</code> to @gid')
       ->fail('Could not change group ownership of <code>@path</code> to @gid');
   }
@@ -1027,7 +1027,7 @@ function _provision_txp_create_directories() {
       ->fail('Could not change permissions of <code>@path</code> to @perm');
   }
   $private = $site_path . '/private';
-  provision_file()->chgrp($private, provision_path_web_group($private, $web_group))
+  provision_path_web_group_chgrp($private, $web_group)
     ->succeed('Changed group ownership of <code>@path</code> to @gid')
     ->fail('Could not change group ownership of <code>@path</code> to @gid');
   provision_file()->chmod($private, 0750)

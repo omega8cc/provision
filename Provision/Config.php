@@ -230,9 +230,10 @@ class Provision_Config {
             ->fail('Could not change permissions of @path to @perm');
         }
         // Where the file really lies outside the account's tree, the shared
-        // web group rather than the account's own.
+        // web group rather than the account's own: decided for the place
+        // the change lands on, in the directory found for real.
         if (!is_null($this->group)) {
-          provision_file()->chgrp($filename, provision_path_web_group($filename, $this->group))
+          provision_path_web_group_chgrp($filename, $this->group)
             ->succeed('Change group ownership of @path to @gid')
             ->fail('Could not change group ownership of @path to @gid');
         }
@@ -322,9 +323,10 @@ class Provision_Config {
       $status = $fs->_create_here($tmp, $contents, $mode, $made);
       if ($status && !is_null($this->group)) {
         // Where the file really lies outside the account's tree, the shared
-        // web group rather than the account's own: judged on the new file,
-        // where it lies, not through a link at the name.
-        $group = provision_path_web_group($tmp, $this->group);
+        // web group rather than the account's own: judged on the new file in
+        // the directory entered, as it stands, not through a link at the
+        // name or at the site dir.
+        $group = provision_path_web_group($dir . '/' . $tmp, $this->group, TRUE);
         if ($fs->_lchgrp_here($tmp, $group)) {
           drush_log(dt('Change group ownership of @path to @gid', array('@path' => $filename, '@gid' => $group)), 'success');
         }
@@ -392,7 +394,7 @@ class Provision_Config {
       }
       clearstatcache();
       if (is_file('local.settings.php') && !is_link('local.settings.php')) {
-        $group = provision_path_web_group($local, $this->group);
+        $group = provision_path_web_group($place['dir'] . '/local.settings.php', $this->group, TRUE);
         if ($fs->_lchgrp_here('local.settings.php', $group)) {
           drush_log(dt('Changed group ownership of <code>@path</code> to @gid', array('@path' => $local, '@gid' => $group)), 'success');
         }

@@ -104,8 +104,10 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
           ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
       }
     }
+    // Each dir's web group decided for the place it lands on
+    // (provision_path_web_group_chgrp()).
     foreach (_provision_grav_writable_dirs() as $dir) {
-      provision_file()->chgrp($extract_path . '/' . $dir, provision_path_web_group($extract_path . '/' . $dir, $web_group), TRUE)
+      provision_path_web_group_chgrp($extract_path . '/' . $dir, $web_group, TRUE)
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }

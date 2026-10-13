@@ -1069,7 +1069,9 @@ function _provision_grav_seed_secret($file, $rotate = FALSE) {
     if (!@mkdir($dir, 02770, TRUE)) {
       return FALSE;
     }
-    @chgrp($dir, provision_path_web_group($dir));
+    // The group decided for the place it lands on (see
+    // provision_path_web_group_chgrp()), as for the file below.
+    provision_path_web_group_chgrp($dir);
   }
   if (function_exists('random_bytes')) {
     $value = bin2hex(random_bytes(32));
@@ -1087,7 +1089,7 @@ function _provision_grav_seed_secret($file, $rotate = FALSE) {
     return FALSE;
   }
   @chmod($tmp, 0660);
-  @chgrp($tmp, provision_path_web_group($tmp));
+  provision_path_web_group_chgrp($tmp);
   if (!@rename($tmp, $file)) {
     @unlink($tmp);
     return FALSE;
@@ -1262,18 +1264,20 @@ function _provision_grav_create_directories() {
   }
 
   // Ownership model (spike-proven): group = web group, 02775, recursive.
-  // The web group where each dir really is: outside the account's tree,
-  // the shared one (provision_path_web_group()).
+  // The web group where each dir really is, decided on the dir judged as it
+  // stands: outside the account's tree, the shared one
+  // (provision_path_web_group()).
   // chmod AFTER chgrp (chgrp strips setgid).
   foreach (_provision_grav_writable_dirs() as $dir) {
     $path = $site_path . '/' . $dir;
     if (!$judge) {
-      provision_file()->chgrp($path, provision_path_web_group($path, $web_group), TRUE)
+      provision_path_web_group_chgrp($path, $web_group, TRUE)
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
     elseif ($places[$dir] !== FALSE && !$places[$dir]['link']) {
-      provision_file()->chgrp_in(_provision_drupal_place_path($places[$dir]), provision_path_web_group($path, $web_group), TRUE, $path)
+      $at = _provision_drupal_place_path($places[$dir]);
+      provision_file()->chgrp_in($at, provision_path_web_group(($at === NULL) ? $path : $at, $web_group, $at !== NULL), TRUE, $path)
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
@@ -1336,7 +1340,7 @@ function _provision_grav_secure_secrets($site_path) {
   }
   $env = $site_path . '/.env';
   if (is_file($env)) {
-    provision_file()->chgrp($env, provision_path_web_group($env, $web_group));
+    provision_path_web_group_chgrp($env, $web_group);
     provision_file()->chmod($env, 0640);
   }
   // 0440, matching Provision_Config_Drushrc's own $mode: a heal that
@@ -1391,7 +1395,7 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
   if ($fs->_enter($place['dir'])) {
     clearstatcache();
     if (is_file('.env') && !is_link('.env')) {
-      $fs->_lchgrp_here('.env', provision_path_web_group($site_path . '/.env', $web_group));
+      $fs->_lchgrp_here('.env', provision_path_web_group($place['dir'] . '/.env', $web_group, TRUE));
       $fs->_chmod_here_nofollow(array('.env'), 0640);
     }
     // 0440, matching Provision_Config_Drushrc's own $mode (see above).
@@ -1454,8 +1458,9 @@ function _provision_grav_write_env($site_path = NULL, $uri = NULL) {
     ->fail('Could not generate config file <code>@path</code>');
   // The WRITER owns the mode: without this, deploy-path rewrites
   // leave .env at the process umask (world-readable) until the next verify
-  // or heal tightens it. FPM reads it via the web group.
-  provision_file()->chgrp($env, provision_path_web_group($env));
+  // or heal tightens it. FPM reads it via the web group, decided for the
+  // place it lands on.
+  provision_path_web_group_chgrp($env);
   provision_file()->chmod($env, 0640);
 }
 
@@ -1577,7 +1582,7 @@ function _provision_grav_create_admin_account($username, $email) {
       dt('Could not write the account file !yaml; run Verify on this site first.', array('!yaml' => $yaml)));
   }
   $web_group = d('@server_master')->web_group;
-  provision_file()->chgrp($yaml, provision_path_web_group($yaml, $web_group));
+  provision_path_web_group_chgrp($yaml, $web_group);
   // 0660, not 0640: the login plugin WRITES here from FPM (reset tokens,
   // admin profile edits) -- the secrets mode, group-rw and no world.
   provision_file()->chmod($yaml, 0660);
@@ -1820,7 +1825,7 @@ function _provision_grav_seed_versions_yaml($site_path) {
   if (!$written) {
     return FALSE;
   }
-  provision_file()->chgrp($config_dir . '/versions.yaml', provision_path_web_group($config_dir . '/versions.yaml'));
+  provision_path_web_group_chgrp($config_dir . '/versions.yaml');
   provision_file()->chmod($config_dir . '/versions.yaml', 0660);
   drush_log(dt('Seeded versions.yaml for @site at Grav @version (schema @schema), so the upgrade replays only the steps newer than it.',
     array('@site' => $site_path, '@version' => $version, '@schema' => $schema)), 'ok');
@@ -1999,7 +2004,7 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
           $failed++;
           continue;
         }
-        provision_file()->chgrp($target, provision_path_web_group($target, $web_group), TRUE);
+        provision_path_web_group_chgrp($target, $web_group, TRUE);
         _provision_grav_chmod_tree($target, FALSE);
         drush_log(dt('Bundle refresh: @kind @slug @old -> @new.',
           array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version, '@new' => $new_version)), 'ok');
@@ -2015,7 +2020,7 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
         $failed++;
         continue;
       }
-      provision_file()->chgrp($target, provision_path_web_group($target, $web_group), TRUE);
+      provision_path_web_group_chgrp($target, $web_group, TRUE);
       _provision_grav_chmod_tree($target, FALSE);
       drush_log(dt('Bundle refresh: @kind @slug installed at @new (shipped by the bundle, absent from the capsule).',
         array('@kind' => $kind, '@slug' => $slug, '@new' => ($new_version === '' ? dt('unknown') : $new_version))), 'ok');
