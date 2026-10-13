@@ -85,7 +85,7 @@ function drush_provision_txp_pre_provision_deploy($backup_file) {
     foreach (array('/public/files', '/public/images', '/public/themes', '/admin/plugins', '/tmp', '/private') as $sub) {
       $path = drush_get_option('extract_path') . $sub;
       if (is_dir($path)) {
-        provision_file()->chgrp($path, $web_group, TRUE)
+        provision_file()->chgrp($path, provision_path_web_group($path, $web_group), TRUE)
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
           ->fail('Could not change group ownership of <code>@path</code> to @gid');
       }
@@ -265,7 +265,7 @@ function _provision_txp_deploy_materialise_private($extract_path) {
     provision_file()->copy($file, $private . '/' . $name)
       ->fail('Could not copy <code>@source</code> to <code>@destination</code>');
   }
-  provision_file()->chgrp($private, d('@server_master')->web_group)
+  provision_file()->chgrp($private, provision_path_web_group($private))
     ->fail('Could not change group ownership of <code>@path</code> to @gid');
   provision_file()->chmod($private, 0750)
     ->fail('Could not change permissions of <code>@path</code> to @perm');

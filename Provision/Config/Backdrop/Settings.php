@@ -51,6 +51,8 @@ class Provision_Config_Backdrop_Settings extends Provision_Config {
     $this->data['extra_config'] = "# Extra configuration from modules:\n";
     $this->data['extra_config'] .= join("\n", drush_command_invoke_all('provision_drupal_config', d()->uri, $this->data));
 
+    // write() gives the file this group, or the shared web group where the
+    // file really lies outside the account's tree (provision_path_web_group()).
     $this->group = $this->platform->server->web_group;
 
     // Add a handy variable indicating if the site is being backed up, we can
@@ -58,25 +60,35 @@ class Provision_Config_Backdrop_Settings extends Provision_Config {
     $backup_file = drush_get_option('backup_file');
     $this->backup_in_progress = !empty($backup_file);
 
-    // Create a blank local.settings.php file if not exists and option calls for this.
-    $local_settings = $this->site_path . '/local.settings.php';
-    $local_settings_blank = "<?php # local settings.php \n";
-    $local_description = 'Backdrop local.settings.php file';
-    if (!provision_file()->exists($local_settings)->status() &&
-        drush_get_option('provision_create_local_settings_file', TRUE)) {
-      provision_file()->file_put_contents($local_settings, $local_settings_blank)
-        ->succeed('Generated blank ' . $local_description)
-        ->fail('Could not generate ' . $local_description);
+    // local.settings.php: a blank one when no name is there and the option
+    // asks for it, then its group and mode, where the site dir really is
+    // (Provision_Config::_local_settings_here()); by path only where the
+    // site dir's place rule is not loaded.
+    if (function_exists('_provision_drupal_store_place')) {
+      $this->_local_settings_here('Backdrop local.settings.php file');
     }
+    else {
+      // Create a blank local.settings.php file if not exists and option calls for this.
+      $local_settings = $this->site_path . '/local.settings.php';
+      $local_settings_blank = "<?php # local settings.php \n";
+      $local_description = 'Backdrop local.settings.php file';
+      if (!provision_file()->exists($local_settings)->status() &&
+          drush_get_option('provision_create_local_settings_file', TRUE)) {
+        provision_file()->file_put_contents($local_settings, $local_settings_blank)
+          ->succeed('Generated blank ' . $local_description)
+          ->fail('Could not generate ' . $local_description);
+      }
 
-    // Set permissions on local.settings.php, if it exists.
-    if (provision_file()->exists($local_settings)->status()) {
-      provision_file()->chgrp($local_settings, $this->group)
-        ->succeed('Changed group ownership of <code>@path</code> to @gid')
-        ->fail('Could not change group ownership of <code>@path</code> to @gid');
-      provision_file()->chmod($local_settings, $this->mode | 0440)
-        ->succeed('Changed permissions of <code>@path</code> to @perm')
-        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      // Set permissions on local.settings.php, if it exists: the group where it
+      // really is, as for settings.php (Provision_Config::write()).
+      if (provision_file()->exists($local_settings)->status()) {
+        provision_file()->chgrp($local_settings, provision_path_web_group($local_settings, $this->group))
+          ->succeed('Changed group ownership of <code>@path</code> to @gid')
+          ->fail('Could not change group ownership of <code>@path</code> to @gid');
+        provision_file()->chmod($local_settings, $this->mode | 0440)
+          ->succeed('Changed permissions of <code>@path</code> to @perm')
+          ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
     }
   }
 

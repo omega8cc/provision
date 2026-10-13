@@ -692,8 +692,11 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE to descend into subdirectories.
    * @param $path
    *   The path this stands for, for the log.
+   * @param $fileperms
+   *   With $recursive, the mode for the files below instead of $perms (the
+   *   directories keep $perms).
    */
-  function chmod_in($dir, $perms, $recursive, $path) {
+  function chmod_in($dir, $perms, $recursive, $path, $fileperms = NULL) {
     $this->_clear_state();
     $this->tokens = array('@path' => $path, '@perm' => sprintf('%o', $perms));
     if ($dir === NULL) {
@@ -710,7 +713,7 @@ class Provision_FileSystem extends Provision_ChainedState {
       return $this;
     }
     if ($recursive) {
-      $done = $this->_here_recursive('chmod', $perms);
+      $done = $this->_here_recursive('chmod', $perms, $fileperms);
     }
     else {
       $done = @chmod('.', $perms);
@@ -755,13 +758,14 @@ class Provision_FileSystem extends Provision_ChainedState {
    * changed by name in the directory it was read from, so a link put on the
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
-   * PHP has no lchmod(), so a file swapped for a link between its test and
-   * chmod() is followed.
+   * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod().
+   * With $filearg the files get it instead of $arg (a chmod with one mode
+   * for directories and another for files).
    *
    * @return
    *   TRUE if every call returned TRUE.
    */
-  function _here_recursive($func, $arg) {
+  function _here_recursive($func, $arg, $filearg = NULL) {
     $here = getcwd();
     if ($here === FALSE) {
       return FALSE;
@@ -775,12 +779,13 @@ class Provision_FileSystem extends Provision_ChainedState {
         }
       }
       closedir($dh);
+      $files = array();
       foreach ($names as $name) {
         if (is_link($name)) {
           continue;
         }
         if (is_dir($name)) {
-          $status = $this->_enter($here . '/' . $name, $name) && $this->_here_recursive($func, $arg) && $status;
+          $status = $this->_enter($here . '/' . $name, $name) && $this->_here_recursive($func, $arg, $filearg) && $status;
           if (!$this->_enter($here)) {
             return FALSE;
           }
@@ -788,9 +793,15 @@ class Provision_FileSystem extends Provision_ChainedState {
         elseif ($func == 'chgrp') {
           $status = lchgrp($name, $arg) && $status;
         }
+        elseif ($func == 'chmod') {
+          $files[] = $name;
+        }
         else {
           $status = call_user_func($func, $name, $arg) && $status;
         }
+      }
+      if ($files) {
+        $status = $this->_chmod_here_nofollow($files, $filearg === NULL ? $arg : $filearg) && $status;
       }
     }
     $status = call_user_func($func, '.', $arg) && $status;
@@ -798,6 +809,73 @@ class Provision_FileSystem extends Provision_ChainedState {
       drush_log(dt('Failed calling :func on :path.', array(':func' => $func . '()', ':path' => $here)), 'debug');
     }
     return $status;
+  }
+
+  /**
+   * Change the mode of the regular files $names of the current directory to
+   * $mode without following a link: a perl helper started here (it inherits
+   * this very directory) reads the names, NUL-separated, on its standard
+   * input, opens each with O_NOFOLLOW (for reading, or else for writing) and
+   * changes the mode through the handle, as PHP has no lchmod() or fchmod().
+   * A name swapped for a link since it was read, or that is no regular file,
+   * is left as it is; each name not changed is logged and fails the call.
+   *
+   * @return
+   *   TRUE if every file was changed.
+   */
+  function _chmod_here_nofollow($names, $mode) {
+    $pl = 'use Fcntl; my $m = oct(shift); my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); push @bad, $n } print map { $_ . "\0" } @bad; exit(@bad ? 1 : 0)';
+    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
+    $pipes = array();
+    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
+    $rc = 1;
+    $bad = '';
+    if (is_resource($proc)) {
+      // perl reports what it could not change only once it has read every
+      // name, so neither side waits on a full pipe.
+      fwrite($pipes[0], implode("\0", $names) . "\0");
+      fclose($pipes[0]);
+      $bad = (string) stream_get_contents($pipes[1]);
+      fclose($pipes[1]);
+      $rc = proc_close($proc);
+    }
+    $told = 0;
+    foreach (explode("\0", $bad) as $name) {
+      if ($name !== '') {
+        $told++;
+        drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
+      }
+    }
+    // A helper that did not start, or ended without naming what it left,
+    // left every name as it was.
+    if ($rc !== 0 && !$told) {
+      drush_log(dt('chmod to @perm failed on @count file(s) in @path: the helper did not run', array('@perm' => sprintf('%o', $mode), '@count' => count($names), '@path' => getcwd())), 'warning');
+    }
+    return $rc === 0;
+  }
+
+  /**
+   * Create the file $name in the current directory with $data and the mode
+   * $mode, refusing any name there, a link included: a perl helper started
+   * here (it inherits this very directory) opens it with O_CREAT, O_EXCL and
+   * O_NOFOLLOW and sets the mode through the handle. PHP's fopen() cannot do
+   * it: it resolves a link at the name itself before open(), so even its 'x'
+   * mode creates the target of a dangling link.
+   *
+   * @return
+   *   TRUE if the file was created and written whole.
+   */
+  function _create_here($name, $data, $mode) {
+    $pl = 'use Fcntl; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; sysopen(my $h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or exit 1; (print {$h} $d) or exit 1; chmod($m, $h) or exit 1; close($h) or exit 1; exit 0';
+    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
+    $pipes = array();
+    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('file', '/dev/null', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
+    if (!is_resource($proc)) {
+      return FALSE;
+    }
+    fwrite($pipes[0], $data);
+    fclose($pipes[0]);
+    return proc_close($proc) === 0;
   }
 
   /**
