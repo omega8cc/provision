@@ -821,7 +821,9 @@ function _provision_grav_secure_secrets($site_path) {
  * capsule as the site dir) and walked from inside it with directories
  * 02770 and files 0660 (Provision_FileSystem::chmod_in()); the root .env
  * and drushrc.php are changed by name in the capsule entered for real.
- * A secret tree or file that is itself a link is left alone.
+ * A secret tree that is itself a link is narrowed where it leads only when
+ * the place rule finds that inside the account's own files store, as the
+ * by-path walk narrowed it; a secret file that is a link is left alone.
  */
 function _provision_grav_secure_secrets_in($site_path, $web_group) {
   $fs = provision_file();
@@ -831,7 +833,7 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
       continue;
     }
     $place = _provision_drupal_store_place($path, $site_path);
-    if ($place === FALSE || $place['dir'] === NULL || $place['rest'] || $place['link']) {
+    if ($place === FALSE || $place['dir'] === NULL || $place['rest']) {
       continue;
     }
     $fs->chmod_in($place['dir'], 02770, TRUE, $path, 0660)
@@ -846,7 +848,7 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
   if ($fs->_enter($place['dir'])) {
     clearstatcache();
     if (is_file('.env') && !is_link('.env')) {
-      @lchgrp('.env', provision_path_web_group($site_path . '/.env', $web_group));
+      $fs->_lchgrp_here('.env', provision_path_web_group($site_path . '/.env', $web_group));
       $fs->_chmod_here_nofollow(array('.env'), 0640);
     }
     // 0440, matching Provision_Config_Drushrc's own $mode (see above).
