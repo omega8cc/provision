@@ -1,6 +1,12 @@
 <?php
 
 class Provision_FileSystem extends Provision_ChainedState {
+  /**
+   * The perl the in-directory helpers run (_chmod_here_nofollow(),
+   * _create_here()).
+   */
+  var $perl = '/usr/bin/perl';
+
    /**
    * Copy file from $source to $destination.
    *
@@ -740,6 +746,19 @@ class Provision_FileSystem extends Provision_ChainedState {
   }
 
   /**
+   * Change the group of the name $name in the current directory without
+   * following a link at it (lchgrp()), the group named or numbered as
+   * chgrp() takes it: a gid that names a group is given by that name.
+   *
+   * @return
+   *   TRUE if the group was changed.
+   */
+  function _lchgrp_here($name, $gid) {
+    $group = provision_posix_groupname($gid);
+    return @lchgrp($name, $group ? $group : $gid);
+  }
+
+  /**
    * Go back to the working directory $cwd, as getcwd() returned it.
    */
   function _leave($cwd) {
@@ -758,7 +777,8 @@ class Provision_FileSystem extends Provision_ChainedState {
    * changed by name in the directory it was read from, so a link put on the
    * way during the walk is never followed. The group goes through lchgrp(),
    * which does not follow a link put in an entry's place since it was read;
-   * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod().
+   * the mode goes through _chmod_here_nofollow(), as PHP has no lchmod(), and
+   * only to directories and regular files.
    * With $filearg the files get it instead of $arg (a chmod with one mode
    * for directories and another for files).
    *
@@ -794,7 +814,10 @@ class Provision_FileSystem extends Provision_ChainedState {
           $status = lchgrp($name, $arg) && $status;
         }
         elseif ($func == 'chmod') {
-          $files[] = $name;
+          // Regular files only: a FIFO, socket or device keeps its mode.
+          if (is_file($name)) {
+            $files[] = $name;
+          }
         }
         else {
           $status = call_user_func($func, $name, $arg) && $status;
@@ -817,6 +840,10 @@ class Provision_FileSystem extends Provision_ChainedState {
    * this very directory) reads the names, NUL-separated, on its standard
    * input, opens each with O_NOFOLLOW (for reading, or else for writing) and
    * changes the mode through the handle, as PHP has no lchmod() or fchmod().
+   * On Linux x86_64 and aarch64 (where O_PATH is 010000000, a value perl's
+   * Fcntl does not export) a file opened neither way, one its owner may
+   * neither read nor write, is opened with O_PATH and O_NOFOLLOW and changed
+   * through /proc/self/fd, which names that very file, not a path.
    * A name swapped for a link since it was read, or that is no regular file,
    * is left as it is; each name not changed is logged and fails the call.
    *
@@ -824,34 +851,33 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE if every file was changed.
    */
   function _chmod_here_nofollow($names, $mode) {
-    $pl = 'use Fcntl; my $m = oct(shift); my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); push @bad, $n } print map { $_ . "\0" } @bad; exit(@bad ? 1 : 0)';
-    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
+    $pl = 'use Fcntl; use Config; my $m = oct(shift); my $p = ($Config{archname} =~ /^(x86_64|aarch64)-linux/) ? 010000000 : 0; my @bad; local $/ = "\0"; while (defined(my $n = <STDIN>)) { chomp $n; my $h; next if (sysopen($h, $n, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) || sysopen($h, $n, O_WRONLY | O_NOFOLLOW | O_NONBLOCK)) && -f $h && chmod($m, $h); next if $p && sysopen($h, $n, $p | O_NOFOLLOW) && -f $h && chmod($m, "/proc/self/fd/" . fileno($h)); push @bad, $n } print map { $_ . "\0" } @bad; print "ok"; exit(@bad ? 1 : 0)';
+    $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
     $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
     $rc = 1;
-    $bad = '';
+    $out = '';
     if (is_resource($proc)) {
       // perl reports what it could not change only once it has read every
       // name, so neither side waits on a full pipe.
       fwrite($pipes[0], implode("\0", $names) . "\0");
       fclose($pipes[0]);
-      $bad = (string) stream_get_contents($pipes[1]);
+      $out = (string) stream_get_contents($pipes[1]);
       fclose($pipes[1]);
       $rc = proc_close($proc);
     }
-    $told = 0;
-    foreach (explode("\0", $bad) as $name) {
-      if ($name !== '') {
-        $told++;
-        drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
-      }
+    // The helper names each file it left, then says "ok": without that word
+    // it did not start, or did not finish, whatever its exit code (a shell
+    // that refuses a command can end 1 as well).
+    $bad = explode("\0", $out);
+    $ran = (array_pop($bad) === 'ok');
+    foreach ($bad as $name) {
+      drush_log(dt('chmod to @perm failed on @path', array('@perm' => sprintf('%o', $mode), '@path' => getcwd() . '/' . $name)), 'warning');
     }
-    // A helper that did not start, or ended without naming what it left,
-    // left every name as it was.
-    if ($rc !== 0 && !$told) {
+    if (!$ran) {
       drush_log(dt('chmod to @perm failed on @count file(s) in @path: the helper did not run', array('@perm' => sprintf('%o', $mode), '@count' => count($names), '@path' => getcwd())), 'warning');
     }
-    return $rc === 0;
+    return $ran && !$bad && $rc === 0;
   }
 
   /**
@@ -866,16 +892,27 @@ class Provision_FileSystem extends Provision_ChainedState {
    *   TRUE if the file was created and written whole.
    */
   function _create_here($name, $data, $mode) {
-    $pl = 'use Fcntl; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; sysopen(my $h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or exit 1; (print {$h} $d) or exit 1; chmod($m, $h) or exit 1; close($h) or exit 1; exit 0';
-    $cmd = "'/usr/bin/perl' -e " . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
+    $pl = 'use Fcntl; my ($n, $m) = (shift, oct(shift)); local $/; my $d = <STDIN>; my $h; my $s = sysopen($h, $n, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) && (print {$h} $d) && chmod($m, $h) && close($h); print($s ? "ok" : "no"); exit($s ? 0 : 1)';
+    $cmd = escapeshellarg($this->perl) . ' -e ' . escapeshellarg($pl) . ' -- ' . escapeshellarg($name) . ' ' . escapeshellarg(sprintf('%o', $mode));
     $pipes = array();
-    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('file', '/dev/null', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
-    if (!is_resource($proc)) {
-      return FALSE;
+    $proc = proc_open($cmd, array(0 => array('pipe', 'r'), 1 => array('pipe', 'w'), 2 => array('file', '/dev/null', 'w')), $pipes);
+    $rc = -1;
+    $out = '';
+    if (is_resource($proc)) {
+      // perl writes its one word only once it has read all the data.
+      fwrite($pipes[0], $data);
+      fclose($pipes[0]);
+      $out = (string) stream_get_contents($pipes[1]);
+      fclose($pipes[1]);
+      $rc = proc_close($proc);
     }
-    fwrite($pipes[0], $data);
-    fclose($pipes[0]);
-    return proc_close($proc) === 0;
+    // The helper says "ok", or "no" when the name is refused or the write
+    // cut short: without a word it did not start, or did not finish,
+    // whatever its exit code (a shell that refuses a command can end 1).
+    if ($out !== 'ok' && $out !== 'no') {
+      drush_log(dt('Could not create @path: the helper did not run', array('@path' => getcwd() . '/' . $name)), 'warning');
+    }
+    return $out === 'ok' && $rc === 0;
   }
 
   /**

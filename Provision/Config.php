@@ -270,7 +270,9 @@ class Provision_Config {
    * name (rename() replaces the link itself) nor one at the site dir is
    * followed, and a hard link at the name keeps its other file as it was.
    * With no mode set, an existing file's mode is kept, as writing it in
-   * place kept it.
+   * place kept it; where the group cannot be given, an existing file's
+   * group is, or the existing file stays. A site dir that cannot be written
+   * gets nothing, as write() by path gave it.
    */
   function _write_in_site_dir($filename, $site_dir) {
     $fs = provision_file();
@@ -287,6 +289,12 @@ class Provision_Config {
         return FALSE;
       }
       $dir .= '/' . implode('/', $place['rest']);
+    }
+    // As write() by path: nothing is processed for a directory that cannot
+    // be written.
+    if (!is_writable($dir)) {
+      drush_log(dt('Could not generate in write(): @label', array('@label' => $label)), 'warning');
+      return FALSE;
     }
     $this->process();
     $template = $this->load_template();
@@ -308,20 +316,30 @@ class Provision_Config {
         $mode = 0666 & ~umask();
       }
       $tmp = '.' . $name . '.provision-' . getmypid() . '-' . mt_rand();
-      $status = $fs->_create_here($tmp, $contents, $mode);
+      $made = $fs->_create_here($tmp, $contents, $mode);
+      $status = $made;
       if ($status && !is_null($this->group)) {
         // Where the file really lies outside the account's tree, the shared
-        // web group rather than the account's own.
-        $group = provision_path_web_group($filename, $this->group);
-        if (@lchgrp($tmp, $group)) {
+        // web group rather than the account's own: judged on the new file,
+        // where it lies, not through a link at the name.
+        $group = provision_path_web_group($tmp, $this->group);
+        if ($fs->_lchgrp_here($tmp, $group)) {
           drush_log(dt('Change group ownership of @path to @gid', array('@path' => $filename, '@gid' => $group)), 'success');
         }
         else {
           drush_log(dt('Could not change group ownership of @path to @gid', array('@path' => $filename, '@gid' => $group)), 'warning');
+          // An existing file keeps its group, as writing it in place kept
+          // it; where even that cannot be given, it stays as it is.
+          clearstatcache();
+          if (is_file($name) && !is_link($name) && !@lchgrp($tmp, filegroup($name))) {
+            drush_log(dt('Left @path as it was: the new file cannot be given its group', array('@path' => $filename)), 'warning');
+            $status = FALSE;
+          }
         }
       }
       $status = $status && @rename($tmp, $name);
-      if (!$status) {
+      // Only a file this write made: a name already there was refused.
+      if (!$status && $made) {
         @unlink($tmp);
       }
     }
@@ -371,7 +389,7 @@ class Provision_Config {
       clearstatcache();
       if (is_file('local.settings.php') && !is_link('local.settings.php')) {
         $group = provision_path_web_group($local, $this->group);
-        if (@lchgrp('local.settings.php', $group)) {
+        if ($fs->_lchgrp_here('local.settings.php', $group)) {
           drush_log(dt('Changed group ownership of <code>@path</code> to @gid', array('@path' => $local, '@gid' => $group)), 'success');
         }
         else {
