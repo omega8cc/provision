@@ -710,6 +710,38 @@ function _provision_grav_copy_db_server_valid($what) {
 }
 
 /**
+ * Whether this site runs a KahunaCart store with no database on record.
+ *
+ * Given no database server, KahunaCart keeps its store in its own SQLite file
+ * inside the capsule (its shipped default). The copy safeguards (a signing
+ * secret of its own, a paused store, a held scheduler) act on a database on
+ * record, and BOA's scheduler runs only such a store, so a store on its own
+ * file gets none of them.
+ */
+function _provision_grav_file_store() {
+  if (_provision_grav_has_db()) {
+    return FALSE;
+  }
+  return _provision_grav_kahunacart_present(d()->site_path, d()->uri);
+}
+
+/**
+ * The refusal of a Clone of a store with no database on record.
+ *
+ * The copy would carry the source's signing secret in the copied SQLite file,
+ * and with it the key that seals the source's payment provider credentials:
+ * a staging copy could use the live store's payment keys.
+ */
+function _provision_grav_refuse_file_store($what) {
+  if (!_provision_grav_file_store()) {
+    return TRUE;
+  }
+  return drush_set_error('PROVISION_GRAV_FILE_STORE',
+    dt('This Grav site runs a KahunaCart store on its own SQLite file, with no database server: its @what would sign with the source store\'s secret and could use its payment keys. A shop belongs on a site created on a database server.',
+    array('@what' => $what)));
+}
+
+/**
  * Resolve the Grav core version string (e.g. "2.0.21") for a given root.
  *
  * Regex over system/defines.php -- a codebase fact, no CMS bootstrap and no

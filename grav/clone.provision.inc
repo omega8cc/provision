@@ -54,6 +54,9 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (!_provision_grav_copy_db_server_valid('clone')) {
     return FALSE;
   }
+  if (!_provision_grav_refuse_file_store('clone')) {
+    return FALSE;
+  }
   // The deploy keys its replace path on directory existence: a target that
   // already carries a capsule would be swapped out as if this were a
   // restore of that site. Refuse instead.
