@@ -230,6 +230,11 @@ if ($identity_changes) {
     drush_log(dt('No contact addresses to re-point on the copy.'), 'ok');
   }
 
+  // ---- (g) a store's signing secret: the copy makes its own ----
+  if (_provision_grav_has_db() && !_provision_grav_rotate_store_secret()) {
+    return FALSE;
+  }
+
   // ---- (e) source-bound state that must be a decision, not a silent copy ----
   if (is_file($site_path . '/user/data/licenses.yaml')) {
     drush_log(dt('The copy carries user/data/licenses.yaml (premium licence keys) from the source; keep or remove it deliberately.'), 'advisory');

@@ -120,6 +120,11 @@ function drush_provision_grav_provision_verify() {
     // Capsule integrity + version (bootstrap-free).
     drush_include_engine('grav', 'verify');
 
+    // A site with a database: a store's schema follows its code.
+    if (_provision_grav_has_db()) {
+      _provision_grav_kahunacart_migrate(d()->site_path, d()->uri);
+    }
+
     drush_set_option('packages', _scrub_object(provision_grav_system_map()), 'site');
 
     provision_drupal_push_site(drush_get_option('override_slave_authority', FALSE));

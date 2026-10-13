@@ -153,6 +153,19 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   if (!drush_get_error()) {
     provision_backend_invoke($new_name, 'provision-verify');
   }
+  // A clone of a store is a second store on the same data: paused, so no
+  // shopper buys there (signed-in staff still can) until the owner opens it.
+  if (!drush_get_error() && $has_db) {
+    $copy_path = $options['root'] . '/sites/' . $options['uri'];
+    if (_provision_grav_kahunacart_present($copy_path, $options['uri'])) {
+      if (_provision_grav_cli('plugin', 'kahunacart store --status=paused -n', $copy_path)) {
+        drush_log(dt('The store of the copy @uri is paused; open it from its admin when it should take orders.', array('@uri' => $options['uri'])), 'ok');
+      }
+      else {
+        drush_log(dt('Could not pause the store of the copy @uri; pause it from its admin before anyone shops there.', array('@uri' => $options['uri'])), 'warning');
+      }
+    }
+  }
   _provision_grav_internal_backup_flag(FALSE);
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');

@@ -452,6 +452,160 @@ function _provision_grav_force_safety_mode($what, $internal = FALSE) {
 }
 
 /**
+ * The database settings of a site with a database, as Grav config overrides.
+ *
+ * KahunaCart reads its connection from plugins.kahunacart.database. Grav
+ * applies GRAV_CONFIG__<key, dots as __> from $_SERVER/$_ENV on every
+ * request and command once GRAV_CONFIG is set, and its admin never writes
+ * such a value back to disk, so the credentials live only in the root-owned
+ * vhost and, for one CLI call, in that call's environment -- never in a file
+ * the shared web group can read. 'localhost' with a port other than 3306
+ * becomes 127.0.0.1: PDO takes 'localhost' as the socket and would skip the
+ * port (ProxySQL). auto_migrate stays manual: Verify migrates.
+ *
+ * @return array
+ *   name => value; empty when the credentials are incomplete.
+ */
+function _provision_grav_db_overrides($db_name, $db_user, $db_passwd, $db_host, $db_port) {
+  $db_name = (string) $db_name;
+  $db_user = (string) $db_user;
+  $db_passwd = (string) $db_passwd;
+  if ($db_name === '' || $db_user === '' || $db_passwd === '') {
+    return array();
+  }
+  $port = ((string) $db_port === '') ? '3306' : (string) $db_port;
+  $host = ((string) $db_host === '') ? 'localhost' : (string) $db_host;
+  if ($host === 'localhost' && $port !== '3306') {
+    $host = '127.0.0.1';
+  }
+  $key = 'GRAV_CONFIG__plugins__kahunacart__database__';
+  return array(
+    'GRAV_CONFIG' => '1',
+    $key . 'type' => 'mysql',
+    $key . 'auto_migrate' => 'manual',
+    $key . 'mysql__host' => $host,
+    $key . 'mysql__port' => $port,
+    $key . 'mysql__dbname' => $db_name,
+    $key . 'mysql__username' => $db_user,
+    $key . 'mysql__password' => $db_passwd,
+  );
+}
+
+/**
+ * The same overrides as server-level fastcgi_param lines, for the vhost.
+ *
+ * Every value must be one nginx takes unquoted (provision's own names and
+ * passwords always are); one that is not drops the whole set rather than
+ * write a line that could break the nginx reload of every site on the box.
+ * A site on the 'none' server has no credentials and gets no line at all.
+ */
+function _provision_grav_db_fastcgi_lines($db_name, $db_user, $db_passwd, $db_host, $db_port) {
+  $out = '';
+  foreach (_provision_grav_db_overrides($db_name, $db_user, $db_passwd, $db_host, $db_port) as $name => $value) {
+    if (!preg_match('/^[A-Za-z0-9._:-]+$/', $value)) {
+      return '';
+    }
+    $out .= '  fastcgi_param ' . $name . ' ' . $value . ";\n";
+  }
+  return $out;
+}
+
+/**
+ * Whether a capsule carries KahunaCart, switched on.
+ *
+ * The plugin tree is the test; a plugin switched off in the capsule's own
+ * config or its host overlay registers no command, so it counts as absent.
+ */
+function _provision_grav_kahunacart_present($site_path, $uri) {
+  if (!is_file($site_path . '/user/plugins/kahunacart/kahunacart.php')) {
+    return FALSE;
+  }
+  foreach (array($site_path . '/user/env/' . $uri . '/config/plugins/kahunacart.yaml',
+    $site_path . '/user/config/plugins/kahunacart.yaml') as $yaml) {
+    if (is_file($yaml) && is_readable($yaml)) {
+      $body = file_get_contents($yaml);
+      if ($body !== FALSE && preg_match('/^enabled:\s*(\S+)/m', $body, $m)) {
+        return !in_array(strtolower(trim($m[1], '\'"')), array('false', '0', 'no', 'off'), TRUE);
+      }
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Bring a capsule's KahunaCart schema up to date (Verify's step).
+ *
+ * KahunaCart never migrates a server database by itself, and its migrations
+ * only go forward, so every task that ends with a Verify (install, restore,
+ * clone, both upgrades, a client's plugin update followed by Verify) applies
+ * them here, as the instance user with the capsule's own credentials. A
+ * failure fails the task: a store on a stale schema answers 500s.
+ */
+function _provision_grav_kahunacart_migrate($site_path, $uri) {
+  if (!_provision_grav_kahunacart_present($site_path, $uri)) {
+    return TRUE;
+  }
+  if (!_provision_grav_cli('plugin', 'kahunacart migrate -n', $site_path)) {
+    return drush_set_error('PROVISION_GRAV_KAHUNACART_MIGRATE',
+      dt('The KahunaCart schema of !uri could not be brought up to date; see the Grav CLI row above.', array('!uri' => $uri)));
+  }
+  drush_log(dt('KahunaCart schema of !uri is up to date.', array('!uri' => $uri)), 'ok');
+  return TRUE;
+}
+
+/**
+ * Make a cloned store sign with a secret of its own.
+ *
+ * KahunaCart keeps its per-site signing secret in its own database
+ * (kahunacart_settings, name security.secret, the empty namespace) and
+ * derives from it the key that seals the payment provider credentials in its
+ * settings files. A clone that kept it would sign links the source honours
+ * and could decrypt, and use, the source's live payment keys. Deleting the
+ * row is the vendor's own rotation: the copy makes a fresh secret on first
+ * use, and its provider keys are entered again before it can take a payment.
+ * Runs in the copy's deploy, on the copy's database; a database without the
+ * table (no store yet) is left alone.
+ */
+function _provision_grav_rotate_store_secret() {
+  $db_name = drush_get_option('db_name', '', 'site');
+  $db_user = drush_get_option('db_user', '', 'site');
+  if ($db_name === '' || $db_user === '' || !function_exists('mysqli_init')) {
+    return TRUE;
+  }
+  $db_port = drush_get_option('db_port', '', 'site');
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+  try {
+    $mysqli = mysqli_init();
+    $mysqli->real_connect(
+      drush_get_option('db_host', 'localhost', 'site'),
+      $db_user,
+      drush_get_option('db_passwd', '', 'site'),
+      $db_name,
+      ((string) $db_port === '') ? 3306 : (int) $db_port
+    );
+    $table = $mysqli->query("SHOW TABLES LIKE 'kahunacart_settings'");
+    if (!$table || $table->num_rows === 0) {
+      $mysqli->close();
+      return TRUE;
+    }
+    $namespaced = $mysqli->query("SHOW COLUMNS FROM kahunacart_settings LIKE 'namespace'");
+    $sql = ($namespaced && $namespaced->num_rows > 0)
+      ? "DELETE FROM kahunacart_settings WHERE name = 'security.secret' AND namespace = ''"
+      : "DELETE FROM kahunacart_settings WHERE name = 'security.secret'";
+    $mysqli->query($sql);
+    $removed = $mysqli->affected_rows;
+    $mysqli->close();
+  }
+  catch (Exception $e) {
+    return drush_set_error('PROVISION_GRAV_STORE_SECRET',
+      dt('Could not rotate the store signing secret of the copy: @error', array('@error' => $e->getMessage())));
+  }
+  drush_log(dt('The copy\'s store signs with a secret of its own (@n source secret removed); its payment provider keys must be entered again before it takes a payment.',
+    array('@n' => $removed)), 'ok');
+  return TRUE;
+}
+
+/**
  * Refuse a copy of a site with a database onto the 'none' server.
  *
  * The copy of a shop needs a database to hold the shop: on the 'none' server
@@ -985,6 +1139,14 @@ function _provision_grav_secure_secrets($site_path) {
   if (is_file($drushrc)) {
     provision_file()->chmod($drushrc, 0440);
   }
+  // Premium licence keys: written by the admin's licence manager (FPM) and
+  // read by GPM (the CLI owner), so group-rw for FPM like the account files,
+  // no world bits.
+  $licenses = $site_path . '/user/data/licenses.yaml';
+  if (is_file($licenses) && !is_link($licenses)) {
+    provision_file()->chgrp($licenses, provision_path_web_group($licenses, $web_group));
+    provision_file()->chmod($licenses, 0660);
+  }
 }
 
 /**
@@ -1031,6 +1193,21 @@ function _provision_grav_secure_secrets_in($site_path, $web_group) {
     }
   }
   $fs->_leave($cwd);
+  // Premium licence keys (see above), judged where the file really is.
+  $licenses_dir = $site_path . '/user/data';
+  if (is_dir($licenses_dir) && is_file($licenses_dir . '/licenses.yaml')) {
+    $place = _provision_drupal_store_place($licenses_dir, $site_path);
+    if ($place !== FALSE && $place['dir'] !== NULL && !$place['rest'] && !$place['link']) {
+      if ($fs->_enter($place['dir'])) {
+        clearstatcache();
+        if (is_file('licenses.yaml') && !is_link('licenses.yaml')) {
+          $fs->_lchgrp_here('licenses.yaml', provision_path_web_group($licenses_dir . '/licenses.yaml', $web_group));
+          $fs->_chmod_here_nofollow(array('licenses.yaml'), 0660);
+        }
+      }
+      $fs->_leave($cwd);
+    }
+  }
 }
 
 /**
@@ -1110,9 +1287,25 @@ function _provision_grav_cli($tool, $args, $site_path = NULL) {
     drush_log(dt('@home/.grav exists -- GPM would silently prefer symlink-from-local-checkout mode; remove it if package operations misbehave.',
       array('@home' => $home)), 'warning');
   }
+  // A capsule with a database: its own credentials (read from its own
+  // drushrc.php, so a copy never runs with the source's) reach the child as
+  // config overrides for this one call, and are taken away again after it.
+  $creds = _provision_grav_drushrc_creds($site_path . '/drushrc.php');
+  $env = _provision_grav_db_overrides(
+    isset($creds['db_name']) ? $creds['db_name'] : '',
+    isset($creds['db_user']) ? $creds['db_user'] : '',
+    isset($creds['db_passwd']) ? $creds['db_passwd'] : '',
+    isset($creds['db_host']) ? $creds['db_host'] : '',
+    isset($creds['db_port']) ? $creds['db_port'] : '');
+  foreach ($env as $name => $value) {
+    putenv($name . '=' . $value);
+  }
   $old_umask = umask(02);
   $result = drush_shell_cd_and_exec($site_path, $bin . ' bin/' . $tool . ' ' . $args);
   umask($old_umask);
+  foreach (array_keys($env) as $name) {
+    putenv($name);
+  }
   if (!$result) {
     $output = implode("\n", drush_shell_exec_output());
     drush_log(dt('Grav CLI failed: bin/!tool !args -- !output',

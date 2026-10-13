@@ -86,6 +86,26 @@ server {
   # hostname -- aliases must not fork per-host config). Proven to reach
   # getenv() under this FPM stack.
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
+<?php
+  // A site with a database (a shop): its connection reaches Grav as config
+  // overrides from this root-owned file only, never from a file in the
+  // capsule (see _provision_grav_db_overrides()); the same ProxySQL port
+  // rule as the other CMS templates. Nothing at all for a site on the
+  // 'none' server, which has no credentials.
+  $grav_db_name = isset($db_name) ? $db_name : '';
+  $grav_db_port = isset($db_port) ? $db_port : '';
+  if (!$grav_db_port && $grav_db_name) {
+    if (provision_file()->exists('/data/conf/' . $script_user . '_use_proxysql.txt')->status()) {
+      $grav_db_port = '6033';
+    }
+    else {
+      $grav_db_port = $this->server->db_port ? $this->server->db_port : '3306';
+    }
+  }
+  print _provision_grav_db_fastcgi_lines($grav_db_name,
+    isset($db_user) ? $db_user : '', isset($db_passwd) ? $db_passwd : '',
+    isset($db_host) ? $db_host : '', $grav_db_port);
+?>
   # Truthful scheme for Grav's Uri fallbacks (stock fastcgi_params does not
   # carry REQUEST_SCHEME under this stack), and -- presence-gated on the
   # shared map -- the local HTTPS front's X-Forwarded-Proto translated into
