@@ -45,6 +45,13 @@ function drush_provision_grav_provision_deploy_validate($backup_file = NULL) {
   $copy = ($deploy_class === 'clone' || $deploy_class === 'upgrade')
     && $old_uri !== '' && $old_uri !== d()->uri;
 
+  // A copy never replaces a tree: the replace path is a restore's, which
+  // swaps the copy in at once and settles the hold as a restore does.
+  if ($exists && $copy) {
+    return drush_set_error('PROVISION_GRAV_COPY_TARGET',
+      dt('@path already exists; a copy is never deployed over an existing site directory. Remove it first.', array('@path' => d()->site_path)));
+  }
+
   if ($exists) {
     drush_set_option('extract_path', d()->site_path . '.restore');
   }
@@ -116,7 +123,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
           if (is_link($staged_marker)) {
             @unlink($staged_marker);
           }
-          _provision_grav_mark_copy($extract_path, trim((string) @file_get_contents($held_marker)));
+          _provision_grav_mark_copy($extract_path, trim((string) @file_get_contents($held_marker)), @filemtime($held_marker));
         }
       }
       elseif (file_exists($staged_marker) || is_link($staged_marker)) {

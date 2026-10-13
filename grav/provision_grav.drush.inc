@@ -660,17 +660,26 @@ function _provision_grav_rotate_store_secret() {
  */
 function _provision_grav_blank_licences_signing_secret($site_path) {
   $files = array($site_path . '/user/config/plugins/kahunacart-licenses.yaml');
-  $overlays = glob($site_path . '/user/env/*/config/plugins/kahunacart-licenses.yaml');
-  if (is_array($overlays)) {
-    $files = array_merge($files, $overlays);
+  // Host overlays: user/env/<host>/ and, where user/env/ does not exist, the
+  // Grav 1.6 shape user/<host>/ that Grav still falls back to.
+  foreach (array('/user/env/*/config/plugins/kahunacart-licenses.yaml', '/user/*/config/plugins/kahunacart-licenses.yaml') as $pattern) {
+    $found = glob($site_path . $pattern);
+    if (is_array($found)) {
+      $files = array_merge($files, $found);
+    }
   }
   $changed = 0;
-  foreach ($files as $file) {
-    if (!is_file($file) || is_link($file)) {
+  foreach (array_unique($files) as $file) {
+    if (is_link($file)) {
+      drush_log(dt('@file is a link, so the copy\'s licence signing secret there was not cleared; replace it with a file of the copy\'s own and rotate the secret.', array('@file' => $file)), 'warning');
+      continue;
+    }
+    if (!is_file($file)) {
       continue;
     }
     $lines = file($file);
     if ($lines === FALSE) {
+      drush_log(dt('Could not read @file to clear the copy\'s licence signing secret; rotate it on the copy.', array('@file' => $file)), 'warning');
       continue;
     }
     $in_api = FALSE;
@@ -693,8 +702,14 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
         break;
       }
     }
-    if ($done && @file_put_contents($file, implode('', $lines), LOCK_EX) !== FALSE) {
+    if (!$done) {
+      continue;
+    }
+    if (@file_put_contents($file, implode('', $lines), LOCK_EX) !== FALSE) {
       $changed++;
+    }
+    else {
+      drush_log(dt('Could not write @file: the copy still signs licence responses with the source\'s secret there; rotate it on the copy.', array('@file' => $file)), 'warning');
     }
   }
   return $changed;
@@ -719,11 +734,16 @@ function _provision_grav_copy_marker($site_path) {
   return $site_path . '/.boa-copy';
 }
 
-function _provision_grav_mark_copy($site_path, $source_uri) {
+function _provision_grav_mark_copy($site_path, $source_uri, $mtime = NULL) {
   $marker = _provision_grav_copy_marker($site_path);
   provision_file()->file_put_contents($marker, (string) $source_uri . "\n")
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
     ->fail('Could not mark the copy at @path');
+  // A hold put back keeps its old time: BOA counts a release file only when
+  // it is newer than the marker, so a release given before stays given.
+  if ($mtime !== NULL && $mtime !== FALSE && is_file($marker)) {
+    @touch($marker, (int) $mtime);
+  }
 }
 
 function _provision_grav_unmark_copy($site_path) {
@@ -842,6 +862,15 @@ function provision_grav_find_sites($root = NULL) {
       if (strpos($uri, '.restore') !== FALSE
         || strpos($uri, '.original') !== FALSE
         || is_link($capsule)) {
+        continue;
+      }
+      // A copy unpacked beside its final path (<uri>.copy) whose task died
+      // before moving it in: its drushrc.php names the SOURCE's database, so
+      // reporting it would have the panel import a second site running on
+      // the source store. Never a site; named so it gets removed.
+      if (substr($uri, -5) === '.copy') {
+        drush_log(dt('@path is a copy whose task never finished (it names its source\'s database); it is not a site. Remove it.',
+          array('@path' => $capsule)), 'warning');
         continue;
       }
       $sites[$uri] = $uri;
@@ -2210,6 +2239,13 @@ function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option 
   }
 
   $capsule = $target_root . '/sites/' . $new_uri;
+  // The copy is unpacked beside its final path and moved in only once it is
+  // held: a deploy that died before the move leaves it there.
+  if (is_dir($capsule . '.copy') && !is_link($capsule . '.copy')) {
+    if (_provision_grav_remove_tree_or_park($capsule . '.copy', $new_uri . '-copy-unpacked') && !is_dir($capsule . '.copy')) {
+      drush_log(dt('Removed the unpacked copy at @path.', array('@path' => $capsule . '.copy')), 'ok');
+    }
+  }
   if (is_dir($capsule) && !is_link($capsule)) {
     // The helper reports its own outcome (deleted silently, parked in one
     // row, or a cleanup error); only a tree that is really gone is "removed".
