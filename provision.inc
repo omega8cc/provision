@@ -3073,9 +3073,11 @@ function provision_posix_groupname($group) {
  *
  * Inside is where the path really is (realpath(); for a path not there yet,
  * its deepest part that exists, then the names below it) at or below the
- * account's home (aegir_root, resolved), or at or below the account's store
- * on attached storage (_provision_path_web_group_store()). A path that
- * cannot be resolved is outside. Any other group is returned as it is.
+ * account's home (aegir_root, resolved), at or below the account's store on
+ * attached storage (_provision_path_web_group_store()), or at or below one
+ * of the account's other places that return walks
+ * (_provision_path_web_group_roots()). A path that cannot be resolved is
+ * outside. Any other group is returned as it is.
  *
  * A caller that acts on a path where it resolved it gives that physical
  * path with $resolved: it is judged as it stands, no link on it resolved
@@ -3112,6 +3114,11 @@ function provision_path_web_group($path, $group = NULL, $resolved = FALSE) {
     $store = _provision_path_web_group_store($aegir_root);
     if ($store !== '' && _provision_path_web_group_below($real, $store)) {
       return $group;
+    }
+    foreach (_provision_path_web_group_roots($aegir_root) as $top) {
+      if (_provision_path_web_group_below($real, $top)) {
+        return $group;
+      }
     }
   }
   $shared = _provision_default_web_group();
@@ -3332,6 +3339,84 @@ function _provision_path_web_group_mnt($mounts = NULL, $mnt = NULL) {
     $found[$key] = $hits[0];
   }
   return $found[$key];
+}
+
+/**
+ * The account's other places the web group conversion walks as its own,
+ * beside its home and its store, resolved: the main login's home
+ * (/home/<account>.ftp), each sub-user's home (/home/<account>.<name>, a
+ * login in the lshellg or ltd-shell group), the logins' Ruby gems and npm
+ * trees (/opt/user/gems/<account> or <account>.<anything>, the same under
+ * /opt/user/npm) and the account's PHP cache dir (/var/www/phpcache/
+ * <account>), each of these four a real directory, as BOA's instgrp takes
+ * them. The account's backend can verify a platform its login lays there
+ * (a gems or npm tree is the login's own, in the account's group), so a
+ * site's path there takes the account's own web group from a Verify as it
+ * does from the conversion, and the return walks it. None for the master.
+ *
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ */
+function _provision_path_web_group_roots($aegir_root) {
+  if (!preg_match('#/data/disk/([a-z0-9][a-z0-9-]*)$#', rtrim((string) $aegir_root, '/'), $match)) {
+    return array();
+  }
+  $acct = $match[1];
+  $home = '/home/';
+  $gems = '/opt/user/gems/';
+  $npm = '/opt/user/npm/';
+  $cache = '/var/www/phpcache/';
+  clearstatcache(TRUE);
+  $tops = array();
+  if (is_dir($home . $acct . '.ftp')) {
+    $tops[] = $home . $acct . '.ftp';
+  }
+  $names = @scandir($home);
+  foreach (is_array($names) ? $names : array() as $name) {
+    if (preg_match('#^' . preg_quote($acct, '#') . '\.[a-z0-9]+(-dev)?$#', $name)
+      && $name !== $acct . '.ftp' && substr($name, -4) !== '.web'
+      && is_dir($home . $name) && _provision_path_web_group_login($name)) {
+      $tops[] = $home . $name;
+    }
+  }
+  foreach (array($gems, $npm, $cache) as $base) {
+    $names = @scandir($base);
+    foreach (is_array($names) ? $names : array() as $name) {
+      if ($name !== $acct && ($base === $cache || strpos($name, $acct . '.') !== 0)) {
+        continue;
+      }
+      if (is_dir($base . $name) && !is_link($base . $name)) {
+        $tops[] = $base . $name;
+      }
+    }
+  }
+  $real = array();
+  foreach ($tops as $top) {
+    $res = realpath($top);
+    if ($res !== FALSE) {
+      $real[] = $res;
+    }
+  }
+  return $real;
+}
+
+/**
+ * Whether the user $name is a shell login of an account: one in the
+ * lshellg or ltd-shell group, as its primary group or a supplementary one.
+ */
+function _provision_path_web_group_login($name) {
+  $user = posix_getpwnam($name);
+  if (!is_array($user)) {
+    return FALSE;
+  }
+  foreach (array('lshellg', 'ltd-shell') as $group) {
+    $info = posix_getgrnam($group);
+    if (is_array($info) && ((int) $info['gid'] === (int) $user['gid']
+      || in_array($name, isset($info['members']) ? (array) $info['members'] : array(), TRUE))) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 /**
