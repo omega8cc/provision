@@ -340,10 +340,11 @@ class Provision_Config {
         }
       }
       $status = $status && @rename($tmp, $name);
-      // Only a file this write made (the helper says so as it makes it): a
-      // name already there was refused.
+      // Only a file this write made (the helper says so as it makes it), and
+      // only while it is the backend's own: a name already there was refused,
+      // and one the account put in its place since is not the writer's.
       if (!$status && $made) {
-        @unlink($tmp);
+        $fs->_remove_own_here($tmp);
       }
     }
     else {
