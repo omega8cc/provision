@@ -323,23 +323,16 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
       // running the migrate task. Doing this is safe only when the site is
       // migrated with the same name - see issue #1067702.
       $local_uri_verify = '@' . d()->uri;
-      // XXX: right now we just pause SSL configuration when migrating,
-      // even if the site name doesn't change, because of possible
-      // edge case situations where the task had errors preventing it
-      // from managing vhost and respective SSL keys updates properly.
-      if (!empty($options['ssl_enabled']) && !empty($options['ssl_key'])) {
-        $temp_uri_verify = $local_uri_verify;
-        drush_set_option('encryption_was_enabled', TRUE);
-        drush_set_option('temp_options_ssl_enabled', $options['ssl_enabled']);
-        drush_set_option('temp_options_ssl_key', $options['ssl_key']);
-        drush_set_option('temp_uri_verify', $temp_uri_verify);
-        $options['ssl_enabled'] = 0;
-        unset($options['ssl_key']);
-        drush_log(dt('[migrate] Encryption paused for @name during the move', array('@name' => $temp_uri_verify)), 'info');
-        drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
-        sleep(5); // A small trick to avoid high load and race conditions.
-      }
+      // Encryption is not paused for the move, as in the D-lineage migrate:
+      // a save with ssl_enabled 0 never took effect (Provision_Context drops
+      // empty option values), and a pause that did would make the next verify
+      // force a new certificate. The front-end verify of the re-enable re-saved
+      // the context from a site record still naming the old platform.
       provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
+      // That verify re-saved the context from the site record: the copy
+      // keeps its encryption settings, not the ones read when this task
+      // began (they differ when Encryption changed while it was queued).
+      unset($options['ssl_enabled'], $options['ssl_key']);
       sleep(5); // A small trick to avoid high load and race conditions.
     }
   }
@@ -426,25 +419,6 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
     // (RENAME/STORE lines), the way a delete does; the nightly sweep stays
     // the safety net. Warn-not-fail.
     _provision_drupal_native_symlink($options['uri'], TRUE);
-
-    if (!is_file($enable_fast_track)) {
-      sleep(5); // A small trick to avoid high load and race conditions.
-      // Re-enable encryption again if it was paused for a same-name move.
-      if (drush_get_option('encryption_was_enabled')) {
-        $temp_options_ssl_enabled = drush_get_option('temp_options_ssl_enabled');
-        $temp_options_ssl_key = drush_get_option('temp_options_ssl_key');
-        $temp_uri_verify = drush_get_option('temp_uri_verify');
-        if ($temp_options_ssl_enabled && $temp_options_ssl_key) {
-          $options['ssl_enabled'] = $temp_options_ssl_enabled;
-          $options['ssl_key'] = $temp_options_ssl_key;
-          drush_log(dt('[migrate] Encryption re-enabled for @name after the move', array('@name' => $temp_uri_verify)), 'info');
-          drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
-          sleep(5); // A small trick to avoid high load and race conditions.
-          provision_backend_invoke('@hostmaster', 'hosting-task', array($temp_uri_verify, 'verify'), array('force' => TRUE));
-          sleep(5); // A small trick to avoid high load and race conditions.
-        }
-      }
-    }
   }
 }
 
