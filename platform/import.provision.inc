@@ -53,8 +53,8 @@ function drush_provision_drupal_post_provision_import() {
       d()->profile = drush_set_option('profile', drush_get_option('profile', 'standard', 'site'));
     }
     elseif (drush_drupal_major_version() >= 8) {
-      // Since Drupal 8.3 settings.php no longer holds the profile, so the
-      // one the import script read from the site comes first.
+      // Drupal 8.3 moved the profile out of settings.php, so the one the
+      // import script read from the site comes first.
       d()->profile = drush_set_option('profile', drush_get_option('profile', \Drupal\Core\Site\Settings::get('install_profile', 'standard'), 'site'), 'site');
     }
     d()->language = drush_set_option('language', drush_get_option('language', 'en', 'site'));
