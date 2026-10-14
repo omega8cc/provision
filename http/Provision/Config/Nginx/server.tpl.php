@@ -456,9 +456,15 @@ map $http_user_agent $ai_user_limit_key {
   ~*Kimi-User             kimi_user;
 }
 
+###
+### One exception, keyed per site: OpenAI's ads checker fetches the landing
+### pages of one advertiser's ads, so a box-wide bucket let one site's ad
+### review shed the checks of every other site's ads.  The zone's key variable
+### stays $ai_utility_limit_key; only this value carries the host.
+###
 map $http_user_agent $ai_utility_limit_key {
   default              '';
-  ~*OAI-AdsBot         oai_adsbot;
+  ~*OAI-AdsBot         "oai_adsbot:$host";
   ~*DuckAssistBot      duckassistbot;
   ~*Google-Read-Aloud  google_readaloud;
   ~*Google-NotebookLM  google_notebooklm;
