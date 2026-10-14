@@ -2098,9 +2098,18 @@ location = /index.php {
 <?php
   $perhost_zone_ok = isset($boa_zones_body)
     && strpos($boa_zones_body, 'zone=boa_perhost_anon') !== FALSE;
-  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 100);
+  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 0);
   if ($perhost_anon_conn < 1 || $perhost_anon_conn > 65535) {
+    // No operator value: the cap BOA writes for this account's PHP pool
+    // (1.5 x pm.max_children, kept between 64 and 300), else the fixed 100.
     $perhost_anon_conn = 100;
+    $perhost_cap_file = '/data/conf/' . $script_user . '_perhost_anon_conn.txt';
+    if ($script_user && @is_file($perhost_cap_file)) {
+      $perhost_cap = (int) trim((string) @file_get_contents($perhost_cap_file));
+      if ($perhost_cap >= 64 && $perhost_cap <= 300) {
+        $perhost_anon_conn = $perhost_cap;
+      }
+    }
   }
   if ($perhost_zone_ok):
 ?>
@@ -2141,12 +2150,13 @@ location = /index.php {
   ### shedding signal — forcing 503 here would silently blind that detector.
   ### Shedding at 444 also keeps this guardrail visible to the IDS.
   ###
-  ### Default 100: above the busiest legitimate per-vhost in-flight peak
-  ### measured on a production box (13-57 across every tenant over a full day)
-  ### with headroom, and far below an observed flood (417).  Deliberately loose
-  ### so it only ever bounds a genuine flood; tune toward ~1.5x the instance's
-  ### FPM pool pm.max_children via the nginx_perhost_anon_conn option (the
-  ### render cannot read the pool size, so this cannot be derived here).
+  ### The cap follows the account's FPM pool: BOA writes 1.5x its
+  ### pm.max_children, kept between 64 and 300, to a file this render reads
+  ### (the render cannot read the pool itself).  The floor of 64 keeps a tiny
+  ### pool from cutting a visitor's first image-style renders; the busiest
+  ### legitimate per-vhost peak measured on a production box was 13-57 over a
+  ### full day, an observed flood 417.  The nginx_perhost_anon_conn option
+  ### overrides it per instance; with no file it stays the fixed 100.
   ###
   limit_conn boa_perhost_anon <?php print $perhost_anon_conn; ?>;
 <?php endif; ?>

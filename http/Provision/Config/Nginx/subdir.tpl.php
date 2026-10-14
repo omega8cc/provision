@@ -1668,12 +1668,21 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
 <?php
   // The anonymous per-host render cap of the shared include, under the same
   // render-gate contract: its zone is declared in the BOA http-scope zones
-  // file, and it is keyed on the host, so this site shares its parent's cap.
+  // file, and it is keyed on the host, so this site shares its parent's cap,
+  // and reads the same value: the operator option, else the cap BOA writes
+  // for this account's PHP pool, else the fixed 100.
   $perhost_zone_ok = isset($boa_zones_body)
     && strpos($boa_zones_body, 'zone=boa_perhost_anon') !== FALSE;
-  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 100);
+  $perhost_anon_conn = (int) drush_get_option('nginx_perhost_anon_conn', 0);
   if ($perhost_anon_conn < 1 || $perhost_anon_conn > 65535) {
     $perhost_anon_conn = 100;
+    $perhost_cap_file = '/data/conf/' . $script_user . '_perhost_anon_conn.txt';
+    if ($script_user && @is_file($perhost_cap_file)) {
+      $perhost_cap = (int) trim((string) @file_get_contents($perhost_cap_file));
+      if ($perhost_cap >= 64 && $perhost_cap <= 300) {
+        $perhost_anon_conn = $perhost_cap;
+      }
+    }
   }
   if ($perhost_zone_ok):
 ?>
