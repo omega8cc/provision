@@ -16,7 +16,9 @@ if (!empty($db['default'])) {
 
   $profile = method_exists('\Drupal', 'installProfile') ? \Drupal::installProfile() : '';
   if (empty($profile)) {
-    $profile = \Drupal\Core\Site\Settings::get('install_profile', 'standard');
+    // A site can run without one (Drupal CMS removes its installer): it
+    // keeps the profile it was recorded with.
+    $profile = d()->profile ? d()->profile : \Drupal\Core\Site\Settings::get('install_profile', 'standard');
   }
   drush_set_option('profile', $profile, 'site');
   drush_set_option('language', \Drupal::languageManager()->getDefaultLanguage()->getId(), 'site');
