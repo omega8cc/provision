@@ -718,8 +718,11 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
 /**
  * The marker a copy of a store carries: <capsule>/.boa-copy. Its first line
  * names the live store the copy stands in for; a second line names the site
- * the copy was made from, when that is another one (a marker written before
- * the second line existed has the first only).
+ * the copy was made from, when that is another one. A `store-db <name>` line
+ * names that store's database and a `source-db <name>` line the source's,
+ * when it is another: a Rename keeps a site's database, so Cutover knows
+ * both sites by them, whatever domain they have now. A marker written before
+ * a line existed lacks it, and Cutover then goes by the domains.
  *
  * A store's worker sends its mail and runs its renewals on every scheduler
  * tick, paused or not. A copy (a Clone, an Upgrade a copy) shares the
@@ -732,10 +735,11 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
  * root: nginx never serves it, and it travels with the capsule on Rename and
  * in its backups.
  *
- * Returns the two names, each '' when absent or not a domain name.
+ * Returns the store, the source, the store's database and the source's
+ * database, each '' when absent or malformed.
  */
 function _provision_grav_copy_names($site_path) {
-  $names = array('', '');
+  $names = array('', '', '', '');
   $marker = _provision_grav_copy_marker($site_path);
   if (is_file($marker) && !is_link($marker)) {
     $lines = explode("\n", (string) @file_get_contents($marker, FALSE, NULL, 0, 1024));
@@ -745,8 +749,62 @@ function _provision_grav_copy_names($site_path) {
         $names[$i] = $name;
       }
     }
+    foreach ($lines as $line) {
+      if (preg_match('/^(store|source)-db ([A-Za-z0-9_]{1,64})$/', trim($line), $m)) {
+        $names[($m[1] === 'store') ? 2 : 3] = $m[2];
+      }
+    }
   }
   return $names;
+}
+
+/**
+ * The database the drushrc.php of the site at $site_path names, '' when it
+ * names none.
+ */
+function _provision_grav_site_db($site_path) {
+  $rc = $site_path . '/drushrc.php';
+  if (!is_file($rc) || is_link($rc)) {
+    return '';
+  }
+  if (preg_match('/^\$options\[\'db_name\'\] = \'([A-Za-z0-9_]{1,64})\';$/m', (string) @file_get_contents($rc, FALSE, NULL, 0, 65536), $m)) {
+    return $m[1];
+  }
+  return '';
+}
+
+/**
+ * The enabled site of this server, other than those in $except, whose
+ * drushrc.php names the database $db, '' when there is none; with $running,
+ * only one that runs a store worker now (KahunaCart in its capsule, not a
+ * held copy). Reads the account's site aliases: Cutover only.
+ */
+function _provision_grav_db_site($db, $except = array(), $running = TRUE) {
+  if ($db === '') {
+    return '';
+  }
+  $files = glob(drush_server_home() . '/.drush/*.alias.drushrc.php');
+  if (!is_array($files)) {
+    return '';
+  }
+  foreach ($files as $file) {
+    $uri = basename($file, '.alias.drushrc.php');
+    if (in_array($uri, $except, TRUE) || !preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $uri)) {
+      continue;
+    }
+    $record = drush_sitealias_get_record('@' . $uri);
+    if (empty($record['site_path']) || empty($record['site_enabled'])) {
+      continue;
+    }
+    if (_provision_grav_site_db($record['site_path']) !== $db) {
+      continue;
+    }
+    if (!$running || (_provision_grav_kahunacart_present($record['site_path'], $uri)
+      && !_provision_grav_copy_held($record['site_path'], $uri))) {
+      return $uri;
+    }
+  }
+  return '';
 }
 
 /**
@@ -779,19 +837,40 @@ function _provision_grav_copy_root($site_path, $uri) {
 }
 
 /**
- * The names a deploy writes into a new copy's marker: the live store, as
- * the copy command decided it in the source's context (the grav_copy_of
- * option), else as the archive's own marker names it, else the source; and
- * the source itself.
+ * The database of that live store: the one the site's own marker names when
+ * it is a copy itself ('' from a marker that predates the line), otherwise
+ * the site's own.
+ */
+function _provision_grav_copy_root_db($site_path) {
+  $names = _provision_grav_copy_names($site_path);
+  return ($names[0] !== '') ? $names[2] : _provision_grav_site_db($site_path);
+}
+
+/**
+ * What a deploy writes into a new copy's marker: the live store and its
+ * database, as the copy command decided them in the source's context (the
+ * grav_copy_of and grav_copy_of_db options), else as the archive's own
+ * marker names them, else the source; the source itself, and its database
+ * (grav_copy_from_db).
  */
 function _provision_grav_copy_names_for_deploy($staged_path, $old_uri) {
   $old_uri = strtolower((string) $old_uri);
   $root = strtolower(trim((string) drush_get_option('grav_copy_of', '')));
+  $root_db = trim((string) drush_get_option('grav_copy_of_db', ''));
+  $from_db = trim((string) drush_get_option('grav_copy_from_db', ''));
   if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $root)) {
     $names = _provision_grav_copy_names($staged_path);
     $root = ($names[0] !== '') ? $names[0] : $old_uri;
+    $root_db = ($names[0] !== '') ? $names[2] : '';
+    $from_db = '';
   }
-  return array($root, $old_uri);
+  if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $root_db)) {
+    $root_db = '';
+  }
+  if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $from_db)) {
+    $from_db = '';
+  }
+  return array($root, $old_uri, $root_db, $from_db);
 }
 
 /**
@@ -815,11 +894,17 @@ function _provision_grav_copy_marker($site_path) {
   return $site_path . '/.boa-copy';
 }
 
-function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_uri = '') {
+function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_uri = '', $root_db = '', $from_db = '') {
   $marker = _provision_grav_copy_marker($site_path);
   $body = (string) $root_uri . "\n";
   if ((string) $from_uri !== '' && (string) $from_uri !== (string) $root_uri) {
     $body .= (string) $from_uri . "\n";
+  }
+  if ((string) $root_db !== '') {
+    $body .= 'store-db ' . $root_db . "\n";
+  }
+  if ((string) $from_db !== '' && (string) $from_db !== (string) $root_db) {
+    $body .= 'source-db ' . $from_db . "\n";
   }
   provision_file()->file_put_contents($marker, $body)
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')

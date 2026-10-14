@@ -301,7 +301,7 @@ foreach ($config_dirs as $config_dir) {
 if (($deploy_class === 'clone' || $deploy_class === 'upgrade') && _provision_grav_has_db()
   && $old_uri !== '' && $old_uri !== $uri) {
   $copy_names = _provision_grav_copy_names_for_deploy($site_path, $old_uri);
-  _provision_grav_mark_copy($site_path, $copy_names[0], NULL, $copy_names[1]);
+  _provision_grav_mark_copy($site_path, $copy_names[0], NULL, $copy_names[1], $copy_names[2], $copy_names[3]);
 }
 
 // ---- (f) modes last, after every write above ----

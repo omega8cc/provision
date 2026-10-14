@@ -208,9 +208,12 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   $deploy_options['deploy_class'] = 'upgrade';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
   // The live store the copy stands in for: the one the source's own marker
-  // names, read from the source itself rather than from its archive.
+  // names, read from the source itself rather than from its archive; with
+  // that store's database and the source's own, which a Rename keeps.
   if (_provision_grav_has_db()) {
     $deploy_options['grav_copy_of'] = _provision_grav_copy_root(d()->site_path, d()->uri);
+    $deploy_options['grav_copy_of_db'] = _provision_grav_copy_root_db(d()->site_path);
+    $deploy_options['grav_copy_from_db'] = _provision_grav_site_db(d()->site_path);
   }
 
   // What the deploy is about to create on the target, for a site with a

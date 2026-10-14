@@ -162,16 +162,18 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $vhost_scheme_ok = FALSE;
 
   // The site leg 1 retires, as it ran before it goes: a copy still held, or
-  // a site that ran as a store of its own (a released copy among them), and
-  // the store its own marker names, if any.
+  // a site that ran as a store of its own (a released copy among them), the
+  // store its own marker names, if any, and its own database.
   $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
   $retired_held = FALSE;
-  $retired_names = array('', '');
+  $retired_names = array('', '', '', '');
+  $retired_db = '';
   if ($retired !== '') {
     $retired_record = drush_sitealias_get_record('@' . $retired);
     if (!empty($retired_record['site_path'])) {
       $retired_held = _provision_grav_copy_held($retired_record['site_path'], $retired);
       $retired_names = _provision_grav_copy_names($retired_record['site_path']);
+      $retired_db = _provision_grav_site_db($retired_record['site_path']);
     }
   }
 
@@ -202,12 +204,16 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   }
 
   // The copy takes over from the store it stands in for: the hold is lifted
-  // when leg 1 retired that store (the marker's first name) and the site the
-  // copy was made from (its second name, when another one) does not run as a
-  // store now, or when leg 1 retired the site the copy was made from while
-  // that site ran as a released copy of the same store (a site that now
-  // holds that domain but is no such copy lifts nothing; a domain is all the
-  // marker keeps). It is lifted before the rename leg,
+  // when leg 1 retired that store and the site the copy was made from (when
+  // another one) does not run as a store now, or when leg 1 retired the site
+  // the copy was made from while that site ran as a store (released, or
+  // taken over by a Cutover of its own). The store is the site with the
+  // database the marker names (a Rename keeps it), or the site at the store's
+  // domain while no site runs a store on that database any more: a Cutover
+  // gives the store's domain another database. The source is known by its
+  // database when the marker names it; a marker written before those lines
+  // knows only the domains the sites had when the copy was made. It is
+  // lifted before the rename leg,
   // whose own safety backup would otherwise carry the hold onto the live
   // store's Backups tab, and it stays lifted when the rename does not
   // complete: that store is gone, this copy is the only one left. A copy the
@@ -218,24 +224,39 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
   $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
   $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
-  $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '');
+  $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '', '', '');
   $copy_twin = '';
   $copy_lift = FALSE;
+  // Leg 1 retired the store, or the copy's own source while it ran as a
+  // store. Read after leg 1: the retired site no longer counts anywhere.
+  $store_elsewhere = ($copy_names[2] !== '') ? _provision_grav_db_site($copy_names[2], array($retired, d()->uri)) : '';
+  $retired_store = ($copy_names[2] !== '' && $retired_db !== '' && $retired_db === $copy_names[2])
+    || ($copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired && $store_elsewhere === '');
+  if ($copy_names[3] !== '') {
+    $retired_source = ($retired_db !== '' && $retired_db === $copy_names[3] && !$retired_held);
+  }
+  else {
+    $retired_source = ($copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
+      && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0]);
+  }
   if ($copy_marked && !$copy_held) {
     $copy_lift = TRUE;
     drush_log(dt('[cutover] This copy was released and runs as a store of its own: its hold marker is removed before the rename, so it keeps running at !domain.',
       array('!domain' => $target_domain)), 'ok');
   }
-  elseif ($copy_held && $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired) {
-    if ($copy_names[1] !== '' && $copy_names[1] !== $copy_names[0] && _provision_grav_store_runs($copy_names[1])) {
+  elseif ($copy_held && $retired !== '' && $retired_store) {
+    if ($copy_names[3] !== '') {
+      $copy_twin = _provision_grav_db_site($copy_names[3], array($retired, d()->uri));
+    }
+    elseif ($copy_names[2] === '' && $copy_names[1] !== '' && $copy_names[1] !== $copy_names[0]
+      && _provision_grav_store_runs($copy_names[1])) {
       $copy_twin = $copy_names[1];
     }
-    else {
+    if ($copy_twin === '') {
       $copy_lift = TRUE;
     }
   }
-  elseif ($copy_held && $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
-    && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0]) {
+  elseif ($copy_held && $retired !== '' && $retired_source) {
     $copy_lift = TRUE;
   }
   if ($copy_lift) {
@@ -243,6 +264,15 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   }
   elseif ($copy_held) {
     $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
+    // Where the store the copy stands in for has a site now: found by its
+    // database, else at the domain it had.
+    $copy_store_at = '';
+    if ($copy_names[2] !== '') {
+      $copy_store_at = _provision_grav_db_site($copy_names[2], array(d()->uri), FALSE);
+    }
+    elseif ($copy_names[0] !== '' && is_file($aliases_dir . '/' . $copy_names[0] . '.alias.drushrc.php')) {
+      $copy_store_at = $copy_names[0];
+    }
     if ($copy_twin !== '') {
       $note = dt('[cutover] The copy stays held: it was made from !from, which runs as a store over the same customers. Release it with !release once !from no longer takes orders.',
         array('!from' => $copy_twin, '!release' => $release));
@@ -251,13 +281,19 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       $note = dt('[cutover] The copy stays held: its marker names no store. Release it with !release once no other copy of its store takes orders.',
         array('!release' => $release));
     }
-    elseif ($copy_names[1] !== '' && $copy_names[1] === $retired) {
+    elseif ($store_elsewhere !== '' && $retired !== '' && $retired === $copy_names[0]) {
+      $note = dt('[cutover] The copy stays held: the site this cutover retires at !from is not the store it stands in for, which runs at !at on its own database. Release it with !release once that store no longer takes orders.',
+        array('!from' => $retired, '!at' => $store_elsewhere, '!release' => $release));
+    }
+    elseif ($retired !== '' && (($copy_names[3] !== '')
+      ? ($retired_db !== '' && $retired_db === $copy_names[3])
+      : ($copy_names[1] !== '' && $copy_names[1] === $retired))) {
       $note = dt('[cutover] The copy stays held: it stands in for !src, and the site this cutover retires at !from was not a released copy of that store. Release it with !release once !src no longer takes orders.',
         array('!src' => $copy_names[0], '!from' => $retired, '!release' => $release));
     }
-    elseif (is_file($aliases_dir . '/' . $copy_names[0] . '.alias.drushrc.php')) {
+    elseif ($copy_store_at !== '') {
       $note = dt('[cutover] The copy stays held: it stands in for !src, which this cutover does not retire. Release it with !release once !src no longer takes orders.',
-        array('!src' => $copy_names[0], '!release' => $release));
+        array('!src' => $copy_store_at, '!release' => $release));
     }
     else {
       $note = dt('[cutover] The copy stays held: it stands in for !src, which has no site on this server any more (deleted or renamed), so this cutover cannot tell whether that store still takes orders. Release the copy with !release once no other copy of that store does.',
