@@ -451,10 +451,17 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   if ((is_null($new_name) || ($new_name == d()->name)) && is_array(drush_get_option('migrate_target_copy', NULL))) {
     $aegir_root = d('@server_master')->aegir_root;
     $placeholder = $aegir_root . '/.drush/sites/' . ltrim(d()->name, '@') . '.site.yml';
-    if (is_file($placeholder) && !is_link($placeholder) && _provision_drush10_script() !== '') {
+    $drush10 = _provision_drush10_script();
+    if (is_file($placeholder) && !is_link($placeholder) && $drush10 !== '') {
       // A missing placeholder makes the converter redo every alias; the
       // drushrc alias being newer by mtime alone is missed within a second.
-      provision_file()->unlink($placeholder);
+      // Only when some installed PHP can run the converter: a conversion
+      // that cannot run must not cost the file (for a name with no dot it is
+      // the alias record itself).
+      list($drush10_php) = _provision_drush10_php($drush10);
+      if ($drush10_php !== '') {
+        provision_file()->unlink($placeholder);
+      }
       _provision_drush10_alias_convert($aegir_root);
     }
   }
