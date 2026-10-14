@@ -1886,7 +1886,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD;
   fastcgi_cache_min_uses 1;
-  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg";
+  ### The Origin of a CORS request is part of the key: a site allowing two or
+  ### more origins answers each with its own, and an ordinary visit sends none.
+  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin";
   fastcgi_cache_valid 200 10s;
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
@@ -2258,7 +2260,9 @@ location = /index.php {
   fastcgi_cache speed;
   fastcgi_cache_methods GET HEAD; ### Nginx default, but added for clarity
   fastcgi_cache_min_uses 1;
-  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg";
+  ### The Origin of a CORS request is part of the key: a site allowing two or
+  ### more origins answers each with its own, and an ordinary visit sends none.
+  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin";
   fastcgi_cache_valid 200 10s;
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
