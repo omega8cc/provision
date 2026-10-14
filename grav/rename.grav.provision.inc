@@ -120,6 +120,13 @@ function drush_provision_grav_rename($new_name = NULL) {
   // and the platform would count a directory nothing serves as a site.
   drush_set_option('provision_save_config', FALSE);
 
+  // A held copy stays held under its new name: the move keeps the marker's
+  // time, so it gets a fresh one first, and a release file left for the new
+  // domain from before releases nothing.
+  if (_provision_grav_copy_held($old_path, $old_uri)) {
+    @touch(_provision_grav_copy_marker($old_path));
+  }
+
   if (!@rename($old_path, $new_path)) {
     return drush_set_error('PROVISION_GRAV_RENAME_FAILED',
       dt('Could not move the capsule !old to !new; nothing was changed.',
