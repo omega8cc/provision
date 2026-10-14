@@ -8,6 +8,7 @@ if ($db = $databases['default']['default']) {
   drush_set_option('db_name', urldecode($db['database']), 'site');
 
   drush_set_option('profile', \Drupal\Core\Site\Settings::get('install_profile', 'standard'), 'site');
-  $language = language_default();
-  drush_set_option('language', $language->language, 'site');
+  // Drupal 8 and newer have no language_default(): the language manager
+  // holds the site's default language.
+  drush_set_option('language', \Drupal::languageManager()->getDefaultLanguage()->getId(), 'site');
 }
