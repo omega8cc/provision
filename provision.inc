@@ -1829,7 +1829,7 @@ function _provision_first_existing($paths) {
  */
 function provision_drush_local_lock_needed() {
   $version = drush_drupal_major_version();
-  if (($version == 10 || $version == 11) && _provision_lock_keeps_stock(d()->root)) {
+  if (($version == 10 || $version == 11 || $version == 12) && _provision_lock_keeps_stock(d()->root)) {
     return !d()->isConsolePatched || !d()->isCoreStock
       || in_array(provision_drush_local_lock_state(), array('unlocked', 'partial'), TRUE);
   }
@@ -1899,7 +1899,7 @@ function provision_drush_local_lock_state() {
   // tree whose conversion is deferred reads as the de-typed lock reads it.
   $typed_drush = ($version >= 10) && _provision_lock_keeps_stock(d()->root);
 
-  if ($version == 10 || $version == 11) {
+  if ($version == 10 || $version == 11 || $version == 12) {
     // Built-state gate: trust the patch flags only on a demonstrably built tree.
     if (!is_dir(d()->symfonyDir)) {
       return 'unknown';
@@ -2281,23 +2281,29 @@ function provision_unlock_drush_local_vnd() {
         return FALSE;
       }
 
-      // D10 has no validator patch, but the name is still concatenated into the
-      // template paths below; define it so a D10 pass does not log an
-      // undefined-variable notice (the apply sites are gated on == 11 first).
+      // D10 has no validator patch and only D10 a leftover name, but both are
+      // concatenated into the paths below; define them so a pass does not log
+      // an undefined-variable notice (the apply sites are gated first).
       $validator_patch_fname = '';
+      $core_patch_leftover = '';
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
         $core_patch_leftover = "drupal-ten-aegir-01.patch";
       }
-      elseif (drush_drupal_major_version() == 11) {
+      elseif (drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) {
+        // Drupal 12 takes the three eleven patches as they are.
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
         $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
         $validator_patch_fname = "drupal-eleven-aegir-validator-03.patch";
-        $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
-        $patchCoreTest = d()->root . '/' . $first_eleven_test;
-        if (provision_file()->exists($patchCoreTest)->status()) {
-          $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+        // An early Drupal 11 still ships this test module and takes the ten
+        // core patch, which no Drupal 12 takes.
+        if (drush_drupal_major_version() == 11) {
+          $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
+          $patchCoreTest = d()->root . '/' . $first_eleven_test;
+          if (provision_file()->exists($patchCoreTest)->status()) {
+            $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+          }
         }
       }
 
@@ -2356,10 +2362,10 @@ function provision_unlock_drush_local_vnd() {
         }
       }
 
-      if (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
+      if ((drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
         drush_set_error('PROVISION_VALIDATOR_PATCH_REVERT_DRYRUN_FAILED', dt('Validator patch would not revert cleanly in @webRoot; skipping to avoid a partial revert.', array('@webRoot' => d()->root)));
       }
-      elseif (drush_drupal_major_version() == 11 && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
+      elseif ((drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/REVERT @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();
@@ -2566,23 +2572,29 @@ function provision_lock_drush_local_vnd() {
 
       $this_user = provision_current_user();
 
-      // D10 has no validator patch, but the name is still concatenated into the
-      // template paths below; define it so a D10 pass does not log an
-      // undefined-variable notice (the apply sites are gated on == 11 first).
+      // D10 has no validator patch and only D10 a leftover name, but both are
+      // concatenated into the paths below; define them so a pass does not log
+      // an undefined-variable notice (the apply sites are gated first).
       $validator_patch_fname = '';
+      $core_patch_leftover = '';
       if (drush_drupal_major_version() == 10) {
         $core_patch_fname = "drupal-ten-aegir-core-01.patch";
         $console_patch_fname = "drupal-ten-aegir-console-02.patch";
         $core_patch_leftover = "drupal-ten-aegir-01.patch";
       }
-      elseif (drush_drupal_major_version() == 11) {
+      elseif (drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) {
+        // Drupal 12 takes the three eleven patches as they are.
         $core_patch_fname = "drupal-eleven-aegir-core-01.patch";
         $console_patch_fname = "drupal-eleven-aegir-console-02.patch";
         $validator_patch_fname = "drupal-eleven-aegir-validator-03.patch";
-        $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
-        $patchCoreTest = d()->root . '/' . $first_eleven_test;
-        if (provision_file()->exists($patchCoreTest)->status()) {
-          $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+        // An early Drupal 11 still ships this test module and takes the ten
+        // core patch, which no Drupal 12 takes.
+        if (drush_drupal_major_version() == 11) {
+          $first_eleven_test = "core/modules/language/tests/language_test/language_test.module";
+          $patchCoreTest = d()->root . '/' . $first_eleven_test;
+          if (provision_file()->exists($patchCoreTest)->status()) {
+            $core_patch_fname = "drupal-ten-aegir-core-01.patch";
+          }
         }
       }
 
@@ -2645,7 +2657,9 @@ function provision_lock_drush_local_vnd() {
         @unlink($stock_dir . '.refused');
       }
 
-      if (!$typed_drush) {
+      // A major with no patch arm here takes the chmod-only lock: the overlay
+      // without the core patch is a codebase the web cannot serve.
+      if (!$typed_drush && isset($core_patch_fname)) {
         if ($this_user == 'aegir' ) {
           $psr_tpl = '/var/aegir/drush/vendor/psr/log/Psr/Log';
         }
@@ -2746,10 +2760,10 @@ function provision_lock_drush_local_vnd() {
       // Drupal 11.0 ships no package_manager, so there is nothing for the
       // validator patch to change there and its dry run can only fail.
       $validator_target = is_file(d()->root . '/core/modules/package_manager/src/Validator/DiskSpaceValidator.php');
-      if (drush_drupal_major_version() == 11 && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
+      if ((drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched && !drush_shell_exec($commandValidatorDry)) {
         drush_set_error('PROVISION_VALIDATOR_PATCH_DRYRUN_FAILED', dt('Validator patch would not apply cleanly in @webRoot; skipping to avoid a partial patch.', array('@webRoot' => d()->root)));
       }
-      elseif (drush_drupal_major_version() == 11 && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
+      elseif ((drush_drupal_major_version() == 11 || drush_drupal_major_version() == 12) && $validator_target && isset($validator_patch_fname) && provision_file()->exists($patchValidatorTpl)->status() && !d()->isValidatorPatched) {
         drush_log(dt('VALIDATOR/PATCH/APPLY @patchValidatorTpl in @webRoot', array('@patchValidatorTpl' => $patchValidatorTpl, '@webRoot' => d()->root)), 'info');
         $success = drush_shell_exec($commandValidator);
         $result = drush_shell_exec_output();
