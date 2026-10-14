@@ -254,9 +254,12 @@ if ($nginx_has_gzip) {
   gzip_min_length   100;
   gzip_types
     application/atom+xml
+    application/hal+json
     application/javascript
     application/json
+    application/problem+json
     application/rss+xml
+    application/vnd.api+json
     application/vnd.ms-fontobject
     application/x-font-opentype
     application/x-font-ttf
@@ -453,9 +456,15 @@ map $http_user_agent $ai_user_limit_key {
   ~*Kimi-User             kimi_user;
 }
 
+###
+### One exception, keyed per site: OpenAI's ads checker fetches the landing
+### pages of one advertiser's ads, so a box-wide bucket let one site's ad
+### review shed the checks of every other site's ads.  The zone's key variable
+### stays $ai_utility_limit_key; only this value carries the host.
+###
 map $http_user_agent $ai_utility_limit_key {
   default              '';
-  ~*OAI-AdsBot         oai_adsbot;
+  ~*OAI-AdsBot         "oai_adsbot:$host";
   ~*DuckAssistBot      duckassistbot;
   ~*Google-Read-Aloud  google_readaloud;
   ~*Google-NotebookLM  google_notebooklm;

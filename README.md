@@ -1,39 +1,18 @@
-# The Aegir system
+# Provision for BOA
 
-The Aegir hosting system allows developers and site administrators to
-automate many of the common tasks associated with deploying and
-managing large websites. Aegir makes it easy to install, upgrade,
-deploy, and backup an entire network of Drupal sites.
+Provision is the backend of the Ægir control panel as BOA ships it: the Drush
+commands that install, verify, back up, restore, clone, migrate and delete sites
+and platforms, and write their web server and database configuration. BOA
+installs and upgrades it for you; it is not installed on its own.
 
-The most up to date information regarding the project and its goals
-can be found on the Aegir website and the documentation pages:
+This repository is the omega8cc fork, developed together with BOA. Documentation:
 
-   http://aegirproject.org
-   http://docs.aegirproject.org/
+- [How the backend works](https://docs.boa.io/developing/aegir-apis/provision-backend)
+- [The Provision API](https://docs.boa.io/developing/aegir-apis/provision-api)
+- [The fork model and branches](https://docs.boa.io/developing/overview/fork-model)
+- [Contributing](https://docs.boa.io/developing/contributing/contributing)
 
-This is the backend of the Aegir hosting system. The front end
-(hostmaster) and the backend (provision) are designed to be run
-separately, and each front end is able to drive multiple back
-ends. Aegir can install itself with the software you have already
-downloaded alongside this readme file.
+Report problems in the [BOA issue queue](https://github.com/omega8cc/boa/issues),
+and security issues as SECURITY.md describes.
 
-To install Aegir, you should follow the instructions at:
-
-   http://docs.aegirproject.org/en/3.x/install/
-
-To upgrade Aegir, follow the instructions at:
-
-   http://docs.aegirproject.org/en/3.x/install/upgrade
-
-If you have further questions or are having trouble with Aegir,
-check out how to reach our community at:
-
-   http://docs.aegirproject.org/en/3.x/community/
-
-Other documentation for developers is also available at:
-
-   http://docs.aegirproject.org/en/3.x/extend/
-
-Build status Travis: [![Build Status](https://travis-ci.org/aegir-project/provision.svg?branch=7.x-3.x)](https://travis-ci.org/aegir-project/provision) (in-depth and manual install)
-
-Build status GitLab CI: [![build status](https://gitlab.com/aegir/provision/badges/7.x-3.x/build.svg)](https://gitlab.com/aegir/provision/commits/7.x-3.x) (debian packages)
+Provision began as part of Ægir 3, from which this fork descends.
