@@ -1513,10 +1513,16 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
  * interpreter's stock ini (-c beats PHPRC), so an ini carrying an
  * open_basedir, which every modern Drush refuses at preflight, cannot stop
  * it before it does anything.
+ *
+ * $php names another interpreter for a script whose own floor the backend's
+ * does not clear; it runs on that interpreter's own php.ini the same way.
  */
-function _provision_php_script_cmd($script, $args, $php_opts = array()) {
-  $cmd = 'exec ' . escapeshellarg(_provision_site_local_php());
-  $ini = _provision_site_local_php_ini();
+function _provision_php_script_cmd($script, $args, $php_opts = array(), $php = NULL) {
+  if ($php === NULL || $php === '') {
+    $php = _provision_site_local_php();
+  }
+  $cmd = 'exec ' . escapeshellarg($php);
+  $ini = _provision_site_local_php_ini($php);
   if ($ini !== '') {
     $cmd .= ' -c ' . escapeshellarg($ini);
   }
@@ -1550,23 +1556,85 @@ function _provision_drush10_script() {
 }
 
 /**
+ * The interpreter BOA's Drush 10 tree runs on from this backend.
+ *
+ * The tree carries the Composer platform check of its own build (PHP 8.1 on
+ * the trees BOA ships), which stops it at autoload below that version, while
+ * a backend may run on less: a Drupal 8 site cannot run on PHP 8, and the
+ * rollback of its failed Migrate converts the aliases on the source's PHP.
+ * The backend's own interpreter when it clears the tree's floor, else the
+ * newest installed /opt/phpNN that does, the choice websh makes for a drush10
+ * line below the floor; '' when none does. The converter loads no codebase,
+ * so the PHP it runs on changes nothing in what it writes.
+ *
+ * @param string $script
+ *   The tree's launcher script (_provision_drush10_script()).
+ *
+ * @return array
+ *   array($php, $floor): the interpreter, '' when none clears the floor, and
+ *   the floor as a PHP_VERSION_ID.
+ */
+function _provision_drush10_php($script) {
+  // The file and the 8.1 fallback websh reads for the same tree.
+  $floor = 80100;
+  foreach (array('/../composer/platform_check.php', '/../../composer/platform_check.php') as $rel) {
+    $file = dirname($script) . $rel;
+    if (is_file($file)) {
+      $code = @file_get_contents($file);
+      if (is_string($code) && preg_match('/PHP_VERSION_ID\s*>=\s*([0-9]{5,6})/', $code, $m)) {
+        $floor = (int) $m[1];
+      }
+      break;
+    }
+  }
+  $own = _provision_site_local_php();
+  if ($own === PHP_BINARY && PHP_VERSION_ID >= $floor) {
+    return array($own, $floor);
+  }
+  // Compared by major and minor, as websh does: 80100 is 81.
+  $floor_mm = (int) ($floor / 10000) * 10 + (int) (($floor % 10000) / 100);
+  foreach (array('86', '85', '84', '83', '82', '81', '80', '74') as $v) {
+    $php = '/opt/php' . $v . '/bin/php';
+    if ((int) $v >= $floor_mm && is_executable($php)) {
+      return array($php, $floor);
+    }
+  }
+  return array('', $floor);
+}
+
+/**
  * Convert the account's Drush 8 aliases into the Drush 10+ yml aliases.
  *
- * Runs on the backend's own interpreter and ini (see
- * _provision_php_script_cmd()): the bare `drush10` launcher runs on whatever
- * ini the shell exports, and the account's Drush 8 ini is refused by every
- * modern Drush, after which no yml alias exists for a new site. The
+ * Runs on an interpreter's own ini (see _provision_php_script_cmd()): the
+ * bare `drush10` launcher runs on whatever ini the shell exports, and the
+ * account's Drush 8 ini is refused by every modern Drush, after which no yml
+ * alias exists for a new site. The interpreter is the backend's own unless it
+ * is below the Drush 10 tree's floor (_provision_drush10_php()). The
  * converter re-converts every alias once any .alias.drushrc.php is newer
  * than its yml, so a rewritten drushrc alias is carried over on the next
- * run. Never silent: a failed conversion is a warning.
+ * run. Never silent: a failed conversion is a warning, one no installed PHP
+ * can run an advisory naming the tree.
  *
  * @param string $aegir_root
  *   The account home holding .drush.
+ *
+ * @return bool|null
+ *   TRUE when converted, FALSE when the converter failed, NULL when no
+ *   installed PHP clears the tree's floor.
  */
 function _provision_drush10_alias_convert($aegir_root) {
   $drush10 = _provision_drush10_script();
   if ($drush10 !== '') {
-    $alias_cmd = _provision_php_script_cmd($drush10, array('site:alias-convert', $aegir_root . '/.drush/sites', '--yes'));
+    list($php, $floor) = _provision_drush10_php($drush10);
+    $floor_txt = (int) ($floor / 10000) . '.' . (int) (($floor % 10000) / 100);
+    if ($php === '') {
+      drush_log(dt("DRUSH/TEN/ALIASES/SKIP Drush 9+ aliases not converted: BOA's Drush 10 tree needs PHP @floor or newer and none is installed (a server tool, not the site's codebase)", array('@floor' => $floor_txt)), 'advisory');
+      return NULL;
+    }
+    if ($php !== _provision_site_local_php()) {
+      drush_log(dt("DRUSH/TEN/ALIASES/PHP @php for BOA's Drush 10 tree, which needs PHP @floor or newer; this task runs on @own", array('@php' => $php, '@floor' => $floor_txt, '@own' => _provision_site_local_php())), 'info');
+    }
+    $alias_cmd = _provision_php_script_cmd($drush10, array('site:alias-convert', $aegir_root . '/.drush/sites', '--yes'), array(), $php);
   }
   else {
     $alias_cmd = 'drush10 site:alias-convert ~/.drush/sites --yes';
@@ -1576,10 +1644,10 @@ function _provision_drush10_alias_convert($aegir_root) {
   $output = implode('', drush_shell_exec_output());
   if (!$result || preg_match('/\[(preflight|error)\]/i', $output)) {
     drush_log("DRUSH/TEN/ALIASES/FAIL " . $output, 'warning');
+    return FALSE;
   }
-  else {
-    drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
-  }
+  drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+  return TRUE;
 }
 
 /**
@@ -1603,10 +1671,15 @@ function _provision_site_local_php() {
  * and it carries no open_basedir. Empty when the interpreter is not laid out
  * that way (the caller then adds no -c and the child inherits the environment).
  *
+ * @param string $php
+ *   The interpreter whose ini is wanted; NULL for _provision_site_local_php().
+ *
  * @return string
  */
-function _provision_site_local_php_ini() {
-  $php = _provision_site_local_php();
+function _provision_site_local_php_ini($php = NULL) {
+  if ($php === NULL || $php === '') {
+    $php = _provision_site_local_php();
+  }
   if (preg_match('#^(/opt/php[0-9]+)/bin/php$#', $php, $m) && is_file($m[1] . '/lib/php.ini')) {
     return $m[1] . '/lib/php.ini';
   }
