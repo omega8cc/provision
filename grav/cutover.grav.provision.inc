@@ -187,25 +187,58 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
-  // The copy takes over only from the store it was made from: the hold is
-  // lifted when leg 1 retired exactly that site (the marker names it), and
-  // before the rename leg, whose own safety backup would otherwise carry the
-  // hold onto the live store's Backups tab. It stays lifted when the rename
-  // does not complete: that store is gone, this copy is the only one left. A
-  // cutover that retires another site, or claims a free domain, leaves the
-  // source running its own worker: the copy stays held until the account
-  // releases it.
+  // The copy takes over only from the store it stands in for: the hold is
+  // lifted when leg 1 retired exactly that site (the marker's first name)
+  // and the site the copy was made from (its second name, when another one)
+  // does not run as a store now, and before the rename leg, whose own safety
+  // backup would otherwise carry the hold onto the live store's Backups tab.
+  // It stays lifted when the rename does not complete: that store is gone,
+  // this copy is the only one left. A copy the account has released runs
+  // already, so its marker goes too: a release names the domain, and the
+  // rename would otherwise hold the copy again under its new name. Any other
+  // copy stays held until the account releases it.
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
-  $copy_held = is_file($copy_marker) && !is_link($copy_marker);
-  $copy_source = $copy_held ? trim((string) @file_get_contents($copy_marker)) : '';
+  $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
+  $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
+  $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '');
   $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
-  $copy_lift = $copy_held && $copy_source !== '' && $retired !== '' && strtolower($copy_source) === $retired;
+  $copy_twin = '';
+  $copy_lift = FALSE;
+  if ($copy_marked && !$copy_held) {
+    $copy_lift = TRUE;
+    drush_log(dt('[cutover] This copy was released and runs as a store of its own: its hold marker is removed before the rename, so it keeps running at !domain.',
+      array('!domain' => $target_domain)), 'ok');
+  }
+  elseif ($copy_held && $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired) {
+    if ($copy_names[1] !== '' && $copy_names[1] !== $copy_names[0] && _provision_grav_store_runs($copy_names[1])) {
+      $copy_twin = $copy_names[1];
+    }
+    else {
+      $copy_lift = TRUE;
+    }
+  }
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->site_path);
   }
   elseif ($copy_held) {
-    drush_log(dt('[cutover] The copy stays held: it was made from !src, which this cutover does not retire, and that store still runs its own worker. Release the copy with ~/static/control/kahunacart-run.!domain.info once !src no longer takes orders.',
-      array('!src' => $copy_source !== '' ? $copy_source : dt('an unnamed source'), '!domain' => $target_domain)), 'warning');
+    $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
+    if ($copy_twin !== '') {
+      $note = dt('[cutover] The copy stays held: it was made from !from, which runs as a store over the same customers. Release it with !release once !from no longer takes orders.',
+        array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($copy_names[0] === '') {
+      $note = dt('[cutover] The copy stays held: its marker names no store. Release it with !release once no other copy of its store takes orders.',
+        array('!release' => $release));
+    }
+    elseif (is_file($aliases_dir . '/' . $copy_names[0] . '.alias.drushrc.php')) {
+      $note = dt('[cutover] The copy stays held: it stands in for !src, which this cutover does not retire. Release it with !release once !src no longer takes orders.',
+        array('!src' => $copy_names[0], '!release' => $release));
+    }
+    else {
+      $note = dt('[cutover] The copy stays held: it stands in for !src, which has no site on this server any more (deleted or renamed), so this cutover cannot tell whether that store still takes orders. Release the copy with !release once no other copy of that store does.',
+        array('!src' => $copy_names[0], '!release' => $release));
+    }
+    drush_log($note, 'warning');
   }
 
   // Leg 2 — rename this site to the freed domain via a REAL grav_rename task,

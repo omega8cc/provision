@@ -207,6 +207,11 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   }
   $deploy_options['deploy_class'] = 'upgrade';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
+  // The live store the copy stands in for, decided here, where the source's
+  // own hold can be read: its marker and its release file.
+  if (_provision_grav_has_db()) {
+    $deploy_options['grav_copy_of'] = _provision_grav_copy_root(d()->site_path, d()->uri);
+  }
 
   // What the deploy is about to create on the target, for a site with a
   // database: the rollback drops the copy's database with the copy.
