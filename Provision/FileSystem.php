@@ -681,6 +681,79 @@ class Provision_FileSystem extends Provision_ChainedState {
   }
 
   /**
+   * Change the group of the name $name in the physical directory $dir, and
+   * with $recursive of everything below it, as chgrp() does for a path a
+   * caller judged: $dir is entered for real (see _enter()) and the name is
+   * changed there by lchgrp(), which does not follow a link put at it, or,
+   * a directory to descend into, entered for real in turn (chgrp_in()). A
+   * link at the name is left alone, as chgrp() leaves one.
+   *
+   * Sets @path, @gid, and @reason tokens for ->succeed and ->fail.
+   *
+   * @param $dir
+   *   The physical path (realpath()) of the directory the name is in, or
+   *   NULL when that resolves nowhere: then nothing is changed, and the
+   *   operation fails as chgrp() fails on a missing path.
+   * @param $name
+   *   The name: not empty, "." or "..", and with no slash.
+   * @param $gid
+   *   The name of group id you wish to change the file group ownership to.
+   * @param $recursive
+   *   TRUE to descend into subdirectories.
+   * @param $path
+   *   The path this stands for, for the log.
+   */
+  function chgrp_name_in($dir, $name, $gid, $recursive, $path) {
+    $this->_clear_state();
+    $this->tokens = array('@path' => $path, '@gid' => $gid);
+    $name = (string) $name;
+    $group = provision_posix_groupname($gid);
+    if ($dir === NULL || $name === '' || $name === '.' || $name === '..' || strpos($name, '/') !== FALSE) {
+      $this->tokens['@reason'] = dt("chgrp to @group failed on @path", array('@group' => $group ? $group : $gid, '@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+
+    $cwd = getcwd();
+    if (!$this->_enter($dir)) {
+      $this->_leave($cwd);
+      $this->tokens['@reason'] = dt('@path is not where it was checked', array('@path' => $path));
+      $this->last_status = FALSE;
+      return $this;
+    }
+    clearstatcache();
+    if (is_link($name)) {
+      // As chgrp(): a link itself is left alone.
+      $this->_leave($cwd);
+      return $this;
+    }
+    if ($recursive && is_dir($name)) {
+      $this->_leave($cwd);
+      return $this->chgrp_in(rtrim($dir, '/') . '/' . $name, $gid, TRUE, $path);
+    }
+    if ($group) {
+      if (provision_user_in_group(provision_current_user(), $gid)) {
+        if (!@lchgrp($name, $group)) {
+          $this->tokens['@reason'] = dt("chgrp to @group failed on @path", array('@group' => $group, '@path' => $path));
+        }
+      }
+      else {
+        $this->tokens['@reason'] = dt("@user is not in @group group", array("@user" => provision_current_user(), "@group" => $group));
+      }
+    }
+    elseif (!@lchgrp($name, $gid)) {
+      $this->tokens['@reason'] = dt("the group does not exist");
+    }
+
+    clearstatcache();
+    $stat = $this->_enter($dir) ? @lstat($name) : FALSE;
+    $this->last_status = is_array($stat) && !is_link($name) && $group == provision_posix_groupname($stat['gid']);
+    $this->_leave($cwd);
+
+    return $this;
+  }
+
+  /**
    * Change the mode of the physical directory $dir to $perms, and with
    * $recursive of everything below it, as chmod() does for a path a caller
    * judged: $dir is entered for real (see _enter()) and the change is made

@@ -80,12 +80,13 @@ function drush_provision_txp_pre_provision_deploy($backup_file) {
       }
     }
 
-    // Web-group access for the per-site writable set of the extracted tree.
+    // Web-group access for the per-site writable set of the extracted tree,
+    // decided for the place it lands on (provision_path_web_group_chgrp()).
     $web_group = d('@server_master')->web_group;
     foreach (array('/public/files', '/public/images', '/public/themes', '/admin/plugins', '/tmp', '/private') as $sub) {
       $path = drush_get_option('extract_path') . $sub;
       if (is_dir($path)) {
-        provision_file()->chgrp($path, provision_path_web_group($path, $web_group), TRUE)
+        provision_path_web_group_chgrp($path, $web_group, TRUE)
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
           ->fail('Could not change group ownership of <code>@path</code> to @gid');
       }
@@ -265,7 +266,7 @@ function _provision_txp_deploy_materialise_private($extract_path) {
     provision_file()->copy($file, $private . '/' . $name)
       ->fail('Could not copy <code>@source</code> to <code>@destination</code>');
   }
-  provision_file()->chgrp($private, provision_path_web_group($private))
+  provision_path_web_group_chgrp($private)
     ->fail('Could not change group ownership of <code>@path</code> to @gid');
   provision_file()->chmod($private, 0750)
     ->fail('Could not change permissions of <code>@path</code> to @perm');

@@ -3073,26 +3073,38 @@ function provision_posix_groupname($group) {
  *
  * Inside is where the path really is (realpath(); for a path not there yet,
  * its deepest part that exists, then the names below it) at or below the
- * account's home (aegir_root, resolved), or at or below the account's store
- * on attached storage (_provision_path_web_group_store()). A path that
- * cannot be resolved is outside. Any other group is returned as it is.
+ * account's home (aegir_root, resolved), at or below the account's store on
+ * attached storage (_provision_path_web_group_store()), or at or below one
+ * of the account's other places that return walks
+ * (_provision_path_web_group_roots()). A path that cannot be resolved is
+ * outside. Any other group is returned as it is.
+ *
+ * A caller that acts on a path where it resolved it gives that physical
+ * path with $resolved: it is judged as it stands, no link on it resolved
+ * again, so the group is decided for the very place the caller changes,
+ * whatever is put on the way in between (provision_path_web_group_chgrp()
+ * resolves, decides and changes so).
  *
  * @param $path
  *   The path, relative to the working directory or absolute.
  * @param $group
  *   The group the caller would give; NULL for the server's web_group.
+ * @param $resolved
+ *   TRUE when $path is a physical path the caller resolved and acts on
+ *   there (realpath(), or the place a place rule judged): absolute, with no
+ *   "." or ".." name; any other is outside.
  *
  * @return
  *   The group to give the path.
  */
-function provision_path_web_group($path, $group = NULL) {
+function provision_path_web_group($path, $group = NULL, $resolved = FALSE) {
   if ($group === NULL) {
     $group = d('@server_master')->web_group;
   }
   if (strpos((string) $group, 'wg-') !== 0) {
     return $group;
   }
-  $real = _provision_path_web_group_real($path);
+  $real = $resolved ? _provision_path_web_group_as_is($path) : _provision_path_web_group_real($path);
   if ($real !== FALSE) {
     $aegir_root = (string) d('@server_master')->aegir_root;
     $home = ($aegir_root === '') ? FALSE : realpath($aegir_root);
@@ -3103,6 +3115,11 @@ function provision_path_web_group($path, $group = NULL) {
     if ($store !== '' && _provision_path_web_group_below($real, $store)) {
       return $group;
     }
+    foreach (_provision_path_web_group_roots($aegir_root) as $top) {
+      if (_provision_path_web_group_below($real, $top)) {
+        return $group;
+      }
+    }
   }
   $shared = _provision_default_web_group();
   if (empty($shared) || strpos((string) $shared, 'wg-') === 0) {
@@ -3110,6 +3127,47 @@ function provision_path_web_group($path, $group = NULL) {
     return $group;
   }
   return $shared;
+}
+
+/**
+ * Give $path the group provision_path_web_group() gives it, as
+ * Provision_FileSystem::chgrp() gives a group (with $recursive, to all
+ * below it too), the group decided for the very place it lands on.
+ *
+ * The directory the path's last name is in is resolved once (realpath()),
+ * the group is decided on that physical directory and the name as they
+ * stand, and the change is made there, by name in that directory entered
+ * for real (Provision_FileSystem::chgrp_name_in()). A link put on the way
+ * since the directory was resolved, or at the name, is never followed, so
+ * a group decided for a place inside the account's tree never lands
+ * outside it. A link at the name is left alone, as chgrp() leaves it.
+ *
+ * @param $path
+ *   The path, relative to the working directory or absolute.
+ * @param $group
+ *   The group the caller would give; NULL for the server's web_group.
+ * @param $recursive
+ *   TRUE to descend into subdirectories.
+ *
+ * @return
+ *   The Provision_FileSystem, for ->succeed() and ->fail().
+ */
+function provision_path_web_group_chgrp($path, $group = NULL, $recursive = FALSE) {
+  $path = (string) $path;
+  $at = $path;
+  $name = basename($path);
+  clearstatcache(TRUE);
+  if ($name === '.' || $name === '..') {
+    // The directory such a path names, by its own name in the one above.
+    $at = realpath($path);
+    $name = ($at === FALSE || $at === '/') ? '' : basename($at);
+  }
+  $dir = ($name === '') ? FALSE : realpath(dirname($at));
+  if ($dir === FALSE) {
+    return provision_file()->chgrp_name_in(NULL, $name, provision_path_web_group($path, $group), $recursive, $path);
+  }
+  $real = rtrim($dir, '/') . '/' . $name;
+  return provision_file()->chgrp_name_in($dir, $name, provision_path_web_group($real, $group, TRUE), $recursive, $path);
 }
 
 /**
@@ -3152,6 +3210,19 @@ function _provision_path_web_group_real($path) {
     $real = rtrim($real, '/') . '/' . implode('/', $rest);
   }
   return $real;
+}
+
+/**
+ * A physical path a caller resolved, as it stands: the path with runs of
+ * slashes made one, FALSE when it is not absolute or has a "." or ".."
+ * name (no place a caller acts on).
+ */
+function _provision_path_web_group_as_is($path) {
+  $path = preg_replace('#/+#', '/', (string) $path);
+  if (strpos($path, '/') !== 0 || preg_match('#/\.\.?(/|$)#', $path)) {
+    return FALSE;
+  }
+  return ($path === '/') ? $path : rtrim($path, '/');
 }
 
 /**
@@ -3268,6 +3339,84 @@ function _provision_path_web_group_mnt($mounts = NULL, $mnt = NULL) {
     $found[$key] = $hits[0];
   }
   return $found[$key];
+}
+
+/**
+ * The account's other places the web group conversion walks as its own,
+ * beside its home and its store, resolved: the main login's home
+ * (/home/<account>.ftp), each sub-user's home (/home/<account>.<name>, a
+ * login in the lshellg or ltd-shell group), the logins' Ruby gems and npm
+ * trees (/opt/user/gems/<account> or <account>.<anything>, the same under
+ * /opt/user/npm) and the account's PHP cache dir (/var/www/phpcache/
+ * <account>), each of these four a real directory, as BOA's instgrp takes
+ * them. The account's backend can verify a platform its login lays there
+ * (a gems or npm tree is the login's own, in the account's group), so a
+ * site's path there takes the account's own web group from a Verify as it
+ * does from the conversion, and the return walks it. None for the master.
+ *
+ * @param $aegir_root
+ *   The account's home, /data/disk/<account> or /var/aegir.
+ */
+function _provision_path_web_group_roots($aegir_root) {
+  if (!preg_match('#/data/disk/([a-z0-9][a-z0-9-]*)$#', rtrim((string) $aegir_root, '/'), $match)) {
+    return array();
+  }
+  $acct = $match[1];
+  $home = '/home/';
+  $gems = '/opt/user/gems/';
+  $npm = '/opt/user/npm/';
+  $cache = '/var/www/phpcache/';
+  clearstatcache(TRUE);
+  $tops = array();
+  if (is_dir($home . $acct . '.ftp')) {
+    $tops[] = $home . $acct . '.ftp';
+  }
+  $names = @scandir($home);
+  foreach (is_array($names) ? $names : array() as $name) {
+    if (preg_match('#^' . preg_quote($acct, '#') . '\.[a-z0-9]+(-dev)?$#', $name)
+      && $name !== $acct . '.ftp' && substr($name, -4) !== '.web'
+      && is_dir($home . $name) && _provision_path_web_group_login($name)) {
+      $tops[] = $home . $name;
+    }
+  }
+  foreach (array($gems, $npm, $cache) as $base) {
+    $names = @scandir($base);
+    foreach (is_array($names) ? $names : array() as $name) {
+      if ($name !== $acct && ($base === $cache || strpos($name, $acct . '.') !== 0)) {
+        continue;
+      }
+      if (is_dir($base . $name) && !is_link($base . $name)) {
+        $tops[] = $base . $name;
+      }
+    }
+  }
+  $real = array();
+  foreach ($tops as $top) {
+    $res = realpath($top);
+    if ($res !== FALSE) {
+      $real[] = $res;
+    }
+  }
+  return $real;
+}
+
+/**
+ * Whether the user $name is a shell login of an account: one in the
+ * lshellg or ltd-shell group, as its primary group or a supplementary one.
+ */
+function _provision_path_web_group_login($name) {
+  $user = posix_getpwnam($name);
+  if (!is_array($user)) {
+    return FALSE;
+  }
+  foreach (array('lshellg', 'ltd-shell') as $group) {
+    $info = posix_getgrnam($group);
+    if (is_array($info) && ((int) $info['gid'] === (int) $user['gid']
+      || in_array($name, isset($info['members']) ? (array) $info['members'] : array(), TRUE))) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }
 
 /**
