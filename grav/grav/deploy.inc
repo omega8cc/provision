@@ -300,7 +300,8 @@ foreach ($config_dirs as $config_dir) {
 // ---- (i) a copy of a store: its scheduler is held ----
 if (($deploy_class === 'clone' || $deploy_class === 'upgrade') && _provision_grav_has_db()
   && $old_uri !== '' && $old_uri !== $uri) {
-  _provision_grav_mark_copy($site_path, _provision_grav_copy_source($site_path, $old_uri));
+  $copy_names = _provision_grav_copy_names_for_deploy($site_path, $old_uri);
+  _provision_grav_mark_copy($site_path, $copy_names[0], NULL, $copy_names[1]);
 }
 
 // ---- (f) modes last, after every write above ----

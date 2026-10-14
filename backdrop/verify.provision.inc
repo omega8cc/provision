@@ -34,7 +34,7 @@ function drush_provision_backdrop_provision_verify_validate() {
 
     drush_errors_on();
     // Deliberately NO in-process FULL bootstrap (mirrors the Drupal layer's
-    // D12+ skip branch). BackdropBoot's configuration phase copies Drush's
+    // D13+ skip branch). BackdropBoot's configuration phase copies Drush's
     // $GLOBALS['databases'] into the 'databases' option, but Aegir renders
     // Backdrop's settings.php with the scalar $database (singular) form, so
     // $databases is empty and a FULL/DATABASE bootstrap here fatals with

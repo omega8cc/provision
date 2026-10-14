@@ -716,8 +716,10 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
 }
 
 /**
- * The marker a copy of a store carries: <capsule>/.boa-copy, naming the
- * site it was copied from.
+ * The marker a copy of a store carries: <capsule>/.boa-copy. Its first line
+ * names the live store the copy stands in for; a second line names the site
+ * the copy was made from, when that is another one (a marker written before
+ * the second line existed has the first only).
  *
  * A store's worker sends its mail and runs its renewals on every scheduler
  * tick, paused or not. A copy (a Clone, an Upgrade a copy) shares the
@@ -729,28 +731,97 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
  * with the control file the scheduler documents. A dotfile at the capsule
  * root: nginx never serves it, and it travels with the capsule on Rename and
  * in its backups.
+ *
+ * Returns the two names, each '' when absent or not a domain name.
  */
-function _provision_grav_copy_source($site_path, $fallback) {
-  // The live store a copy stands in for: a copy of a copy keeps the name its
-  // source's marker carries (the store both duplicate), so Cutover lifts the
-  // hold only when it retires that store.
+function _provision_grav_copy_names($site_path) {
+  $names = array('', '');
   $marker = _provision_grav_copy_marker($site_path);
   if (is_file($marker) && !is_link($marker)) {
-    $name = strtolower(trim((string) @file_get_contents($marker)));
-    if (preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $name)) {
-      return $name;
+    $lines = explode("\n", (string) @file_get_contents($marker, FALSE, NULL, 0, 1024));
+    foreach (array(0, 1) as $i) {
+      $name = isset($lines[$i]) ? strtolower(trim($lines[$i])) : '';
+      if (preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $name)) {
+        $names[$i] = $name;
+      }
     }
   }
-  return (string) $fallback;
+  return $names;
+}
+
+/**
+ * Whether the copy at $site_path is held: its marker is there and no
+ * release file for $uri is newer, the test BOA's scheduler applies. File
+ * times are read to the second here, so a release made in the marker's own
+ * second counts as not newer: the copy reads as held.
+ */
+function _provision_grav_copy_held($site_path, $uri) {
+  $marker = _provision_grav_copy_marker($site_path);
+  if (!is_file($marker) || is_link($marker)) {
+    return FALSE;
+  }
+  clearstatcache();
+  $release = d('@server_master')->aegir_root . '/static/control/kahunacart-run.' . $uri . '.info';
+  $marked = @filemtime($marker);
+  $released = @filemtime($release);
+  return !($marked !== FALSE && $released !== FALSE && $released > $marked);
+}
+
+/**
+ * The live store a copy of the site at $site_path stands in for: the store
+ * the site's own marker names when it is a copy itself, held or released (a
+ * release can be taken back), otherwise the site itself. Cutover decides
+ * from the state of the site it retires, read before it goes.
+ */
+function _provision_grav_copy_root($site_path, $uri) {
+  $names = _provision_grav_copy_names($site_path);
+  return ($names[0] !== '') ? $names[0] : strtolower((string) $uri);
+}
+
+/**
+ * The names a deploy writes into a new copy's marker: the live store, as
+ * the copy command decided it in the source's context (the grav_copy_of
+ * option), else as the archive's own marker names it, else the source; and
+ * the source itself.
+ */
+function _provision_grav_copy_names_for_deploy($staged_path, $old_uri) {
+  $old_uri = strtolower((string) $old_uri);
+  $root = strtolower(trim((string) drush_get_option('grav_copy_of', '')));
+  if (!preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $root)) {
+    $names = _provision_grav_copy_names($staged_path);
+    $root = ($names[0] !== '') ? $names[0] : $old_uri;
+  }
+  return array($root, $old_uri);
+}
+
+/**
+ * Whether the site at $uri on this server runs a store worker now: an
+ * enabled site whose capsule carries KahunaCart and is not a held copy (a
+ * released copy runs).
+ */
+function _provision_grav_store_runs($uri) {
+  if ($uri === '' || !is_file(drush_server_home() . '/.drush/' . $uri . '.alias.drushrc.php')) {
+    return FALSE;
+  }
+  $record = drush_sitealias_get_record('@' . $uri);
+  if (empty($record['site_path']) || empty($record['site_enabled'])) {
+    return FALSE;
+  }
+  return _provision_grav_kahunacart_present($record['site_path'], $uri)
+    && !_provision_grav_copy_held($record['site_path'], $uri);
 }
 
 function _provision_grav_copy_marker($site_path) {
   return $site_path . '/.boa-copy';
 }
 
-function _provision_grav_mark_copy($site_path, $source_uri, $mtime = NULL) {
+function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_uri = '') {
   $marker = _provision_grav_copy_marker($site_path);
-  provision_file()->file_put_contents($marker, (string) $source_uri . "\n")
+  $body = (string) $root_uri . "\n";
+  if ((string) $from_uri !== '' && (string) $from_uri !== (string) $root_uri) {
+    $body .= (string) $from_uri . "\n";
+  }
+  provision_file()->file_put_contents($marker, $body)
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
     ->fail('Could not mark the copy at @path');
   // A hold put back keeps its old time: BOA counts a release file only when

@@ -161,6 +161,33 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $vhostd_path = _provision_grav_cutover_vhostd_path();
   $vhost_scheme_ok = FALSE;
 
+  // The site leg 1 retires, as it ran before it goes: a copy still held, or
+  // a site that ran as a store of its own (a released copy among them), the
+  // store its own marker names, if any, and whether it carries a store at
+  // all (KahunaCart in its capsule, the test BOA's scheduler applies). A
+  // marker BOA never writes (a link, a directory) is judged by the
+  // scheduler's own test, which follows it: held while it exists and no
+  // release file for the site is newer.
+  $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
+  $retired_held = FALSE;
+  $retired_names = array('', '');
+  $retired_store = FALSE;
+  if ($retired !== '') {
+    $retired_record = drush_sitealias_get_record('@' . $retired);
+    if (!empty($retired_record['site_path'])) {
+      $retired_marker = _provision_grav_copy_marker($retired_record['site_path']);
+      $retired_held = _provision_grav_copy_held($retired_record['site_path'], $retired);
+      if (!$retired_held && (is_link($retired_marker) || (file_exists($retired_marker) && !is_file($retired_marker)))) {
+        clearstatcache();
+        $marked = @filemtime($retired_marker);
+        $released = @filemtime(d('@server_master')->aegir_root . '/static/control/kahunacart-run.' . $retired . '.info');
+        $retired_held = ($marked !== FALSE) && !($released !== FALSE && $released > $marked);
+      }
+      $retired_names = _provision_grav_copy_names($retired_record['site_path']);
+      $retired_store = is_file($retired_record['site_path'] . '/user/plugins/kahunacart/kahunacart.php');
+    }
+  }
+
   // Leg 1 — retire the holder of the target domain. The chained frontend
   // delete backs it up first, then removes its vhost/site dir/alias and
   // flips its node to DELETED, freeing the domain for the rename.
@@ -187,25 +214,85 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
-  // The copy takes over only from the store it was made from: the hold is
-  // lifted when leg 1 retired exactly that site (the marker names it), and
-  // before the rename leg, whose own safety backup would otherwise carry the
-  // hold onto the live store's Backups tab. It stays lifted when the rename
-  // does not complete: that store is gone, this copy is the only one left. A
-  // cutover that retires another site, or claims a free domain, leaves the
-  // source running its own worker: the copy stays held until the account
-  // releases it.
+  // The copy takes over from the store it stands in for: the hold is lifted
+  // when leg 1 retired that store at the marker's first name, a site that
+  // carried a store (any site, for a copy that carries none) and was neither
+  // a held copy nor a copy of another store, and the site the copy was made
+  // from (its second name, when another one) does not run as a store now; or
+  // when leg 1 retired the site the copy was made from while that site ran
+  // as a released copy of the same store. A site that now holds either
+  // domain but is no such site lifts nothing. A domain is all the marker
+  // keeps, so a store that is no copy, put at the store's domain, still
+  // passes that test (the source's test still applies). It is lifted before
+  // the rename leg,
+  // whose own safety backup would otherwise carry the hold onto the live
+  // store's Backups tab, and it stays lifted when the rename does not
+  // complete: that store is gone, this copy is the only one left. A copy the
+  // account has released runs already, so its marker goes too: a release
+  // names the domain, and the rename would otherwise hold the copy again
+  // under its new name. Any other copy stays held until the account releases
+  // it.
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
-  $copy_held = is_file($copy_marker) && !is_link($copy_marker);
-  $copy_source = $copy_held ? trim((string) @file_get_contents($copy_marker)) : '';
-  $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
-  $copy_lift = $copy_held && $copy_source !== '' && $retired !== '' && strtolower($copy_source) === $retired;
+  $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
+  $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
+  $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '');
+  $copy_store = $copy_marked && is_file(d()->site_path . '/user/plugins/kahunacart/kahunacart.php');
+  $copy_twin = '';
+  $copy_lift = FALSE;
+  if ($copy_marked && !$copy_held) {
+    $copy_lift = TRUE;
+    drush_log(dt('[cutover] This copy was released and runs as a store of its own: its hold marker is removed before the rename, so it keeps running at !domain.',
+      array('!domain' => $target_domain)), 'ok');
+  }
+  elseif ($copy_held && $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired
+    && ($retired_store || !$copy_store) && !$retired_held
+    && ($retired_names[0] === '' || $retired_names[0] === $copy_names[0])) {
+    if ($copy_names[1] !== '' && $copy_names[1] !== $copy_names[0] && _provision_grav_store_runs($copy_names[1])) {
+      $copy_twin = $copy_names[1];
+    }
+    else {
+      $copy_lift = TRUE;
+    }
+  }
+  elseif ($copy_held && $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
+    && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0]) {
+    $copy_lift = TRUE;
+  }
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->site_path);
   }
   elseif ($copy_held) {
-    drush_log(dt('[cutover] The copy stays held: it was made from !src, which this cutover does not retire, and that store still runs its own worker. Release the copy with ~/static/control/kahunacart-run.!domain.info once !src no longer takes orders.',
-      array('!src' => $copy_source !== '' ? $copy_source : dt('an unnamed source'), '!domain' => $target_domain)), 'warning');
+    $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
+    if ($copy_twin !== '') {
+      $note = dt('[cutover] The copy stays held: it was made from the site at !from, and a store runs at that domain now, possibly over the same customers. Release it with !release once !from no longer takes orders, or now if the store at !from is not the site this copy was made from.',
+        array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($copy_names[0] === '') {
+      $note = dt('[cutover] The copy stays held: its marker names no store. Release it with !release once its store and every other copy of that store no longer take orders.',
+        array('!release' => $release));
+    }
+    elseif ($retired !== '' && $retired === $copy_names[0]
+      && ($retired_held || ($retired_names[0] !== '' && $retired_names[0] !== $copy_names[0]))) {
+      $note = dt('[cutover] The copy stays held: the site this cutover retires at !from was not the store it stands in for (it was a held copy or a copy of another store), so that store may run under another name now. Release the copy with !release once that store, under whatever name it runs now, and every other copy of it no longer take orders.',
+        array('!from' => $retired, '!release' => $release));
+    }
+    elseif ($retired !== '' && $retired === $copy_names[0]) {
+      $note = dt('[cutover] The copy stays held: the site this cutover retires at !from carried no store, so it was not the store this copy stands in for, which may run under another name now. If the shop was built on this copy and its source never had one, release it now with !release; otherwise release it once that store, under whatever name it runs now, and every other copy of it no longer take orders.',
+        array('!from' => $retired, '!release' => $release));
+    }
+    elseif ($copy_names[1] !== '' && $copy_names[1] === $retired) {
+      $note = dt('[cutover] The copy stays held: it stands in for !src, and the site this cutover retires at !from was not a released copy of that store. Release it with !release once that store, under whatever name it runs now, no longer takes orders.',
+        array('!src' => $copy_names[0], '!from' => $retired, '!release' => $release));
+    }
+    elseif (is_file($aliases_dir . '/' . $copy_names[0] . '.alias.drushrc.php')) {
+      $note = dt('[cutover] The copy stays held: it stands in for !src, which this cutover does not retire. Release it with !release once that store, under whatever name it runs now, no longer takes orders.',
+        array('!src' => $copy_names[0], '!release' => $release));
+    }
+    else {
+      $note = dt('[cutover] The copy stays held: it stands in for !src, which has no site on this server any more (deleted or renamed), so this cutover cannot tell whether that store still takes orders. Release the copy with !release once that store, under whatever name it runs now, and every other copy of it no longer take orders.',
+        array('!src' => $copy_names[0], '!release' => $release));
+    }
+    drush_log($note, 'warning');
   }
 
   // Leg 2 — rename this site to the freed domain via a REAL grav_rename task,
@@ -237,6 +324,15 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   // The copy took over from its source: its store worker runs from now on.
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
+  }
+  elseif ($copy_held) {
+    // Still held under the new name: a release file left for this domain,
+    // by the site leg 1 retired or earlier, is older than the marker from
+    // now on and releases nothing.
+    $moved_marker = _provision_grav_copy_marker(d()->root . '/sites/' . $target_domain);
+    if (is_file($moved_marker) && !is_link($moved_marker)) {
+      @touch($moved_marker);
+    }
   }
   drush_log(dt('[cutover] Encryption is OFF for !domain (the rename disables it — keys are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!domain' => $target_domain)), 'advisory');

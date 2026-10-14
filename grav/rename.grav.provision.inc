@@ -120,6 +120,17 @@ function drush_provision_grav_rename($new_name = NULL) {
   // and the platform would count a directory nothing serves as a site.
   drush_set_option('provision_save_config', FALSE);
 
+  // A held copy stays held under its new name: the move keeps the marker's
+  // time, so it gets a fresh one first, and a release file left for the new
+  // domain from before releases nothing. A released copy keeps its marker's
+  // time, and its release names the old domain.
+  $copy_marker = _provision_grav_copy_marker($old_path);
+  $held_copy = _provision_grav_copy_held($old_path, $old_uri);
+  $released_copy = !$held_copy && is_file($copy_marker) && !is_link($copy_marker);
+  if ($held_copy) {
+    @touch($copy_marker);
+  }
+
   if (!@rename($old_path, $new_path)) {
     return drush_set_error('PROVISION_GRAV_RENAME_FAILED',
       dt('Could not move the capsule !old to !new; nothing was changed.',
@@ -174,6 +185,15 @@ function drush_provision_grav_rename($new_name = NULL) {
 
   drush_log(dt('Encryption is OFF for !new (a rename disables it -- certificates are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!new' => $new_uri)), 'advisory');
+  // Said only when the rename stands: an error here starts the rollback.
+  if ($held_copy && !drush_get_error()) {
+    drush_log(dt('This copy of a store stays held at !new: its hold starts again with the rename, so only ~/static/control/kahunacart-run.!new.info made after it releases the copy.',
+      array('!new' => $new_uri)), 'advisory');
+  }
+  elseif ($released_copy && !drush_get_error()) {
+    drush_log(dt('This copy of a store was released at !old: at !new it runs only while ~/static/control/kahunacart-run.!new.info is newer than its marker.',
+      array('!old' => $old_uri, '!new' => $new_uri)), 'advisory');
+  }
 }
 
 /**

@@ -1844,7 +1844,7 @@ function provision_drush_local_lock_needed() {
  * provision_check_codebase_status, which MUST have run first) and the actual
  * permission bits the lock (0400) / unlock (0775) apply to vendor/drush and the
  * Symfony console Input/Style dirs. Patch-state is authoritative where patch
- * templates exist (D10/D11); for pre-D10 and D12+ the lock is the chmod alone,
+ * templates exist (D10 to D12); for pre-D10 and D13+ the lock is the chmod alone,
  * so perm-bits are the only signal. Any patch-vs-perm disagreement (the
  * interrupted-run signature) returns 'partial' so the caller runs the body,
  * whose per-step guards converge only the still-needed work.
@@ -1927,7 +1927,7 @@ function provision_drush_local_lock_state() {
     return 'partial';
   }
 
-  // Pre-D10 and D12+: no patch templates; the lock is the chmod alone.
+  // Pre-D10 and D13+: no patch templates; the lock is the chmod alone.
   if ($bits_locked && ($typed_drush ? $psr_detyped !== TRUE : $psr_detyped !== FALSE)) {
     return 'locked';
   }
