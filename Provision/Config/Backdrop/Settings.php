@@ -80,9 +80,10 @@ class Provision_Config_Backdrop_Settings extends Provision_Config {
       }
 
       // Set permissions on local.settings.php, if it exists: the group where it
-      // really is, as for settings.php (Provision_Config::write()).
+      // really is, as for settings.php (Provision_Config::write()), decided
+      // for the place it lands on.
       if (provision_file()->exists($local_settings)->status()) {
-        provision_file()->chgrp($local_settings, provision_path_web_group($local_settings, $this->group))
+        provision_path_web_group_chgrp($local_settings, $this->group)
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
           ->fail('Could not change group ownership of <code>@path</code> to @gid');
         provision_file()->chmod($local_settings, $this->mode | 0440)

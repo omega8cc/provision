@@ -219,13 +219,13 @@ function _provision_backdrop_create_directories($url = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
-  // Each dir takes its group where it really is: one outside the account's
-  // tree keeps the shared web group rather than the account's own
-  // (provision_path_web_group()).
+  // Each dir takes its group where it really is (the place judged, as it
+  // stands): one outside the account's tree keeps the shared web group
+  // rather than the account's own (provision_path_web_group()).
   $groups = array();
   foreach ($config_dirs as $path) {
     $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
-    $groups[$path] = provision_path_web_group(($at === NULL) ? $path : $at, $web_group);
+    $groups[$path] = ($at === NULL) ? provision_path_web_group($path, $web_group) : provision_path_web_group($at, $web_group, TRUE);
   }
   foreach ($config_dirs as $path) {
     if (!isset($places[$path])) {

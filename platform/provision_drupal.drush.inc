@@ -527,13 +527,13 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not create <code>@path</code>', 'DRUSH_PERM_ERROR');
     }
   }
-  // Each path takes its group where it really is (the place judged, or the
-  // path): one outside the account's tree keeps the shared web group rather
-  // than the account's own (provision_path_web_group()).
+  // Each path takes its group where it really is (the place judged, as it
+  // stands, or the path): one outside the account's tree keeps the shared
+  // web group rather than the account's own (provision_path_web_group()).
   foreach ($chgrp as $path => $group) {
     if ($group !== FALSE) {
       $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
-      $group = provision_path_web_group(($at === NULL) ? $path : $at, $group);
+      $group = ($at === NULL) ? provision_path_web_group($path, $group) : provision_path_web_group($at, $group, TRUE);
       if (!isset($places[$path])) {
         provision_file()->chgrp($path, $group, !in_array($path, $chgrp_not_recursive))
           ->succeed('Changed group ownership of <code>@path</code> to @gid')
@@ -555,7 +555,8 @@ function _provision_drupal_create_directories($url = NULL) {
       // tree, as the group it takes there does.
       if (isset($narrowed[$path]) && $perm === $narrowed[$path]) {
         $at = isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : NULL;
-        if (strpos((string) provision_path_web_group(($at === NULL) ? $path : $at), 'wg-') !== 0) {
+        $wg = ($at === NULL) ? provision_path_web_group($path) : provision_path_web_group($at, NULL, TRUE);
+        if (strpos((string) $wg, 'wg-') !== 0) {
           $perm = $wide[$path];
         }
       }
@@ -771,7 +772,7 @@ function _provision_drupal_site_place($path, $site_dir, $aegir_root) {
  * itself a link is left alone, as chgrp() leaves it. Each other tree is
  * walked from inside the directory judged, every directory below it entered
  * for real (Provision_FileSystem::chgrp_in()), and takes the group
- * provision_path_web_group() gives the directory judged.
+ * provision_path_web_group() gives the directory judged, as it stands.
  *
  * @param $extract_path
  *   The extracted site dir, <platform root>/sites/<uri> or its .restore
@@ -806,8 +807,10 @@ function _provision_drupal_deploy_chgrp($extract_path) {
     }
     // A tree that is not there gets nothing, and fails as before.
     $dir = $place['rest'] ? NULL : $place['dir'];
-    // Where it really lies outside the account's tree, the shared web group.
-    provision_file()->chgrp_in($dir, provision_path_web_group(($dir === NULL) ? $extract_path . '/' . $tree : $dir, $group), TRUE, $extract_path . '/' . $tree)
+    // Where it really lies outside the account's tree, the shared web group:
+    // decided on the directory judged, as it stands.
+    $wg = ($dir === NULL) ? provision_path_web_group($extract_path . '/' . $tree, $group) : provision_path_web_group($dir, $group, TRUE);
+    provision_file()->chgrp_in($dir, $wg, TRUE, $extract_path . '/' . $tree)
       ->succeed('Changed group ownership of ' . $what . ' in <code>@path</code> to @gid')
       ->fail('Could not change group ownership of ' . $what . ' in <code>@path</code> to @gid');
   }
