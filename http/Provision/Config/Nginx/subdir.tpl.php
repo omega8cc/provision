@@ -792,13 +792,15 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   }
 
   ###
-  ### Deny every hidden file and directory but /.well-known/, as Drupal's own
-  ### .htaccess does: the hidden-name alternatives of the deny below are
-  ### anchored at the start of the URI, which always begins with a slash, so
-  ### they never match. Keep this ahead of every location that serves files.
+  ### Deny every hidden file and directory, as Drupal's own .htaccess does,
+  ### with .well-known/ allowed at the site's own root only: the hidden-name
+  ### alternatives of the deny below are anchored at the start of the URI,
+  ### which always begins with a slash, so they never match. A dot after an
+  ### autocomplete path is the text a Drupal 7 or Backdrop visitor typed, so
+  ### it goes on to Drupal. Logged, so the log scan counts these probes. Keep
+  ### this ahead of every location that serves files.
   ###
-  location ~ /\.(?!well-known/) {
-    access_log off;
+  location ~ ^/<?php print $subdir; ?>/\.(?!well-known/)|^/<?php print $subdir; ?>/(?:(?!/[^/]*autocomplete).)+/\. {
     log_not_found off;
     return 404;
   }
@@ -814,15 +816,15 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
 
   ###
   ### Deny the composer and npm manifests and lock files, as Drupal's own
-  ### .htaccess does, ahead of the locations that serve files.
+  ### .htaccess does, ahead of the locations that serve files. Private files
+  ### under system/files/ still go to Drupal, which checks access itself.
   ###
-  location ~* /.*composer\.(json|lock)$ {
+  location ~* ^(?!/<?php print $subdir; ?>(?:/[^/]+)?/system/files/).*composer\.(json|lock)$ {
     access_log off;
     log_not_found off;
     return 404;
   }
-  location ~* /(?:package(?:-lock)?\.json|yarn\.lock)$ {
-    access_log off;
+  location ~* ^(?!/<?php print $subdir; ?>(?:/[^/]+)?/system/files/).*/(?:package(?:-lock)?\.json|yarn\.lock)$ {
     log_not_found off;
     return 404;
   }
@@ -1061,7 +1063,6 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
     ### No hidden file or directory under the short /files/ URIs either.
     ###
     location ~ /\. {
-      access_log off;
       log_not_found off;
       return 404;
     }
@@ -1166,7 +1167,6 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ###
   location ^~ /<?php print $subdir; ?>/downloads/ {
     location ~ /\. {
-      access_log off;
       log_not_found off;
       return 404;
     }

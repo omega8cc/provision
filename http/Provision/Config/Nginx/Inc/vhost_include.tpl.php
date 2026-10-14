@@ -1047,13 +1047,15 @@ location ^~ /audio/download {
 }
 
 ###
-### Deny every hidden file and directory but /.well-known/, as Drupal's own
-### .htaccess does: the hidden-name alternatives of the deny below are anchored
-### at the start of the URI, which always begins with a slash, so they never
-### match. Keep this ahead of every location that serves files.
+### Deny every hidden file and directory, as Drupal's own .htaccess does, with
+### /.well-known/ allowed at the document root only: the hidden-name
+### alternatives of the deny below are anchored at the start of the URI, which
+### always begins with a slash, so they never match. A dot after an
+### autocomplete path is the text a Drupal 7 or Backdrop visitor typed, so it
+### goes on to Drupal. Logged, so the log scan counts these probes. Keep this
+### ahead of every location that serves files.
 ###
-location ~ /\.(?!well-known/) {
-  access_log off;
+location ~ ^/\.(?!well-known/)|^(?:(?!/[^/]*autocomplete).)+/\. {
   log_not_found off;
   return 404;
 }
@@ -1069,15 +1071,15 @@ location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|
 
 ###
 ### Deny the composer and npm manifests and lock files, as Drupal's own
-### .htaccess does, ahead of the locations that serve files.
+### .htaccess does, ahead of the locations that serve files. Private files
+### under system/files/ still go to Drupal, which checks access itself.
 ###
-location ~* /.*composer\.(json|lock)$ {
+location ~* ^(?!(?:/[^/]+)?/system/files/).*composer\.(json|lock)$ {
   access_log off;
   log_not_found off;
   return 404;
 }
-location ~* /(?:package(?:-lock)?\.json|yarn\.lock)$ {
-  access_log off;
+location ~* ^(?!(?:/[^/]+)?/system/files/).*/(?:package(?:-lock)?\.json|yarn\.lock)$ {
   log_not_found off;
   return 404;
 }
@@ -1477,7 +1479,6 @@ location ^~ /files/ {
   ### No hidden file or directory under the short /files/ URIs either.
   ###
   location ~ /\. {
-    access_log off;
     log_not_found off;
     return 404;
   }
@@ -1583,7 +1584,6 @@ location ^~ /files/ {
 ###
 location ^~ /downloads/ {
   location ~ /\. {
-    access_log off;
     log_not_found off;
     return 404;
   }
