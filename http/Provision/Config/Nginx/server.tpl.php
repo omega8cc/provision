@@ -358,7 +358,7 @@ map $http_user_agent $is_ai_training {
   # Allowed classes whose UA carries a training token in its contact part
   # ("+claudebot@anthropic.com", ".../support/amazonbot"): regex lines are
   # tried in order, so this one keeps them out of the training class.
-  ~*Claude-User|Claude-SearchBot|Amzn-SearchBot                                          '';
+  ~*Claude-User|Claude-SearchBot|Amzn-SearchBot|Amzn-User                               '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot|KimiBot                              is_ai_training;
   # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
@@ -374,7 +374,7 @@ map $http_user_agent $is_ai_training {
 ###
 map $http_user_agent $is_ai_search {
   default  '';
-  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot  is_ai_search;
+  ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot|Amzn-SearchBot  is_ai_search;
 }
 
 ###
@@ -387,7 +387,7 @@ map $http_user_agent $is_ai_search {
 ###
 map $http_user_agent $is_ai_user {
   default  '';
-  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher|Google-?Agent|Kimi-User  is_ai_user;
+  ~*ChatGPT-User|Claude-User|MistralAI-User|Meta-ExternalFetcher|Google-?Agent|Kimi-User|Amzn-User  is_ai_user;
 }
 
 ###
@@ -444,6 +444,7 @@ map $http_user_agent $ai_search_limit_key {
   ~*Google-CloudVertexBot  google_vertexbot;
   ~*Kimi-SearchBot         kimi_searchbot;
   ~*ExaSearchBot           exa_searchbot;
+  ~*Amzn-SearchBot         amzn_searchbot;
 }
 
 map $http_user_agent $ai_user_limit_key {
@@ -454,6 +455,7 @@ map $http_user_agent $ai_user_limit_key {
   ~*Meta-ExternalFetcher  meta_fetcher;
   ~*Google-?Agent         google_agent;
   ~*Kimi-User             kimi_user;
+  ~*Amzn-User             amzn_user;
 }
 
 ###
