@@ -48,13 +48,20 @@ if ($this->redirection) {
         print "  }\n";
         print "\n";
       }
-      // An HTTPS visitor who reached this alias through the wildcard SSL
-      // front arrives here over plain HTTP, with X-Forwarded-Proto: https.
-      print "  set \$boa_visitor_scheme \$scheme;\n";
-      print "  if (\$http_x_forwarded_proto = \"https\") {\n";
-      print "    set \$boa_visitor_scheme \"https\";\n";
-      print "  }\n";
-      print "  return 301 \$boa_visitor_scheme://{$this->redirection}\$request_uri;\n";
+      if (!empty($ssl_redirection)) {
+        // HTTPS required: straight to the main https address, not to the
+        // http one whose own vhost would send a second redirect.
+        print "  return 301 https://{$this->redirection}\$request_uri;\n";
+      }
+      else {
+        // An HTTPS visitor who reached this alias through the wildcard SSL
+        // front arrives here over plain HTTP, with X-Forwarded-Proto: https.
+        print "  set \$boa_visitor_scheme \$scheme;\n";
+        print "  if (\$http_x_forwarded_proto = \"https\") {\n";
+        print "    set \$boa_visitor_scheme \"https\";\n";
+        print "  }\n";
+        print "  return 301 \$boa_visitor_scheme://{$this->redirection}\$request_uri;\n";
+      }
       print "}\n";
     }
   }
