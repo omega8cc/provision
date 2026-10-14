@@ -129,7 +129,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
           @unlink($staged_marker);
         }
         $held_names = _provision_grav_copy_names(d()->site_path);
-        _provision_grav_mark_copy($extract_path, $held_names[0], @filemtime($held_marker), $held_names[1], $held_names[2], $held_names[3]);
+        _provision_grav_mark_copy($extract_path, $held_names[0], @filemtime($held_marker), $held_names[1]);
       }
       elseif (file_exists($staged_marker) || is_link($staged_marker)) {
         provision_file()->unlink($staged_marker)
@@ -158,7 +158,7 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       // either way, naming the live store and this copy's source.
       if (_provision_grav_has_db()) {
         $copy_names = _provision_grav_copy_names_for_deploy($extract_path, drush_get_option('old_uri', ''));
-        _provision_grav_mark_copy($extract_path, $copy_names[0], NULL, $copy_names[1], $copy_names[2], $copy_names[3]);
+        _provision_grav_mark_copy($extract_path, $copy_names[0], NULL, $copy_names[1]);
         if (!is_file(_provision_grav_copy_marker($extract_path))) {
           return drush_set_error('PROVISION_GRAV_COPY_MARK',
             dt('Could not hold the copy at @path before moving it into place.', array('@path' => $extract_path)));
