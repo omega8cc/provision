@@ -768,20 +768,14 @@ function _provision_grav_copy_held($site_path, $uri) {
 }
 
 /**
- * The live store a copy of the site at $site_path stands in for, decided in
- * that site's own context, where its release file can be read: while the
- * site is a held copy itself, the store its marker names; otherwise the site
- * itself, which runs as a store of its own (a released copy, or never a
- * copy).
+ * The live store a copy of the site at $site_path stands in for: the store
+ * the site's own marker names when it is a copy itself, held or released (a
+ * release can be taken back), otherwise the site itself. Cutover decides
+ * from the state of the site it retires, read before it goes.
  */
 function _provision_grav_copy_root($site_path, $uri) {
-  if (_provision_grav_copy_held($site_path, $uri)) {
-    $names = _provision_grav_copy_names($site_path);
-    if ($names[0] !== '') {
-      return $names[0];
-    }
-  }
-  return strtolower((string) $uri);
+  $names = _provision_grav_copy_names($site_path);
+  return ($names[0] !== '') ? $names[0] : strtolower((string) $uri);
 }
 
 /**

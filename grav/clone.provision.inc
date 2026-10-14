@@ -144,8 +144,8 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   }
   $deploy_options['deploy_class'] = 'clone';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
-  // The live store the copy stands in for, decided here, where the source's
-  // own hold can be read: its marker and its release file.
+  // The live store the copy stands in for: the one the source's own marker
+  // names, read from the source itself rather than from its archive.
   if (_provision_grav_has_db()) {
     $deploy_options['grav_copy_of'] = _provision_grav_copy_root(d()->site_path, d()->uri);
   }

@@ -161,6 +161,17 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $vhostd_path = _provision_grav_cutover_vhostd_path();
   $vhost_scheme_ok = FALSE;
 
+  // The site leg 1 retires, as it ran before it goes: a copy still held, or
+  // a site that ran as a store of its own (a released copy among them).
+  $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
+  $retired_held = FALSE;
+  if ($retired !== '') {
+    $retired_record = drush_sitealias_get_record('@' . $retired);
+    if (!empty($retired_record['site_path'])) {
+      $retired_held = _provision_grav_copy_held($retired_record['site_path'], $retired);
+    }
+  }
+
   // Leg 1 — retire the holder of the target domain. The chained frontend
   // delete backs it up first, then removes its vhost/site dir/alias and
   // flips its node to DELETED, freeing the domain for the rename.
@@ -187,21 +198,22 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
-  // The copy takes over only from the store it stands in for: the hold is
-  // lifted when leg 1 retired exactly that site (the marker's first name)
-  // and the site the copy was made from (its second name, when another one)
-  // does not run as a store now, and before the rename leg, whose own safety
-  // backup would otherwise carry the hold onto the live store's Backups tab.
-  // It stays lifted when the rename does not complete: that store is gone,
-  // this copy is the only one left. A copy the account has released runs
-  // already, so its marker goes too: a release names the domain, and the
-  // rename would otherwise hold the copy again under its new name. Any other
-  // copy stays held until the account releases it.
+  // The copy takes over from the store it stands in for: the hold is lifted
+  // when leg 1 retired that store (the marker's first name) and the site the
+  // copy was made from (its second name, when another one) does not run as a
+  // store now, or when leg 1 retired the site the copy was made from while
+  // that site ran as a store of its own. It is lifted before the rename leg,
+  // whose own safety backup would otherwise carry the hold onto the live
+  // store's Backups tab, and it stays lifted when the rename does not
+  // complete: that store is gone, this copy is the only one left. A copy the
+  // account has released runs already, so its marker goes too: a release
+  // names the domain, and the rename would otherwise hold the copy again
+  // under its new name. Any other copy stays held until the account releases
+  // it.
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
   $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
   $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
   $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '');
-  $retired = (is_string($source) && $source !== '') ? strtolower(ltrim($source, '@')) : '';
   $copy_twin = '';
   $copy_lift = FALSE;
   if ($copy_marked && !$copy_held) {
@@ -216,6 +228,9 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     else {
       $copy_lift = TRUE;
     }
+  }
+  elseif ($copy_held && $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired && !$retired_held) {
+    $copy_lift = TRUE;
   }
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->site_path);
@@ -270,6 +285,15 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   // The copy took over from its source: its store worker runs from now on.
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
+  }
+  elseif ($copy_held) {
+    // Still held under the new name: a release file left for this domain,
+    // by the site leg 1 retired or earlier, is older than the marker from
+    // now on and releases nothing.
+    $moved_marker = _provision_grav_copy_marker(d()->root . '/sites/' . $target_domain);
+    if (is_file($moved_marker) && !is_link($moved_marker)) {
+      @touch($moved_marker);
+    }
   }
   drush_log(dt('[cutover] Encryption is OFF for !domain (the rename disables it — keys are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!domain' => $target_domain)), 'advisory');
