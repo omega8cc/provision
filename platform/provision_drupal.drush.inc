@@ -1643,7 +1643,9 @@ function _provision_drush10_alias_convert($aegir_root) {
   $result = drush_shell_cd_and_exec($aegir_root, $alias_cmd);
   $output = implode('', drush_shell_exec_output());
   if (!$result || preg_match('/\[(preflight|error)\]/i', $output)) {
-    drush_log("DRUSH/TEN/ALIASES/FAIL " . $output, 'warning');
+    // Named as the server's tool: its raw output (a Composer platform error
+    // above all) otherwise reads as a fault in the site's own codebase.
+    drush_log("DRUSH/TEN/ALIASES/FAIL BOA's Drush 10 (" . (($drush10 !== '') ? $drush10 : 'drush10') . ") did not convert the Drush 9+ aliases: " . $output, 'warning');
     return FALSE;
   }
   drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
