@@ -318,25 +318,25 @@ function drush_provision_drupal_post_provision_deploy() {
       drush_log(dt('Registry rebuilt without --no-cache-clear in drush_provision_drupal_post_provision_deploy'));
     }
   }
-  // D6-D11 finish the rebuild in-process under a FULL bootstrap. Aegir's own
-  // Drush 8 CAN read-only FULL-bootstrap D10/D11 here, exactly as it does at
-  // install/verify VALIDATE time (the install/verify gates were restored to
-  // < 12 in f9466d37 because that in-process container is what the unconditional
-  // post-hook system_map() needs); this gate now mirrors the FULL-bootstrap gates
-  // in install.provision.inc and verify.provision.inc (same '< 12' test; line
-  // numbers move, the functions do not). The in-process pass regenerates the site 'packages' map so the
-  // Hostmaster module/theme inventory stays current after a clone/migrate/
-  // restore, runs the deploy_11 URL-rename engine (system.site name on a
-  // clone-to-new-URL), and rebuilds node access. D10/D11 are ALSO rebuilt above
-  // by core itself in _provision_drupal_rebuild_d8plus() (harmless, and it
-  // pre-warms the container this bootstrap then reads). D12+ alone skip the
-  // FULL bootstrap (Aegir Drush 8 cannot load them) and take the
-  // CONFIGURATION-only branch below, relying on that core rebuild. If the
-  // bootstrap genuinely fails on D10/D11 it is a WARNING naming what this
-  // tail then skipped (the 'packages' map is left untouched, no regression
-  // over the prior skip) -- never a plain log line, which let a deploy whose
-  // tail did not run end SUCCESSFUL.
-  if (drush_drupal_major_version() < 12) {
+  // D6-D12 finish the rebuild in-process under a FULL bootstrap. Aegir's own
+  // Drush 8 CAN read-only FULL-bootstrap D10 to D12 here, exactly as it does
+  // at install/verify VALIDATE time (that in-process container is what the
+  // unconditional post-hook system_map() needs, f9466d37); this gate mirrors
+  // the FULL-bootstrap gates in install.provision.inc and verify.provision.inc
+  // (same '< 13' test; line numbers move, the functions do not). The in-process
+  // pass regenerates the site 'packages' map so the Hostmaster module/theme
+  // inventory stays current after a clone/migrate/restore, runs the deploy
+  // URL-rename engine (system.site name on a clone-to-new-URL), and rebuilds
+  // node access. D10 to D12 are ALSO rebuilt above by core itself in
+  // _provision_drupal_rebuild_d8plus() (harmless, and it pre-warms the
+  // container this bootstrap then reads). D13+ alone skip the FULL bootstrap
+  // (Aegir Drush 8 has no boot class for them) and take the CONFIGURATION-only
+  // branch below, relying on that core rebuild. If the bootstrap genuinely
+  // fails on D10 to D12 it is a WARNING naming what this tail then skipped (the
+  // 'packages' map is left untouched, no regression over the prior skip) --
+  // never a plain log line, which let a deploy whose tail did not run end
+  // SUCCESSFUL.
+  if (drush_drupal_major_version() < 13) {
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
       drush_include_engine('drupal', 'deploy');
@@ -365,7 +365,7 @@ function drush_provision_drupal_post_provision_deploy() {
   }
   else {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-    drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_post_provision_deploy");
+    drush_log("Skipping FULL bootstrap for drupal 13+ in drush_provision_drupal_post_provision_deploy");
   }
 
   // Remove the restore directory.

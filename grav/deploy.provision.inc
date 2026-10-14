@@ -123,12 +123,13 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       $held_marker = _provision_grav_copy_marker(d()->site_path);
       $staged_marker = _provision_grav_copy_marker($extract_path);
       if (is_file($held_marker) && !is_link($held_marker)) {
-        if (!is_file($staged_marker) || is_link($staged_marker)) {
-          if (is_link($staged_marker)) {
-            @unlink($staged_marker);
-          }
-          _provision_grav_mark_copy($extract_path, trim((string) @file_get_contents($held_marker)), @filemtime($held_marker));
+        // The replaced tree's marker, names and time, whatever the archive
+        // carries: its time against the release file is the hold.
+        if (is_link($staged_marker)) {
+          @unlink($staged_marker);
         }
+        $held_names = _provision_grav_copy_names(d()->site_path);
+        _provision_grav_mark_copy($extract_path, $held_names[0], @filemtime($held_marker), $held_names[1]);
       }
       elseif (file_exists($staged_marker) || is_link($staged_marker)) {
         provision_file()->unlink($staged_marker)
@@ -154,9 +155,10 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       // Held before it becomes visible: the marker is in the staged tree
       // when the rename puts it at the site path. The archive carries the
       // file only when its source was a copy itself; it is written again
-      // either way, naming this copy's source.
+      // either way, naming the live store and this copy's source.
       if (_provision_grav_has_db()) {
-        _provision_grav_mark_copy($extract_path, _provision_grav_copy_source($extract_path, (string) drush_get_option('old_uri', '')));
+        $copy_names = _provision_grav_copy_names_for_deploy($extract_path, drush_get_option('old_uri', ''));
+        _provision_grav_mark_copy($extract_path, $copy_names[0], NULL, $copy_names[1]);
         if (!is_file(_provision_grav_copy_marker($extract_path))) {
           return drush_set_error('PROVISION_GRAV_COPY_MARK',
             dt('Could not hold the copy at @path before moving it into place.', array('@path' => $extract_path)));

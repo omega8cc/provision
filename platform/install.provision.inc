@@ -255,6 +255,19 @@ function drush_provision_drupal_provision_install() {
           '@version' => $d11_db_version,
         )));
       }
+      // The same for PHP: core's platform check refuses an interpreter below
+      // the codebase's floor (8.3 for Drupal 11, 8.5 for 12) inside the unlock
+      // window, and the site-local Drush and core run on this backend's own
+      // PHP (_provision_site_local_php()).
+      $d11_php_floor = _provision_drupal_minimum_php();
+      if ($d11_php_floor !== FALSE && version_compare(PHP_VERSION, $d11_php_floor, '<')) {
+        return drush_set_error('PROVISION_DRUPAL_PHP_TOO_OLD', dt('Drupal @major needs PHP @floor or newer; this platform\'s tasks run PHP @version. Name PHP @short for the platform in ~/static/control/cli-per-platform.info (docs.boa.io: Choosing your PHP version), then run Install again. The codebase was not touched.', array(
+          '@major' => drush_drupal_major_version(),
+          '@floor' => $d11_php_floor,
+          '@short' => preg_replace('/^([0-9]+\.[0-9]+).*$/', '$1', $d11_php_floor),
+          '@version' => PHP_VERSION,
+        )));
+      }
 
       if ($lock_unlock) {
         drush_log(dt('D11/INSTALL2/LOCAL/DRUSH/UNLOCK with provision_unlock_drush_local_vnd'), 'info');
@@ -608,7 +621,7 @@ function drush_provision_drupal_provision_install() {
       // _provision_drupal_rebuild_d8plus() then rebuilds the D8+ container by
       // core itself (no Drush) in this re-patched state as the last container
       // write, so the stock install-time container never stays the one the web
-      // serves; D<12 also gets the Aegir Drush 8 FULL bootstrap tail in the
+      // serves; D<13 also gets the Aegir Drush 8 FULL bootstrap tail in the
       // caller.
       if ($lock_unlock) {
         provision_check_codebase_status();
@@ -628,12 +641,12 @@ function drush_provision_drupal_provision_install() {
       drush_set_option('login_link', $result['context']['login_link']);
     }
 
-    if (drush_drupal_major_version() < 12) {
+    if (drush_drupal_major_version() < 13) {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     }
     else {
       drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_CONFIGURATION);
-      drush_log("Skipping FULL bootstrap for drupal 12+ in drush_provision_drupal_provision_install");
+      drush_log("Skipping FULL bootstrap for drupal 13+ in drush_provision_drupal_provision_install");
     }
 
     drush_set_option('profile_installed', TRUE, 'site');
@@ -671,7 +684,7 @@ function drush_provision_drupal_post_provision_install() {
       // Non-fatal, never silent.
       _provision_drupal_rebuild_d8plus();
     }
-    elseif (drush_drupal_major_version() < 12) {
+    elseif (drush_drupal_major_version() < 13) {
       _provision_drupal_rebuild_caches();
     }
     drush_set_option('packages', _scrub_object(provision_drupal_system_map()), 'site');
@@ -727,6 +740,25 @@ function _provision_d11_db_server_version() {
     return FALSE;
   }
   return $version;
+}
+
+/**
+ * The lowest PHP the platform's core accepts, or FALSE.
+ *
+ * Read as text from Drupal::MINIMUM_PHP in core/lib/Drupal.php, so no class
+ * is loaded and any backend PHP can read it. FALSE when the file or the
+ * constant is not there; the caller then lets the installer decide, as before.
+ */
+function _provision_drupal_minimum_php() {
+  $file = d()->root . '/core/lib/Drupal.php';
+  if (!is_file($file) || !is_readable($file)) {
+    return FALSE;
+  }
+  $code = @file_get_contents($file);
+  if (!is_string($code) || !preg_match("/const\s+MINIMUM_PHP\s*=\s*'([0-9]+\.[0-9]+(\.[0-9]+)?)'\s*;/", $code, $m)) {
+    return FALSE;
+  }
+  return $m[1];
 }
 
 function _provision_install_db_url_from_context() {

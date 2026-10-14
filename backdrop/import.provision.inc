@@ -18,7 +18,7 @@ function drush_provision_backdrop_provision_import() {
     return;
   }
   if (d()->type === 'site') {
-    // Backdrop is major 1 (< 12); Aegir Drush 8 FULL-bootstraps it via BackdropBoot.
+    // Backdrop is major 1 (< 13); Aegir Drush 8 FULL-bootstraps it via BackdropBoot.
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL);
     drush_include_engine('backdrop', 'import');
     drush_set_option('installed', TRUE, 'site');
