@@ -418,7 +418,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
     gzip_http_version 1.1;
     if_modified_since exact;
     set $nocache_details "Skip";
-    location ~* ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(?:CHANGELOG\.txt$|(?:.*/)?\.|sites/[^/]+/(?:files/)?private/|sites/.*/files/(?:backup_migrate/|config_|civicrm/(?:ConfigAndLog|custom|upload|templates_c))|(?:.*/)?vendor/composer/|(?:.*/)?composer\.(?:json|lock)$|(?:.*/)?(?:modules|themes|libraries)/.*\.(?:txt|md)$|.*\.(?:php|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|[a-z]*sql|theme|twig|tpl|xtmpl|yml)(?:~|\.sw[op]|\.bak|\.orig|\.save)?$) {
+    location ~* ^/<?php print $subdir; ?>/cdn/farfuture/[^/]+/[^/]+/(?:CHANGELOG\.txt$|(?:.*/)?\.|sites/[^/]+/(?:files/)?private/|sites/.*/files/(?:backup_migrate/|config_|civicrm/(?:ConfigAndLog|custom|upload|templates_c))|(?:.*/)?vendor/composer/|(?:.*/)?composer\.(?:json|lock)$|(?:.*/)?(?:package(?:-lock)?\.json|yarn\.lock)$|(?:.*/)?(?:modules|themes|libraries)/.*\.(?:txt|md)$|.*\.(?:php|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|[a-z]*sql|theme|twig|tpl|xtmpl|yml)(?:~|\.sw[op]|\.bak|\.orig|\.save)?$) {
       return 404;
     }
     location ~* ^/<?php print $subdir; ?>/cdn/farfuture/.+\.(?:css|js|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|pdf|docx?|xlsx?|pptx?|tiff?|txt|rtf|class|otf|ttf|woff2?|eot|less)$ {
@@ -792,9 +792,46 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   }
 
   ###
+  ### Deny every hidden file and directory but /.well-known/, as Drupal's own
+  ### .htaccess does: the hidden-name alternatives of the deny below are
+  ### anchored at the start of the URI, which always begins with a slash, so
+  ### they never match. Keep this ahead of every location that serves files.
+  ###
+  location ~ /\.(?!well-known/) {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+
+  ###
   ### Deny listed requests for security reasons.
   ###
   location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save))$ {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+
+  ###
+  ### Deny the composer and npm manifests and lock files, as Drupal's own
+  ### .htaccess does, ahead of the locations that serve files.
+  ###
+  location ~* /.*composer\.(json|lock)$ {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+  location ~* /(?:package(?:-lock)?\.json|yarn\.lock)$ {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+  location ^~ /<?php print $subdir; ?>/vendor/composer/ {
+    access_log off;
+    log_not_found off;
+    return 404;
+  }
+  location = /<?php print $subdir; ?>/CHANGELOG.txt {
     access_log off;
     log_not_found off;
     return 404;
@@ -1021,6 +1058,15 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   location ^~ /<?php print $subdir; ?>/files/ {
 
     ###
+    ### No hidden file or directory under the short /files/ URIs either.
+    ###
+    location ~ /\. {
+      access_log off;
+      log_not_found off;
+      return 404;
+    }
+
+    ###
     ### Sub-location to support Flash Video (FLV) files with short URIs.
     ###
     location ~* /<?php print $subdir; ?>/files/.+\.flv$ {
@@ -1119,6 +1165,11 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### Map /<?php print $subdir; ?>/downloads/ shortcut early to avoid overrides in other locations.
   ###
   location ^~ /<?php print $subdir; ?>/downloads/ {
+    location ~ /\. {
+      access_log off;
+      log_not_found off;
+      return 404;
+    }
     location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx?|tiff?|txt|rtf|vcard|vcf|bat|dll|class|otf|ttf|woff2?|eot|less|avi|mpe?g|mov|wmv|mp3|ogg|ogv|wav|oga|opus|flac|aac|weba|webm|mkv|m4v|vtt|mp4|m4a|flv|midi|zip|tar|t?gz|rar|dmg|exe|apk|pxl|ipa|map)$ {
       expires 30d;
       access_log off;
@@ -1220,25 +1271,6 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
     log_not_found off;
     expires max; # if using aggregator
     try_files /cache/perm/$host${uri}_.js /$1 $uri =404;
-  }
-
-  ###
-  ### Deny listed requests for security reasons.
-  ###
-  location ~* /.*composer\.(json|lock)$ {
-    access_log off;
-    log_not_found off;
-    return 404;
-  }
-  location ^~ /<?php print $subdir; ?>/vendor/composer/ {
-    access_log off;
-    log_not_found off;
-    return 404;
-  }
-  location = /<?php print $subdir; ?>/CHANGELOG.txt {
-    access_log off;
-    log_not_found off;
-    return 404;
   }
 
   ###

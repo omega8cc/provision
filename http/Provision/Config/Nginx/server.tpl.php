@@ -254,9 +254,12 @@ if ($nginx_has_gzip) {
   gzip_min_length   100;
   gzip_types
     application/atom+xml
+    application/hal+json
     application/javascript
     application/json
+    application/problem+json
     application/rss+xml
+    application/vnd.api+json
     application/vnd.ms-fontobject
     application/x-font-opentype
     application/x-font-ttf
