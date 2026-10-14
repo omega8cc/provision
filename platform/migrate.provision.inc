@@ -140,6 +140,17 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   }
   d()->service('http')->create_config('site');
   d()->service('http')->parse_configs();
+  // The site's cache namespace is keyed by its name without a leading www.
+  // (see _provision_valkey_purge_site()), so a copy built under the same name
+  // or its www. twin shared it with the source. What a newer core wrote there
+  // does not unserialize under the old one, and the site would fail on it
+  // until a flush: purge it, now that the vhost has been rewritten. Only a
+  // cache is lost, whichever copy the site is left on.
+  $old_host = preg_replace('`^www\.`', '', strtolower(d()->uri));
+  $new_host = is_null($new_name) ? $old_host : preg_replace('`^www\.`', '', strtolower(ltrim($new_name, '@')));
+  if ($new_host == $old_host && is_array(drush_get_option('migrate_target_copy', NULL))) {
+    _provision_valkey_purge_site(d()->uri);
+  }
 }
 
 /**
@@ -298,31 +309,19 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
         // We should update also the info collected about the site before running migrate task.
         // Doing this is safe only when the site is migrated with the same name - see issue #1067702.
         $local_uri_verify = '@' . d()->uri;
-        // XXX: right now we just pause SSL configuration when migrating,
-        // even if the site name doesn't change, because of possible
-        // edge case situations where the task had errors preventing it
-        // from managing vhost and respective SSL keys updates properly.
-        if ($options['ssl_enabled'] && $options['ssl_key']) {
-          $encryption_was_enabled = "YES";
-          $temp_options_ssl_enabled = $options['ssl_enabled'];
-          $temp_options_ssl_key = $options['ssl_key'];
-          $temp_uri_verify = $local_uri_verify;
-          drush_log(dt("LOG/TO DISABLE ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
-          drush_log(dt("LOG/TO DISABLE ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
-          drush_log(dt("LOG/TO DISABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
-          drush_set_option('encryption_was_enabled', TRUE);
-          drush_set_option('temp_options_ssl_enabled', $options['ssl_enabled']);
-          drush_set_option('temp_options_ssl_key', $options['ssl_key']);
-          drush_set_option('temp_uri_verify', $temp_uri_verify);
-          $options['ssl_enabled'] = 0;
-          unset($options['ssl_key']);
-          drush_log(dt("LOG/DISABLED ssl_enabled WAS @this", array('@this' => $options['ssl_enabled'])), 'info');
-          drush_log(dt("LOG/DISABLED ssl_key WAS @this", array('@this' => $options['ssl_key'])), 'info');
-          drush_log(dt("LOG/DISABLED temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
-          drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
-          sleep(5); // A small trick to avoid high load and race conditions.
-        }
+        // Encryption is not paused for the move. A save with ssl_enabled 0
+        // never took effect (Provision_Context drops empty option values), so
+        // the copy has always been verified with its encryption on; and a
+        // pause that did take effect would make the next verify force a new
+        // certificate. The re-enable that followed it ran a front-end verify,
+        // which re-saved the context from a site record still naming the old
+        // platform, and booted the old code against the cache namespace the
+        // new copy had just filled.
         provision_backend_invoke('@hostmaster', 'hosting-task', array($local_uri_verify, 'verify'), array('force' => TRUE));
+        // That verify re-saved the context from the site record: the copy
+        // keeps its encryption settings, not the ones read when this task
+        // began (they differ when Encryption changed while it was queued).
+        unset($options['ssl_enabled'], $options['ssl_key']);
         sleep(5); // A small trick to avoid high load and race conditions.
       }
     }
@@ -392,32 +391,6 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // Delegated to the root autosymlink tool via its sudo wrapper; the verify above
     // wrote the vhost so the account auto-resolves. Warn-not-fail.
     _provision_drupal_native_symlink($options['uri'], TRUE);
-
-    $aegir_root = d('@server_master')->aegir_root;
-    $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
-
-    if (!is_file($enable_fast_track)) {
-      sleep(5); // A small trick to avoid high load and race conditions.
-      // Re-enable encryption again if needed and only when platform has changed
-      $encryption_was_enabled = drush_get_option('encryption_was_enabled');
-      if ($encryption_was_enabled) {
-        drush_log(dt("LOG/ENABLE encryption_was_enabled WAS @this", array('@this' => $encryption_was_enabled)), 'info');
-        $temp_options_ssl_enabled = drush_get_option('temp_options_ssl_enabled');
-        $temp_options_ssl_key = drush_get_option('temp_options_ssl_key');
-        $temp_uri_verify = drush_get_option('temp_uri_verify');
-        if ($temp_options_ssl_enabled && $temp_options_ssl_key) {
-          drush_log(dt("LOG/ENABLE temp_options_ssl_enabled WAS @this", array('@this' => $temp_options_ssl_enabled)), 'info');
-          drush_log(dt("LOG/ENABLE temp_options_ssl_key WAS @this", array('@this' => $temp_options_ssl_key)), 'info');
-          drush_log(dt("LOG/ENABLE temp_uri_verify WAS @this", array('@this' => $temp_uri_verify)), 'info');
-          $options['ssl_enabled'] = $temp_options_ssl_enabled;
-          $options['ssl_key'] = $temp_options_ssl_key;
-          drush_invoke_process('@none', 'provision-save', array($temp_uri_verify), $options);
-          sleep(5); // A small trick to avoid high load and race conditions.
-          provision_backend_invoke('@hostmaster', 'hosting-task', array($temp_uri_verify, 'verify'), array('force' => TRUE));
-          sleep(5); // A small trick to avoid high load and race conditions.
-        }
-      }
-    }
   }
 }
 
