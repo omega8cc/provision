@@ -426,8 +426,11 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
     $placeholder = $aegir_root . '/.drush/sites/' . ltrim(d()->name, '@') . '.site.yml';
     $drush10 = _provision_drush10_script();
     if (is_file($placeholder) && !is_link($placeholder) && $drush10 !== '') {
-      // A missing placeholder makes the converter redo every alias; the
-      // drushrc alias being newer by mtime alone is missed within a second.
+      // Removing the file is not what makes the converter redo the aliases:
+      // given a destination, Drush 10.6.2 re-converts every alias on every
+      // run, whatever the mtimes (see _provision_drush10_alias_convert()).
+      // Removed, the file is written anew even when it was edited or lost
+      // its checksum, which the converter otherwise keeps.
       // Only when some installed PHP can run the converter: a conversion
       // that cannot run must not cost the file (for a name with no dot it is
       // the alias record itself).

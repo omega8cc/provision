@@ -4559,6 +4559,41 @@ function provision_report_retired_updatedb_controls($uri) {
 }
 
 /**
+ * Name the error that has already failed this task, in one line.
+ *
+ * Once an error is set, Drush 8's drush_bootstrap() runs no bootstrap phase
+ * and returns FALSE without trying. A deploy whose updatedb, or another step
+ * before its closing FULL bootstrap, has failed (a child's error is relayed
+ * into this process by the integrated backend invoke) therefore never tries
+ * that bootstrap; the deploys name the earlier error rather than report a
+ * bootstrap that failed. The first error recorded is the earliest; only the
+ * first line of its first message is kept, because Drush's database error
+ * goes on with the connection details.
+ *
+ * @return string
+ *   "<error code>: <first line>", the code alone when the message is empty,
+ *   or '' when no error is set.
+ */
+function provision_earlier_error() {
+  if (!drush_get_error()) {
+    return '';
+  }
+  $log = drush_get_error_log();
+  if (!is_array($log) || empty($log)) {
+    return '';
+  }
+  $messages = reset($log);
+  $code = (string) key($log);
+  $first = is_array($messages) ? reset($messages) : $messages;
+  if (!is_scalar($first) && !(is_object($first) && method_exists($first, '__toString'))) {
+    $first = '';
+  }
+  $lines = explode("\n", trim((string) $first));
+  $line = trim($lines[0]);
+  return $line === '' ? $code : $code . ': ' . $line;
+}
+
+/**
  * Report a failed tar run in tar's own words.
  *
  * Drush captures a command's output all along but prints it only under
