@@ -68,11 +68,17 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
   // any code: clone, rename and restore land a site here without passing
   // through provision-install, so the target would inherit a stale namespace
   // (deleted site's compiled container and routing included) exactly the way
-  // a same-name reinstall did. For a same-URI deploy over an existing site
-  // (migrate/restore in place) this only flushes that site's own cache
-  // mid-maintenance -- the deploy tail rebuilds caches anyway. Non-fatal by
-  // design: an unreachable cache store must not fail a deploy.
-  _provision_valkey_purge_site(d()->uri);
+  // a same-name reinstall did. A same-name Migrate names the live site's own
+  // namespace to spare (Drupal 10 and 11 keep one per copy): the live site
+  // keeps its cache while the copy is built, and its writes no longer outrun
+  // the sweep. Everything else under the name goes, so a copy that comes to
+  // reuse a dropped database's name does not find that database's entries.
+  // A restore in place only has its own cache flushed mid-maintenance. Where
+  // every copy shares one namespace (Drupal 8 and 9, an older module), the
+  // live site's cache is flushed while it still serves, and it fills it again
+  // before the copy takes over -- the deploy tail rebuilds caches anyway.
+  // Non-fatal by design: an unreachable cache store must not fail a deploy.
+  _provision_valkey_purge_site(d()->uri, _provision_valkey_keep_prefix(d()->uri));
   $extracted = provision_file()->extract($backup_file, drush_get_option('extract_path'))
     ->succeed('Successfully extracted the contents of @path')
     ->fail('Failed to extract the contents of @path to @target', 'PROVISION_BACKUP_EXTRACTION_FAILED')
