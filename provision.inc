@@ -2831,6 +2831,161 @@ function provision_auto_fix_platform_root($isroot) {
 }
 
 /**
+ * The Composer project root a platform Delete removes with the docroot.
+ *
+ * A Composer build keeps vendor/ and composer.lock beside its docroot, and
+ * that project root is the platform's code too: the Delete removes it whole.
+ * Never a directory of the account's own layout (its home, static/, distro/,
+ * platforms/, static/platforms/), never one outside the account or reached
+ * through a link, never the directory holding a docroot that is its own
+ * project root, never one that holds another codebase beside this docroot,
+ * which a recursive delete would take with it, and never one another
+ * registered platform's root lies in.
+ *
+ * @return
+ *   The project root's real path, or FALSE.
+ */
+function _provision_platform_composer_parent($root) {
+  $parent = dirname($root);
+  if (!is_dir($parent . '/vendor') || !is_file($parent . '/composer.lock')) {
+    return FALSE;
+  }
+  // A docroot with its own lock or a real vendor/ is the project root itself
+  // (a legacy-project or tarball layout): what holds it is a container,
+  // never this platform's code.
+  if ((is_file($root . '/composer.lock') && !is_link($root . '/composer.lock'))
+    || (is_dir($root . '/vendor') && !is_link($root . '/vendor'))) {
+    return FALSE;
+  }
+  // Reached through a link, the delete would unlink only the link and leave
+  // the real tree behind, opened by the helper below.
+  if (is_link($parent)) {
+    drush_log(dt('DELETE/PARENT/KEPT @parent is a link: only the platform docroot is deleted', array('@parent' => $parent)), 'warning');
+    return FALSE;
+  }
+  $aegir_root = d('@server_master')->aegir_root;
+  $base = empty($aegir_root) ? FALSE : realpath($aegir_root);
+  $real = realpath($parent);
+  if ($base === FALSE || $real === FALSE || strpos($real . '/', $base . '/') !== 0) {
+    return FALSE;
+  }
+  // clients/ holds the client logins' homes and aegir/ the account's own
+  // control panel: a recursive delete must never reach either, nor any other
+  // directory of the account's layout. A project root is only ever below them.
+  foreach (array('', '/static', '/distro', '/platforms', '/static/platforms', '/clients', '/aegir', '/tools', '/config', '/backups', '/.drush', '/.tmp') as $sub) {
+    if ($real === realpath($base . $sub)) {
+      drush_log(dt('DELETE/PARENT/KEPT @parent is a directory of the account itself: only the platform docroot is deleted', array('@parent' => $parent)), 'warning');
+      return FALSE;
+    }
+  }
+  // vendor-bin/ holds the project's own Composer tools (bamarni's plugin).
+  if (_provision_dir_holds_codebase($real, array(basename($root), 'vendor', 'vendor-bin'), 3, realpath($root))) {
+    drush_log(dt('DELETE/PARENT/KEPT @parent holds another codebase, or a directory the backend user cannot read, beside @doc: only the platform docroot is deleted', array('@parent' => $parent, '@doc' => basename($root))), 'warning');
+    return FALSE;
+  }
+  $other = _provision_platform_registered_in($real);
+  if ($other !== FALSE) {
+    drush_log(dt('DELETE/PARENT/KEPT @parent also holds the root of @other: only the platform docroot is deleted', array('@parent' => $parent, '@other' => $other)), 'warning');
+    return FALSE;
+  }
+  // The path every check above was made on: the later steps act on it.
+  return $real;
+}
+
+/**
+ * Whether a directory holds a codebase: a Drupal or Backdrop docroot
+ * (index.php beside core/ or includes/) or an installed Composer vendor/,
+ * at most $depth levels down, never through a link. Top-level entries
+ * named in $skip are passed over, and so is the directory whose real path
+ * is $doc (the platform's own docroot, reached through a link). A directory
+ * that cannot be listed counts as holding one: what is in it is unknown.
+ */
+function _provision_dir_holds_codebase($dir, $skip, $depth, $doc = FALSE) {
+  $d = @dir($dir);
+  if (empty($d)) {
+    return TRUE;
+  }
+  $found = FALSE;
+  while (!$found && ($entry = $d->read()) !== FALSE) {
+    if ($entry == '.' || $entry == '..' || in_array($entry, $skip, TRUE)) {
+      continue;
+    }
+    $path = $dir . '/' . $entry;
+    if (is_link($path) || !is_dir($path)) {
+      continue;
+    }
+    if ($doc !== FALSE && realpath($path) === $doc) {
+      continue;
+    }
+    if (is_file($path . '/vendor/autoload.php')
+      || (is_file($path . '/index.php') && (is_dir($path . '/core') || is_dir($path . '/includes')))) {
+      $found = TRUE;
+    }
+    elseif ($depth > 1) {
+      $found = _provision_dir_holds_codebase($path, array(), $depth - 1, $doc);
+    }
+  }
+  $d->close();
+  return $found;
+}
+
+/**
+ * The name of another platform alias whose root lies in $real, or FALSE.
+ *
+ * Hosting does not stop two platforms naming one path, so a project root can
+ * carry a second registration. This platform's own alias is passed over by
+ * name (provision-save has removed it already when the Delete asks).
+ */
+function _provision_platform_registered_in($real) {
+  $own = ltrim((string) d()->name, '@') . '.alias.drushrc.php';
+  $files = glob(drush_server_home() . '/.drush/platform_*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    if (basename($file) === $own) {
+      continue;
+    }
+    $text = @file_get_contents($file);
+    if (!is_string($text) || !preg_match("/'root' => '([^']+)'/", $text, $m)) {
+      continue;
+    }
+    $other = realpath($m[1]);
+    if ($other !== FALSE && strpos($other . '/', $real . '/') === 0) {
+      return basename($file, '.alias.drushrc.php');
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Let the backend user remove a Composer project root under static/.
+ *
+ * What the account's shell logins made in the project root (composer.json,
+ * composer.lock, the directory itself and any other they added) stays
+ * theirs through every Verify, which hands over only the docroot's code and
+ * vendor/. A directory left 0755 there (a shell session before the limited
+ * shell carried umask 002, rsync -a, scp -p) keeps the backend user that
+ * runs the Delete from unlinking anything in it: the Delete then empties
+ * web/ and vendor/ and stops. The permissions helper's --app-root leg gives
+ * those directories the group write static/ carries for the account (02775),
+ * as the logins' umask would have. An older helper refuses the argument, and
+ * this one a root it leaves as it is, both with a non-zero status: the
+ * Delete then goes on as before.
+ */
+function _provision_platform_parent_writable($parent) {
+  $aegir_root = d('@server_master')->aegir_root;
+  $static = empty($aegir_root) ? FALSE : realpath($aegir_root . '/static');
+  $real = realpath($parent);
+  if ($static === FALSE || $real === FALSE || strpos($real, $static . '/') !== 0) {
+    return;
+  }
+  if (drush_shell_exec('sudo --non-interactive /usr/local/bin/fix-drupal-platform-permissions.sh --root=%s --app-root', d()->root)) {
+    drush_log(dt('DELETE/PARENT/OPEN @parent: group write set for the Delete', array('@parent' => $parent)), 'info');
+  }
+  else {
+    drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not run its --app-root leg; a directory there the backend user cannot write stays', array('@parent' => $parent)), 'notice');
+  }
+}
+
+/**
  * Determine if the currently acting context is the server's hostmaster site.
  *
  * @return
