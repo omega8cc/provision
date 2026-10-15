@@ -4832,6 +4832,92 @@ function provision_site_bytes($site_path, $follow_links = TRUE) {
 }
 
 /**
+ * Count the inodes of a site directory, following links when asked.
+ *
+ * Every file, directory and link takes an inode, so this is how many the
+ * unpacked copy of the site needs. The same walk as provision_site_bytes
+ * (one `du -s --inodes`, stat only, bounded by a timeout), and the total is
+ * taken whatever du's exit code, for the same reason.
+ *
+ * @return
+ *   The count, or FALSE when the directory could not be measured: the caller
+ *   then skips its inode check rather than refuse on a guess.
+ */
+function provision_site_inodes($site_path, $follow_links = TRUE) {
+  if (empty($site_path) || !is_dir($site_path)) {
+    return FALSE;
+  }
+  $command = $follow_links ? 'timeout 900 du -s -L --inodes -- %s' : 'timeout 900 du -s --inodes -- %s';
+  drush_shell_exec($command, $site_path);
+  $output = drush_shell_exec_output();
+  if (!is_array($output)) {
+    return FALSE;
+  }
+  $inodes = FALSE;
+  foreach ($output as $line) {
+    if (preg_match('/^(\d+)\s/', trim($line), $matches)) {
+      $inodes = (float) $matches[1];
+    }
+  }
+  return $inodes;
+}
+
+/**
+ * The inodes of the filesystem holding a path: total, used and free.
+ *
+ * PHP has no call for it, so `df -P -i` is read; its POSIX format fixes the
+ * column order (Inodes, IUsed, IFree) whatever the locale prints in the
+ * header.
+ *
+ * @return
+ *   array('total' => .., 'used' => .., 'free' => .., 'path' => the directory
+ *   measured), or FALSE when it could not be read or the filesystem keeps no
+ *   inode count (btrfs reports a total of 0): the caller then skips its
+ *   inode check.
+ */
+function provision_path_inodes($path) {
+  $probe = provision_path_probe($path);
+  if ($probe === FALSE) {
+    return FALSE;
+  }
+  drush_shell_exec('timeout 30 df -P -i -- %s', $probe);
+  $output = drush_shell_exec_output();
+  if (!is_array($output)) {
+    return FALSE;
+  }
+  $found = FALSE;
+  foreach ($output as $line) {
+    $fields = preg_split('/\s+/', trim($line));
+    if (count($fields) >= 6 && preg_match('/^\d+$/', $fields[1]) && preg_match('/^\d+$/', $fields[2]) && preg_match('/^\d+$/', $fields[3])) {
+      $found = array(
+        'total' => (float) $fields[1],
+        'used' => (float) $fields[2],
+        'free' => (float) $fields[3],
+        'path' => $probe,
+      );
+    }
+  }
+  if ($found === FALSE || $found['total'] <= 0) {
+    return FALSE;
+  }
+  return $found;
+}
+
+/**
+ * The inodes a copying task must leave free on a filesystem: 50,000, or 2%
+ * of its inodes when that is more -- the inode twin of
+ * provision_space_margin(). A copy that lands the filesystem at zero free
+ * inodes fails every write on it, every service's included.
+ */
+function provision_inode_margin($total) {
+  $margin = 50000.0;
+  if ($total * 0.02 > $margin) {
+    $margin = $total * 0.02;
+  }
+  return $margin;
+}
+
+/**
  * Refuse a clone or migrate whose target cannot run on its command-line PHP.
  *
  * On a BOA account the shell wrapper picks the PHP of every Drush process
@@ -4961,6 +5047,28 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   if ($excluded_bytes > 0 && $excluded_bytes < $full_bytes) {
     $full_bytes -= $excluded_bytes;
   }
+  else {
+    $excluded_bytes = 0;
+  }
+  $excluded_inodes = 0;
+  // Every file of the unpacked copy takes an inode, and a filesystem runs
+  // out of them while df -h still shows free space: the copy is counted in
+  // files as well, on the same terms (links followed, cache directories
+  // left out). Unmeasured, the inode side is skipped, never refused.
+  $full_inodes = provision_site_inodes($site_path, TRUE);
+  if ($full_inodes === FALSE) {
+    drush_log(dt('SPACE/PREFLIGHT @what: the files of @path could not be counted within the bound, so the inode check is SKIPPED', array('@what' => $what, '@path' => $site_path)), 'warning');
+  }
+  else {
+    $excluded_inodes = provision_site_excluded_inodes($site_path);
+    if ($excluded_inodes > 0 && $excluded_inodes < $full_inodes) {
+      $full_inodes -= $excluded_inodes;
+    }
+    else {
+      $excluded_inodes = 0;
+    }
+  }
+  $copy_inodes = ($full_inodes === FALSE) ? 0 : $full_inodes;
   // The database dump a restorable safety copy writes: uncompressed into the
   // site directory first, then inside the archive, then unpacked again. For
   // a database-heavy site it is the largest single new file of the task.
@@ -4968,19 +5076,21 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   $needs = array();
   $detail = array();
   $unpack_bytes = 0;
+  $unpack_inodes = 0;
   switch ($task) {
     case 'clone':
       // The safety copy is forced restorable (self-contained, links followed)
       // and the deploy unpacks all of it beside the source; when the store
       // sits on another filesystem than the platform, the unshare that moves
       // the unpacked files into the store is a copy there as well.
-      $needs[] = array($backup_path, $full_bytes + $db_bytes);
-      $needs[] = array($target_root, $full_bytes + $db_bytes);
-      $needs[] = array($source_root, $db_bytes);
+      $needs[] = array($backup_path, $full_bytes + $db_bytes, 0);
+      $needs[] = array($target_root, $full_bytes + $db_bytes, $copy_inodes);
+      $needs[] = array($source_root, $db_bytes, 0);
       $unpack_bytes = $full_bytes + $db_bytes;
+      $unpack_inodes = $copy_inodes;
       $detail[] = dt('a self-contained safety copy (@gb GB) and the unpacked clone (@gb GB)', array('@gb' => round(($full_bytes + $db_bytes) / $gb, 1)));
       if (provision_path_device($store_root) !== provision_path_device($target_root)) {
-        $needs[] = array($store_root, $full_bytes);
+        $needs[] = array($store_root, $full_bytes, $copy_inodes);
         $detail[] = dt('the clone\'s own store on its separate filesystem (@gb GB)', array('@gb' => round($full_bytes / $gb, 1)));
       }
       break;
@@ -4991,17 +5101,21 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       // the archive itself.
       $archive_bytes = (!empty($restore_file) && is_file($restore_file)) ? (float) filesize($restore_file) : 0;
       $unpack_bytes = max($archive_bytes, $full_bytes + $db_bytes);
-      $needs[] = array($backup_path, $full_bytes + $db_bytes);
-      $needs[] = array($target_root, $unpack_bytes);
-      $needs[] = array($source_root, $db_bytes);
+      $unpack_inodes = $copy_inodes;
+      $needs[] = array($backup_path, $full_bytes + $db_bytes, 0);
+      $needs[] = array($target_root, $unpack_bytes, $unpack_inodes);
+      $needs[] = array($source_root, $db_bytes, 0);
       $detail[] = dt('a self-contained safety copy (@gb GB) and the unpacked archive (about @ugb GB, a lower bound)', array('@gb' => round(($full_bytes + $db_bytes) / $gb, 1), '@ugb' => round($unpack_bytes / $gb, 1)));
       break;
 
     case 'migrate':
       // The safety copy keeps links unless a files-carrying mode was asked
-      // for or the operator opted into dereferencing; a site renamed under a
-      // new name then gets its own copy of the store (the unshare), a
-      // same-name migrate keeps it.
+      // for or the operator opted into dereferencing. With links kept, a
+      // site renamed under a new name gets its own copy of the whole store
+      // (the unshare copies it, cache directories included) and a same-name
+      // migrate keeps it. With the store's files in the copy, the deploy
+      // unpacks them as plain directories and the conversion moves them into
+      // the store: a rename on one filesystem, a copy onto a store on another.
       $local_bytes = provision_site_bytes($site_path, FALSE);
       if ($local_bytes === FALSE) {
         $local_bytes = $full_bytes;
@@ -5011,16 +5125,41 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
         || (is_file('/data/conf/dereference_backups.conf') && !is_file('/data/conf/force_symlinks.conf'));
       $archive_bytes = $dereference ? $full_bytes : $local_bytes;
       $unpack_bytes = $archive_bytes;
+      $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
+      $linked = is_link($site_path . '/files') || is_link($site_path . '/private');
+      $store_apart = provision_path_device($store_root) !== provision_path_device($target_root);
+      $store_copy = $linked && ($dereference ? $store_apart : $renamed);
+      $local_inodes = $copy_inodes;
+      if ($full_inodes !== FALSE && (!$dereference || $store_copy)) {
+        $local_inodes = provision_site_inodes($site_path, FALSE);
+        if ($local_inodes === FALSE) {
+          $local_inodes = $copy_inodes;
+        }
+      }
+      $unpack_inodes = $dereference ? $copy_inodes : $local_inodes;
       // The fast path dumps the database uncompressed into the backups
       // directory's transient store, once.
-      $needs[] = array($backup_path, $archive_bytes + $db_bytes);
-      $needs[] = array($target_root, $archive_bytes);
+      $needs[] = array($backup_path, $archive_bytes + $db_bytes, 0);
+      $needs[] = array($target_root, $archive_bytes, $unpack_inodes);
       $detail[] = dt('a safety copy (@gb GB, plus a @dgb GB database dump) and the unpacked site (@gb GB)', array('@gb' => round($archive_bytes / $gb, 1), '@dgb' => round($db_bytes / $gb, 1)));
-      $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
-      $store_bytes = $full_bytes - $local_bytes;
-      if ($renamed && $store_bytes > 0 && (is_link($site_path . '/files') || is_link($site_path . '/private'))) {
-        $needs[] = array($store_root, $store_bytes);
-        $detail[] = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+      if ($store_copy) {
+        if ($dereference) {
+          // the unpacked directories, which the archive left the cache
+          // directories out of
+          $store_bytes = $full_bytes - $local_bytes;
+          $store_inodes = max(0, $copy_inodes - $local_inodes);
+          $store_what = dt('the move of the store\'s files onto its separate filesystem (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+        }
+        else {
+          // the whole store, its cache directories included
+          $store_bytes = $full_bytes + $excluded_bytes - $local_bytes;
+          $store_inodes = max(0, $copy_inodes + $excluded_inodes - $local_inodes);
+          $store_what = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+        }
+        if ($store_bytes > 0) {
+          $needs[] = array($store_root, $store_bytes, $store_inodes);
+          $detail[] = $store_what;
+        }
       }
       break;
 
@@ -5030,8 +5169,8 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   // Sum per filesystem: two copies on one device need room for both.
   $by_device = array();
   foreach ($needs as $need) {
-    list($path, $bytes) = $need;
-    if ($bytes <= 0 || empty($path)) {
+    list($path, $bytes, $inodes) = $need;
+    if (($bytes <= 0 && $inodes <= 0) || empty($path)) {
       continue;
     }
     $probe = provision_path_probe($path);
@@ -5041,13 +5180,15 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       continue;
     }
     if (!isset($by_device[$device])) {
-      $by_device[$device] = array('path' => $probe, 'need' => 0);
+      $by_device[$device] = array('path' => $probe, 'need' => 0, 'inodes' => 0);
     }
     $by_device[$device]['need'] += $bytes;
+    $by_device[$device]['inodes'] += $inodes;
   }
-  drush_log(dt('SPACE/PREFLIGHT @what: the site measures @gb GB following links (cache directories left out); the task needs @detail', array(
+  drush_log(dt('SPACE/PREFLIGHT @what: the site measures @gb GB@files following links (cache directories left out); the task needs @detail', array(
     '@what' => $what,
     '@gb' => round($full_bytes / $gb, 1),
+    '@files' => ($full_inodes === FALSE) ? '' : dt(' in @n files', array('@n' => number_format($full_inodes, 0, '.', ','))),
     '@detail' => implode(dt(' and '), $detail),
   )), 'info');
   foreach ($by_device as $device) {
@@ -5068,8 +5209,29 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       return FALSE;
     }
   }
+  foreach ($by_device as $device) {
+    if ($device['inodes'] <= 0) {
+      continue;
+    }
+    $in = provision_path_inodes($device['path']);
+    if ($in === FALSE) {
+      continue;
+    }
+    $imargin = provision_inode_margin($in['total']);
+    if ($in['free'] < $device['inodes'] + $imargin) {
+      drush_set_error('PROVISION_INSUFFICIENT_INODES', dt('@what needs about @need free inodes on the filesystem holding @path (@margin of them headroom) but only @free are free: every file takes an inode, so a filesystem runs out of them while df -h still shows free space (df -i shows them); free inodes first, nothing was written (the copy is counted at the site\'s files following links; /data/conf/disable_space_preflight.cnf turns this check off)', array(
+        '@what' => $what,
+        '@need' => number_format($device['inodes'] + $imargin, 0, '.', ','),
+        '@margin' => number_format($imargin, 0, '.', ','),
+        '@path' => $device['path'],
+        '@free' => number_format($in['free'], 0, '.', ','),
+      )));
+      return FALSE;
+    }
+  }
   // For the re-check at the deploy seam, once the safety copy exists.
   drush_set_option('space_preflight_unpack_bytes', $unpack_bytes);
+  drush_set_option('space_preflight_unpack_inodes', $unpack_inodes);
   drush_set_option('space_preflight_unpack_path', $target_root);
   return TRUE;
 }
@@ -5081,6 +5243,11 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
  * archive's --exclude-tag skips; a lineage without the constant measures 0.
  */
 function provision_site_excluded_bytes($site_path) {
+  // The set is defined with the backup command, which a copying task's
+  // validate hook runs before: load it (include_once, as Drush does).
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') && function_exists('drush_command_include')) {
+    drush_command_include('provision-backup');
+  }
   if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') || empty($site_path)) {
     return 0;
   }
@@ -5105,6 +5272,43 @@ function provision_site_excluded_bytes($site_path) {
     }
   }
   return $bytes;
+}
+
+/**
+ * The inodes of a site's tagged-out cache directories, following links: the
+ * files of the same set provision_site_excluded_bytes() measures, which the
+ * archive skips and so no copy unpacks.
+ */
+function provision_site_excluded_inodes($site_path) {
+  // The set is defined with the backup command, which a copying task's
+  // validate hook runs before: load it (include_once, as Drush does).
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') && function_exists('drush_command_include')) {
+    drush_command_include('provision-backup');
+  }
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') || empty($site_path)) {
+    return 0;
+  }
+  $dirs = array();
+  foreach (PROVISION_BACKUP_EXCLUDED_DIRECTORIES as $excluded) {
+    $dir = $site_path . '/' . ltrim($excluded, './');
+    if (is_dir($dir)) {
+      $dirs[] = drush_escapeshellarg($dir);
+    }
+  }
+  if (empty($dirs)) {
+    return 0;
+  }
+  drush_shell_exec('timeout 300 du -s -L --inodes -- ' . implode(' ', $dirs));
+  $output = drush_shell_exec_output();
+  $inodes = 0;
+  if (is_array($output)) {
+    foreach ($output as $line) {
+      if (preg_match('/^(\d+)\s/', trim($line), $matches)) {
+        $inodes += (float) $matches[1];
+      }
+    }
+  }
+  return $inodes;
 }
 
 /**
@@ -5182,6 +5386,24 @@ function provision_copy_task_space_recheck($what) {
       '@margin' => round($margin / $gb, 1),
     )));
     return FALSE;
+  }
+  // The same for the inodes the unpacked copy's files take
+  $inodes = (float) drush_get_option('space_preflight_unpack_inodes', 0);
+  if ($inodes > 0) {
+    $in = provision_path_inodes($probe);
+    if ($in !== FALSE) {
+      $imargin = provision_inode_margin($in['total']);
+      if ($in['free'] < $inodes + $imargin) {
+        drush_set_error('PROVISION_INSUFFICIENT_INODES', dt('@what: the safety copy is done, but only @free inodes are free on the filesystem holding @path for the @need the unpacked copy\'s files take (@margin of them headroom); they went elsewhere since the pre-flight, free inodes (df -i) and retry', array(
+          '@what' => $what,
+          '@free' => number_format($in['free'], 0, '.', ','),
+          '@path' => $probe,
+          '@need' => number_format($inodes + $imargin, 0, '.', ','),
+          '@margin' => number_format($imargin, 0, '.', ','),
+        )));
+        return FALSE;
+      }
+    }
   }
   return TRUE;
 }
