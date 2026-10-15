@@ -335,8 +335,13 @@ function drush_provision_drupal_post_provision_deploy() {
   // fails on D10 to D12 it is a WARNING naming what this tail then skipped (the
   // 'packages' map is left untouched, no regression over the prior skip) --
   // never a plain log line, which let a deploy whose tail did not run end
-  // SUCCESSFUL.
+  // SUCCESSFUL. After a step above has already failed (updatedb, or any child
+  // whose error the integrated invoke relayed here) Drush runs no bootstrap
+  // phase at all, so that skip names the earlier error instead.
   if (drush_drupal_major_version() < 13) {
+    // Read before the call: a bootstrap that is tried and fails sets an error
+    // of its own.
+    $failed_before = drush_get_error();
     // We should be able to fully load Drupal now.
     if (drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_FULL)) {
       drush_include_engine('drupal', 'deploy');
@@ -353,6 +358,11 @@ function drush_provision_drupal_post_provision_deploy() {
           drush_log(dt('OPS, NO rebuild of node access table available'));
         }
       }
+    }
+    elseif ($failed_before) {
+      // drush_bootstrap() returned FALSE without trying: not a second failure.
+      $earlier = provision_earlier_error();
+      drush_log(dt('DEPLOY/BOOTSTRAP/SKIP the full bootstrap after updatedb was not tried: an earlier step of this deploy failed (!error) and Drush runs no bootstrap phase after an error; the deploy fails on that error, not on the bootstrap, and the packages map, the URL-rename deploy engine and the node access rebuild were skipped with it', array('!error' => $earlier !== '' ? $earlier : dt('see the errors above'))), 'warning');
     }
     else {
       // A tail that did not run is never a notice: the task would otherwise
