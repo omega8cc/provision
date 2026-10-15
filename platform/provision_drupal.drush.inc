@@ -560,6 +560,14 @@ function _provision_drupal_create_directories($url = NULL) {
           $perm = $wide[$path];
         }
       }
+      // A folder the site's own web pool made (Drupal makes files/css again
+      // as the pool user right after a cache rebuild removed it, on a site
+      // with visitors): only its owner can change its mode, and its group
+      // already writes it, so the chmod would only fail.
+      if (_provision_drupal_web_made_dir(isset($places[$path]) ? _provision_drupal_place_path($places[$path]) : $path)) {
+        drush_log(dt('Left <code>@path</code> as the site\'s web pool made it, writable to its group', array('@path' => $path)), 'info');
+        continue;
+      }
       if (isset($places[$path])) {
         $done = provision_file()->chmod_in(_provision_drupal_place_path($places[$path]), $perm, !in_array($path, $chmod_not_recursive), $path);
       }
@@ -570,6 +578,38 @@ function _provision_drupal_create_directories($url = NULL) {
         ->fail('Could not change permissions <code>@path</code> to @perm');
     }
   }
+}
+
+/**
+ * Whether a site folder is one the site's own web pool made.
+ *
+ * TRUE for a real directory (not a link) that the account's PHP-FPM pool user
+ * owns, <account>.web or <account>.<NN>.web, and whose group holds read,
+ * write and search: only its owner can change its mode, and the web server
+ * that writes there already can.
+ *
+ * @param $path
+ *   The physical path, absolute or relative to the working directory.
+ *
+ * @return
+ *   TRUE or FALSE.
+ */
+function _provision_drupal_web_made_dir($path) {
+  if (!is_string($path) || $path === '') {
+    return FALSE;
+  }
+  clearstatcache(TRUE, $path);
+  $st = @lstat($path);
+  if (!is_array($st) || ($st['mode'] & 0170000) !== 0040000 || $st['uid'] === posix_geteuid()
+    || ($st['mode'] & 0070) !== 0070) {
+    return FALSE;
+  }
+  $me = provision_current_user();
+  $pw = @posix_getpwuid($st['uid']);
+  if (!is_string($me) || $me === '' || !is_array($pw) || !isset($pw['name']) || !is_string($pw['name'])) {
+    return FALSE;
+  }
+  return (bool) preg_match('#^' . preg_quote($me, '#') . '(\.[0-9]{2})?\.web\z#', $pw['name']);
 }
 
 /**
