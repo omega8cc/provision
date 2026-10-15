@@ -241,7 +241,10 @@ function drush_provision_backdrop_post_provision_deploy() {
 
   // Finish the rebuild in-process under a FULL bootstrap: regenerate the site
   // 'packages' map, run the URL-rename deploy engine (system.core:site_name on a
-  // clone-to-new-URL) and rebuild node access.
+  // clone-to-new-URL) and rebuild node access. After a failed backdrop-updatedb
+  // (its error relayed here) Drush runs no bootstrap phase at all; read before
+  // the call, which sets an error of its own when a bootstrap it tried fails.
+  $failed_before = drush_get_error();
   if (drush_get_option('backdrop_d7_upgrade', FALSE)) {
     // D7 -> Backdrop upgrade deploy: bootstrapping the still-unconverted copy
     // database here would fail; the standalone updater performs the conversion,
@@ -264,6 +267,11 @@ function drush_provision_backdrop_post_provision_deploy() {
         drush_log(dt('OPS, NO rebuild of node access table available'));
       }
     }
+  }
+  elseif ($failed_before) {
+    // drush_bootstrap() returned FALSE without trying: not a second failure.
+    $earlier = provision_earlier_error();
+    drush_log(dt('DEPLOY/BOOTSTRAP/SKIP the full bootstrap after backdrop-updatedb was not tried: an earlier step of this deploy failed (!error) and Drush runs no bootstrap phase after an error; the deploy fails on that error, not on the bootstrap, and the packages map, the URL-rename deploy engine and the node access rebuild were skipped with it', array('!error' => $earlier !== '' ? $earlier : dt('see the errors above'))), 'warning');
   }
   else {
     drush_log("could not bootstrap Backdrop after updatedb");
