@@ -2865,11 +2865,14 @@ function _provision_valkey_cmd($fp, $args) {
  * pass finds nothing, bounded so a persistent concurrent writer cannot make
  * the task spin forever. UNLINK keeps the deletion off the server's main
  * thread; ancient pre-4.0 Redis without it falls back to DEL for the rest of
- * the run (via $use_del, shared across calls by reference).
+ * the run (via $use_del, shared across calls by reference). Keys starting
+ * with $keep, the namespace of a site copy that is still serving, are left
+ * alone and do not count as found, so that copy writing on does not keep the
+ * sweep going.
  *
  * Returns the number of keys deleted, or FALSE on a protocol/stream failure.
  */
-function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
+function _provision_valkey_purge_prefix($fp, $prefix, &$use_del, $keep = '') {
   $deleted = 0;
   for ($sweep = 0; $sweep < 8; $sweep++) {
     $found = 0;
@@ -2883,7 +2886,8 @@ function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
       $keys = array();
       if (is_array($reply['value'][1]['value'])) {
         foreach ($reply['value'][1]['value'] as $key_reply) {
-          if (isset($key_reply['value']) && is_string($key_reply['value'])) {
+          if (isset($key_reply['value']) && is_string($key_reply['value'])
+            && ($keep === '' || strpos($key_reply['value'], $keep) !== 0)) {
             $keys[] = $key_reply['value'];
           }
         }
@@ -2936,22 +2940,19 @@ function _provision_valkey_purge_prefix($fp, $prefix, &$use_del) {
  * prefixes are site-unique, so sweeping every populated database stays
  * strictly site-scoped.
  *
+ * On Drupal 10 and 11 the cache module adds a segment of each copy's own
+ * after md5(<host>)_sn_ (see _provision_valkey_site_copy_prefix()), so the
+ * md5(<host>)_sn_ prefix still reaches every copy of the site. $keep names
+ * the one namespace to spare: the live site's, while a Migrate builds its
+ * copy under the same name.
+ *
  * Non-fatal by design: logs and returns FALSE on any failure -- a cache
  * purge must never fail a delete or install task. Boxes without the wiring
  * (vanilla Aegir) skip silently.
  */
-function _provision_valkey_purge_site($uri) {
-  $host = strtolower(trim((string) $uri));
+function _provision_valkey_purge_site($uri, $keep = '') {
+  $host = _provision_valkey_site_host($uri);
   if ($host === '') {
-    return FALSE;
-  }
-  $slash = strpos($host, '/');
-  if ($slash !== FALSE) {
-    $host = substr($host, 0, $slash);
-  }
-  // Strip the leading www. exactly like the runtime prefix builders do.
-  $host = preg_replace('`^www\.`', '', $host);
-  if (!is_string($host) || $host === '') {
     return FALSE;
   }
   // The plain-host <host>_z_ prefix goes into a SCAN MATCH glob verbatim, so
@@ -2968,7 +2969,78 @@ function _provision_valkey_purge_site($uri) {
     md5($host) . '_n_',
     $host . '_z_'
   );
-  return _provision_valkey_purge_prefixes($prefixes, $uri);
+  return _provision_valkey_purge_prefixes($prefixes, $uri, $keep);
+}
+
+/**
+ * The name a site's cache namespaces are keyed by: the host part of its uri,
+ * lowercased, without a leading www. ('' when there is none).
+ */
+function _provision_valkey_site_host($uri) {
+  $host = strtolower(trim((string) $uri));
+  $slash = strpos($host, '/');
+  if ($slash !== FALSE) {
+    $host = substr($host, 0, $slash);
+  }
+  // Strip the leading www. exactly like the runtime prefix builders do.
+  $host = preg_replace('`^www\.`', '', $host);
+  return is_string($host) ? $host : '';
+}
+
+/**
+ * The cache namespace one copy of a Drupal 10 or 11 site writes to.
+ *
+ * The cache module BOA ships for Drupal 10 and 11 keys each copy of a site by
+ * its database as well as its name: md5(<name>)_sn_, then the first eight hex
+ * digits of md5("<db host>/<db name>/<table prefix>") and an underscore
+ * (RedisPrefixTrait::getSiteCopySegment()). BOA's settings set no table
+ * prefix, and the db_host here is the value the site's settings.php reads on
+ * the web and on the command line alike. A namespace this does not name (a
+ * table prefix added in local settings, an older module, Drupal 8 or 9) is
+ * simply not spared or not removed. Returns '' when the name or the database
+ * is unknown.
+ */
+function _provision_valkey_site_copy_prefix($uri, $db_host, $db_name) {
+  $host = _provision_valkey_site_host($uri);
+  $db_host = strtolower(trim((string) $db_host));
+  $db_name = (string) $db_name;
+  if ($host === '' || $db_host === '' || $db_name === '') {
+    return '';
+  }
+  return md5($host) . '_sn_' . substr(md5($db_host . '/' . $db_name . '/'), 0, 8) . '_';
+}
+
+/**
+ * The live site's namespace a deploy was told to spare, when it is one.
+ *
+ * A same-name Migrate passes its source's namespace as the valkey_keep_prefix
+ * option of the deploy; anything not shaped like a namespace of this site's
+ * name is ignored, so the purge then sweeps everything as before. Never the
+ * copy's own namespace either: the database service creates the copy's
+ * database before this purge runs, and a copy whose namespace matched the
+ * live site's would read that site's entries, written by another core.
+ */
+function _provision_valkey_keep_prefix($uri) {
+  $keep = _provision_valkey_copy_namespace((string) drush_get_option('valkey_keep_prefix', ''), $uri);
+  if ($keep === '' || $keep === _provision_valkey_site_copy_prefix($uri, drush_get_option('db_host', '', 'site'), drush_get_option('db_name', '', 'site'))) {
+    return '';
+  }
+  return $keep;
+}
+
+/**
+ * $ns when it is one copy's namespace of this site's name, else ''.
+ *
+ * Checked wherever a namespace arrives through an option, so nothing but
+ * md5(<name>)_sn_<8 hex>_ of this very name is ever spared or purged by it.
+ */
+function _provision_valkey_copy_namespace($ns, $uri) {
+  $host = _provision_valkey_site_host($uri);
+  if ($ns === '' || $host === '' || !preg_match('/^[0-9a-f]{32}_sn_[0-9a-f]{8}_\z/', $ns)
+    || strpos($ns, md5($host) . '_sn_') !== 0) {
+    return '';
+  }
+  return $ns;
 }
 
 /**
@@ -3006,13 +3078,17 @@ function _provision_valkey_purge_backdrop_site($uri) {
  * The connection/sweep core shared by the Drupal (host-keyed) and Backdrop
  * (db-keyed) namespace purges; see _provision_valkey_purge_site() for the
  * full rationale. The caller is responsible for prefixes that cannot match
- * another site's keys and are safe as SCAN MATCH globs.
+ * another site's keys and are safe as SCAN MATCH globs. Keys starting with
+ * $keep are spared (see _provision_valkey_purge_prefix()).
  */
-function _provision_valkey_purge_prefixes($prefixes, $uri) {
+function _provision_valkey_purge_prefixes($prefixes, $uri, $keep = '') {
   $conf = _provision_valkey_conf();
   if ($conf === FALSE) {
     drush_log(dt('VALKEY/PURGE no cache store wiring on this box; nothing to purge for !uri', array('!uri' => $uri)), 'info');
     return TRUE;
+  }
+  if ($keep !== '') {
+    drush_log(dt('VALKEY/PURGE keeps the live site\'s cache namespace !keep for !uri', array('!keep' => $keep, '!uri' => $uri)), 'info');
   }
   $remote = 'tcp://' . $conf['host'] . ':' . $conf['port'];
   if (substr($conf['host'], 0, 1) === '/') {
@@ -3090,7 +3166,7 @@ function _provision_valkey_purge_prefixes($prefixes, $uri) {
       break;
     }
     foreach ($prefixes as $prefix) {
-      $n = _provision_valkey_purge_prefix($fp, $prefix, $use_del);
+      $n = _provision_valkey_purge_prefix($fp, $prefix, $use_del, $keep);
       if ($n === FALSE) {
         // Protocol/stream failure: the socket may be desynchronised, so no
         // later reply on it can be trusted -- abort the whole run.
