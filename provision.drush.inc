@@ -58,6 +58,8 @@ function provision_drush_init() {
   _provision_drush_check_user();
   // Abort the process if the load is too high.
   _provision_drush_check_load();
+  // Refuse a task that adds a copy while its filesystems are out of inodes.
+  _provision_drush_check_inodes();
   // Name the command-line PHP of this task process in the task log.
   _provision_drush_cli_php_report();
 }
@@ -142,6 +144,75 @@ function _provision_drush_check_load() {
     drush_set_error('PROVISION_OVERLOAD', dt("load on system too heavy (@load), aborting", array('@load' => join(" ", $load))));
     exit(1);
   }
+}
+
+/**
+ * Refuse a task that adds a copy of a site or a codebase while a filesystem
+ * it writes to has more than 90% of its inodes in use.
+ *
+ * Every file takes an inode: a filesystem out of them fails every write as
+ * "No space left on device" while df -h still shows free space, and a task
+ * that runs into that leaves a half-written copy on a box whose services can
+ * no longer write either. BOA's upgrades, backups and migration tools refuse
+ * at the same line. Delete, Verify, Backup and the other tasks still run,
+ * because they are how the inodes come back (the nightly frees an account's
+ * empty platforms through Delete tasks). The hostmaster's own upgrade is the
+ * Octopus run's to judge, and /data/conf/disable_space_preflight.cnf turns
+ * this off with the copying tasks' space checks.
+ */
+function _provision_drush_check_inodes() {
+  static $copying = array(
+    'provision-install',
+    'provision-clone',
+    'provision-migrate',
+    'provision-restore',
+    'provision-deploy',
+    'provision-backdrop-upgrade',
+    'provision-backdrop-d6-upgrade',
+    'provision-grav-upgrade',
+    'provision-grav-copy-upgrade',
+    'provision-grav-rename',
+    'provision-txp-upgrade',
+    'provision-txp-rename',
+  );
+  $command = drush_get_command();
+  if (empty($command['command']) || !in_array($command['command'], $copying, TRUE)) {
+    return TRUE;
+  }
+  if (is_file('/data/conf/disable_space_preflight.cnf')) {
+    return TRUE;
+  }
+  if (function_exists('provision_is_hostmaster_site') && provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $paths = array('/');
+  $home = getenv('HOME');
+  if (is_string($home) && $home !== '') {
+    $paths[] = $home;
+  }
+  if (isset(d()->root) && is_string(d()->root) && d()->root !== '') {
+    $paths[] = d()->root;
+  }
+  $seen = array();
+  foreach ($paths as $path) {
+    $device = provision_path_device($path);
+    if ($device === FALSE || isset($seen[$device])) {
+      continue;
+    }
+    $seen[$device] = TRUE;
+    $in = provision_path_inodes($path);
+    if ($in === FALSE) {
+      continue;
+    }
+    if ($in['used'] * 100 > $in['total'] * 90) {
+      return drush_set_error('PROVISION_INSUFFICIENT_INODES', dt('@pct% of the inodes on the filesystem holding @path are in use (@free free), above 90%: every file takes an inode, so a filesystem runs out of them while df -h still shows free space (df -i shows them). This task adds files and was refused before writing any; free inodes first (Delete tasks still run: removing unused platforms and sites frees them), or /data/conf/disable_space_preflight.cnf turns this check off', array(
+        '@pct' => (int) ceil($in['used'] * 100 / $in['total']),
+        '@path' => $in['path'],
+        '@free' => number_format($in['free'], 0, '.', ','),
+      )));
+    }
+  }
+  return TRUE;
 }
 
 /**
