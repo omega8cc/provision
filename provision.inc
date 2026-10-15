@@ -5115,8 +5115,10 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
         || (is_file('/data/conf/dereference_backups.conf') && !is_file('/data/conf/force_symlinks.conf'));
       $archive_bytes = $dereference ? $full_bytes : $local_bytes;
       $unpack_bytes = $archive_bytes;
+      $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
+      $linked = is_link($site_path . '/files') || is_link($site_path . '/private');
       $local_inodes = $copy_inodes;
-      if (!$dereference && $full_inodes !== FALSE) {
+      if ($full_inodes !== FALSE && (!$dereference || ($renamed && $linked))) {
         $local_inodes = provision_site_inodes($site_path, FALSE);
         if ($local_inodes === FALSE) {
           $local_inodes = $copy_inodes;
@@ -5128,10 +5130,16 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $needs[] = array($backup_path, $archive_bytes + $db_bytes, 0);
       $needs[] = array($target_root, $archive_bytes, $unpack_inodes);
       $detail[] = dt('a safety copy (@gb GB, plus a @dgb GB database dump) and the unpacked site (@gb GB)', array('@gb' => round($archive_bytes / $gb, 1), '@dgb' => round($db_bytes / $gb, 1)));
-      $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
       $store_bytes = $full_bytes - $local_bytes;
-      if ($renamed && $store_bytes > 0 && (is_link($site_path . '/files') || is_link($site_path . '/private'))) {
-        $needs[] = array($store_root, $store_bytes, max(0, $copy_inodes - $local_inodes));
+      if ($renamed && $store_bytes > 0 && $linked) {
+        // The store's files are new inodes there unless the unpacked copy
+        // already carries them on the same filesystem, where moving them
+        // into the store is a rename.
+        $store_inodes = max(0, $copy_inodes - $local_inodes);
+        if ($dereference && provision_path_device($store_root) === provision_path_device($target_root)) {
+          $store_inodes = 0;
+        }
+        $needs[] = array($store_root, $store_bytes, $store_inodes);
         $detail[] = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
       }
       break;
@@ -5216,6 +5224,11 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
  * archive's --exclude-tag skips; a lineage without the constant measures 0.
  */
 function provision_site_excluded_bytes($site_path) {
+  // The set is defined with the backup command, which a copying task's
+  // validate hook runs before: load it (include_once, as Drush does).
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') && function_exists('drush_command_include')) {
+    drush_command_include('provision-backup');
+  }
   if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') || empty($site_path)) {
     return 0;
   }
@@ -5248,6 +5261,11 @@ function provision_site_excluded_bytes($site_path) {
  * archive skips and so no copy unpacks.
  */
 function provision_site_excluded_inodes($site_path) {
+  // The set is defined with the backup command, which a copying task's
+  // validate hook runs before: load it (include_once, as Drush does).
+  if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') && function_exists('drush_command_include')) {
+    drush_command_include('provision-backup');
+  }
   if (!defined('PROVISION_BACKUP_EXCLUDED_DIRECTORIES') || empty($site_path)) {
     return 0;
   }
