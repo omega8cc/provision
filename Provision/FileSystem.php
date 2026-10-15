@@ -419,6 +419,16 @@ class Provision_FileSystem extends Provision_ChainedState {
               '@where' => dirname($target),
             ));
           }
+          // "No space left on device" with megabytes to spare is a
+          // filesystem out of inodes: every file takes one, and only df -i
+          // shows them, so the count rides the reason too.
+          $inodes = function_exists('provision_path_inodes') ? provision_path_inodes(dirname($target)) : FALSE;
+          if ($inodes !== FALSE) {
+            $reason .= dt(', @ifree of its @itotal inodes free', array(
+              '@ifree' => number_format($inodes['free'], 0, '.', ','),
+              '@itotal' => number_format($inodes['total'], 0, '.', ','),
+            ));
+          }
           $this->tokens['@reason'] = $reason;
           $this->last_status = FALSE;
         }
