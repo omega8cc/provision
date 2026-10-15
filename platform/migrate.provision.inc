@@ -140,12 +140,14 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   }
   d()->service('http')->create_config('site');
   d()->service('http')->parse_configs();
-  // The site's cache namespace is keyed by its name without a leading www.
-  // (see _provision_valkey_purge_site()), so a copy built under the same name
-  // or its www. twin shared it with the source. What a newer core wrote there
-  // does not unserialize under the old one, and the site would fail on it
-  // until a flush: purge it, now that the vhost has been rewritten. Only a
-  // cache is lost, whichever copy the site is left on.
+  // The site's cache namespaces are keyed by its name without a leading www.
+  // (see _provision_valkey_purge_site()). On Drupal 8 and 9, and under a cache
+  // module older than the one that keys each copy by its database, a copy
+  // built under the same name or its www. twin shared the source's: what a
+  // newer core wrote there does not unserialize under the old one, and the
+  // site would fail on it until a flush. Purge every namespace under the
+  // name, now that the vhost has been rewritten. Only a cache is lost,
+  // whichever copy the site is left on.
   $old_host = preg_replace('`^www\.`', '', strtolower(d()->uri));
   $new_host = is_null($new_name) ? $old_host : preg_replace('`^www\.`', '', strtolower(ltrim($new_name, '@')));
   if ($new_host == $old_host && is_array(drush_get_option('migrate_target_copy', NULL))) {
@@ -351,6 +353,20 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     'old_uri' => d()->uri,
     'strict' => 0,
   );
+  // On Drupal 10 and 11 the live site and a copy built under its name, or its
+  // www. twin, have cache namespaces of their own (see
+  // _provision_valkey_site_copy_prefix()). The deploy's purge spares the live
+  // site's, which keeps its cache while the copy is built; once the copy has
+  // taken over, the post hook removes it.
+  $old_host = _provision_valkey_site_host(d()->uri);
+  $new_host = is_null($new_name) ? $old_host : _provision_valkey_site_host(ltrim($new_name, '@'));
+  if ($new_host === $old_host) {
+    $source_ns = _provision_valkey_site_copy_prefix(d()->uri, drush_get_option('db_host', '', 'site'), drush_get_option('db_name', '', 'site'));
+    if ($source_ns !== '') {
+      $deploy_options['valkey_keep_prefix'] = $source_ns;
+      drush_set_option('provision_migrate_source_ns', $source_ns);
+    }
+  }
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
   // The safety copy took its time; the unpacked copy must still fit.
@@ -537,6 +553,14 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   else {
     // Load the config file of the newly migrated site and return it to hosting.
     provision_reload_config('site', drush_get_option('new_site_path', d()->site_path) . '/drushrc.php');
+  }
+
+  // The copy now serves the site: the source's cache namespace, spared while
+  // the copy was built, is read by nothing any more. Never the copy's own,
+  // should the two coincide.
+  $source_ns = (string) drush_get_option('provision_migrate_source_ns', '');
+  if ($source_ns !== '' && $source_ns !== _provision_valkey_site_copy_prefix(d()->uri, drush_get_option('db_host', '', 'site'), drush_get_option('db_name', '', 'site'))) {
+    _provision_valkey_purge_prefixes(array($source_ns), d()->uri);
   }
 
   $backup_path = d('@server_master')->backup_path;
