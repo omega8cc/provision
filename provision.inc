@@ -5047,6 +5047,10 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   if ($excluded_bytes > 0 && $excluded_bytes < $full_bytes) {
     $full_bytes -= $excluded_bytes;
   }
+  else {
+    $excluded_bytes = 0;
+  }
+  $excluded_inodes = 0;
   // Every file of the unpacked copy takes an inode, and a filesystem runs
   // out of them while df -h still shows free space: the copy is counted in
   // files as well, on the same terms (links followed, cache directories
@@ -5059,6 +5063,9 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
     $excluded_inodes = provision_site_excluded_inodes($site_path);
     if ($excluded_inodes > 0 && $excluded_inodes < $full_inodes) {
       $full_inodes -= $excluded_inodes;
+    }
+    else {
+      $excluded_inodes = 0;
     }
   }
   $copy_inodes = ($full_inodes === FALSE) ? 0 : $full_inodes;
@@ -5103,9 +5110,12 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
 
     case 'migrate':
       // The safety copy keeps links unless a files-carrying mode was asked
-      // for or the operator opted into dereferencing; a site renamed under a
-      // new name then gets its own copy of the store (the unshare), a
-      // same-name migrate keeps it.
+      // for or the operator opted into dereferencing. With links kept, a
+      // site renamed under a new name gets its own copy of the whole store
+      // (the unshare copies it, cache directories included) and a same-name
+      // migrate keeps it. With the store's files in the copy, the deploy
+      // unpacks them as plain directories and the conversion moves them into
+      // the store: a rename on one filesystem, a copy onto a store on another.
       $local_bytes = provision_site_bytes($site_path, FALSE);
       if ($local_bytes === FALSE) {
         $local_bytes = $full_bytes;
@@ -5117,8 +5127,10 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $unpack_bytes = $archive_bytes;
       $renamed = !empty($new_name) && ltrim($new_name, '@') != ltrim(d()->name, '@');
       $linked = is_link($site_path . '/files') || is_link($site_path . '/private');
+      $store_apart = provision_path_device($store_root) !== provision_path_device($target_root);
+      $store_copy = $linked && ($dereference ? $store_apart : $renamed);
       $local_inodes = $copy_inodes;
-      if ($full_inodes !== FALSE && (!$dereference || ($renamed && $linked))) {
+      if ($full_inodes !== FALSE && (!$dereference || $store_copy)) {
         $local_inodes = provision_site_inodes($site_path, FALSE);
         if ($local_inodes === FALSE) {
           $local_inodes = $copy_inodes;
@@ -5130,17 +5142,24 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $needs[] = array($backup_path, $archive_bytes + $db_bytes, 0);
       $needs[] = array($target_root, $archive_bytes, $unpack_inodes);
       $detail[] = dt('a safety copy (@gb GB, plus a @dgb GB database dump) and the unpacked site (@gb GB)', array('@gb' => round($archive_bytes / $gb, 1), '@dgb' => round($db_bytes / $gb, 1)));
-      $store_bytes = $full_bytes - $local_bytes;
-      if ($renamed && $store_bytes > 0 && $linked) {
-        // The store's files are new inodes there unless the unpacked copy
-        // already carries them on the same filesystem, where moving them
-        // into the store is a rename.
-        $store_inodes = max(0, $copy_inodes - $local_inodes);
-        if ($dereference && provision_path_device($store_root) === provision_path_device($target_root)) {
-          $store_inodes = 0;
+      if ($store_copy) {
+        if ($dereference) {
+          // the unpacked directories, which the archive left the cache
+          // directories out of
+          $store_bytes = $full_bytes - $local_bytes;
+          $store_inodes = max(0, $copy_inodes - $local_inodes);
+          $store_what = dt('the move of the store\'s files onto its separate filesystem (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
         }
-        $needs[] = array($store_root, $store_bytes, $store_inodes);
-        $detail[] = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+        else {
+          // the whole store, its cache directories included
+          $store_bytes = $full_bytes + $excluded_bytes - $local_bytes;
+          $store_inodes = max(0, $copy_inodes + $excluded_inodes - $local_inodes);
+          $store_what = dt('the renamed site\'s own copy of the store (@gb GB)', array('@gb' => round($store_bytes / $gb, 1)));
+        }
+        if ($store_bytes > 0) {
+          $needs[] = array($store_root, $store_bytes, $store_inodes);
+          $detail[] = $store_what;
+        }
       }
       break;
 
