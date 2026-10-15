@@ -3015,13 +3015,19 @@ function _provision_valkey_site_copy_prefix($uri, $db_host, $db_name) {
  *
  * A same-name Migrate passes its source's namespace as the valkey_keep_prefix
  * option of the deploy; anything not shaped like a namespace of this site's
- * name is ignored, so the purge then sweeps everything as before.
+ * name is ignored, so the purge then sweeps everything as before. Never the
+ * copy's own namespace either: the database service creates the copy's
+ * database before this purge runs, and a copy whose namespace matched the
+ * live site's would read that site's entries, written by another core.
  */
 function _provision_valkey_keep_prefix($uri) {
   $keep = (string) drush_get_option('valkey_keep_prefix', '');
   $host = _provision_valkey_site_host($uri);
   if ($keep === '' || $host === '' || !preg_match('/^[0-9a-f]{32}_sn_[0-9a-f]{8}_$/', $keep)
     || strpos($keep, md5($host) . '_sn_') !== 0) {
+    return '';
+  }
+  if ($keep === _provision_valkey_site_copy_prefix($uri, drush_get_option('db_host', '', 'site'), drush_get_option('db_name', '', 'site'))) {
     return '';
   }
   return $keep;
