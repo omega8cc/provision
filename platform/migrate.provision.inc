@@ -558,7 +558,7 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   // The copy now serves the site: the source's cache namespace, spared while
   // the copy was built, is read by nothing any more. Never the copy's own,
   // should the two coincide.
-  $source_ns = (string) drush_get_option('provision_migrate_source_ns', '');
+  $source_ns = _provision_valkey_copy_namespace((string) drush_get_option('provision_migrate_source_ns', ''), d()->uri);
   if ($source_ns !== '' && $source_ns !== _provision_valkey_site_copy_prefix(d()->uri, drush_get_option('db_host', '', 'site'), drush_get_option('db_name', '', 'site'))) {
     _provision_valkey_purge_prefixes(array($source_ns), d()->uri);
   }
