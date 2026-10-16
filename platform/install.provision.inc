@@ -147,6 +147,10 @@ function drush_provision_drupal_pre_provision_install_rollback() {
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
+  // The site's aliases go first: Drupal 6 links in the platform's sites
+  // directory and Drupal 7+ alias store entries name the directory removed
+  // below, and a Delete of the failed site has no alias left to run against.
+  _provision_drupal_delete_aliases();
   provision_file()->chmod(d()->site_path, 0755);
   _provision_recursive_delete( d()->site_path );
   drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
@@ -657,7 +661,10 @@ function drush_provision_drupal_provision_install() {
   }
 
   drush_set_option('installed', TRUE, 'site');
-  _provision_drupal_maintain_aliases();
+  // A failed install makes no aliases: its rollback removes the site.
+  if (!drush_get_error()) {
+    _provision_drupal_maintain_aliases();
+  }
 
 }
 
