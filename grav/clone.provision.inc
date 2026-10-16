@@ -150,6 +150,11 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
     $deploy_options['grav_copy_of'] = _provision_grav_copy_root(d()->site_path, d()->uri);
   }
 
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
+    return FALSE;
+  }
+
   // What the deploy is about to create on the target, for a site with a
   // database: the rollback drops the copy's database with the copy.
   $has_db = _provision_grav_has_db();

@@ -4998,8 +4998,15 @@ function provision_cli_php_target_preflight($task, $platform = NULL, $new_name =
  * store's size; a very compressible site may be refused with a little room
  * to spare, which is the cheap side of that error.
  *
+ * The Backdrop, Grav and Textpattern upgrades that deploy into another
+ * platform make the same two copies as a migrate ('upgrade'). An upgrade in
+ * place, a rename and a Backup task of its own add only the safety copy, an
+ * archive in the backups directory ('inplace-upgrade', 'rename', 'backup'),
+ * sized by what the backup mode puts in it.
+ *
  * @param $task
- *   'clone', 'migrate' or 'restore', the flow whose copies are counted.
+ *   'clone', 'migrate', 'restore', 'upgrade', 'inplace-upgrade', 'rename'
+ *   or 'backup', the flow whose copies are counted.
  * @param $platform
  *   The target platform context name for a clone or migrate (NULL = same).
  * @param $new_name
@@ -5031,7 +5038,8 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $target_root = $target_platform->root;
     }
   }
-  $what = ucfirst($task) . ' of ' . d()->uri;
+  $labels = array('inplace-upgrade' => 'Upgrade');
+  $what = (isset($labels[$task]) ? $labels[$task] : ucfirst($task)) . ' of ' . d()->uri;
   $gb = 1073741824;
   $full_bytes = provision_site_bytes($site_path, TRUE);
   if ($full_bytes === FALSE) {
@@ -5054,12 +5062,15 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   // Every file of the unpacked copy takes an inode, and a filesystem runs
   // out of them while df -h still shows free space: the copy is counted in
   // files as well, on the same terms (links followed, cache directories
-  // left out). Unmeasured, the inode side is skipped, never refused.
-  $full_inodes = provision_site_inodes($site_path, TRUE);
+  // left out). Unmeasured, the inode side is skipped, never refused. An
+  // archive is one file, so the tasks that add only their safety copy skip
+  // the count.
+  $archive_only = in_array($task, array('backup', 'rename', 'inplace-upgrade'), TRUE);
+  $full_inodes = $archive_only ? 0 : provision_site_inodes($site_path, TRUE);
   if ($full_inodes === FALSE) {
     drush_log(dt('SPACE/PREFLIGHT @what: the files of @path could not be counted within the bound, so the inode check is SKIPPED', array('@what' => $what, '@path' => $site_path)), 'warning');
   }
-  else {
+  elseif (!$archive_only) {
     $excluded_inodes = provision_site_excluded_inodes($site_path);
     if ($excluded_inodes > 0 && $excluded_inodes < $full_inodes) {
       $full_inodes -= $excluded_inodes;
@@ -5072,9 +5083,12 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   // The database dump a restorable safety copy writes: uncompressed into the
   // site directory first, then inside the archive, then unpacked again. For
   // a database-heavy site it is the largest single new file of the task.
-  $db_bytes = provision_site_database_bytes();
+  // The tasks that add only their safety copy ask the database only when
+  // that copy dumps it (below): a files-only Backup must not need the server
+  $db_bytes = $archive_only ? 0 : provision_site_database_bytes();
   $needs = array();
   $detail = array();
+  $basis = dt('every copy is counted at the site\'s full size following links, or at the archive\'s size when that is larger');
   $unpack_bytes = 0;
   $unpack_inodes = 0;
   switch ($task) {
@@ -5108,6 +5122,54 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $detail[] = dt('a self-contained safety copy (@gb GB) and the unpacked archive (about @ugb GB, a lower bound)', array('@gb' => round(($full_bytes + $db_bytes) / $gb, 1), '@ugb' => round($unpack_bytes / $gb, 1)));
       break;
 
+    case 'backup':
+    case 'rename':
+    case 'inplace-upgrade':
+      // Only the safety copy is new: the site's own files stay where they
+      // are. The archive carries what the backup mode asks for: the dump
+      // alone, the files without it, or the files with it, links followed
+      // when the mode or the box-wide dereference setting says so. A Backup
+      // task's mode is the one its validate hook latched.
+      if ($task == 'backup' && function_exists('provision_backup_mode_resolve')) {
+        $mode = provision_backup_mode_resolve();
+      }
+      else {
+        $mode = function_exists('provision_backup_mode_sanitize') ? provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE)) : FALSE;
+        // A rename's or an upgrade's pre-hook forces its safety copy to the
+        // restorable mode after this check runs (Grav, TXP): size that one
+        if (empty($mode)) {
+          $mode = 'site_files_with_mysqldump';
+        }
+      }
+      $archive_bytes = 0;
+      if ($mode != 'backup_mysqldump_only') {
+        $dereference = ($mode == 'site_files_with_mysqldump' || $mode == 'site_files_without_db_backup')
+          || (is_file('/data/conf/dereference_backups.conf') && !is_file('/data/conf/force_symlinks.conf'));
+        // A TXP archive never follows links, in any mode (txp/backup.provision.inc)
+        if (function_exists('provision_platform_is_txp') && provision_platform_is_txp(d())) {
+          $dereference = FALSE;
+        }
+        $archive_bytes = $full_bytes;
+        if (!$dereference) {
+          $local_bytes = provision_site_bytes($site_path, FALSE);
+          if ($local_bytes !== FALSE) {
+            $archive_bytes = $local_bytes;
+          }
+        }
+      }
+      $dump_bytes = ($mode == 'site_files_without_db_backup') ? 0 : provision_site_database_bytes();
+      $needs[] = array($backup_path, $archive_bytes + $dump_bytes, 0);
+      $detail[] = dt('a safety copy of about @gb GB', array('@gb' => round(($archive_bytes + $dump_bytes) / $gb, 1)));
+      // A copy with a mode, as every one sized here has, writes the dump
+      // uncompressed into the site directory first and then packs it.
+      if (!empty($mode) && $dump_bytes > 0) {
+        $needs[] = array($site_path, $dump_bytes, 0);
+        $detail[] = dt('the database dump written into the site directory first (@dgb GB)', array('@dgb' => round($dump_bytes / $gb, 1)));
+      }
+      $basis = dt('the safety copy is counted at what its backup mode packs: the database alone, or the site\'s files, following links only when the mode or /data/conf/dereference_backups.conf says so, and its database when the mode carries one');
+      break;
+
+    case 'upgrade':
     case 'migrate':
       // The safety copy keeps links unless a files-carrying mode was asked
       // for or the operator opted into dereferencing. With links kept, a
@@ -5142,6 +5204,7 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
       $needs[] = array($backup_path, $archive_bytes + $db_bytes, 0);
       $needs[] = array($target_root, $archive_bytes, $unpack_inodes);
       $detail[] = dt('a safety copy (@gb GB, plus a @dgb GB database dump) and the unpacked site (@gb GB)', array('@gb' => round($archive_bytes / $gb, 1), '@dgb' => round($db_bytes / $gb, 1)));
+      $basis = dt('every copy is counted at the site\'s size, following links only where the safety copy carries the linked files');
       if ($store_copy) {
         if ($dereference) {
           // the unpacked directories, which the archive left the cache
@@ -5188,7 +5251,7 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
   drush_log(dt('SPACE/PREFLIGHT @what: the site measures @gb GB@files following links (cache directories left out); the task needs @detail', array(
     '@what' => $what,
     '@gb' => round($full_bytes / $gb, 1),
-    '@files' => ($full_inodes === FALSE) ? '' : dt(' in @n files', array('@n' => number_format($full_inodes, 0, '.', ','))),
+    '@files' => ($full_inodes === FALSE || $archive_only) ? '' : dt(' in @n files', array('@n' => number_format($full_inodes, 0, '.', ','))),
     '@detail' => implode(dt(' and '), $detail),
   )), 'info');
   foreach ($by_device as $device) {
@@ -5199,8 +5262,9 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
     }
     $margin = provision_space_margin($device['path']);
     if ($free < $device['need'] + $margin) {
-      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need GB free on the filesystem holding @path (@margin GB of it headroom) but only @free GB is free: free space first, nothing was written (every copy is counted at the site\'s full size following links, or at the archive\'s size when that is larger; /data/conf/disable_space_preflight.cnf turns this check off)', array(
+      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need GB free on the filesystem holding @path (@margin GB of it headroom) but only @free GB is free: free space first, nothing was written (@basis; /data/conf/disable_space_preflight.cnf turns this check off)', array(
         '@what' => $what,
+        '@basis' => $basis,
         '@need' => round(($device['need'] + $margin) / $gb, 1),
         '@margin' => round($margin / $gb, 1),
         '@path' => $device['path'],
@@ -5411,12 +5475,28 @@ function provision_copy_task_space_recheck($what) {
 /**
  * The site's database on disk, in bytes, as the safety copy's dump will
  * roughly weigh: the data and index lengths of its tables, read through the
- * database server's own connection. Zero when there is no database, the
- * server cannot be asked, or the site carries no database name (a Grav
- * capsule): the estimate then simply lacks the dump term.
+ * database server's own connection. Zero when the site carries no database
+ * name (a Grav capsule) or the server gives no figure: the estimate then
+ * simply lacks the dump term. A server that cannot be reached sets the
+ * connection error, as the dump itself would, so call it only for a copy
+ * that dumps the database.
  */
 function provision_site_database_bytes() {
-  $db_name = isset(d()->db_name) ? d()->db_name : '';
+  // The site's credentials: its own drushrc.php, read (never included) as
+  // the Backdrop and Grav layers read it, else Drush's 'site' context, which
+  // holds that file once a task bootstrapped the site (before that it can
+  // be the platform's sites/default); never a property of the context object
+  $db_name = '';
+  if (d()->type === 'site' && !empty(d()->site_path)) {
+    $drushrc = d()->site_path . '/drushrc.php';
+    $body = is_readable($drushrc) ? @file_get_contents($drushrc) : FALSE;
+    if (is_string($body) && preg_match('/\$options\s*\[\s*[\'"]db_name[\'"]\s*\]\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]/', $body, $m)) {
+      $db_name = $m[1];
+    }
+  }
+  if ($db_name === '') {
+    $db_name = (string) drush_get_option('db_name', '', 'site');
+  }
   if ($db_name === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db_name)) {
     return 0;
   }

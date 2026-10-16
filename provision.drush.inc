@@ -156,9 +156,13 @@ function _provision_drush_check_load() {
  * no longer write either. BOA's upgrades, backups and migration tools refuse
  * at the same line. Delete, Verify, Backup and the other tasks still run,
  * because they are how the inodes come back (the nightly frees an account's
- * empty platforms through Delete tasks). The hostmaster's own upgrade is the
- * Octopus run's to judge, and /data/conf/disable_space_preflight.cnf turns
- * this off with the copying tasks' space checks.
+ * empty platforms through Delete tasks). A platform Verify that builds its
+ * codebase from a makefile is the exception: it adds a whole codebase. The
+ * hostmaster's own upgrade, the build of its new platform included (marked
+ * by hostmaster-migrate and hostmaster-install), is the Octopus or Barracuda
+ * run's to judge, and
+ * /data/conf/disable_space_preflight.cnf turns this off with the copying
+ * tasks' space checks.
  */
 function _provision_drush_check_inodes() {
   static $copying = array(
@@ -176,7 +180,12 @@ function _provision_drush_check_inodes() {
     'provision-txp-rename',
   );
   $command = drush_get_command();
-  if (empty($command['command']) || !in_array($command['command'], $copying, TRUE)) {
+  if (empty($command['command'])) {
+    return TRUE;
+  }
+  if (!in_array($command['command'], $copying, TRUE)
+    && !($command['command'] === 'provision-verify' && _provision_verify_builds_platform()
+      && !drush_get_option('hostmaster_platform_build', FALSE))) {
     return TRUE;
   }
   if (is_file('/data/conf/disable_space_preflight.cnf')) {
@@ -213,6 +222,51 @@ function _provision_drush_check_inodes() {
     }
   }
   return TRUE;
+}
+
+/**
+ * Whether this Verify builds a platform's codebase from its makefile: the
+ * platform's root does not exist yet and a makefile is on record, so the
+ * Verify runs drush make (platform/verify.provision.inc).
+ */
+function _provision_verify_builds_platform() {
+  if (d()->type !== 'platform') {
+    return FALSE;
+  }
+  $root = d()->root;
+  if (empty(d()->makefile) || !is_string($root) || $root === '') {
+    return FALSE;
+  }
+  return !file_exists($root);
+}
+
+/**
+ * Whether this process was started for $command itself.
+ *
+ * A task's own safety copy runs the backup command in the same process
+ * (drush_invoke), which makes it the current command; the command line that
+ * started the process, which Drush keeps in its argv context, still names
+ * the task. Every safety copy provision itself makes is run that way.
+ */
+function provision_task_is_top_level($command) {
+  $argv = drush_get_context('argv');
+  return is_array($argv) && in_array($command, $argv, TRUE);
+}
+
+/**
+ * Whether this provision-backup is a Backup task of its own, the one the
+ * task queue runs: the process was started for provision-backup, and its
+ * mode came from the backup mode control file, which the queue writes for
+ * every Backup task it runs. Call it after provision_backup_mode_resolve().
+ *
+ * A task that starts its safety copy as a process of its own passes the
+ * mode as an option (the Update task's and the utf8mb4 conversion's copies)
+ * or none at all (a Sync's copy of its destination); like the copies made
+ * in the task's own process, each is that task's to size. So is a
+ * provision-backup run by hand.
+ */
+function provision_backup_is_own_task() {
+  return provision_task_is_top_level('provision-backup') && defined('AEGIR_BACKUP_MODE_CTRL_READ');
 }
 
 /**
@@ -398,6 +452,10 @@ function provision_drush_command() {
       ),
       'override_slave_authority' => array(
         'description' => dt('Push the site specific files directory to a slave. This overrides the slaves authority.'),
+      ),
+      'hostmaster_platform_build' => array(
+        'description' => dt('Set by hostmaster-migrate and hostmaster-install for the panel\'s new platform: its build is not held to the inode gate.'),
+        'hidden' => TRUE,
       ),
     ),
     'allow-additional-options' => TRUE,

@@ -97,6 +97,12 @@ function drush_provision_drupal_provision_backup_validate($backup_file = NULL) {
     @unlink(AEGIR_BACKUP_MODE_CTRL);
   }
 
+  // A Backup task of its own must not fill the filesystem its archive goes
+  // to. The safety copy a Clone, Migrate, Delete, Update or upgrade makes is
+  // that task's to size, so only the queue's Backup task is checked.
+  if (provision_backup_is_own_task() && !provision_copy_task_space_preflight('backup')) {
+    return FALSE;
+  }
 }
 
 /**

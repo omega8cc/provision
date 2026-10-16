@@ -353,7 +353,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     'old_uri' => d()->uri,
     'strict' => 0,
   );
-  // On Drupal 10 and 11 the live site and a copy built under its name, or its
+  // On Drupal 10, 11 and 12 the live site and a copy built under its name, or its
   // www. twin, have cache namespaces of their own (see
   // _provision_valkey_site_copy_prefix()). The deploy's purge spares the live
   // site's, which keeps its cache while the copy is built; once the copy has

@@ -112,6 +112,18 @@ function drush_provision_grav_provision_restore($restore_file) {
   // happened to be readable at backup time.
   $deploy_options['deploy_class'] = 'restore';
 
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Restore of ' . d()->uri)) {
+    // Nothing was deployed: site_enabled goes back to TRUE, as in the failure
+    // branch below; the vhost is rendered from it (the http pre-hook removed
+    // it and its rollback renders it again). The rollback removes the safety
+    // copy.
+    d()->site_enabled = true;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    return FALSE;
+  }
+
   // What the deploy is about to replace, for a site with a database: a
   // deploy that died without rolling back leaves its copy and the database
   // it made (see the failure branch below).

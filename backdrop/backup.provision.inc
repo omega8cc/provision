@@ -72,6 +72,11 @@ function drush_provision_backdrop_provision_backup_validate($backup_file = NULL)
     @unlink(AEGIR_BACKUP_MODE_CTRL);
   }
 
+  // A Backup task of its own must not fill the filesystem its archive goes
+  // to; a task's safety copy is that task's to size (as in the Drupal layer).
+  if (provision_backup_is_own_task() && !provision_copy_task_space_preflight('backup')) {
+    return FALSE;
+  }
 }
 
 /**

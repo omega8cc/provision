@@ -272,6 +272,9 @@ function drush_provision_hostmaster_install($site = NULL) {
     # Don't rewrite module info files if using working-copy.
     $options['no-gitinfofile'] = 1;
   }
+  // The panel's own codebase: its room is the install's to judge, not the
+  // inode gate's (_provision_drush_check_inodes())
+  $options['hostmaster_platform_build'] = 1;
   provision_backend_invoke($platform_name, 'provision-verify', array(), $options);
 
   // exit if an error has occured.
