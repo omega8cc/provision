@@ -359,8 +359,15 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     elseif ($copy_ids['store'] !== '') {
       $holders = _provision_grav_sites_with_store_id($copy_ids['store'], $copy_skip);
       if (empty($holders) && _provision_grav_cutover_store_here($copy_ids['store'], $copy_names[0], $copy_skip)) {
-        $note = dt('[cutover] The copy stays held: the store it stands in for looks to be the site at !where, a store whose .boa-store identity file is gone, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
-          array('!where' => $copy_names[0], '!release' => $release));
+        $where_record = drush_sitealias_get_record('@' . $copy_names[0]);
+        if (!empty($where_record['site_path']) && _provision_grav_store_own_id($where_record['site_path']) === '') {
+          $note = dt('[cutover] The copy stays held: the store it stands in for looks to be the site at !where, a store whose .boa-store identity file is gone, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
+            array('!where' => $copy_names[0], '!release' => $release));
+        }
+        else {
+          $note = dt('[cutover] The copy stays held: the site at !where, the store\'s domain, is a store and no copy, but holds none of this store\'s identities (its .boa-store was made again, or it is another store put at that domain). The copy stays held while it is there; if it is not the store this copy stands in for, release the copy with !release.',
+            array('!where' => $copy_names[0], '!release' => $release));
+        }
       }
       elseif (!empty($holders)) {
         $note = dt('[cutover] The copy stays held: the store it stands in for is the site at !where, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
@@ -422,7 +429,7 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     // reached the new name; at its old name it stays held.
     if ($copy_keep_released) {
       _provision_grav_cutover_keep_released($target_domain, $retired_marker_time, $retired);
-      drush_log(dt('[cutover] If the rename rolled back, a re-run holds the copy at !domain: run it as !domain ran before with: touch ~/static/control/kahunacart-run.!domain.info',
+      drush_log(dt('[cutover] If the rename rolled back, a re-run holds the copy at !domain. Once the re-run has completed, run it as !domain ran before with: touch ~/static/control/kahunacart-run.!domain.info (a touch made before the re-run is undone by it).',
         array('!domain' => $target_domain)), 'warning');
     }
     return drush_set_error('PROVISION_GRAV_CUTOVER_RENAME_FAILED',
@@ -475,8 +482,8 @@ function _provision_grav_cutover_vhostd_path() {
  * Whether the store a copy stands in for is still on this server: a site
  * other than those in $skip that holds the store's identity and is a store
  * (_provision_grav_store_present()), or the site at the store's domain when
- * it is a store and no copy: its identity file may be gone, or made again
- * by a later copy of it.
+ * it is a store with no copy marker: its identity file may be gone, or made
+ * again by a later copy of it.
  */
 function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
   foreach (_provision_grav_sites_with_store_id($store_id, $skip) as $holder) {
@@ -487,8 +494,11 @@ function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
   if ($store_domain !== '' && !in_array($store_domain, $skip, TRUE) && _provision_grav_store_present($store_domain)) {
     $record = drush_sitealias_get_record('@' . $store_domain);
     if (!empty($record['site_path'])) {
+      // A copy is a site with BOA's marker, a regular file; a link or a
+      // directory made there by hand is judged by the scheduler, as the
+      // store test judges the retired site.
       $marker = _provision_grav_copy_marker($record['site_path']);
-      return !file_exists($marker) && !is_link($marker);
+      return !(is_file($marker) && !is_link($marker));
     }
   }
   return FALSE;
@@ -497,9 +507,9 @@ function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
 /**
  * The site a copy was made from, when it is a store now (it would take
  * orders from the same customers): a site other than those in $skip that
- * holds the source's identity and is a store, or, where its identity file
- * is gone, the site at the source's domain when it is a store with no
- * identity of its own whose marker names the same store. '' when none.
+ * holds the source's identity and is a store, or the site at the source's
+ * domain when it is a store whose marker names the same store (its identity
+ * file may be gone, or made again by a later copy of it). '' when none.
  */
 function _provision_grav_cutover_twin($copy_ids, $source_domain, $skip) {
   foreach (_provision_grav_sites_with_store_id($copy_ids['source'], $skip) as $holder) {
@@ -509,7 +519,7 @@ function _provision_grav_cutover_twin($copy_ids, $source_domain, $skip) {
   }
   if ($source_domain !== '' && !in_array($source_domain, $skip, TRUE) && _provision_grav_store_present($source_domain)) {
     $record = drush_sitealias_get_record('@' . $source_domain);
-    if (!empty($record['site_path']) && _provision_grav_store_own_id($record['site_path']) === '') {
+    if (!empty($record['site_path'])) {
       $ids = _provision_grav_copy_ids($record['site_path']);
       if ($ids['store'] === $copy_ids['store']) {
         return $source_domain;
