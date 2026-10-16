@@ -265,6 +265,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $core9_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_nine';
         $core10_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_ten';
         $core11_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_eleven';
+        $core12_contrib_dir = '/data/all/' . $latestDir . '/o_contrib_twelve';
       }
       else {
         $core6_contrib_dir = '/data/all/000/modules/o_contrib';
@@ -273,6 +274,7 @@ function drush_provision_drupal_pre_provision_verify() {
         $core9_contrib_dir = '/data/all/000/modules/o_contrib_nine';
         $core10_contrib_dir = '/data/all/000/modules/o_contrib_ten';
         $core11_contrib_dir = '/data/all/000/modules/o_contrib_eleven';
+        $core12_contrib_dir = '/data/all/000/modules/o_contrib_twelve';
       }
 
       $core6_version_id = d()->root . '/modules/path_alias_cache';
@@ -299,6 +301,11 @@ function drush_provision_drupal_pre_provision_verify() {
       $core11_contrib_symlink = d()->root . '/modules/o_contrib_eleven';
       $core11_contrib_dot = d()->root . '/modules/.o_contrib_eleven_dont_use';
 
+      // Drupal 12 still ships workspaces_ui, the Drupal 11 marker, so the
+      // major version tells the two apart.
+      $core_major = drush_drupal_major_version();
+      $core12_contrib_symlink = d()->root . '/modules/o_contrib_twelve';
+
       $core6_contrib_js_file = $core6_contrib_dir . '/js/js.php';
       $core7_contrib_js_file = $core7_contrib_dir . '/js/js.php';
       $core6_contrib_js_symlink = d()->root . '/js.php';
@@ -310,7 +317,8 @@ function drush_provision_drupal_pre_provision_verify() {
         provision_file()->exists($core8_contrib_dir)->status() ||
         provision_file()->exists($core9_contrib_dir)->status() ||
         provision_file()->exists($core10_contrib_dir)->status() ||
-        provision_file()->exists($core11_contrib_dir)->status()) {
+        provision_file()->exists($core11_contrib_dir)->status() ||
+        provision_file()->exists($core12_contrib_dir)->status()) {
         provision_file()->writable(d()->root)
           ->succeed('Drupal root directory @path is writable by the provisioning script')
           ->fail('Drupal root directory @path is not writable by the provisioning script', 'PROVISION_DRUPAL_ROOT_DIR_NOT_WRITABLE');
@@ -319,9 +327,27 @@ function drush_provision_drupal_pre_provision_verify() {
           ->fail('Drupal core modules directory @path is not writable by the provisioning script', 'PROVISION_CORE_MODULES_DIR_NOT_WRITABLE');
       }
 
+      // Add symlink to BOA specific contrib in Drupal 12, once the shelf
+      // exists; a Drupal 11 shelf an earlier Verify linked here is removed.
+      if ($core_major == 12) {
+        if (is_link($core11_contrib_symlink)) {
+          if (@unlink($core11_contrib_symlink)) {
+            drush_log(dt('Drupal 11 BOA contrib symlink removed from: !path', array('!path' => $core11_contrib_symlink)), 'message');
+          }
+        }
+        if (provision_file()->exists($core12_contrib_dir)->status() &&
+          !is_link($core12_contrib_symlink) &&
+          !provision_file()->exists($core12_contrib_symlink)->status()) {
+          provision_file()->symlink($core12_contrib_dir, $core12_contrib_symlink)
+            ->succeed('Created symlink @path to @target')
+            ->fail('Could not create symlink @path to @target: @reason');
+        }
+      }
+
       // Add symlink to BOA specific contrib in Drupal 11.
       // Check if static copy exists first
-      if (provision_file()->exists($core11_version_id)->status()) {
+      if (provision_file()->exists($core11_version_id)->status() &&
+        $core_major < 12) {
         if (is_dir($core11_contrib_symlink) && !is_link($core11_contrib_symlink)) {
           // Run cleanup of previous dot dir if exists
           // and current contrib is not a symlink again.
