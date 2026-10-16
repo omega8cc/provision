@@ -172,9 +172,13 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $retired_held = FALSE;
   $retired_names = array('', '');
   $retired_store = FALSE;
-  // Its store identities and the identities its own marker names, if any.
+  // Its store identities, the identities its own marker names, if any, its
+  // marker's time, and whether it ran a store worker (enabled, KahunaCart
+  // switched on, no held copy).
   $retired_ids = array();
   $retired_copy_ids = array('store' => '', 'source' => '');
+  $retired_marker_time = FALSE;
+  $retired_ran = FALSE;
   if ($retired !== '') {
     $retired_record = drush_sitealias_get_record('@' . $retired);
     if (!empty($retired_record['site_path'])) {
@@ -190,6 +194,12 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       $retired_store = is_file($retired_record['site_path'] . '/user/plugins/kahunacart/kahunacart.php');
       $retired_ids = _provision_grav_store_ids($retired_record['site_path']);
       $retired_copy_ids = _provision_grav_copy_ids($retired_record['site_path']);
+      if (is_file($retired_marker) && !is_link($retired_marker)) {
+        clearstatcache();
+        $retired_marker_time = @filemtime($retired_marker);
+      }
+      $retired_ran = !$retired_held && !empty($retired_record['site_enabled'])
+        && _provision_grav_kahunacart_present($retired_record['site_path'], $retired);
     }
   }
 
@@ -221,34 +231,44 @@ function drush_provision_grav_cutover($target_domain = NULL) {
 
   // The copy takes over from the store it stands in for. A marker that names
   // identities (_provision_grav_store_ids()) is decided by them, whatever
-  // the domains are now; the hold is lifted when leg 1 retired:
+  // the domains are now. The copy is promoted, its hold lifted for good,
+  // when leg 1 retired:
   // - a site holding the store's identity (the store under any domain, or a
   //   copy that took its place at an earlier Cutover) that carried a store
-  //   (any site, for a copy that carries none) and was no held copy, while
-  //   no other site holding the identity of the site the copy was made from
-  //   runs a store (it would share the copy's customers);
-  // - the site the copy was made from, while it ran as a released copy of
-  //   the same store;
-  // - another released copy of the same store that carried a store, while
-  //   no site holding the store's identity runs a store: the copy takes its
-  //   place.
+  //   (any site, for a copy that carries none) and was no held copy;
+  // - another released copy of the same store that ran its worker, while
+  //   no site holding the store's identity is a store any more (enabled or
+  //   not: a disabled one can be enabled again);
+  // - the site the copy was made from, a released copy of the same store
+  //   that ran its worker, under that same condition.
+  // Either way the copy stays held while the site it was made from is a
+  // store (it would take orders from the same customers). When the site
+  // the copy was made from, a released copy that ran, is retired while the
+  // store is still here, the copy takes its place as a released copy: its
+  // marker gets that site's marker time back after the rename, so the
+  // release file left for the domain releases it and taking that file back
+  // holds it again. A copy that takes a site's place takes its identities,
+  // and on a promotion beside no store also the store's, so later copies
+  // find it. A site whose identity file is gone counts by its domain where
+  // that keeps a copy held: a store at the store's domain with no identity
+  // is still the store, a released copy at the source's domain naming the
+  // same store is still the source.
   // A marker with domains only (written before identities existed, or with
   // no random source) keeps the domain rule: leg 1 retired the site at the
   // store's domain, a site that carried a store (any site, for a copy that
   // carries none) and was neither a held copy nor a copy of another store,
-  // while the site the copy was made from does not run as a store at its
-  // domain; or the site at the source's domain while it ran as a released
-  // copy of the same store. A domain is all such a marker keeps, so a store
+  // while the site the copy was made from is no store at its domain; or the
+  // site at the source's domain, a released copy of the same store that ran
+  // its worker (promoted when no store is at the store's domain, else kept
+  // released as above). A domain is all such a marker keeps, so a store
   // that is no copy, put at the store's domain, passes that test.
-  // A copy that takes over from the retired site takes its identities too,
-  // so later copies of that site find it here. The hold is lifted before the
-  // rename leg, whose own safety backup would otherwise carry it onto the
-  // live store's Backups tab, and it stays lifted when the rename does not
-  // complete: that store is gone, this copy is the only one left. A copy the
-  // account has released runs already, so its marker goes too (a release
-  // names the domain, and the rename would otherwise hold the copy again
-  // under its new name). Any other copy stays held until the account
-  // releases it.
+  // The hold is lifted before the rename leg, whose own safety backup would
+  // otherwise carry it onto the live store's Backups tab, and it stays
+  // lifted when the rename does not complete: that store is gone, this copy
+  // is the only one left. A copy the account has released runs already, so
+  // its marker goes too (a release names the domain, and the rename would
+  // otherwise hold the copy again under its new name). Any other copy stays
+  // held until the account releases it.
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
   $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
   $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
@@ -257,71 +277,79 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $copy_store = $copy_marked && is_file(d()->site_path . '/user/plugins/kahunacart/kahunacart.php');
   $copy_twin = '';
   $copy_lift = FALSE;
-  $copy_takes = FALSE;
+  $copy_keep_released = FALSE;
   // Neither this copy nor the retired site counts as another site.
   $copy_skip = array(strtolower(d()->uri), $retired);
   if ($copy_ids['store'] !== '') {
     $by_store = $retired !== '' && in_array($copy_ids['store'], $retired_ids, TRUE)
       && ($retired_store || !$copy_store) && !$retired_held;
-    $by_source = $retired !== '' && in_array($copy_ids['source'], $retired_ids, TRUE)
-      && !$retired_held && $retired_copy_ids['store'] === $copy_ids['store'];
-    $by_sibling = FALSE;
-    if (!$by_store && !$by_source && $retired !== '' && $retired_store && !$retired_held
-      && $retired_copy_ids['store'] === $copy_ids['store']) {
-      $by_sibling = TRUE;
-      foreach (_provision_grav_sites_with_store_id($copy_ids['store'], $copy_skip) as $holder) {
-        if (_provision_grav_store_runs($holder)) {
-          $by_sibling = FALSE;
-          break;
-        }
-      }
-    }
-    if ($by_store && $copy_held) {
-      foreach (_provision_grav_sites_with_store_id($copy_ids['source'], $copy_skip) as $holder) {
-        if (_provision_grav_store_runs($holder)) {
-          $copy_twin = $holder;
-          break;
-        }
-      }
+    $by_source = !$by_store && $retired !== '' && $retired_ran
+      && in_array($copy_ids['source'], $retired_ids, TRUE)
+      && $retired_copy_ids['store'] === $copy_ids['store'];
+    $by_sibling = !$by_store && !$by_source && $retired !== '' && $retired_ran
+      && $retired_copy_ids['store'] === $copy_ids['store'];
+    $store_here = ($by_source || $by_sibling)
+      && _provision_grav_cutover_store_here($copy_ids['store'], $copy_names[0], $copy_skip);
+    $by_sibling = $by_sibling && !$store_here;
+    if (($by_store || $by_sibling || ($by_source && !$store_here)) && $copy_held) {
+      $copy_twin = _provision_grav_cutover_twin($copy_ids, $copy_names[1], $copy_skip);
     }
   }
   else {
     $by_store = $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired
       && ($retired_store || !$copy_store) && !$retired_held
       && ($retired_names[0] === '' || $retired_names[0] === $copy_names[0]);
-    $by_source = $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
-      && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0];
+    $by_source = !$by_store && $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
+      && $retired_ran && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0];
     $by_sibling = FALSE;
+    $store_here = $by_source && !in_array($copy_names[0], $copy_skip, TRUE)
+      && _provision_grav_store_present($copy_names[0]);
     if ($by_store && $copy_held && $copy_names[1] !== '' && $copy_names[1] !== $copy_names[0]
-      && _provision_grav_store_runs($copy_names[1])) {
+      && _provision_grav_store_present($copy_names[1])) {
       $copy_twin = $copy_names[1];
     }
   }
-  $copy_takes = $copy_marked && (($by_store && $copy_twin === '') || $by_source || $by_sibling);
+  $copy_promote = $copy_twin === '' && ($by_store || $by_sibling || ($by_source && !$store_here));
+  $copy_takes = $copy_marked && ($copy_promote || ($by_source && $store_here));
+  $copy_taken = $retired_ids;
+  if (($by_sibling || ($by_source && !$store_here)) && $copy_ids['store'] !== '') {
+    $copy_taken[] = $copy_ids['store'];
+  }
   if ($copy_marked && !$copy_held) {
     $copy_lift = TRUE;
     drush_log(dt('[cutover] This copy was released and runs as a store of its own: its hold marker is removed before the rename, so it keeps running at !domain.',
       array('!domain' => $target_domain)), 'ok');
   }
-  elseif ($copy_held && $copy_takes) {
+  elseif ($copy_held && $copy_promote) {
     $copy_lift = TRUE;
   }
+  elseif ($copy_held && $by_source && $store_here) {
+    $copy_keep_released = ($retired_marker_time !== FALSE);
+  }
+  if ($copy_takes && !empty($copy_taken) && !_provision_grav_take_store_ids(d()->site_path, $copy_taken)) {
+    drush_log(dt('[cutover] Could not add the store identities of !from to this site: copies of !from will stay held through a Cutover over it.',
+      array('!from' => $retired)), 'warning');
+  }
   if ($copy_lift) {
-    if ($copy_takes && !empty($retired_ids) && !_provision_grav_take_store_ids(d()->site_path, $retired_ids)) {
-      drush_log(dt('[cutover] Could not add the store identities of !from to this site: copies of !from will stay held through a Cutover over it.',
-        array('!from' => $retired)), 'warning');
-    }
     _provision_grav_unmark_copy(d()->site_path);
+  }
+  elseif ($copy_keep_released) {
+    drush_log(dt('[cutover] This copy takes the place of !from, the released copy of the same store it was made from, while that store is still here: it stays a released copy at !from, released by ~/static/control/kahunacart-run.!from.info as that site was. Delete that file to hold it.',
+      array('!from' => $retired)), 'ok');
   }
   elseif ($copy_held) {
     $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
     if ($copy_twin !== '' && $copy_ids['store'] !== '') {
-      $note = dt('[cutover] The copy stays held: the site it was made from runs a store at !from now, over the same customers. Release it with !release once !from no longer takes orders.',
+      $note = dt('[cutover] The copy stays held: the site it was made from is a store at !from now, over the same customers. Release it with !release once !from no longer takes orders.',
         array('!from' => $copy_twin, '!release' => $release));
     }
     elseif ($copy_twin !== '') {
       $note = dt('[cutover] The copy stays held: it was made from the site at !from, and a store runs at that domain now, possibly over the same customers. Release it with !release once !from no longer takes orders, or now if the store at !from is not the site this copy was made from.',
         array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($by_source && $store_here) {
+      $note = dt('[cutover] The copy stays held: it takes the place of !from, the released copy it was made from, but the time of that site\'s hold could not be read to keep it released. Release it with !release if it should run as !from did.',
+        array('!from' => $retired, '!release' => $release));
     }
     elseif ($copy_ids['store'] !== '' && $retired !== '' && in_array($copy_ids['store'], $retired_ids, TRUE) && !$retired_held) {
       $note = dt('[cutover] The copy stays held: the site this cutover retires at !from is the one it stands in for, but it carried no store. If the shop was built on this copy, release it now with !release; otherwise release it once every other copy of that store no longer takes orders.',
@@ -329,7 +357,11 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     }
     elseif ($copy_ids['store'] !== '') {
       $holders = _provision_grav_sites_with_store_id($copy_ids['store'], $copy_skip);
-      if (!empty($holders)) {
+      if (empty($holders) && _provision_grav_cutover_store_here($copy_ids['store'], $copy_names[0], $copy_skip)) {
+        $note = dt('[cutover] The copy stays held: the store it stands in for looks to be the site at !where, a store whose .boa-store identity file is gone, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
+          array('!where' => $copy_names[0], '!release' => $release));
+      }
+      elseif (!empty($holders)) {
         $note = dt('[cutover] The copy stays held: the store it stands in for is the site at !where, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
           array('!where' => implode(', ', $holders), '!release' => $release));
       }
@@ -396,6 +428,14 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
   }
+  elseif ($copy_keep_released) {
+    // Released as the site it replaced was: its marker gets that site's
+    // marker time, so the release file left for this domain is newer.
+    $moved_marker = _provision_grav_copy_marker(d()->root . '/sites/' . $target_domain);
+    if (is_file($moved_marker) && !is_link($moved_marker)) {
+      @touch($moved_marker, (int) $retired_marker_time);
+    }
+  }
   elseif ($copy_held) {
     // Still held under the new name: a release file left for this domain,
     // by the site leg 1 retired or earlier, is older than the marker from
@@ -424,6 +464,51 @@ function _provision_grav_cutover_vhostd_path() {
     && !empty($server->http_vhostd_path)
     && is_string($server->http_vhostd_path)) {
     return $server->http_vhostd_path;
+  }
+  return '';
+}
+
+/**
+ * Whether the store a copy stands in for is still on this server: a site
+ * other than those in $skip that holds the store's identity and is a store
+ * (_provision_grav_store_present()), or, where an identity file is gone,
+ * the site at the store's domain when it is a store with no identity of its
+ * own.
+ */
+function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
+  foreach (_provision_grav_sites_with_store_id($store_id, $skip) as $holder) {
+    if (_provision_grav_store_present($holder)) {
+      return TRUE;
+    }
+  }
+  if ($store_domain !== '' && !in_array($store_domain, $skip, TRUE) && _provision_grav_store_present($store_domain)) {
+    $record = drush_sitealias_get_record('@' . $store_domain);
+    return !empty($record['site_path']) && _provision_grav_store_own_id($record['site_path']) === '';
+  }
+  return FALSE;
+}
+
+/**
+ * The site a copy was made from, when it is a store now (it would take
+ * orders from the same customers): a site other than those in $skip that
+ * holds the source's identity and is a store, or, where its identity file
+ * is gone, the site at the source's domain when it is a store with no
+ * identity of its own whose marker names the same store. '' when none.
+ */
+function _provision_grav_cutover_twin($copy_ids, $source_domain, $skip) {
+  foreach (_provision_grav_sites_with_store_id($copy_ids['source'], $skip) as $holder) {
+    if (_provision_grav_store_present($holder)) {
+      return $holder;
+    }
+  }
+  if ($source_domain !== '' && !in_array($source_domain, $skip, TRUE) && _provision_grav_store_present($source_domain)) {
+    $record = drush_sitealias_get_record('@' . $source_domain);
+    if (!empty($record['site_path']) && _provision_grav_store_own_id($record['site_path']) === '') {
+      $ids = _provision_grav_copy_ids($record['site_path']);
+      if ($ids['store'] === $copy_ids['store']) {
+        return $source_domain;
+      }
+    }
   }
   return '';
 }

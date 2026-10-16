@@ -798,19 +798,20 @@ function _provision_grav_copy_names_for_deploy($staged_path, $old_uri) {
 }
 
 /**
- * Whether the site at $uri on this server runs a store worker now: an
- * enabled site whose capsule carries KahunaCart and is not a held copy (a
- * released copy runs).
+ * Whether the site at $uri on this server is a store that runs or can run
+ * its worker: its capsule carries KahunaCart (switched on in its config or
+ * not) and it is no held copy (a released copy runs). Enabled or not: a
+ * disabled site is enabled again with one task, so it counts.
  */
-function _provision_grav_store_runs($uri) {
+function _provision_grav_store_present($uri) {
   if ($uri === '' || !is_file(drush_server_home() . '/.drush/' . $uri . '.alias.drushrc.php')) {
     return FALSE;
   }
   $record = drush_sitealias_get_record('@' . $uri);
-  if (empty($record['site_path']) || empty($record['site_enabled'])) {
+  if (empty($record['site_path']) || !is_string($record['site_path'])) {
     return FALSE;
   }
-  return _provision_grav_kahunacart_present($record['site_path'], $uri)
+  return is_file($record['site_path'] . '/user/plugins/kahunacart/kahunacart.php')
     && !_provision_grav_copy_held($record['site_path'], $uri);
 }
 
@@ -829,10 +830,13 @@ function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_u
   if (is_array($ids) && !empty($ids['store']) && !empty($ids['source'])) {
     $body .= 'store-id ' . $ids['store'] . "\n" . 'source-id ' . $ids['source'] . "\n";
   }
-  // Never written through a link: the archive a copy is unpacked from
-  // carries whatever the source's tree had at that path.
+  // Never written through a link, nor given up for a directory: the archive
+  // a copy is unpacked from carries whatever the source's tree had there.
   if (is_link($marker)) {
     @unlink($marker);
+  }
+  elseif (is_dir($marker) && !@rmdir($marker)) {
+    @rename($marker, $marker . '.' . uniqid('', TRUE) . '.dir');
   }
   provision_file()->file_put_contents($marker, $body)
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
@@ -937,7 +941,12 @@ function _provision_grav_new_store_id() {
   }
   if (!is_string($bytes) && function_exists('openssl_random_pseudo_bytes')) {
     $strong = FALSE;
-    $bytes = openssl_random_pseudo_bytes(16, $strong);
+    try {
+      $bytes = openssl_random_pseudo_bytes(16, $strong);
+    }
+    catch (Exception $e) {
+      $bytes = FALSE;
+    }
     if (!$strong) {
       $bytes = FALSE;
     }
@@ -965,15 +974,20 @@ function _provision_grav_write_store_file($site_path, $body) {
   if (file_exists($file) && !is_file($file)) {
     return FALSE;
   }
-  $tmp = $file . '.' . uniqid() . '.tmp';
+  $suffix = _provision_grav_new_store_id();
+  $tmp = $file . '.' . ($suffix !== '' ? $suffix : uniqid('', TRUE)) . '.tmp';
   $fh = @fopen($tmp, 'x');
   if (!$fh) {
     return FALSE;
   }
   $written = fwrite($fh, $body);
   fclose($fh);
+  if (is_link($tmp)) {
+    @unlink($tmp);
+    return FALSE;
+  }
   @chmod($tmp, 0644);
-  if ($written !== strlen($body) || !@rename($tmp, $file)) {
+  if ($written !== strlen($body) || is_link($tmp) || !@rename($tmp, $file)) {
     @unlink($tmp);
     return FALSE;
   }
@@ -1142,16 +1156,38 @@ function _provision_grav_db_has_store() {
  * (Cutover's own pre-rename copy among them) would otherwise hold a live
  * store's worker for good, and a copy restored from its source's backup
  * would lose its hold. The archive's .boa-store stays only when the
- * replaced tree has none.
+ * replaced tree has none. FALSE when a held site's marker could not be
+ * written into the unpacked tree.
  */
 function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
   $held_marker = _provision_grav_copy_marker($live_path);
   $staged_marker = _provision_grav_copy_marker($staged_path);
+  clearstatcache();
   if (is_file($held_marker) && !is_link($held_marker)) {
     $held_names = _provision_grav_copy_names($live_path);
     _provision_grav_mark_copy($staged_path, $held_names[0], @filemtime($held_marker), $held_names[1], _provision_grav_copy_ids($live_path));
   }
-  elseif (file_exists($staged_marker) || is_link($staged_marker)) {
+  elseif (file_exists($held_marker)) {
+    // A link or a directory made by hand at the marker's path: the
+    // scheduler holds the site by it (its test follows a link), so the
+    // restored site is held the same, by a marker of its own that names no
+    // store and has that path's time.
+    if (is_link($staged_marker) || is_file($staged_marker)) {
+      @unlink($staged_marker);
+    }
+    _provision_grav_mark_copy($staged_path, '', @filemtime($held_marker));
+  }
+  elseif (is_link($staged_marker) || is_dir($staged_marker)) {
+    // Not the archive's file: a link or a directory is never restored (the
+    // scheduler would hold the site by either).
+    if (is_link($staged_marker)) {
+      @unlink($staged_marker);
+    }
+    elseif (!@rmdir($staged_marker)) {
+      @rename($staged_marker, $staged_marker . '.' . uniqid('', TRUE) . '.dir');
+    }
+  }
+  elseif (file_exists($staged_marker)) {
     provision_file()->unlink($staged_marker)
       ->succeed('The archive was taken while this site was a copy; its hold marker is not restored: the site stays as it was')
       ->fail('Could not remove the archive\'s copy marker @path');
@@ -1167,6 +1203,8 @@ function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
   elseif (is_link($staged_ids)) {
     @unlink($staged_ids);
   }
+  clearstatcache();
+  return !file_exists($held_marker) || (is_file($staged_marker) && !is_link($staged_marker));
 }
 
 /**

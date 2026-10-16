@@ -118,7 +118,10 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     if (drush_get_option('deploy_replace_site', FALSE)) {
       // The hold and the store identity follow the tree being replaced,
       // never the archive.
-      _provision_grav_keep_identity_on_replace(d()->site_path, $extract_path);
+      if (!_provision_grav_keep_identity_on_replace(d()->site_path, $extract_path)) {
+        return drush_set_error('PROVISION_GRAV_RESTORE_HOLD',
+          dt('Could not keep the hold of @path in the restored tree; nothing was swapped in.', array('@path' => d()->site_path)));
+      }
 
       $old = d()->site_path . '.restore';
       $new = d()->site_path;
