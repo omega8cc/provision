@@ -91,6 +91,13 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
   if (_provision_grav_has_db()) {
     _provision_grav_ensure_db_creds_loaded();
   }
+
+  // Refuse a rename that cannot fit before its safety copy starts: only its safety copy is new,
+  // the site moves on its own filesystem
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('rename')) {
+    return FALSE;
+  }
 }
 
 /**

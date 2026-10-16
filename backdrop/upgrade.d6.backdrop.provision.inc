@@ -153,6 +153,13 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
   // conversion (data kept) — a warning, never a gate. The CCK field-data
   // gate is content_migrate's, enforced hard in the command phase.
   _provision_backdrop_d6_upgrade_kit_report($db, $db_name);
+
+  // Refuse an upgrade that cannot fit before its safety copy starts: the copy and the site
+  // unpacked into the Drupal 7 platform, as for a migrate
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
+    return FALSE;
+  }
 }
 
 /**
@@ -408,6 +415,17 @@ function drush_provision_backdrop_d6_upgrade($new_name = NULL, $platform = NULL)
     'd6_d7_upgrade' => 1,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'backdrop_d6_upgrade');
+
+  // The safety copy took its time; the unpacked copy must still fit. This
+  // lineage keeps its archive on a later failure (its rollbacks remove only
+  // the flag), but one refused here was never used: it goes, or a retry
+  // would find its room taken by it.
+  if (!provision_copy_task_space_recheck('Upgrade of ' . d()->uri)) {
+    provision_file()->unlink(drush_get_option('backup_file'))
+      ->succeed('Removed the unused upgrade safety copy')
+      ->fail('Could not remove the unused upgrade safety copy');
+    return FALSE;
+  }
 
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 

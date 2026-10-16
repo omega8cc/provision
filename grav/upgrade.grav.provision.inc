@@ -55,6 +55,13 @@ function drush_provision_grav_upgrade_validate($artefact = NULL) {
   }
   drush_set_option('grav_upgrade_artefact', $resolved['artefact']);
   drush_set_option('grav_upgrade_artefact_version', $resolved['version']);
+
+  // Refuse an upgrade in place that cannot fit before its safety copy starts: only its safety copy is
+  // new, the site stays where it is
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('inplace-upgrade')) {
+    return FALSE;
+  }
 }
 
 /**

@@ -131,6 +131,13 @@ function drush_provision_backdrop_provision_restore($restore_file) {
 
   // The safety copy took its time; the unpacked archive must still fit.
   if (!provision_copy_task_space_recheck('Restore of ' . d()->uri)) {
+    // Nothing was deployed: site_enabled goes back to TRUE, as in the failure
+    // branch below; the vhost is rendered from it (the http pre-hook removed
+    // it and its rollback renders it again). The rollback removes the safety
+    // copy.
+    d()->site_enabled = true;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
     return FALSE;
   }
 
