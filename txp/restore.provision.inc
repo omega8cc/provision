@@ -104,6 +104,18 @@ function drush_provision_txp_provision_restore($restore_file) {
   // must not rewrite the site's contact data.
   $deploy_options['deploy_class'] = 'restore';
 
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Restore of ' . d()->uri)) {
+    // Nothing was deployed: site_enabled goes back to TRUE, as in the failure
+    // branch below; the vhost is rendered from it (the http pre-hook removed
+    // it and its rollback renders it again), and TXP's config.php has no
+    // offline flag. The rollback removes the safety copy.
+    d()->site_enabled = TRUE;
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+    return FALSE;
+  }
+
   // What the deploy is about to replace (see the failure branch below).
   provision_target_copy_probe('restore_target_copy', d()->root, d()->uri, isset(d()->options['db_server']) ? d()->options['db_server'] : '');
   $deploy_result = provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);

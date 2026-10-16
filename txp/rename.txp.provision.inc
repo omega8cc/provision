@@ -104,6 +104,13 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     drush_log(dt('A stale !uri alias with no site directory is left over; this rename removes it before saving its own.',
       array('!uri' => $new_uri)), 'info');
   }
+
+  // Refuse a rename that cannot fit before its safety copy starts: only its safety copy is new,
+  // the site moves on its own filesystem
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('rename')) {
+    return FALSE;
+  }
 }
 
 /**

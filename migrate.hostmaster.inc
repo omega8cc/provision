@@ -77,6 +77,9 @@ We are making the following assumptions:
     if (drush_get_option('working-copy')) {
       $options['working-copy'] = 1;
     }
+    // The panel's own codebase: its room is the upgrade's to judge, not the
+    // inode gate's (_provision_drush_check_inodes())
+    $options['hostmaster_platform_build'] = 1;
     provision_backend_invoke($new_platform, 'provision-verify', array(), $options);
     drush_set_option('new_platform', $new_platform);
     // exit if an error has occured.

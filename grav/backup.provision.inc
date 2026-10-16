@@ -47,6 +47,13 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   if (_provision_grav_db_unrecorded() && !defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
     if (defined('AEGIR_BACKUP_MODE_CTRL') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+      // Asked through the control file, as the queue's Backup task is: say
+      // so, as the resolver's read would have (provision_backup_is_own_task())
+      if (!provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE))
+        && provision_backup_mode_sanitize(@file_get_contents(AEGIR_BACKUP_MODE_CTRL))
+        && !defined('AEGIR_BACKUP_MODE_CTRL_READ')) {
+        define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);
+      }
       @unlink(AEGIR_BACKUP_MODE_CTRL);
     }
     drush_log(dt('This Grav site is on a database server but no database is on record for it; the archive is files-only.'), 'warning');
@@ -92,6 +99,12 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   // (same semantics and same rationale as the Backdrop fork).
   if (defined('AEGIR_BACKUP_MODE_CTRL_READ') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
     @unlink(AEGIR_BACKUP_MODE_CTRL);
+  }
+
+  // A Backup task of its own must not fill the filesystem its archive goes
+  // to; a task's safety copy is that task's to size (as in the Drupal layer).
+  if (provision_backup_is_own_task() && !provision_copy_task_space_preflight('backup')) {
+    return FALSE;
   }
 }
 

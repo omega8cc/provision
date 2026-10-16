@@ -69,7 +69,7 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
   // through provision-install, so the target would inherit a stale namespace
   // (deleted site's compiled container and routing included) exactly the way
   // a same-name reinstall did. A same-name Migrate names the live site's own
-  // namespace to spare (Drupal 10 and 11 keep one per copy): the live site
+  // namespace to spare (Drupal 10, 11 and 12 keep one per copy): the live site
   // keeps its cache while the copy is built, and its writes no longer outrun
   // the sweep. Everything else under the name goes, so a copy that comes to
   // reuse a dropped database's name does not find that database's entries.

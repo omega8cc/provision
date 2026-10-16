@@ -142,6 +142,14 @@ function drush_provision_drupal_provision_restore($restore_file) {
 
   // The safety copy took its time; the unpacked archive must still fit.
   if (!provision_copy_task_space_recheck('Restore of ' . d()->uri)) {
+    // Nothing was deployed: put back what the pre-hooks changed, as the
+    // failure branch below does: site_enabled, which the vhost is rendered
+    // from (the http pre-hook removed it and its rollback renders it again),
+    // and the offline settings.php. The rollback removes the safety copy.
+    d()->site_enabled = true;
+    _provision_drupal_create_settings_file();
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
     return FALSE;
   }
 

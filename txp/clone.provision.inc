@@ -249,6 +249,11 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   $deploy_options['deploy_class'] = 'clone';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
 
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Clone of ' . d()->uri)) {
+    return FALSE;
+  }
+
   // What the deploy is about to create on the target (see the rollback).
   provision_target_copy_probe('clone_target_copy', $options['root'], $options['uri'], isset($options['db_server']) ? $options['db_server'] : '');
   $deploy_result = provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);

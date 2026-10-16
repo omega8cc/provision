@@ -243,6 +243,13 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
 
   drush_set_option('txp_upgrade_source_version', $source_version);
   drush_set_option('txp_upgrade_target_version', $target_version);
+
+  // Refuse an upgrade that cannot fit before its safety copy starts: the copy and the site
+  // unpacked into the target platform, as for a migrate
+  // (provision_copy_task_space_preflight()).
+  if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
+    return FALSE;
+  }
 }
 
 /**
@@ -391,6 +398,11 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
   // mode is: a contributed alter must not be able to drop them.
   $deploy_options['deploy_class'] = 'upgrade';
   $deploy_options['client_email'] = drush_get_option('client_email', '');
+
+  // The safety copy took its time; the unpacked copy must still fit.
+  if (!provision_copy_task_space_recheck('Upgrade of ' . d()->uri)) {
+    return FALSE;
+  }
 
   provision_backend_invoke($new_name, 'provision-deploy', array(drush_get_option('backup_file')), $deploy_options);
 

@@ -2980,7 +2980,7 @@ function _provision_valkey_purge_prefix($fp, $prefix, &$use_del, $keep = '') {
  * prefixes are site-unique, so sweeping every populated database stays
  * strictly site-scoped.
  *
- * On Drupal 10 and 11 the cache module adds a segment of each copy's own
+ * On Drupal 10, 11 and 12 the cache module adds a segment of each copy's own
  * after md5(<host>)_sn_ (see _provision_valkey_site_copy_prefix()), so the
  * md5(<host>)_sn_ prefix still reaches every copy of the site. $keep names
  * the one namespace to spare: the live site's, while a Migrate builds its
@@ -3028,9 +3028,9 @@ function _provision_valkey_site_host($uri) {
 }
 
 /**
- * The cache namespace one copy of a Drupal 10 or 11 site writes to.
+ * The cache namespace one copy of a Drupal 10, 11 or 12 site writes to.
  *
- * The cache module BOA ships for Drupal 10 and 11 keys each copy of a site by
+ * The cache modules BOA ships for Drupal 10, 11 and 12 key each copy of a site by
  * its database as well as its name: md5(<name>)_sn_, then the first eight hex
  * digits of md5("<db host>/<db name>/<table prefix>") and an underscore
  * (RedisPrefixTrait::getSiteCopySegment()). BOA's settings set no table
