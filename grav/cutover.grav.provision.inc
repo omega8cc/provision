@@ -333,19 +333,20 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   if ($copy_lift) {
     _provision_grav_unmark_copy(d()->site_path);
   }
-  elseif ($copy_keep_released) {
-    drush_log(dt('[cutover] This copy takes the place of !from, the released copy of the same store it was made from, while that store is still here: it stays a released copy at !from, released by ~/static/control/kahunacart-run.!from.info as that site was. Delete that file to hold it.',
-      array('!from' => $retired)), 'ok');
-  }
-  elseif ($copy_held) {
+  elseif ($copy_held && !$copy_keep_released) {
     $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
     if ($copy_twin !== '' && $copy_ids['store'] !== '') {
       $note = dt('[cutover] The copy stays held: the site it was made from is a store at !from now, over the same customers. Release it with !release once !from no longer takes orders.',
         array('!from' => $copy_twin, '!release' => $release));
     }
     elseif ($copy_twin !== '') {
-      $note = dt('[cutover] The copy stays held: it was made from the site at !from, and a store runs at that domain now, possibly over the same customers. Release it with !release once !from no longer takes orders, or now if the store at !from is not the site this copy was made from.',
+      $note = dt('[cutover] The copy stays held: it was made from the site at !from, and a store is at that domain now (enabled or not), possibly over the same customers. Release it with !release once !from no longer takes orders, or now if the store at !from is not the site this copy was made from.',
         array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($retired !== '' && !$retired_held && $retired_store && !$retired_ran
+      && $copy_ids['store'] !== '' && $retired_copy_ids['store'] === $copy_ids['store']) {
+      $note = dt('[cutover] The copy stays held: the site this cutover retires at !from, a released copy of the same store, ran no store worker (disabled, or KahunaCart switched off there), so the copy does not take its place running. If the shop should run, release the copy with !release.',
+        array('!from' => $retired, '!release' => $release));
     }
     elseif ($by_source && $store_here) {
       $note = dt('[cutover] The copy stays held: it takes the place of !from, the released copy it was made from, but the time of that site\'s hold could not be read to keep it released. Release it with !release if it should run as !from did.',
@@ -416,7 +417,14 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     || ($vhost_scheme_ok && !provision_file()->exists($vhostd_path . '/' . $target_domain)->status())) {
     // The hold is not put back: the store it was held for is retired, so
     // this copy is the only one left, and a re-run (a plain rename by then,
-    // with no source to match) could never lift it again.
+    // with no source to match) could never lift it again. A copy taking a
+    // released copy's place is released as that one was when its capsule
+    // reached the new name; at its old name it stays held.
+    if ($copy_keep_released) {
+      _provision_grav_cutover_keep_released($target_domain, $retired_marker_time, $retired);
+      drush_log(dt('[cutover] If the rename rolled back, a re-run holds the copy at !domain: run it as !domain ran before with: touch ~/static/control/kahunacart-run.!domain.info',
+        array('!domain' => $target_domain)), 'warning');
+    }
     return drush_set_error('PROVISION_GRAV_CUTOVER_RENAME_FAILED',
       dt('The rename to !domain did not complete. The retired source is preserved in its pre-delete backup; if the rename rolled back, this site still answers at !old. Fix the cause from the rename task log, then re-run cutover — with !domain free it degrades to a plain rename (a stale leftover !domain alias from a rollback is detected and overwritten).',
       array('!domain' => $target_domain, '!old' => ltrim($old_name, '@'))));
@@ -429,12 +437,7 @@ function drush_provision_grav_cutover($target_domain = NULL) {
     _provision_grav_unmark_copy(d()->root . '/sites/' . $target_domain);
   }
   elseif ($copy_keep_released) {
-    // Released as the site it replaced was: its marker gets that site's
-    // marker time, so the release file left for this domain is newer.
-    $moved_marker = _provision_grav_copy_marker(d()->root . '/sites/' . $target_domain);
-    if (is_file($moved_marker) && !is_link($moved_marker)) {
-      @touch($moved_marker, (int) $retired_marker_time);
-    }
+    _provision_grav_cutover_keep_released($target_domain, $retired_marker_time, $retired);
   }
   elseif ($copy_held) {
     // Still held under the new name: a release file left for this domain,
@@ -471,9 +474,9 @@ function _provision_grav_cutover_vhostd_path() {
 /**
  * Whether the store a copy stands in for is still on this server: a site
  * other than those in $skip that holds the store's identity and is a store
- * (_provision_grav_store_present()), or, where an identity file is gone,
- * the site at the store's domain when it is a store with no identity of its
- * own.
+ * (_provision_grav_store_present()), or the site at the store's domain when
+ * it is a store and no copy: its identity file may be gone, or made again
+ * by a later copy of it.
  */
 function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
   foreach (_provision_grav_sites_with_store_id($store_id, $skip) as $holder) {
@@ -483,7 +486,10 @@ function _provision_grav_cutover_store_here($store_id, $store_domain, $skip) {
   }
   if ($store_domain !== '' && !in_array($store_domain, $skip, TRUE) && _provision_grav_store_present($store_domain)) {
     $record = drush_sitealias_get_record('@' . $store_domain);
-    return !empty($record['site_path']) && _provision_grav_store_own_id($record['site_path']) === '';
+    if (!empty($record['site_path'])) {
+      $marker = _provision_grav_copy_marker($record['site_path']);
+      return !file_exists($marker) && !is_link($marker);
+    }
   }
   return FALSE;
 }
@@ -511,4 +517,29 @@ function _provision_grav_cutover_twin($copy_ids, $source_domain, $skip) {
     }
   }
   return '';
+}
+
+/**
+ * Release a copy that took the place of the released copy it was made from
+ * as that site was: its marker, now at $domain, gets the retired site's
+ * marker time, so the release file left for $domain is newer than it and
+ * taking that file back holds the copy again. The rename leg logs that the
+ * copy's hold starts again; this undoes it.
+ */
+function _provision_grav_cutover_keep_released($domain, $time, $retired) {
+  $marker = _provision_grav_copy_marker(d()->root . '/sites/' . $domain);
+  $release = '~/static/control/kahunacart-run.' . $domain . '.info';
+  if (!is_file($marker) || is_link($marker)) {
+    return FALSE;
+  }
+  @touch($marker, (int) $time);
+  clearstatcache();
+  if (@filemtime($marker) !== (int) $time) {
+    drush_log(dt('[cutover] Could not give the copy at !domain the hold time of !from: it stays held. Release it with !release to run it as !from did.',
+      array('!domain' => $domain, '!from' => $retired, '!release' => $release)), 'warning');
+    return FALSE;
+  }
+  drush_log(dt('[cutover] This copy takes the place of !from, the released copy of the same store it was made from, while that store is still here: the hold the rename leg started is undone, and the copy runs as !from did while !release is newer than its marker. Delete that file to hold it.',
+    array('!from' => $retired, '!release' => $release)), 'ok');
+  return TRUE;
 }

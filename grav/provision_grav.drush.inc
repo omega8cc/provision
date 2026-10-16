@@ -835,8 +835,8 @@ function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_u
   if (is_link($marker)) {
     @unlink($marker);
   }
-  elseif (is_dir($marker) && !@rmdir($marker)) {
-    @rename($marker, $marker . '.' . uniqid('', TRUE) . '.dir');
+  else {
+    _provision_grav_clear_staged_dir($marker);
   }
   provision_file()->file_put_contents($marker, $body)
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
@@ -995,6 +995,17 @@ function _provision_grav_write_store_file($site_path, $body) {
 }
 
 /**
+ * Clear a directory made by hand at $path in an unpacked tree (an archive
+ * keeps whatever the source's tree had there): removed when empty, else
+ * renamed aside. Never used on a live tree.
+ */
+function _provision_grav_clear_staged_dir($path) {
+  if (!is_link($path) && is_dir($path) && !@rmdir($path)) {
+    @rename($path, $path . '.' . uniqid('', TRUE) . '.dir');
+  }
+}
+
+/**
  * The site's own token, made now when it has none (any other valid lines it
  * has are kept after it). '' when none could be made or written.
  */
@@ -1101,6 +1112,7 @@ function _provision_grav_stage_copy_identity($path, $old_uri) {
   if (is_link($file) || is_file($file)) {
     @unlink($file);
   }
+  _provision_grav_clear_staged_dir($file);
   $own = _provision_grav_new_store_id();
   if ($own === '' || !_provision_grav_write_store_file($path, $own . "\n")) {
     drush_log(dt('Could not give the copy at @path a store identity; copies of it are held by domain.', array('@path' => $path)), 'warning');
@@ -1110,6 +1122,7 @@ function _provision_grav_stage_copy_identity($path, $old_uri) {
     if (is_link($marker) || is_file($marker)) {
       @unlink($marker);
     }
+    _provision_grav_clear_staged_dir($marker);
     return TRUE;
   }
   $names = _provision_grav_copy_names_for_deploy($path, $old_uri);
@@ -1183,8 +1196,8 @@ function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
     if (is_link($staged_marker)) {
       @unlink($staged_marker);
     }
-    elseif (!@rmdir($staged_marker)) {
-      @rename($staged_marker, $staged_marker . '.' . uniqid('', TRUE) . '.dir');
+    else {
+      _provision_grav_clear_staged_dir($staged_marker);
     }
   }
   elseif (file_exists($staged_marker)) {
@@ -1195,6 +1208,7 @@ function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
   $live_ids = _provision_grav_store_id_file($live_path);
   $staged_ids = _provision_grav_store_id_file($staged_path);
   if (is_file($live_ids) && !is_link($live_ids)) {
+    _provision_grav_clear_staged_dir($staged_ids);
     $body = @file_get_contents($live_ids, FALSE, NULL, 0, 65536);
     if (!is_string($body) || !_provision_grav_write_store_file($staged_path, $body)) {
       drush_log(dt('Could not keep the store identity of @path across the restore; copies of this site may stay held through a Cutover over it.', array('@path' => $live_path)), 'warning');
@@ -1202,6 +1216,9 @@ function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
   }
   elseif (is_link($staged_ids)) {
     @unlink($staged_ids);
+  }
+  else {
+    _provision_grav_clear_staged_dir($staged_ids);
   }
   clearstatcache();
   return !file_exists($held_marker) || (is_file($staged_marker) && !is_link($staged_marker));
