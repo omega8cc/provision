@@ -172,6 +172,9 @@ function drush_provision_grav_cutover($target_domain = NULL) {
   $retired_held = FALSE;
   $retired_names = array('', '');
   $retired_store = FALSE;
+  // Its store identities and the identities its own marker names, if any.
+  $retired_ids = array();
+  $retired_copy_ids = array('store' => '', 'source' => '');
   if ($retired !== '') {
     $retired_record = drush_sitealias_get_record('@' . $retired);
     if (!empty($retired_record['site_path'])) {
@@ -185,6 +188,8 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       }
       $retired_names = _provision_grav_copy_names($retired_record['site_path']);
       $retired_store = is_file($retired_record['site_path'] . '/user/plugins/kahunacart/kahunacart.php');
+      $retired_ids = _provision_grav_store_ids($retired_record['site_path']);
+      $retired_copy_ids = _provision_grav_copy_ids($retired_record['site_path']);
     }
   }
 
@@ -214,58 +219,124 @@ function drush_provision_grav_cutover($target_domain = NULL) {
       array('!domain' => $target_domain)), 'info');
   }
 
-  // The copy takes over from the store it stands in for: the hold is lifted
-  // when leg 1 retired that store at the marker's first name, a site that
-  // carried a store (any site, for a copy that carries none) and was neither
-  // a held copy nor a copy of another store, and the site the copy was made
-  // from (its second name, when another one) does not run as a store now; or
-  // when leg 1 retired the site the copy was made from while that site ran
-  // as a released copy of the same store. A site that now holds either
-  // domain but is no such site lifts nothing. A domain is all the marker
-  // keeps, so a store that is no copy, put at the store's domain, still
-  // passes that test (the source's test still applies). It is lifted before
-  // the rename leg,
-  // whose own safety backup would otherwise carry the hold onto the live
-  // store's Backups tab, and it stays lifted when the rename does not
+  // The copy takes over from the store it stands in for. A marker that names
+  // identities (_provision_grav_store_ids()) is decided by them, whatever
+  // the domains are now; the hold is lifted when leg 1 retired:
+  // - a site holding the store's identity (the store under any domain, or a
+  //   copy that took its place at an earlier Cutover) that carried a store
+  //   (any site, for a copy that carries none) and was no held copy, while
+  //   no other site holding the identity of the site the copy was made from
+  //   runs a store (it would share the copy's customers);
+  // - the site the copy was made from, while it ran as a released copy of
+  //   the same store;
+  // - another released copy of the same store that carried a store, while
+  //   no site holding the store's identity runs a store: the copy takes its
+  //   place.
+  // A marker with domains only (written before identities existed, or with
+  // no random source) keeps the domain rule: leg 1 retired the site at the
+  // store's domain, a site that carried a store (any site, for a copy that
+  // carries none) and was neither a held copy nor a copy of another store,
+  // while the site the copy was made from does not run as a store at its
+  // domain; or the site at the source's domain while it ran as a released
+  // copy of the same store. A domain is all such a marker keeps, so a store
+  // that is no copy, put at the store's domain, passes that test.
+  // A copy that takes over from the retired site takes its identities too,
+  // so later copies of that site find it here. The hold is lifted before the
+  // rename leg, whose own safety backup would otherwise carry it onto the
+  // live store's Backups tab, and it stays lifted when the rename does not
   // complete: that store is gone, this copy is the only one left. A copy the
-  // account has released runs already, so its marker goes too: a release
+  // account has released runs already, so its marker goes too (a release
   // names the domain, and the rename would otherwise hold the copy again
-  // under its new name. Any other copy stays held until the account releases
-  // it.
+  // under its new name). Any other copy stays held until the account
+  // releases it.
   $copy_marker = _provision_grav_copy_marker(d()->site_path);
   $copy_marked = is_file($copy_marker) && !is_link($copy_marker);
   $copy_held = $copy_marked && _provision_grav_copy_held(d()->site_path, d()->uri);
   $copy_names = $copy_marked ? _provision_grav_copy_names(d()->site_path) : array('', '');
+  $copy_ids = $copy_marked ? _provision_grav_copy_ids(d()->site_path) : array('store' => '', 'source' => '');
   $copy_store = $copy_marked && is_file(d()->site_path . '/user/plugins/kahunacart/kahunacart.php');
   $copy_twin = '';
   $copy_lift = FALSE;
+  $copy_takes = FALSE;
+  // Neither this copy nor the retired site counts as another site.
+  $copy_skip = array(strtolower(d()->uri), $retired);
+  if ($copy_ids['store'] !== '') {
+    $by_store = $retired !== '' && in_array($copy_ids['store'], $retired_ids, TRUE)
+      && ($retired_store || !$copy_store) && !$retired_held;
+    $by_source = $retired !== '' && in_array($copy_ids['source'], $retired_ids, TRUE)
+      && !$retired_held && $retired_copy_ids['store'] === $copy_ids['store'];
+    $by_sibling = FALSE;
+    if (!$by_store && !$by_source && $retired !== '' && $retired_store && !$retired_held
+      && $retired_copy_ids['store'] === $copy_ids['store']) {
+      $by_sibling = TRUE;
+      foreach (_provision_grav_sites_with_store_id($copy_ids['store'], $copy_skip) as $holder) {
+        if (_provision_grav_store_runs($holder)) {
+          $by_sibling = FALSE;
+          break;
+        }
+      }
+    }
+    if ($by_store && $copy_held) {
+      foreach (_provision_grav_sites_with_store_id($copy_ids['source'], $copy_skip) as $holder) {
+        if (_provision_grav_store_runs($holder)) {
+          $copy_twin = $holder;
+          break;
+        }
+      }
+    }
+  }
+  else {
+    $by_store = $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired
+      && ($retired_store || !$copy_store) && !$retired_held
+      && ($retired_names[0] === '' || $retired_names[0] === $copy_names[0]);
+    $by_source = $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
+      && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0];
+    $by_sibling = FALSE;
+    if ($by_store && $copy_held && $copy_names[1] !== '' && $copy_names[1] !== $copy_names[0]
+      && _provision_grav_store_runs($copy_names[1])) {
+      $copy_twin = $copy_names[1];
+    }
+  }
+  $copy_takes = $copy_marked && (($by_store && $copy_twin === '') || $by_source || $by_sibling);
   if ($copy_marked && !$copy_held) {
     $copy_lift = TRUE;
     drush_log(dt('[cutover] This copy was released and runs as a store of its own: its hold marker is removed before the rename, so it keeps running at !domain.',
       array('!domain' => $target_domain)), 'ok');
   }
-  elseif ($copy_held && $copy_names[0] !== '' && $retired !== '' && $copy_names[0] === $retired
-    && ($retired_store || !$copy_store) && !$retired_held
-    && ($retired_names[0] === '' || $retired_names[0] === $copy_names[0])) {
-    if ($copy_names[1] !== '' && $copy_names[1] !== $copy_names[0] && _provision_grav_store_runs($copy_names[1])) {
-      $copy_twin = $copy_names[1];
-    }
-    else {
-      $copy_lift = TRUE;
-    }
-  }
-  elseif ($copy_held && $copy_names[1] !== '' && $retired !== '' && $copy_names[1] === $retired
-    && !$retired_held && $retired_names[0] !== '' && $retired_names[0] === $copy_names[0]) {
+  elseif ($copy_held && $copy_takes) {
     $copy_lift = TRUE;
   }
   if ($copy_lift) {
+    if ($copy_takes && !empty($retired_ids) && !_provision_grav_take_store_ids(d()->site_path, $retired_ids)) {
+      drush_log(dt('[cutover] Could not add the store identities of !from to this site: copies of !from will stay held through a Cutover over it.',
+        array('!from' => $retired)), 'warning');
+    }
     _provision_grav_unmark_copy(d()->site_path);
   }
   elseif ($copy_held) {
     $release = '~/static/control/kahunacart-run.' . $target_domain . '.info';
-    if ($copy_twin !== '') {
+    if ($copy_twin !== '' && $copy_ids['store'] !== '') {
+      $note = dt('[cutover] The copy stays held: the site it was made from runs a store at !from now, over the same customers. Release it with !release once !from no longer takes orders.',
+        array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($copy_twin !== '') {
       $note = dt('[cutover] The copy stays held: it was made from the site at !from, and a store runs at that domain now, possibly over the same customers. Release it with !release once !from no longer takes orders, or now if the store at !from is not the site this copy was made from.',
         array('!from' => $copy_twin, '!release' => $release));
+    }
+    elseif ($copy_ids['store'] !== '' && $retired !== '' && in_array($copy_ids['store'], $retired_ids, TRUE) && !$retired_held) {
+      $note = dt('[cutover] The copy stays held: the site this cutover retires at !from is the one it stands in for, but it carried no store. If the shop was built on this copy, release it now with !release; otherwise release it once every other copy of that store no longer takes orders.',
+        array('!from' => $retired, '!release' => $release));
+    }
+    elseif ($copy_ids['store'] !== '') {
+      $holders = _provision_grav_sites_with_store_id($copy_ids['store'], $copy_skip);
+      if (!empty($holders)) {
+        $note = dt('[cutover] The copy stays held: the store it stands in for is the site at !where, which this cutover does not retire. Release it with !release once that store no longer takes orders.',
+          array('!where' => implode(', ', $holders), '!release' => $release));
+      }
+      else {
+        $note = dt('[cutover] The copy stays held: the store it stands in for has no site on this server any more (deleted, or its .boa-store identity file removed), so this cutover cannot tell whether it still takes orders. Release the copy with !release once that store and every other copy of it no longer take orders.',
+          array('!release' => $release));
+      }
     }
     elseif ($copy_names[0] === '') {
       $note = dt('[cutover] The copy stays held: its marker names no store. Release it with !release once its store and every other copy of that store no longer take orders.',

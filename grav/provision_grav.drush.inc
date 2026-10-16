@@ -719,7 +719,10 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
  * The marker a copy of a store carries: <capsule>/.boa-copy. Its first line
  * names the live store the copy stands in for; a second line names the site
  * the copy was made from, when that is another one (a marker written before
- * the second line existed has the first only).
+ * the second line existed has the first only). The lines `store-id <token>`
+ * and `source-id <token>` name the same two sites by identity (see
+ * _provision_grav_store_ids()); a marker written before identities existed,
+ * or with no random source to make one, has the domains only.
  *
  * A store's worker sends its mail and runs its renewals on every scheduler
  * tick, paused or not. A copy (a Clone, an Upgrade a copy) shares the
@@ -815,11 +818,21 @@ function _provision_grav_copy_marker($site_path) {
   return $site_path . '/.boa-copy';
 }
 
-function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_uri = '') {
+function _provision_grav_mark_copy($site_path, $root_uri, $mtime = NULL, $from_uri = '', $ids = NULL) {
   $marker = _provision_grav_copy_marker($site_path);
   $body = (string) $root_uri . "\n";
   if ((string) $from_uri !== '' && (string) $from_uri !== (string) $root_uri) {
     $body .= (string) $from_uri . "\n";
+  }
+  // The store's identity alone decides nothing without the source's (the
+  // twin test reads it), so a marker carries both or neither.
+  if (is_array($ids) && !empty($ids['store']) && !empty($ids['source'])) {
+    $body .= 'store-id ' . $ids['store'] . "\n" . 'source-id ' . $ids['source'] . "\n";
+  }
+  // Never written through a link: the archive a copy is unpacked from
+  // carries whatever the source's tree had at that path.
+  if (is_link($marker)) {
+    @unlink($marker);
   }
   provision_file()->file_put_contents($marker, $body)
     ->succeed('Marked the copy at @path: BOA\'s scheduler leaves its store worker alone until cutover or release')
@@ -838,6 +851,349 @@ function _provision_grav_unmark_copy($site_path) {
       ->succeed('Removed the copy marker @path: this site is the live store now')
       ->fail('Could not remove the copy marker @path');
   }
+}
+
+/**
+ * The two identities a copy's marker names: 'store' (the live store it
+ * stands in for) and 'source' (the site it was made from), each '' when the
+ * marker has none or is no regular file. A marker carries both or neither.
+ */
+function _provision_grav_copy_ids($site_path) {
+  $ids = array('store' => '', 'source' => '');
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    foreach (explode("\n", (string) @file_get_contents($marker, FALSE, NULL, 0, 4096)) as $line) {
+      if (preg_match('/^(store|source)-id\s+([0-9a-f]{32})\s*$/', strtolower(trim($line)), $m) && $ids[$m[1]] === '') {
+        $ids[$m[1]] = $m[2];
+      }
+    }
+  }
+  if ($ids['store'] === '' || $ids['source'] === '') {
+    $ids = array('store' => '', 'source' => '');
+  }
+  return $ids;
+}
+
+/**
+ * A site's store identity: <capsule>/.boa-store, one token of 32 lowercase
+ * hex characters per line. The first line is the site's own; the lines
+ * after it are the identities it took over when a Cutover put it in place
+ * of the site that had them. A domain moves and comes back and a database
+ * name is reused per domain and changes on Restore, so a copy's hold is
+ * decided by these tokens: a site gets one the first time a copy is made of
+ * it, and every copy gets its own. A dotfile at the capsule root, like the
+ * copy marker: nginx never serves it, and it travels with the capsule on
+ * Rename, in its backups and on a move to another server.
+ */
+function _provision_grav_store_id_file($site_path) {
+  return $site_path . '/.boa-store';
+}
+
+/**
+ * Every valid token of the site at $site_path, its own first when its first
+ * line is one; empty when it has none (no file, a link, no valid line).
+ */
+function _provision_grav_store_ids($site_path) {
+  $ids = array();
+  $file = _provision_grav_store_id_file($site_path);
+  if (is_file($file) && !is_link($file)) {
+    foreach (explode("\n", (string) @file_get_contents($file, FALSE, NULL, 0, 65536)) as $line) {
+      $line = strtolower(trim($line));
+      if (preg_match('/^[0-9a-f]{32}$/', $line) && !in_array($line, $ids, TRUE)) {
+        $ids[] = $line;
+      }
+    }
+  }
+  return $ids;
+}
+
+/**
+ * The site's own token: the first line of its .boa-store, '' when that line
+ * is no token (a file the owner removed or edited ends the identity).
+ */
+function _provision_grav_store_own_id($site_path) {
+  $file = _provision_grav_store_id_file($site_path);
+  if (!is_file($file) || is_link($file)) {
+    return '';
+  }
+  $lines = explode("\n", (string) @file_get_contents($file, FALSE, NULL, 0, 65536));
+  $own = strtolower(trim($lines[0]));
+  return preg_match('/^[0-9a-f]{32}$/', $own) ? $own : '';
+}
+
+/**
+ * A new token, '' when no random source works (the site then gets no
+ * identity, and copies of it are held by the domain rule).
+ */
+function _provision_grav_new_store_id() {
+  $bytes = FALSE;
+  if (function_exists('random_bytes')) {
+    try {
+      $bytes = random_bytes(16);
+    }
+    catch (Exception $e) {
+      $bytes = FALSE;
+    }
+  }
+  if (!is_string($bytes) && function_exists('openssl_random_pseudo_bytes')) {
+    $strong = FALSE;
+    $bytes = openssl_random_pseudo_bytes(16, $strong);
+    if (!$strong) {
+      $bytes = FALSE;
+    }
+  }
+  if (!is_string($bytes) && is_readable('/dev/urandom')) {
+    $fh = @fopen('/dev/urandom', 'rb');
+    if ($fh) {
+      $bytes = fread($fh, 16);
+      fclose($fh);
+    }
+  }
+  return (is_string($bytes) && strlen($bytes) === 16) ? bin2hex($bytes) : '';
+}
+
+/**
+ * Write the .boa-store of the site at $site_path whole, never through a
+ * link (a new file renamed into place), 0644 like the capsule's other root
+ * files. FALSE when it could not be written.
+ */
+function _provision_grav_write_store_file($site_path, $body) {
+  $file = _provision_grav_store_id_file($site_path);
+  if (is_link($file) && !@unlink($file)) {
+    return FALSE;
+  }
+  if (file_exists($file) && !is_file($file)) {
+    return FALSE;
+  }
+  $tmp = $file . '.' . uniqid() . '.tmp';
+  $fh = @fopen($tmp, 'x');
+  if (!$fh) {
+    return FALSE;
+  }
+  $written = fwrite($fh, $body);
+  fclose($fh);
+  @chmod($tmp, 0644);
+  if ($written !== strlen($body) || !@rename($tmp, $file)) {
+    @unlink($tmp);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * The site's own token, made now when it has none (any other valid lines it
+ * has are kept after it). '' when none could be made or written.
+ */
+function _provision_grav_ensure_store_id($site_path) {
+  $own = _provision_grav_store_own_id($site_path);
+  if ($own !== '') {
+    return $own;
+  }
+  $own = _provision_grav_new_store_id();
+  if ($own === '') {
+    drush_log(dt('No random source made a store identity for @path; copies of it are held by domain.', array('@path' => $site_path)), 'warning');
+    return '';
+  }
+  $ids = array_merge(array($own), _provision_grav_store_ids($site_path));
+  if (!_provision_grav_write_store_file($site_path, implode("\n", $ids) . "\n")) {
+    drush_log(dt('Could not write the store identity @file; copies of this site are held by domain.', array('@file' => _provision_grav_store_id_file($site_path))), 'warning');
+    return '';
+  }
+  drush_log(dt('Gave the site at @path a store identity of its own (@file).', array('@path' => $site_path, '@file' => '.boa-store')), 'ok');
+  return $own;
+}
+
+/**
+ * Add the identities $taken to the site at $site_path, after its own and
+ * those it has (Cutover: the copy that takes over a site takes its tokens,
+ * so later copies of that site find it). FALSE when it could not be written.
+ */
+function _provision_grav_take_store_ids($site_path, $taken) {
+  $own = _provision_grav_ensure_store_id($site_path);
+  if ($own === '') {
+    return FALSE;
+  }
+  $ids = _provision_grav_store_ids($site_path);
+  foreach ($taken as $id) {
+    if (!in_array($id, $ids, TRUE)) {
+      $ids[] = $id;
+    }
+  }
+  return _provision_grav_write_store_file($site_path, implode("\n", $ids) . "\n");
+}
+
+/**
+ * The identities a copy of the site at $site_path names in its marker,
+ * decided in the source's context: the source's own token (made now when it
+ * has none), and the live store's, which is the one the source's own marker
+ * names when the source is a copy itself (held or released: a release can
+ * be taken back) and the source's own otherwise. A source whose marker
+ * names no store identity (written before identities existed) gives none:
+ * the copy is then held by the domain rule.
+ */
+function _provision_grav_copy_ids_of_source($site_path) {
+  $source = _provision_grav_ensure_store_id($site_path);
+  $marker = _provision_grav_copy_marker($site_path);
+  if (is_file($marker) && !is_link($marker)) {
+    $marked = _provision_grav_copy_ids($site_path);
+    $store = $marked['store'];
+  }
+  else {
+    $store = $source;
+  }
+  if ($store === '' || $source === '') {
+    return array('store' => '', 'source' => '');
+  }
+  return array('store' => $store, 'source' => $source);
+}
+
+/**
+ * The options a copy command passes its deploy, in the source's context: the
+ * live store the copy stands in for by domain (grav_copy_of) and by identity,
+ * and the source's identity.
+ */
+function _provision_grav_copy_deploy_options(&$deploy_options) {
+  $deploy_options['grav_copy_of'] = _provision_grav_copy_root(d()->site_path, d()->uri);
+  $ids = _provision_grav_copy_ids_of_source(d()->site_path);
+  $deploy_options['grav_copy_store_id'] = $ids['store'];
+  $deploy_options['grav_copy_source_id'] = $ids['source'];
+}
+
+/**
+ * The identities a deploy writes into a new copy's marker, as the copy
+ * command decided them in the source's context; none when it passed none.
+ */
+function _provision_grav_copy_ids_for_deploy() {
+  $store = strtolower(trim((string) drush_get_option('grav_copy_store_id', '')));
+  $source = strtolower(trim((string) drush_get_option('grav_copy_source_id', '')));
+  if (!preg_match('/^[0-9a-f]{32}$/', $store) || !preg_match('/^[0-9a-f]{32}$/', $source)) {
+    return array('store' => '', 'source' => '');
+  }
+  return array('store' => $store, 'source' => $source);
+}
+
+/**
+ * Give a new copy (Clone, Upgrade a copy) its identity in the unpacked tree,
+ * before the tree is moved to its site path: a token of its own in place of
+ * the archive's (a copy is a new site), and, when the tree carries
+ * KahunaCart, the hold marker naming the live store and the source. A copy
+ * of a site without the store shares no customers or orders: the archive's
+ * marker is dropped (the deploy engine still holds it after the import when
+ * its database carries a store). FALSE when a store's copy could not be
+ * held.
+ */
+function _provision_grav_stage_copy_identity($path, $old_uri) {
+  $file = _provision_grav_store_id_file($path);
+  if (is_link($file) || is_file($file)) {
+    @unlink($file);
+  }
+  $own = _provision_grav_new_store_id();
+  if ($own === '' || !_provision_grav_write_store_file($path, $own . "\n")) {
+    drush_log(dt('Could not give the copy at @path a store identity; copies of it are held by domain.', array('@path' => $path)), 'warning');
+  }
+  $marker = _provision_grav_copy_marker($path);
+  if (!is_file($path . '/user/plugins/kahunacart/kahunacart.php')) {
+    if (is_link($marker) || is_file($marker)) {
+      @unlink($marker);
+    }
+    return TRUE;
+  }
+  $names = _provision_grav_copy_names_for_deploy($path, $old_uri);
+  _provision_grav_mark_copy($path, $names[0], NULL, $names[1], _provision_grav_copy_ids_for_deploy());
+  return is_file($marker) && !is_link($marker);
+}
+
+/**
+ * Whether this site's database carries a KahunaCart store: TRUE also when
+ * it cannot be read, so a copy is held rather than run on a guess.
+ */
+function _provision_grav_db_has_store() {
+  $db_name = drush_get_option('db_name', '', 'site');
+  $db_user = drush_get_option('db_user', '', 'site');
+  if ($db_name === '' || $db_user === '' || !function_exists('mysqli_init')) {
+    return TRUE;
+  }
+  $db_port = drush_get_option('db_port', '', 'site');
+  mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+  try {
+    $mysqli = mysqli_init();
+    $mysqli->real_connect(
+      drush_get_option('db_host', 'localhost', 'site'),
+      $db_user,
+      drush_get_option('db_passwd', '', 'site'),
+      $db_name,
+      ((string) $db_port === '') ? 3306 : (int) $db_port
+    );
+    $tables = $mysqli->query("SHOW TABLES LIKE 'kahunacart\\_%'");
+    $found = $tables && $tables->num_rows > 0;
+    $mysqli->close();
+  }
+  catch (Exception $e) {
+    return TRUE;
+  }
+  return $found;
+}
+
+/**
+ * Restore: the site keeps its own hold and identity, never the archive's.
+ * The replaced tree's marker (its names, identities and time: its time
+ * against the release file is the hold) and its .boa-store go into the
+ * unpacked tree before the swap. A backup taken while the site was a copy
+ * (Cutover's own pre-rename copy among them) would otherwise hold a live
+ * store's worker for good, and a copy restored from its source's backup
+ * would lose its hold. The archive's .boa-store stays only when the
+ * replaced tree has none.
+ */
+function _provision_grav_keep_identity_on_replace($live_path, $staged_path) {
+  $held_marker = _provision_grav_copy_marker($live_path);
+  $staged_marker = _provision_grav_copy_marker($staged_path);
+  if (is_file($held_marker) && !is_link($held_marker)) {
+    $held_names = _provision_grav_copy_names($live_path);
+    _provision_grav_mark_copy($staged_path, $held_names[0], @filemtime($held_marker), $held_names[1], _provision_grav_copy_ids($live_path));
+  }
+  elseif (file_exists($staged_marker) || is_link($staged_marker)) {
+    provision_file()->unlink($staged_marker)
+      ->succeed('The archive was taken while this site was a copy; its hold marker is not restored: the site stays as it was')
+      ->fail('Could not remove the archive\'s copy marker @path');
+  }
+  $live_ids = _provision_grav_store_id_file($live_path);
+  $staged_ids = _provision_grav_store_id_file($staged_path);
+  if (is_file($live_ids) && !is_link($live_ids)) {
+    $body = @file_get_contents($live_ids, FALSE, NULL, 0, 65536);
+    if (!is_string($body) || !_provision_grav_write_store_file($staged_path, $body)) {
+      drush_log(dt('Could not keep the store identity of @path across the restore; copies of this site may stay held through a Cutover over it.', array('@path' => $live_path)), 'warning');
+    }
+  }
+  elseif (is_link($staged_ids)) {
+    @unlink($staged_ids);
+  }
+}
+
+/**
+ * The sites of this account whose store identity holds $id, by domain,
+ * except those named in $skip: every site alias of the account, and the
+ * .boa-store of the capsule it names.
+ */
+function _provision_grav_sites_with_store_id($id, $skip = array()) {
+  $found = array();
+  if ($id === '') {
+    return $found;
+  }
+  $files = glob(drush_server_home() . '/.drush/*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    $uri = basename($file, '.alias.drushrc.php');
+    if (in_array($uri, $skip, TRUE)) {
+      continue;
+    }
+    $record = drush_sitealias_get_record('@' . $uri);
+    if (empty($record['site_path']) || !is_string($record['site_path'])) {
+      continue;
+    }
+    if (in_array($id, _provision_grav_store_ids($record['site_path']), TRUE)) {
+      $found[] = $uri;
+    }
+  }
+  return $found;
 }
 
 /**
