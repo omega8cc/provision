@@ -1965,6 +1965,14 @@ function provision_drush_local_lock_state() {
  * logged as advisories (the condition is permanent for that platform and
  * must not turn every later task into a WARNING); a require that still
  * fails is a warning carrying composer's own message.
+ *
+ * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
+ * holds even where the codebase allows dev stability): no Drush release
+ * supports Drupal 12 yet, only 14.x-dev resolves on its core, and a box
+ * never pulls a development Drush into a platform. Until Drush 14 is
+ * released that require cannot resolve and changes nothing, so its failure
+ * is an advisory naming the constraint, like the two skips above. Other
+ * majors keep the bare require exactly as it was.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
@@ -1982,10 +1990,32 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+  $major = drush_drupal_major_version();
+  if ($major == 12) {
+    $package = 'drush/drush:^14@stable';
+    $result = drush_shell_cd_and_exec($approot, 'composer require %s --no-interaction --no-progress', $package);
+  }
+  else {
+    $package = 'drush/drush';
+    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+  }
   $output = implode('', drush_shell_exec_output());
-  if ($result) {
+  if ($result && $major == 12) {
+    drush_log(dt('DRUSH/DRUSH (@package) @out', array(
+      '@package' => $package,
+      '@out' => $output,
+    )));
+  }
+  elseif ($result) {
     drush_log("DRUSH/DRUSH " . $output);
+  }
+  elseif ($major == 12) {
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major needs Drush 14 and a box takes only a released Drush, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+      '@package' => $package,
+      '@root' => $approot,
+      '@major' => $major,
+      '@out' => $output,
+    )), 'advisory');
   }
   else {
     drush_log(dt('DRUSH/DRUSH composer require drush/drush failed in @root; it keeps no site-local Drush: @out', array(
