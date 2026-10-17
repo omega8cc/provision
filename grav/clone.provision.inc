@@ -70,6 +70,11 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
       dt('A Grav capsule already exists at !path; delete that site first or choose another name.',
       array('!path' => $target_root . '/sites/' . $new_uri)));
   }
+  // An alias of the new name: a live one (a site elsewhere) is refused, a
+  // stale one goes before the copy's context is saved.
+  if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_CLONE_TARGET_EXISTS')) {
+    return FALSE;
+  }
   // Clear a stale frontend backup-mode ctrl file before the internal safety
   // backup runs: a dead task's database-only mode would make the grav
   // backup refuse, or a different mode change the archive's transport.
@@ -126,6 +131,11 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   // server of the copy.
   $options = _provision_grav_copy_options($new_name, $platform, 'clone');
 
+  // A stale alias of the copy's name goes first: the save would build the
+  // copy's context on top of it.
+  if (!_provision_grav_remove_stale_alias(ltrim($new_name, '@'), 'PROVISION_GRAV_CLONE_TARGET_EXISTS')) {
+    return FALSE;
+  }
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   $deploy_options = array(
