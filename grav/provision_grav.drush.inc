@@ -2684,14 +2684,22 @@ function _provision_grav_alias_site_dirs($uri) {
  * leftover whose recorded directories are all gone (a rolled-back rename, a
  * cutover's retired holder) is tolerated so our own debris never blocks a
  * retry, and handed to the command, which removes it before its save.
+ *
+ * $own_site_path (a rename only): the renamed site's own directory. A name
+ * that is one of its own extra Drush aliases is a file naming that
+ * directory; it is the site's, so it goes like a stale one and the save
+ * writes it again.
  */
-function _provision_grav_check_new_name_alias($new_uri, $error_code) {
+function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_path = '') {
   if (!provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
     return TRUE;
   }
   $leftover_dirs = _provision_grav_alias_site_dirs($new_uri);
   $occupied = empty($leftover_dirs);
   foreach ($leftover_dirs as $leftover_dir) {
+    if ($own_site_path !== '' && $leftover_dir === $own_site_path) {
+      continue;
+    }
     if (provision_file()->exists($leftover_dir)->status()) {
       $occupied = TRUE;
     }
@@ -2715,13 +2723,19 @@ function _provision_grav_check_new_name_alias($new_uri, $error_code) {
  * or '' is filtered out of the merge. The earlier holder's aliases,
  * redirection, encryption and key, extra Drush aliases and cron key would
  * become the new site's. Returns FALSE (error set) when the file survives.
+ *
+ * The file is removed here, not by provision-save --delete: that loads the
+ * record as a context before it unlinks, and a stale record whose platform
+ * or db server context is gone too dies there. Validate read the record from
+ * the file and nothing in this process has loaded it, so no context or alias
+ * cache holds it.
  */
 function _provision_grav_remove_stale_alias($new_uri, $error_code) {
   if (!drush_get_option('grav_stale_alias', FALSE)) {
     return TRUE;
   }
   $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
-  drush_invoke_process('@none', 'provision-save', array('@' . $new_uri), array('delete' => TRUE));
+  @unlink($stale_alias);
   clearstatcache();
   if (file_exists($stale_alias)) {
     return drush_set_error($error_code,
