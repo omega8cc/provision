@@ -80,6 +80,11 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
       dt('sites/@uri already exists on this platform; delete that site first or choose another name.',
       array('@uri' => $new_uri)));
   }
+  // An alias of the new name: a live one (another platform's site) is
+  // refused, a stale one goes before the new context is saved.
+  if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_RENAME_TARGET_EXISTS')) {
+    return FALSE;
+  }
 
   // Clear a stale frontend backup-mode ctrl file before the safety copy runs.
   if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
@@ -154,7 +159,11 @@ function drush_provision_grav_rename($new_name = NULL) {
   // The new context. Encryption goes off with the name (SSL keys are
   // name-bound) and the domain aliases do not follow a rename; the extra
   // Drush aliases do, because they name the SITE and the new context rewrites
-  // their alias files at the new uri.
+  // their alias files at the new uri. A stale alias of the new name goes
+  // first: the save would build the new context on top of it.
+  if (!_provision_grav_remove_stale_alias($new_uri, 'PROVISION_GRAV_RENAME_FAILED')) {
+    return FALSE;
+  }
   $options = d()->options;
   $options['uri'] = $new_uri;
   $hash_name = drush_get_option('#name') ? '#name' : 'name';
@@ -164,6 +173,11 @@ function drush_provision_grav_rename($new_name = NULL) {
   $options['redirection'] = 0;
   $options['ssl_enabled'] = 0;
   unset($options['ssl_key']);
+  // The subprocess gets its options on the command line, where an array
+  // never arrives, so the extra Drush aliases go as the comma-separated list
+  // provision-save takes for them. An empty list leaves the new context
+  // with none.
+  $options['drush_aliases'] = implode(',', (array) d()->drush_aliases);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   drush_set_option('grav_rename_saved', TRUE);
 
@@ -252,6 +266,15 @@ function drush_provision_grav_rename_rollback($new_name = NULL) {
   // is back at the old path, so the helper finds nothing to remove there.
   if (drush_get_option('grav_rename_saved', FALSE)) {
     _provision_grav_discard_copy($new_name, NULL);
+    // The extra Drush aliases are the new context's now (its provision-save
+    // rewrote their files at the new uri) and the new context is gone, so
+    // they go too, before the old context is re-asserted from its own
+    // record (the no-option re-save provision-verify uses), which writes
+    // them again for the restored site.
+    foreach (d()->drush_aliases as $alias) {
+      drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));
+    }
+    drush_invoke_process('@none', 'provision-save', array(d()->name));
   }
   drush_log(dt('provision-grav-rename rolled back; the site still answers at !old.', array('!old' => $old_uri)), 'advisory');
 }
