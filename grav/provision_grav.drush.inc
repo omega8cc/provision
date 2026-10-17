@@ -2687,8 +2687,9 @@ function _provision_grav_alias_site_dirs($uri) {
  *
  * $own_site_path (a rename only): the renamed site's own directory. A name
  * that is one of its own extra Drush aliases is a file naming that
- * directory; it is the site's, so it goes like a stale one and the save
- * writes it again.
+ * directory. It is refused with its own reason: taking it over would leave
+ * the site listing its own name as an extra alias, and the name's file is
+ * shared with any other site that lists it too.
  */
 function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_path = '') {
   if (!provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
@@ -2698,7 +2699,9 @@ function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_p
   $occupied = empty($leftover_dirs);
   foreach ($leftover_dirs as $leftover_dir) {
     if ($own_site_path !== '' && $leftover_dir === $own_site_path) {
-      continue;
+      return drush_set_error($error_code,
+        dt('@uri is one of this site\'s own extra Drush aliases; remove it from the site\'s aliases first, then rename.',
+        array('@uri' => $new_uri)));
     }
     if (provision_file()->exists($leftover_dir)->status()) {
       $occupied = TRUE;

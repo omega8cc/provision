@@ -95,10 +95,13 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     $occupied = empty($leftover_dirs);
     foreach ($leftover_dirs as $leftover_dir) {
       // One of the site's own extra Drush aliases names its own directory:
-      // it is the site's, so it goes like a stale one and the save writes
-      // it again.
+      // refused with its own reason. Taking it over would leave the site
+      // listing its own name as an extra alias, and the name's file is
+      // shared with any other site that lists it too.
       if ($leftover_dir === d()->site_path) {
-        continue;
+        return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
+          dt('!uri is one of this site\'s own extra Drush aliases; remove it from the site\'s aliases first, then rename.',
+          array('!uri' => $new_uri)));
       }
       $occupied = $occupied || provision_file()->exists($leftover_dir)->status();
     }

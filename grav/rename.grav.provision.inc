@@ -80,8 +80,8 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
       dt('sites/@uri already exists on this platform; delete that site first or choose another name.',
       array('@uri' => $new_uri)));
   }
-  // An alias of the new name: a live one (another platform's site) is
-  // refused, a stale one or the site's own extra Drush alias goes before
+  // An alias of the new name: a live one (another platform's site) or one of
+  // the site's own extra Drush aliases is refused, a stale one goes before
   // the new context is saved.
   if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_RENAME_TARGET_EXISTS', d()->site_path)) {
     return FALSE;
