@@ -116,25 +116,11 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {
-      // The hold follows the tree being replaced, never the archive: a
-      // backup taken while the site was a copy (Cutover's own pre-rename
-      // copy among them) would otherwise hold a live store's worker for
-      // good, and a copy restored from its source's backup would lose it.
-      $held_marker = _provision_grav_copy_marker(d()->site_path);
-      $staged_marker = _provision_grav_copy_marker($extract_path);
-      if (is_file($held_marker) && !is_link($held_marker)) {
-        // The replaced tree's marker, names and time, whatever the archive
-        // carries: its time against the release file is the hold.
-        if (is_link($staged_marker)) {
-          @unlink($staged_marker);
-        }
-        $held_names = _provision_grav_copy_names(d()->site_path);
-        _provision_grav_mark_copy($extract_path, $held_names[0], @filemtime($held_marker), $held_names[1]);
-      }
-      elseif (file_exists($staged_marker) || is_link($staged_marker)) {
-        provision_file()->unlink($staged_marker)
-          ->succeed('The archive was taken while this site was a copy; its hold marker is not restored: the site stays as it was')
-          ->fail('Could not remove the archive\'s copy marker @path');
+      // The hold and the store identity follow the tree being replaced,
+      // never the archive.
+      if (!_provision_grav_keep_identity_on_replace(d()->site_path, $extract_path)) {
+        return drush_set_error('PROVISION_GRAV_RESTORE_HOLD',
+          dt('Could not keep the hold of @path in the restored tree; nothing was swapped in.', array('@path' => d()->site_path)));
       }
 
       $old = d()->site_path . '.restore';
@@ -152,16 +138,22 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
       }
     }
     elseif (drush_get_option('deploy_copy_staged', FALSE)) {
-      // Held before it becomes visible: the marker is in the staged tree
-      // when the rename puts it at the site path. The archive carries the
-      // file only when its source was a copy itself; it is written again
-      // either way, naming the live store and this copy's source.
+      // Held before it becomes visible: a copy of a store has its marker in
+      // the staged tree when the rename puts it at the site path, naming
+      // the live store and this copy's source, and every copy has an
+      // identity of its own beside it (_provision_grav_stage_copy_identity()).
       if (_provision_grav_has_db()) {
-        $copy_names = _provision_grav_copy_names_for_deploy($extract_path, drush_get_option('old_uri', ''));
-        _provision_grav_mark_copy($extract_path, $copy_names[0], NULL, $copy_names[1]);
-        if (!is_file(_provision_grav_copy_marker($extract_path))) {
+        if (!_provision_grav_stage_copy_identity($extract_path, drush_get_option('old_uri', ''))) {
           return drush_set_error('PROVISION_GRAV_COPY_MARK',
             dt('Could not hold the copy at @path before moving it into place.', array('@path' => $extract_path)));
+        }
+      }
+      else {
+        // A site with no database never runs a store worker and has no
+        // identity; a copy never shares its source's.
+        $staged_ids = _provision_grav_store_id_file($extract_path);
+        if (is_link($staged_ids) || is_file($staged_ids)) {
+          @unlink($staged_ids);
         }
       }
       if (file_exists(d()->site_path) || is_link(d()->site_path)) {

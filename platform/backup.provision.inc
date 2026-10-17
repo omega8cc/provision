@@ -171,6 +171,16 @@ function drush_provision_drupal_provision_backup() {
   // sync all filesystem changes back from the remote server.
   provision_drupal_fetch_site();
 
+  // A task that put the site under maintenance and runs this backup as a
+  // child of its own (the Update's safety copy) passes this option: the
+  // child's context comes from the alias, where the site is enabled, and the
+  // settings.php writes below would take the site out of maintenance before
+  // that task's work runs. Run in the task's own process, the backup sees
+  // the task's context and needs no option.
+  if (drush_get_option('provision_backup_keep_offline', FALSE)) {
+    d()->site_enabled = FALSE;
+  }
+
   // Check if we are currently cloaking credentials
   $cloaked = d()->service('http')->cloaked_db_creds();
   $cloaked = drush_get_option('provision_db_cloaking', $cloaked);

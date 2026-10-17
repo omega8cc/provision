@@ -298,10 +298,14 @@ foreach ($config_dirs as $config_dir) {
 }
 
 // ---- (i) a copy of a store: its scheduler is held ----
+// A store is in the tree (KahunaCart) or in the database imported by now: a
+// tree whose plugin was removed still has the source's customers and
+// orders there, and adding the plugin back would run them.
 if (($deploy_class === 'clone' || $deploy_class === 'upgrade') && _provision_grav_has_db()
-  && $old_uri !== '' && $old_uri !== $uri) {
+  && $old_uri !== '' && $old_uri !== $uri
+  && (is_file($site_path . '/user/plugins/kahunacart/kahunacart.php') || _provision_grav_db_has_store())) {
   $copy_names = _provision_grav_copy_names_for_deploy($site_path, $old_uri);
-  _provision_grav_mark_copy($site_path, $copy_names[0], NULL, $copy_names[1]);
+  _provision_grav_mark_copy($site_path, $copy_names[0], NULL, $copy_names[1], _provision_grav_copy_ids_for_deploy());
 }
 
 // ---- (f) modes last, after every write above ----
