@@ -1972,10 +1972,12 @@ function provision_drush_local_lock_state() {
  * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
  * holds even where the codebase allows dev stability): no Drush release
  * supports Drupal 12 yet, only 14.x-dev resolves on its core, and a box
- * never pulls a development Drush into a platform. Until Drush 14 is
- * released that require cannot resolve and changes nothing, so its failure
- * is an advisory naming the constraint, like the skips above. Other
- * majors keep the bare require exactly as it was.
+ * never pulls a development Drush into a platform; --prefer-stable keeps the
+ * packages it brings in stable too. Until Drush 14 is released composer
+ * refuses that require on stability and changes nothing, which is an
+ * advisory naming the constraint, like the skips above; any other failure
+ * is the warning every major gets. Other majors keep the bare require
+ * exactly as it was.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
@@ -2003,23 +2005,23 @@ function _provision_require_site_local_drush($approot) {
   $major = drush_drupal_major_version();
   if ($major == 12) {
     $package = 'drush/drush:^14@stable';
-    $result = drush_shell_cd_and_exec($approot, 'composer require %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
   }
   else {
-    $package = 'drush/drush';
     $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
   if ($result && $major == 12) {
-    drush_log(dt('DRUSH/DRUSH (@package) @out', array(
-      '@package' => $package,
-      '@out' => $output,
-    )));
+    drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
   }
   elseif ($result) {
     drush_log("DRUSH/DRUSH " . $output);
   }
-  elseif ($major == 12) {
+  elseif ($major == 12 && strpos($output, 'drush/drush') !== FALSE
+    && strpos($output, 'does not match your minimum-stability') !== FALSE) {
+    // Composer's own refusal of the unreleased Drush, which changes nothing;
+    // any other failure (a conflict, the network, a half-done install) is a
+    // warning, as on every other major.
     drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major needs Drush 14 and a box takes only a released Drush, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
       '@package' => $package,
       '@root' => $approot,
