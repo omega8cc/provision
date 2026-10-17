@@ -1961,14 +1961,34 @@ function provision_drush_local_lock_state() {
  * SUCCESSFUL require re-installed the patched calendar and h5p packages and
  * composer-patches then logged "Could not apply patch! Skipping" for every
  * one of their patches -- the platform kept running on unpatched modules.
- * The build box applies those patches; a box never can. Both skips are
+ * The build box applies those patches; a box never can. A codebase whose
+ * composer.json the backend cannot write is its owner's (a tenant's build in
+ * ~/static, owned by the account's FTP user once the ownership step ran):
+ * the require could only fail there, so it is skipped too. The skips are
  * logged as advisories (the condition is permanent for that platform and
  * must not turn every later task into a WARNING); a require that still
  * fails is a warning carrying composer's own message.
+ *
+ * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
+ * holds even where the codebase allows dev stability): no Drush release
+ * supports Drupal 12 yet, only 14.x-dev resolves on its core, and a box
+ * never pulls a development Drush into a platform; --prefer-stable keeps the
+ * packages it brings in stable too. Until Drush 14 is released composer
+ * refuses that require on stability and changes nothing, which is an
+ * advisory naming the constraint, like the skips above; any other failure
+ * is the warning every major gets. Other majors keep the bare require
+ * exactly as it was.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase carries composer patches, and a resolve on this box would re-install the patched packages without their patches; it keeps no site-local Drush until it is built with one', array(
+      '@root' => $approot,
+    )), 'advisory');
+    return FALSE;
+  }
+  // A codebase the backend cannot write is its owner's (see above).
+  if (!is_writable(rtrim($approot, '/') . '/composer.json')) {
+    drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: composer.json is not writable by the backend, the codebase belongs to its owner; it keeps no site-local Drush until it is built with one', array(
       '@root' => $approot,
     )), 'advisory');
     return FALSE;
@@ -1982,10 +2002,32 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+  $major = drush_drupal_major_version();
+  if ($major == 12) {
+    $package = 'drush/drush:^14@stable';
+    $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+  }
+  else {
+    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+  }
   $output = implode('', drush_shell_exec_output());
-  if ($result) {
+  if ($result && $major == 12) {
+    drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
+  }
+  elseif ($result) {
     drush_log("DRUSH/DRUSH " . $output);
+  }
+  elseif ($major == 12 && strpos($output, 'drush/drush') !== FALSE
+    && strpos($output, 'does not match your minimum-stability') !== FALSE) {
+    // Composer's own refusal of the unreleased Drush, which changes nothing;
+    // any other failure (a conflict, the network, a half-done install) is a
+    // warning, as on every other major.
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major needs Drush 14 and a box takes only a released Drush, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+      '@package' => $package,
+      '@root' => $approot,
+      '@major' => $major,
+      '@out' => $output,
+    )), 'advisory');
   }
   else {
     drush_log(dt('DRUSH/DRUSH composer require drush/drush failed in @root; it keeps no site-local Drush: @out', array(
