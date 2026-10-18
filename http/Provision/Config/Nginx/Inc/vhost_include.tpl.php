@@ -1613,7 +1613,7 @@ location ~* ^.+\.(?:mp3|ogg|oga|ogv|opus|wav|flac|aac|weba|webm|avi|mpe?g|mov|wm
   log_not_found off;
   rewrite ^/images/(.*)$  /sites/$main_site_name/files/images/$1 last;
   rewrite ^/.+/sites/.+/files/(.*)$  /sites/$main_site_name/files/$1 last;
-  try_files $uri =404;
+  try_files $uri @legacy_files;
 }
 
 ###
@@ -1626,7 +1626,7 @@ location ~* ^.+\.(?:pdf|jpe?g|gif|png|ico|webp|avif|bmp|svg|swf|docx?|xlsx?|pptx
   log_not_found off;
   rewrite ^/images/(.*)$  /sites/$main_site_name/files/images/$1 last;
   rewrite ^/.+/sites/.+/files/(.*)$  /sites/$main_site_name/files/$1 last;
-  try_files $uri =404;
+  try_files $uri @legacy_files;
 }
 
 ###
@@ -1638,7 +1638,7 @@ location ~* ^.+\.(?:avi|mpe?g|mov|wmv|ogg|ogv|webm|zip|tar|t?gz|rar|dmg|exe|apk|
   access_log off;
   log_not_found off;
   rewrite ^/.+/sites/.+/files/(.*)$  /sites/$main_site_name/files/$1 last;
-  try_files $uri =404;
+  try_files $uri @legacy_files;
 }
 
 ###
@@ -1651,7 +1651,25 @@ location ~* ^/sites/.+/files/.+\.(?:pdf|aspx?)$ {
   expires 30d;
   access_log off;
   log_not_found off;
-  try_files $uri =404;
+  try_files $uri @legacy_files;
+}
+
+###
+### Old public-file addresses. A site that came from elsewhere keeps links to
+### /sites/default/files/..., a renamed site to /sites/<old-name>/files/...,
+### and neither path exists on this platform. A request for one that the
+### static locations above found nothing for is answered from the site's own
+### files directory, 404 when it is not there either (no second rewrite).
+### Only those locations reach here, after their own try_files, so the
+### private, backup_migrate and config_ locations ahead of them have already
+### taken what they refuse; a .php name never matches them at all.
+###
+location @legacy_files {
+  expires 30d;
+  access_log off;
+  log_not_found off;
+  rewrite ^/sites/[^/]+/files/(.*)$ /sites/$main_site_name/files/$1 break;
+  return 404;
 }
 
 ###
