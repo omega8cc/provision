@@ -357,10 +357,13 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
   // resets above never replace what that record holds: an empty array does
   // not reach the subprocess, a 0 is filtered out there and an unset key is
   // not sent at all. The earlier holder's aliases, redirection, encryption
-  // and extra Drush aliases would become the copy's.
+  // and extra Drush aliases would become the copy's. The file is unlinked
+  // here, not by provision-save --delete: that loads the record as a context
+  // first, and a stale record whose platform context is gone too dies there.
+  // Validate read it from the file and nothing in this process has loaded it.
   if (drush_get_option('txp_upgrade_stale_alias', FALSE)) {
     $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
-    drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
+    @unlink($stale_alias);
     clearstatcache();
     if (file_exists($stale_alias)) {
       return drush_set_error('PROVISION_TXP_UPGRADE_BAD_TARGET',

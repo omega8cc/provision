@@ -352,6 +352,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   $deploy_options = array(
     'old_uri' => d()->uri,
     'strict' => 0,
+    // The pre-hook put the site under maintenance; the copy stays there until
+    // the deploy has updated its database (_provision_drupal_deploy_keeps_offline()).
+    'provision_deploy_keep_offline' => TRUE,
   );
   // On Drupal 10, 11 and 12 the live site and a copy built under its name, or its
   // www. twin, have cache namespaces of their own (see

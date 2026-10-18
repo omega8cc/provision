@@ -2653,6 +2653,102 @@ function _provision_grav_repoint_uri($site_path, $old_uri, $new_uri) {
 }
 
 /**
+ * The site directories an alias file of $uri records, read from the file.
+ *
+ * Never through d(): the process keeps every context it loads, and the
+ * command reads the new name's context after its own provision-save.
+ */
+function _provision_grav_alias_site_dirs($uri) {
+  $aliases = array();
+  $file = drush_server_home() . '/.drush/' . $uri . '.alias.drushrc.php';
+  if (!is_file($file) || (@include $file) === FALSE || !isset($aliases[$uri]) || !is_array($aliases[$uri])) {
+    return array();
+  }
+  $record = $aliases[$uri];
+  $dirs = array();
+  if (isset($record['site_path']) && is_string($record['site_path']) && $record['site_path'] !== '') {
+    $dirs[] = $record['site_path'];
+  }
+  if (isset($record['root']) && is_string($record['root']) && $record['root'] !== '') {
+    $dirs[] = rtrim($record['root'], '/') . '/sites/' . $uri;
+  }
+  return array_values(array_unique($dirs));
+}
+
+/**
+ * Validate a new name's alias for a rename or a copy.
+ *
+ * provision-save writes whatever alias it is given, so an occupied name would
+ * re-point a live site's context at this capsule: refuse an alias that still
+ * resolves to a site directory, or that records nothing for the name. A
+ * leftover whose recorded directories are all gone (a rolled-back rename, a
+ * cutover's retired holder) is tolerated so our own debris never blocks a
+ * retry, and handed to the command, which removes it before its save.
+ *
+ * $own_site_path (a rename only): the renamed site's own directory. A name
+ * that is one of its own extra Drush aliases is a file naming that
+ * directory. It is refused with its own reason: taking it over would leave
+ * the site listing its own name as an extra alias, and the name's file is
+ * shared with any other site that lists it too.
+ */
+function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_path = '') {
+  if (!provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
+    return TRUE;
+  }
+  $leftover_dirs = _provision_grav_alias_site_dirs($new_uri);
+  $occupied = empty($leftover_dirs);
+  foreach ($leftover_dirs as $leftover_dir) {
+    if ($own_site_path !== '' && $leftover_dir === $own_site_path) {
+      return drush_set_error($error_code,
+        dt('@uri is one of this site\'s own extra Drush aliases; remove it from the site\'s aliases first, then rename.',
+        array('@uri' => $new_uri)));
+    }
+    if (provision_file()->exists($leftover_dir)->status()) {
+      $occupied = TRUE;
+    }
+  }
+  if ($occupied) {
+    return drush_set_error($error_code,
+      dt('A backend context already holds @uri; choose another name.', array('@uri' => $new_uri)));
+  }
+  drush_set_option('grav_stale_alias', TRUE);
+  drush_log(dt('A stale @uri alias with no site directory is left over; it is removed before the new context is saved.',
+    array('@uri' => $new_uri)), 'info');
+  return TRUE;
+}
+
+/**
+ * Remove the stale alias _provision_grav_check_new_name_alias() let through.
+ *
+ * provision-save builds the context on top of the record it finds, and the
+ * resets a rename or copy makes never replace what that record holds: in the
+ * GET-mode subprocess an empty array is dropped from the command line and a 0
+ * or '' is filtered out of the merge. The earlier holder's aliases,
+ * redirection, encryption and key, extra Drush aliases and cron key would
+ * become the new site's. Returns FALSE (error set) when the file survives.
+ *
+ * The file is removed here, not by provision-save --delete: that loads the
+ * record as a context before it unlinks, and a stale record whose platform
+ * or db server context is gone too dies there. Validate read the record from
+ * the file and nothing in this process has loaded it, so no context or alias
+ * cache holds it.
+ */
+function _provision_grav_remove_stale_alias($new_uri, $error_code) {
+  if (!drush_get_option('grav_stale_alias', FALSE)) {
+    return TRUE;
+  }
+  $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
+  @unlink($stale_alias);
+  clearstatcache();
+  if (file_exists($stale_alias)) {
+    return drush_set_error($error_code,
+      dt('Could not remove the stale @uri alias; the new context would inherit its settings.', array('@uri' => $new_uri)));
+  }
+  drush_log(dt('Removed the stale @uri alias.', array('@uri' => $new_uri)), 'ok');
+  return TRUE;
+}
+
+/**
  * The context options for a COPY of this site at a new uri.
  *
  * One authority for both copy commands (clone and copy-upgrade): the two must

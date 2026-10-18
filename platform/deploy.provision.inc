@@ -119,7 +119,17 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
       }
     }
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
-    _provision_drupal_create_settings_file();
+    if (_provision_drupal_deploy_keeps_offline()) {
+      // Only settings.php is written offline: the vhost the http post hook
+      // renders from site_enabled stays as it was.
+      $site_enabled = d()->site_enabled;
+      d()->site_enabled = FALSE;
+      _provision_drupal_create_settings_file();
+      d()->site_enabled = $site_enabled;
+    }
+    else {
+      _provision_drupal_create_settings_file();
+    }
     provision_drupal_push_site($override_slave_authority = TRUE);
 
     $site_packages = drush_get_option('packages', array(), 'site');
@@ -384,6 +394,12 @@ function drush_provision_drupal_post_provision_deploy() {
     drush_log("Skipping FULL bootstrap for drupal 13+ in drush_provision_drupal_post_provision_deploy");
   }
 
+  // The database is updated: settings.php goes back to the site's own state.
+  // A failed deploy is left to its rollback and to the task that invoked it.
+  if (!drush_get_error() && _provision_drupal_deploy_keeps_offline()) {
+    _provision_drupal_create_settings_file();
+  }
+
   // Remove the restore directory.
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
     _provision_recursive_delete(drush_get_option('extract_path'));
@@ -400,6 +416,24 @@ function drush_provision_drupal_post_provision_deploy() {
       }
     }
   }
+}
+
+/**
+ * Whether this deploy keeps settings.php offline until its database is updated.
+ *
+ * A Restore or a Migrate puts the site under maintenance before its deploy
+ * and brings it out after, but the deploy runs as a process of its own, built
+ * from the alias, where the site is enabled: it would write settings.php
+ * online, and the updatedb in the post hook would run with the vhost the
+ * http post hook has already made live. Such a task passes this option.
+ * Drupal 6 and 7 only: Drupal 8 and later ignore the settings.php flag, and
+ * Drush puts them into maintenance for its own updatedb. The panel site is
+ * left out: its Migrate is the panel's own upgrade, run by hostmaster-migrate.
+ */
+function _provision_drupal_deploy_keeps_offline() {
+  return drush_get_option('provision_deploy_keep_offline', FALSE)
+    && drush_drupal_major_version() < 8
+    && !provision_is_hostmaster_site();
 }
 
 /**

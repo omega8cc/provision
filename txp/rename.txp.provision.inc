@@ -94,6 +94,15 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
     $occupied = empty($leftover_dirs);
     foreach ($leftover_dirs as $leftover_dir) {
+      // One of the site's own extra Drush aliases names its own directory:
+      // refused with its own reason. Taking it over would leave the site
+      // listing its own name as an extra alias, and the name's file is
+      // shared with any other site that lists it too.
+      if ($leftover_dir === d()->site_path) {
+        return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME',
+          dt('!uri is one of this site\'s own extra Drush aliases; remove it from the site\'s aliases first, then rename.',
+          array('!uri' => $new_uri)));
+      }
       $occupied = $occupied || provision_file()->exists($leftover_dir)->status();
     }
     if ($occupied) {
@@ -193,10 +202,13 @@ function drush_provision_txp_rename($new_name = NULL) {
   // resets below never replace what that record holds: an empty array does
   // not reach the subprocess and a 0 is filtered out there. The earlier
   // holder's aliases, redirection, encryption and extra Drush aliases would
-  // become this site's.
+  // become this site's. The file is unlinked here, not by provision-save
+  // --delete: that loads the record as a context first, and a stale record
+  // whose platform context is gone too dies there. Validate read it from the
+  // file and nothing in this process has loaded it.
   if (drush_get_option('txp_rename_stale_alias', FALSE)) {
     $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
-    drush_invoke_process('@none', 'provision-save', array('@' . $new_uri), array('delete' => TRUE));
+    @unlink($stale_alias);
     clearstatcache();
     if (file_exists($stale_alias)) {
       return drush_set_error('PROVISION_TXP_RENAME_FAILED',
