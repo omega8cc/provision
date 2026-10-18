@@ -137,6 +137,9 @@ function drush_provision_drupal_provision_restore($restore_file) {
     // deploy carries it across instead of importing one (import_site_database()).
     // The deploy child cannot read it itself before its own credentials change.
     'restore_source_db' => drush_get_option('db_name', '', 'site'),
+    // The pre-hook put the site under maintenance; it stays there until the
+    // deploy has updated the database (_provision_drupal_deploy_keeps_offline()).
+    'provision_deploy_keep_offline' => TRUE,
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'restore');
 

@@ -100,19 +100,11 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
   // given, so an occupied name would silently re-point a live site's context
   // at this platform. Refuse on a context that still resolves to a site
   // directory. A leftover alias whose recorded directory is gone is a
-  // rolled-back rename's own debris: log it and carry on, the same tolerance
-  // the cutover carries, so our own leftover never blocks a retry.
-  if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
-    $leftover = d('@' . $new_uri);
-    $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
-      ? $leftover->site_path : '';
-    if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
-      return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_TARGET_EXISTS',
-        dt('A backend context already holds @uri; choose another name.',
-        array('@uri' => $new_uri)));
-    }
-    drush_log(dt('A stale @uri alias with no site directory is left over (a rolled-back rename); the copy overwrites it.',
-      array('@uri' => $new_uri)), 'info');
+  // rolled-back rename's own debris: the same tolerance the cutover carries,
+  // so our own leftover never blocks a retry, and the command removes it
+  // before the copy's save.
+  if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_COPY_UPGRADE_TARGET_EXISTS')) {
+    return FALSE;
   }
 
   // The deploy keys its replace path on directory existence: a target that
@@ -194,6 +186,11 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   // commands, so the two can never ship the copy differently.
   $options = _provision_grav_copy_options($new_name, $platform, 'copy-upgrade');
 
+  // A stale alias of the copy's name goes first: the save would build the
+  // copy's context on top of it.
+  if (!_provision_grav_remove_stale_alias($new_uri, 'PROVISION_GRAV_COPY_UPGRADE_TARGET_EXISTS')) {
+    return FALSE;
+  }
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   $deploy_options = array(
