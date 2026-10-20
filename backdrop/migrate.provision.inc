@@ -163,10 +163,17 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  drush_log(dt("Bringing site out of maintenance"));
-  d()->site_enabled = TRUE;
-  _provision_backdrop_create_settings_file();
-  provision_drupal_push_site();
+  // A site the command rollback kept on its target (the source was already
+  // being retired) has nothing to bring back here: its settings and vhost are
+  // the ones the target verify wrote, and writing them at the old path would
+  // re-create a site directory there with no database behind it.
+  $kept_on_target = drush_get_option('migrate_kept_on_target', FALSE);
+  if (!$kept_on_target) {
+    drush_log(dt("Bringing site out of maintenance"));
+    d()->site_enabled = TRUE;
+    _provision_backdrop_create_settings_file();
+    provision_drupal_push_site();
+  }
 
   // Once the source is being retired, this package holds the only copy of its
   // pre-migrate database: keep it.
@@ -187,8 +194,10 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
       ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
       ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
   }
-  d()->service('http')->create_config('site');
-  d()->service('http')->parse_configs();
+  if (!$kept_on_target) {
+    d()->service('http')->create_config('site');
+    d()->service('http')->parse_configs();
+  }
 }
 
 /**
@@ -433,6 +442,19 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  $same_name = is_null($new_name) || ($new_name == d()->name);
+  $outcome = provision_migrate_failure_outcome($same_name,
+    drush_get_option('migrate_source_retiring', FALSE),
+    drush_get_option('migrate_target_deployed', FALSE));
+  // The source was already being retired: the copy is the site. Nothing below
+  // may put the record back on a platform where the site is gone.
+  if ($outcome === 'roll_forward') {
+    if (!drush_get_option('migrate_source_retired', FALSE)) {
+      _provision_backdrop_retire_migrate_source($new_name);
+    }
+    _provision_migrate_keep_on_target($platform);
+    return;
+  }
   // A same-platform rename may have dropped the rename target's sites.php
   // record before invoking the deploy; a failed deploy must not leave the
   // source's alias routing incomplete. Rebuild the full mapping from the
@@ -459,16 +481,12 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
   }
   // The copy the deploy built on the target. Under the same name the site
   // record went back to the old platform just above, so nothing points at the
-  // copy whether or not its deploy completed -- unless a post hook had begun to
-  // retire the source (migrate_source_retiring): then the copy is what is left
-  // of the site. Under a new name a completed deploy keeps the copy with its
-  // context.
-  $same_name = is_null($new_name) || ($new_name == d()->name);
-  if (($same_name && !drush_get_option('migrate_source_retiring', FALSE))
-    || (!$same_name && !drush_get_option('migrate_target_deployed', FALSE))) {
+  // copy whether or not its deploy completed. Under a new name a completed
+  // deploy keeps the copy with its context.
+  if ($outcome === 'remove_copy') {
     provision_remove_unfinished_target_copy('migrate_target_copy');
   }
-  elseif ($same_name) {
+  elseif ($outcome === 'keep_copy') {
     $record = drush_get_option('migrate_target_copy', NULL);
     if (is_array($record) && !empty($record['site_path'])) {
       drush_log(dt('The source was being retired when the migrate failed: the copy at @path is what is left of the site, and it is kept.', array('@path' => $record['site_path'])), 'warning');
@@ -490,6 +508,39 @@ function drush_provision_backdrop_post_provision_migrate($platform, $new_name = 
   }
   drush_set_option('installed', FALSE);
 
+  _provision_backdrop_retire_migrate_source($new_name);
+
+  if (drush_get_option('rename_only')) {
+    // We run this extra tricky backend verify to avoid issue #1004526.
+    drush_log(dt("LOG/RENAME new_uri is @this", array('@this' => $new_name)), 'info');
+    provision_reload_config('site', drush_get_option('new_site_path', d($new_name)->site_path) . '/drushrc.php');
+    $final_aliases = drush_get_option('aliases');
+    d($new_name)->aliases = drush_set_option('aliases', $final_aliases);
+    d($new_name)->write_alias();
+    drush_set_option('aliases', drush_get_option('aliases'), 'site');
+    drush_set_option('provision_save_config', FALSE);
+    provision_backend_invoke($new_name, 'provision-verify');
+  }
+  else {
+    // Load the config file of the newly migrated site and return it to hosting.
+    provision_reload_config('site', drush_get_option('new_site_path', d()->site_path) . '/drushrc.php');
+  }
+
+  $backup_path = d('@server_master')->backup_path;
+  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
+  provision_file()->unlink($internal_backup_flag)
+    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate')
+    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
+}
+
+/**
+ * Retire the migrated Backdrop site's source, the step of the post hook.
+ *
+ * The Backdrop mirror of _provision_drupal_retire_migrate_source():
+ * idempotent, so the migrate rollback can finish what a failed post hook did
+ * not reach.
+ */
+function _provision_backdrop_retire_migrate_source($new_name) {
   if (!drush_get_option('deploy_replace_site', FALSE)) {
     // we remove the aliases even if redirection is enabled as a precaution
     // if redirection is enabled, keep silent about errors
@@ -521,26 +572,5 @@ function drush_provision_backdrop_post_provision_migrate($platform, $new_name = 
     // Remove the symlink in the clients directory.
     _provision_client_delete_symlink();
   }
-
-  if (drush_get_option('rename_only')) {
-    // We run this extra tricky backend verify to avoid issue #1004526.
-    drush_log(dt("LOG/RENAME new_uri is @this", array('@this' => $new_name)), 'info');
-    provision_reload_config('site', drush_get_option('new_site_path', d($new_name)->site_path) . '/drushrc.php');
-    $final_aliases = drush_get_option('aliases');
-    d($new_name)->aliases = drush_set_option('aliases', $final_aliases);
-    d($new_name)->write_alias();
-    drush_set_option('aliases', drush_get_option('aliases'), 'site');
-    drush_set_option('provision_save_config', FALSE);
-    provision_backend_invoke($new_name, 'provision-verify');
-  }
-  else {
-    // Load the config file of the newly migrated site and return it to hosting.
-    provision_reload_config('site', drush_get_option('new_site_path', d()->site_path) . '/drushrc.php');
-  }
-
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  provision_file()->unlink($internal_backup_flag)
-    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate')
-    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
+  drush_set_option('migrate_source_retired', TRUE);
 }
