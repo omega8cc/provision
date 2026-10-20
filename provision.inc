@@ -4527,6 +4527,29 @@ function _provision_restore_drop_safety_copy($removed, $failed) {
 }
 
 /**
+ * Take a site out of the maintenance a failed Restore put it in.
+ *
+ * The pre hook disables the site in memory; its rollback runs before the
+ * http one, which renders the vhost from that state. The main hook's failure
+ * branches enable it again themselves, but a failure before them (the safety
+ * copy) left the site on the disabled vhost. A kept restored copy is served
+ * from the vhost its Verify wrote, which the http rollback leaves alone.
+ *
+ * @param string $settings_writer
+ *   The settings writer of a CMS whose settings file carries the maintenance
+ *   state, or '' for one whose vhost alone does.
+ */
+function _provision_restore_reenable_site($settings_writer = '') {
+  if (d()->site_enabled || drush_get_option('restore_kept_replaced', FALSE)) {
+    return;
+  }
+  d()->site_enabled = TRUE;
+  if ($settings_writer !== '' && function_exists($settings_writer)) {
+    call_user_func($settings_writer);
+  }
+}
+
+/**
  * Finish what an extension retires in its own migrate post hook.
  *
  * A roll-forward completes provision's own retirement only, and a post phase

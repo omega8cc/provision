@@ -79,6 +79,7 @@ function drush_provision_txp_pre_provision_restore_rollback($restore_file) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
+  _provision_restore_reenable_site();
   _provision_restore_drop_safety_copy('Removed unused restore safety package', 'Could not remove unused restore safety package');
   $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
   if (is_file($internal_backup_flag)) {
@@ -125,6 +126,9 @@ function drush_provision_txp_provision_restore($restore_file) {
   $deploy_result = provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   provision_target_copy_deployed('restore_target_copy', $deploy_result);
   if (!drush_get_error()) {
+    // The deploy let the original go: the restored copy is the site, and a
+    // later failure keeps it (_provision_restore_keep_replaced()).
+    drush_set_option('restore_kept_replaced', TRUE);
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', FALSE);
   }

@@ -78,6 +78,7 @@ function drush_provision_grav_pre_provision_restore_rollback($restore_file) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
+  _provision_restore_reenable_site();
   _provision_restore_drop_safety_copy('Removed unused restore safety copy', 'Could not remove unused restore safety copy');
   _provision_grav_internal_backup_flag(FALSE);
 }
@@ -133,6 +134,9 @@ function drush_provision_grav_provision_restore($restore_file) {
     provision_target_copy_deployed('restore_target_copy', $deploy_result);
   }
   if (!drush_get_error()) {
+    // The deploy let the original go: the restored copy is the site, and a
+    // later failure keeps it (_provision_restore_keep_replaced()).
+    drush_set_option('restore_kept_replaced', TRUE);
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', false);
   }
