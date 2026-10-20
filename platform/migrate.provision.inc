@@ -504,8 +504,9 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
 /**
  * Finish a migrate forward after the source had begun to go.
  *
- * Called by the migrate rollback when a post hook failed after the source's
- * database was dropped or its directory deleted (see
+ * Called by the migrate rollback when a post hook failed once the source's
+ * retirement had begun: its database drop attempted (a failed drop included,
+ * the database then named and left in place) or its directory deleted (see
  * provision_migrate_failure_outcome()). The deploy and the target verify
  * completed, so the copy is a served site: the retirement the post hook did
  * not reach is finished, the site context is reloaded from the copy so the
@@ -519,6 +520,7 @@ function _provision_drupal_migrate_roll_forward($platform, $new_name) {
   if (!drush_get_option('migrate_source_retired', FALSE)) {
     _provision_drupal_retire_migrate_source($new_name);
   }
+  _provision_migrate_retire_extras($new_name);
   _provision_migrate_keep_on_target($platform);
 }
 
@@ -526,9 +528,10 @@ function _provision_drupal_migrate_roll_forward($platform, $new_name) {
  * Retire the migrated site's source, the step of the migrate post hook.
  *
  * Deletes the source's sites.php records and its site directory (unless the
- * deploy replaced that directory in place), and on a rename the old name's
- * store, drushrc alias, directory, records and client link. Idempotent, so
- * the migrate rollback can finish what a failed post hook did not reach.
+ * deploy replaced that directory in place); on a rename, sets the old name's
+ * store aside and removes its drushrc alias, directory, records and client
+ * link. Idempotent, so the migrate rollback can finish what a failed post
+ * hook did not reach.
  */
 function _provision_drupal_retire_migrate_source($new_name) {
   if (!drush_get_option('deploy_replace_site', FALSE)) {

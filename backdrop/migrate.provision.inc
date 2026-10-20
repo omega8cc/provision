@@ -452,6 +452,7 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
     if (!drush_get_option('migrate_source_retired', FALSE)) {
       _provision_backdrop_retire_migrate_source($new_name);
     }
+    _provision_migrate_retire_extras($new_name);
     _provision_migrate_keep_on_target($platform);
     return;
   }

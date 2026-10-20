@@ -4449,6 +4449,26 @@ function _provision_migrate_keep_on_target($platform) {
 }
 
 /**
+ * Finish what an extension retires in its own migrate post hook.
+ *
+ * A roll-forward completes provision's own retirement only, and a post phase
+ * that stopped early never reached the post hooks sorting after the failing
+ * one. The HTTP basic authentication extension removes a renamed site's
+ * old-name password file in its post hook: this does it for a rename through
+ * the extension's own helper, which keeps a file a site vhost still serves
+ * and removes nothing that is already gone.
+ *
+ * @param string|null $new_name
+ *   The migrate's new name, NULL for a same-name move.
+ */
+function _provision_migrate_retire_extras($new_name) {
+  if (!is_null($new_name) && ($new_name != d()->name) && d($new_name)->uri != d()->uri
+    && function_exists('_http_basic_auth_retire_file')) {
+    _http_basic_auth_retire_file(d());
+  }
+}
+
+/**
  * Whether a failed Migrate's backend result leaves the site on its target.
  *
  * For the caller of a provision-migrate that failed: TRUE when its rollback
