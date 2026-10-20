@@ -4449,6 +4449,38 @@ function _provision_migrate_keep_on_target($platform) {
 }
 
 /**
+ * Whether a failed Migrate's backend result leaves the site on its target.
+ *
+ * For the caller of a provision-migrate that failed: TRUE when its rollback
+ * finished it forward (migrate_kept_on_target names $target), and when the
+ * process died (DRUSH_NOT_COMPLETED: a PHP fatal runs no rollback, but the
+ * result still carries every option set so far) after a completed deploy,
+ * once a post hook had begun to retire the source: the site's alias and
+ * vhost already name the target then, and its record must follow them
+ * there. A process that failed normally and reports no kept flag rolled the
+ * site back itself; one that left no result proves nothing.
+ *
+ * @param array|false $result
+ *   The provision-migrate backend result.
+ * @param string $target
+ *   The target platform's context name.
+ *
+ * @return bool
+ *   The site stays on $target.
+ */
+function provision_migrate_result_kept_on_target($result, $target) {
+  if (!is_array($result) || !isset($result['context']) || !is_array($result['context'])) {
+    return FALSE;
+  }
+  $context = $result['context'];
+  if (!empty($context['migrate_kept_on_target'])) {
+    return $context['migrate_kept_on_target'] === $target;
+  }
+  return !empty($context['migrate_source_retiring']) && !empty($context['migrate_target_deployed'])
+    && isset($result['error_log']['DRUSH_NOT_COMPLETED']);
+}
+
+/**
  * Remove the yml file site:alias-convert wrote for one drushrc alias.
  *
  * The converter files an alias under its last label as the environment, in a

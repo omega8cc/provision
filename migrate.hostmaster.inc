@@ -211,7 +211,17 @@ function drush_provision_hostmaster_migrate($site, $platform) {
     file_put_contents($local_settings_file, $lines_to_append, FILE_APPEND);
   }
 
-  provision_backend_invoke(drush_get_option('site_name'), 'provision-migrate', array(drush_get_option('new_platform')));
+  $result = provision_backend_invoke(drush_get_option('site_name'), 'provision-migrate', array(drush_get_option('new_platform')));
+  // A migrate that failed once the panel's old copy was being retired leaves
+  // the panel on the new platform (provision_migrate_result_kept_on_target()).
+  // Its record must follow it there as after a success, or the next Verify of
+  // the panel writes its alias for the old root, where nothing is left; the
+  // post hook does that only for a success. The command still fails.
+  if (is_array($result) && !empty($result['error_status'])
+    && provision_migrate_result_kept_on_target($result, drush_get_option('new_platform'))) {
+    drush_log(dt('The migrate of @site failed after its old copy was retired: it stays on @platform, and its record follows it.', array('@site' => drush_get_option('site_name'), '@platform' => drush_get_option('new_platform'))), 'warning');
+    drush_provision_post_hostmaster_migrate($site, $platform);
+  }
 
   if ($major_version_upgrade) {
     drush_log('Re-enabling error-reporting.', 'notice');
