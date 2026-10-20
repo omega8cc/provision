@@ -497,6 +497,10 @@ class Provision_Service_db extends Provision_Service {
    * post file holds a CREATE: mydumper 1.0.5 writes a trigger file of its
    * header alone for a database without any. A compressed or unreadable
    * file counts as carrying them.
+   *
+   * A post file it loads that holds a routine written in double quotes with
+   * no mode line before it stops the import too (FALSE, the error set): see
+   * myloader_unmoded_routines().
    */
   function myloader_definer_option($myloader_path, $db_user, $dump_dir) {
     $help = '';
@@ -504,6 +508,7 @@ class Provision_Service_db extends Provision_Service {
       $help = implode("\n", drush_shell_exec_output());
     }
     $carried = 0;
+    $unmoded = array();
     foreach (array_merge((array) glob($dump_dir . '/*-schema-triggers.sql*'), (array) glob($dump_dir . '/*-schema-post.sql*')) as $file) {
       if (!is_string($file) || !is_file($file)) {
         continue;
@@ -512,11 +517,17 @@ class Provision_Service_db extends Provision_Service {
       if ($text === FALSE || preg_match('/^\s*CREATE\s/mi', $text)) {
         $carried++;
       }
+      if (is_string($text) && substr($file, -16) === '-schema-post.sql') {
+        $unmoded = array_merge($unmoded, $this->myloader_unmoded_routines($text));
+      }
     }
     if (preg_match('/^\s+--replace-definer(\s|=)/m', $help)
       && preg_match('/^[A-Za-z0-9_]+$/', (string) $db_user)) {
       $host = $this->definer_host($db_user);
       if (is_string($host) && preg_match('/^[A-Za-z0-9_.:%-]+$/', $host)) {
+        if ($unmoded) {
+          return $this->myloader_unmoded_error($unmoded);
+        }
         return ' --replace-definer=' . escapeshellarg('`' . $db_user . '`@`' . $host . '`');
       }
       if ($carried) {
@@ -538,7 +549,45 @@ class Provision_Service_db extends Provision_Service {
     if ($options !== '' && $carried) {
       drush_log(dt('The dump carries triggers, routines or events, and this myloader cannot hand them to @user: they are left out of the import.', array('@user' => $db_user)), 'warning');
     }
+    if ($unmoded && strpos($options, '--skip-post') === FALSE) {
+      return $this->myloader_unmoded_error($unmoded);
+    }
     return $options;
+  }
+
+  /**
+   * The routines of a mydumper post file that this import cannot load.
+   *
+   * A routine made under ANSI_QUOTES (a Drupal site's own connection) is
+   * dumped with its name and definer in double quotes, and mydumper loads the
+   * whole file under one mode without it: ERROR 1064. BOA's dumps put each
+   * object's own mode on a SET SQL_MODE line right before its CREATE; a dump
+   * written before they did, or one whose modes could not be written, has
+   * none there. Its mode cannot be told from the file: the quotes show
+   * ANSI_QUOTES only, and the rest (PIPES_AS_CONCAT, the strict modes)
+   * changes what the routine does, so such a dump is never loaded with a
+   * guessed mode.
+   */
+  function myloader_unmoded_routines($text) {
+    $names = array();
+    $prev = '';
+    foreach (preg_split('/\r?\n/', $text) as $line) {
+      if (preg_match('/^\s*CREATE\s+(DEFINER\s*=\s*\S+\s+)?(FUNCTION|PROCEDURE)\s+"((?:[^"]|"")+)"/i', $line, $match)
+        && !preg_match("/^SET SQL_MODE='[^']*';$/i", $prev)) {
+        $names[] = str_replace('""', '"', $match[3]);
+      }
+      if (trim($line) !== '') {
+        $prev = trim($line);
+      }
+    }
+    return $names;
+  }
+
+  /**
+   * Stops a fast import that holds routines it cannot load (see above).
+   */
+  function myloader_unmoded_error($names) {
+    return drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('The dump holds stored routines made under ANSI_QUOTES with no SQL mode line before them (@names), as a dump written before BOA kept each object\'s own mode does: myloader cannot load them, and their mode cannot be read from the dump. The import is stopped before it loads anything. Restore a backup taken since, or load this one by hand as root with each routine\'s own SET SQL_MODE line put before it.', array('@names' => implode(', ', array_unique($names)))));
   }
 
   function import_site_database($dump_file = null, $creds = array()) {
