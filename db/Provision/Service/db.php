@@ -589,7 +589,7 @@ class Provision_Service_db extends Provision_Service {
    * Stops a fast import that holds routines it cannot load (see above).
    */
   function myloader_unmoded_error($names) {
-    return drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('The dump holds stored routines made under ANSI_QUOTES with no SQL mode line before them (@names), as a dump written before BOA kept each object\'s own mode does: myloader cannot load them, and their mode cannot be read from the dump. The import is stopped before it loads anything. Restore a backup taken since, or load this one by hand as root with each routine\'s own SET SQL_MODE line put before it.', array('@names' => implode(', ', array_unique($names)))));
+    return drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('The dump holds stored routines made under ANSI_QUOTES with no SQL mode line before them (@names): the step that writes each object\'s own mode after the dump did not complete for it (the dump\'s own warning says why). myloader cannot load such routines, and their mode cannot be read from the dump. The import is stopped before it loads anything: fix what stopped that step, then run the task again.', array('@names' => implode(', ', array_unique($names)))));
   }
 
   function import_site_database($dump_file = null, $creds = array()) {
