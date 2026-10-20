@@ -4550,6 +4550,28 @@ function _provision_restore_reenable_site($settings_writer = '') {
 }
 
 /**
+ * Read a kept restored copy's settings back into the task before it ends.
+ *
+ * The db post hook reads the site's drushrc.php back once the old database
+ * is dropped. A Restore whose Verify failed after its deploy came through
+ * never runs it, so the task's result still named the database the site ran
+ * on before, and the panel recorded that. Never before the post phase: its
+ * drop takes the database this context names. The old database is named
+ * when it is still there.
+ */
+function _provision_restore_kept_reload() {
+  if (!drush_get_option('restore_kept_replaced', FALSE) || !is_file(d()->site_path . '/drushrc.php')) {
+    return;
+  }
+  $old_db = (string) drush_get_option('db_name', '', 'site');
+  provision_reload_config('site', d()->site_path . '/drushrc.php');
+  if ($old_db !== '' && $old_db !== (string) drush_get_option('db_name', '', 'site')
+    && d()->service('db')->database_exists($old_db)) {
+    drush_log(dt('The database @db the site ran on before the Restore is left in place.', array('@db' => $old_db)), 'warning');
+  }
+}
+
+/**
  * Finish what an extension retires in its own migrate post hook.
  *
  * A roll-forward completes provision's own retirement only, and a post phase

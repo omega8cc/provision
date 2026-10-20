@@ -101,6 +101,7 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
     return;
   }
   _provision_restore_reenable_site('_provision_drupal_create_settings_file');
+  _provision_restore_kept_reload();
   _provision_restore_drop_safety_copy('Removed unused migration site package', 'Could not remove unused migration site package');
   // Belt for the flag cleanup above: rollback of the completed pre phase runs
   // when a later phase fails before the command-level cleanup is reached.

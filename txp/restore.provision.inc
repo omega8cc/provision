@@ -80,6 +80,7 @@ function drush_provision_txp_pre_provision_restore_rollback($restore_file) {
     return;
   }
   _provision_restore_reenable_site();
+  _provision_restore_kept_reload();
   _provision_restore_drop_safety_copy('Removed unused restore safety package', 'Could not remove unused restore safety package');
   $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
   if (is_file($internal_backup_flag)) {

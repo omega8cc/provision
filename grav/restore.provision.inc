@@ -79,6 +79,7 @@ function drush_provision_grav_pre_provision_restore_rollback($restore_file) {
     return;
   }
   _provision_restore_reenable_site();
+  _provision_restore_kept_reload();
   _provision_restore_drop_safety_copy('Removed unused restore safety copy', 'Could not remove unused restore safety copy');
   _provision_grav_internal_backup_flag(FALSE);
 }
