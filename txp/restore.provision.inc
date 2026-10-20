@@ -73,9 +73,7 @@ function drush_provision_txp_pre_provision_restore_rollback($restore_file) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
-  provision_file()->unlink(drush_get_option('backup_file'))
-    ->succeed('Removed unused restore safety package')
-    ->fail('Could not remove unused restore safety package');
+  _provision_restore_drop_safety_copy('Removed unused restore safety package', 'Could not remove unused restore safety package');
   $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
   if (is_file($internal_backup_flag)) {
     provision_file()->unlink($internal_backup_flag)
@@ -123,6 +121,11 @@ function drush_provision_txp_provision_restore($restore_file) {
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', FALSE);
+  }
+  elseif (provision_deploy_replaced_original($deploy_result)) {
+    // The deploy had let the original go before a later step of it failed:
+    // the restored copy is the site and stays, finished as above.
+    _provision_restore_keep_replaced();
   }
   else {
     // The pre-hook took the site into the maintenance (disabled) vhost. A

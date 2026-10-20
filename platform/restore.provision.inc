@@ -100,9 +100,7 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  $success =  provision_file()->unlink(drush_get_option('backup_file'))
-    ->succeed('Removed unused migration site package')
-    ->fail('Could not remove unused migration site package');
+  _provision_restore_drop_safety_copy('Removed unused migration site package', 'Could not remove unused migration site package');
   // Belt for the flag cleanup above: rollback of the completed pre phase runs
   // when a later phase fails before the command-level cleanup is reached.
   $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
@@ -173,6 +171,12 @@ function drush_provision_drupal_provision_restore($restore_file) {
     _provision_drupal_native_symlink_after_restore(d()->uri);
 
     drush_set_option('installed', false);
+  }
+  elseif (provision_deploy_replaced_original($deploy_result)) {
+    // The deploy had let the original go before a later step of it failed:
+    // the restored copy is the site and stays, finished as above.
+    _provision_restore_keep_replaced();
+    _provision_drupal_native_symlink_after_restore(d()->uri);
   }
   else {
     // The pre-hook took the site into maintenance: settings.php carries the

@@ -9,6 +9,12 @@ function drush_db_pre_provision_deploy() {
 }
 
 function drush_db_pre_provision_deploy_rollback() {
+  // The copy replaced the site and its original is gone (see
+  // provision_deploy_replaced_original()): its database is the site's now.
+  if (provision_deploy_replaced_original()) {
+    drush_log(dt('The database of the copy that replaced the site stays.'), 'warning');
+    return;
+  }
   d()->service('db')->destroy_site_database();
 }
 

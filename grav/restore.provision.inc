@@ -78,9 +78,7 @@ function drush_provision_grav_pre_provision_restore_rollback($restore_file) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
-  provision_file()->unlink(drush_get_option('backup_file'))
-    ->succeed('Removed unused restore safety copy')
-    ->fail('Could not remove unused restore safety copy');
+  _provision_restore_drop_safety_copy('Removed unused restore safety copy', 'Could not remove unused restore safety copy');
   _provision_grav_internal_backup_flag(FALSE);
 }
 
@@ -137,6 +135,11 @@ function drush_provision_grav_provision_restore($restore_file) {
   if (!drush_get_error()) {
     provision_backend_invoke(d()->name, 'provision-verify');
     drush_set_option('installed', false);
+  }
+  elseif (provision_deploy_replaced_original($deploy_result)) {
+    // The deploy had let the original go before a later step of it failed:
+    // the restored copy is the site and stays, finished as above.
+    _provision_restore_keep_replaced();
   }
   else {
     // The pre-hook took the site into the maintenance (disabled) vhost. A

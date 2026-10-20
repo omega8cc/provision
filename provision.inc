@@ -4449,6 +4449,81 @@ function _provision_migrate_keep_on_target($platform) {
 }
 
 /**
+ * Whether a Restore's deploy had let the original site directory go.
+ *
+ * A deploy that replaces a site directory parks the original beside it as
+ * <dir>.restore, swaps the copy in, and its CMS post hook removes the parked
+ * original once the copy is in place. For a Restore (is_restore)
+ * deploy_replaced_original is set just before that: from then on the
+ * restored copy is all there is of the site, a step that fails afterwards
+ * finds nothing to swap back, so the deploy's rollbacks keep the copy and
+ * its database, and the Restore keeps them too. A Migrate onto a directory
+ * that was there keeps the old rollback: what it parked was a leftover, and
+ * the live site is the source.
+ *
+ * @param array|false|null $result
+ *   A provision-deploy backend result, or NULL to ask the running deploy.
+ *
+ * @return bool
+ *   The original was let go.
+ */
+function provision_deploy_replaced_original($result = NULL) {
+  if ($result === NULL) {
+    return (bool) drush_get_option('deploy_replaced_original', FALSE);
+  }
+  return is_array($result) && isset($result['context']) && is_array($result['context'])
+    && !empty($result['context']['deploy_replaced_original']);
+}
+
+/**
+ * Finish a Restore whose deploy had already replaced the site.
+ *
+ * Called from a Restore's failure branch when its deploy failed after it
+ * let the original go (provision_deploy_replaced_original()): the restored
+ * copy is the site, so the Restore finishes the way a successful one does,
+ * a Verify writing the site's settings and vhost from the copy, instead of
+ * putting back an original that is gone. The task stays failed. The site
+ * context is reloaded from the copy, so the task's result names its
+ * database; restore_kept_replaced keeps the safety copy taken before the
+ * Restore (the pre rollbacks would remove it) and tells the front end to
+ * list it. The database the site ran on before is named when it is still
+ * there.
+ */
+function _provision_restore_keep_replaced() {
+  $old_db = (string) drush_get_option('db_name', '', 'site');
+  drush_set_option('restore_kept_replaced', TRUE);
+  drush_log(dt('The restored copy had replaced the site before a later step of its deploy failed: it stays, and a Verify writes the site\'s settings and vhost from it.'), 'warning');
+  provision_backend_invoke(d()->name, 'provision-verify');
+  if (is_file(d()->site_path . '/drushrc.php')) {
+    provision_reload_config('site', d()->site_path . '/drushrc.php');
+  }
+  if ($old_db !== '' && $old_db !== (string) drush_get_option('db_name', '', 'site')
+    && d()->service('db')->database_exists($old_db)) {
+    drush_log(dt('The database @db the site ran on before the Restore is left in place.', array('@db' => $old_db)), 'warning');
+  }
+}
+
+/**
+ * Remove a Restore's unused safety copy, or keep it when it is all that is
+ * left of the site as it was before (_provision_restore_keep_replaced()).
+ *
+ * @param string $removed
+ *   The success line of the removal.
+ * @param string $failed
+ *   The failure line of the removal.
+ */
+function _provision_restore_drop_safety_copy($removed, $failed) {
+  $package = drush_get_option('backup_file');
+  if (drush_get_option('restore_kept_replaced', FALSE)) {
+    drush_log(dt('Kept the safety copy @path: it holds the site as it was before the Restore.', array('@path' => $package)), 'warning');
+    return;
+  }
+  provision_file()->unlink($package)
+    ->succeed($removed)
+    ->fail($failed);
+}
+
+/**
  * Finish what an extension retires in its own migrate post hook.
  *
  * A roll-forward completes provision's own retirement only, and a post phase
