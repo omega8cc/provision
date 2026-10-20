@@ -15,6 +15,12 @@ function drush_provision_backdrop_provision_restore_validate($restore_file = nul
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // The http layer builds the site's vhost data once per process, from the
+  // 'site' context as it stands then (its pre hook runs before this layer's).
+  // Every vhost this process renders -- the failure branch, the rollback --
+  // must carry the site's database settings, which Backdrop's settings.php
+  // reads from the vhost, so they are loaded here, before any pre hook.
+  _provision_backdrop_ensure_db_creds_loaded();
   // Backup mode ctrl file cleanup. The safety copy force-defines its own mode
   // and never reads the ctrl file, so without this a dead backup task's
   // leftover would survive the whole restore - adopted by the provision-deploy

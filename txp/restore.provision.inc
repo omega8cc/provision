@@ -15,6 +15,12 @@ function drush_provision_txp_provision_restore_validate($restore_file = NULL) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
+  // The http layer builds the site's vhost data once per process, from the
+  // 'site' context as it stands then (its pre hook runs before this layer's).
+  // Every vhost this process renders -- the failure branch, the rollback --
+  // must carry the site's database settings, so they are loaded here, before
+  // any pre hook.
+  _provision_txp_ensure_db_creds_loaded();
   provision_file()->exists($restore_file)
     ->succeed('Restoring site from @path')
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
