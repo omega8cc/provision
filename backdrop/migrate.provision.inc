@@ -173,6 +173,9 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
     d()->site_enabled = TRUE;
     _provision_backdrop_create_settings_file();
     provision_drupal_push_site();
+    // The target verify pointed the client's link at the copy the command
+    // rollback removed: point it back at the site.
+    _provision_client_create_symlink();
   }
 
   // Once the source is being retired, this package holds the only copy of its
