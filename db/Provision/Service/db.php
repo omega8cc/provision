@@ -566,14 +566,16 @@ class Provision_Service_db extends Provision_Service {
    * none there. Its mode cannot be told from the file: the quotes show
    * ANSI_QUOTES only, and the rest (PIPES_AS_CONCAT, the strict modes)
    * changes what the routine does, so such a dump is never loaded with a
-   * guessed mode.
+   * guessed mode. A routine's header is the line right after mydumper's own
+   * DROP of it, or after BOA's mode line there: a body line that happens to
+   * begin the same way is neither.
    */
   function myloader_unmoded_routines($text) {
     $names = array();
     $prev = '';
     foreach (preg_split('/\r?\n/', $text) as $line) {
       if (preg_match('/^\s*CREATE\s+(DEFINER\s*=\s*\S+\s+)?(FUNCTION|PROCEDURE)\s+"((?:[^"]|"")+)"/i', $line, $match)
-        && !preg_match("/^SET SQL_MODE='[^']*';$/i", $prev)) {
+        && preg_match('/^DROP\s+' . $match[2] . '\s+IF\s+EXISTS\s/i', $prev)) {
         $names[] = str_replace('""', '"', $match[3]);
       }
       if (trim($line) !== '') {
