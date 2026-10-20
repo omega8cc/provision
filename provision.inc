@@ -4485,13 +4485,16 @@ function provision_deploy_replaced_original($result = NULL) {
  * putting back an original that is gone. The task stays failed. The site
  * context is reloaded from the copy, so the task's result names its
  * database; restore_kept_replaced keeps the safety copy taken before the
- * Restore (the pre rollbacks would remove it) and tells the front end to
- * list it. The database the site ran on before is named when it is still
- * there.
+ * Restore (the pre rollbacks would remove it), keeps the http rollback from
+ * rendering the vhost again from the pre-hook's disabled state, and tells
+ * the front end to list the safety copy. The database the site ran on
+ * before is named when it is still there.
  */
 function _provision_restore_keep_replaced() {
   $old_db = (string) drush_get_option('db_name', '', 'site');
   drush_set_option('restore_kept_replaced', TRUE);
+  // The pre-hook disabled the site in memory only; the copy is served.
+  d()->site_enabled = TRUE;
   drush_log(dt('The restored copy had replaced the site before a later step of its deploy failed: it stays, and a Verify writes the site\'s settings and vhost from it.'), 'warning');
   provision_backend_invoke(d()->name, 'provision-verify');
   if (is_file(d()->site_path . '/drushrc.php')) {
