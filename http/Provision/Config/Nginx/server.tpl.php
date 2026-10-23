@@ -404,6 +404,23 @@ map $http_user_agent $is_ai_evasive {
 }
 
 ###
+### Defaults for the per-site AI opt-ins.  A site vhost sets $ai_train_allow and
+### $ai_evasive_allow to 0 before its ai_policy include, and the shared
+### nginx_vhost_common.conf tests both.  A server verify re-renders that include
+### before the sites are verified, so a vhost rendered by an older Provision (an
+### upgrade that stopped between the two, e.g. on a panel that did not verify)
+### declares neither, and `nginx -t` fails with `unknown "ai_train_allow"
+### variable` for EVERY server block.  Declared here as well, they always exist;
+### a vhost's own set still wins.  Same superset rule as $is_ai_crawler above.
+###
+map $host $ai_train_allow {
+  default  0;
+}
+map $host $ai_evasive_allow {
+  default  0;
+}
+
+###
 ### AI utility bots (ads validation, text-to-speech, assistant retrieval)
 ### — allowed (rate-limited).
 ###
