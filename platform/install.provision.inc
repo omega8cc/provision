@@ -564,6 +564,35 @@ function drush_provision_drupal_provision_install() {
           }
         }
 
+        // Store the usage data choice itself too. DRUPAL_CMS_TELEMETRY above
+        // is read only by drupal_cms_helper 2.2.2 and newer, and only while a
+        // site template recipe is applied, and from helper 2.2.5 a site with
+        // no stored choice sends. A site installed on a Drupal CMS platform
+        // older than 2.2.2, or with no site template, would start sending once
+        // it runs helper 2.2.5 or newer. The key is inert on a site without
+        // the helper. Non-fatal: the install stands either way.
+        if ($success) {
+          $tlm_command = array(
+            $drushPath,
+            'state:set',
+            'drupal_cms_telemetry',
+            'FALSE',
+            '--input-format=boolean',
+            '--root=' . d()->root,
+            '--uri=' . d()->uri,
+          );
+          $tlm_cmd_string = _provision_site_local_drush_cmd(array_slice($tlm_command, 1));
+          if (drush_shell_cd_and_exec($appRoot, $tlm_cmd_string)) {
+            drush_log(dt('D11/INSTALL/TELEMETRY stored drupal_cms_telemetry FALSE (usage data off)'), 'info');
+          }
+          else {
+            drush_log(dt('D11/INSTALL/TELEMETRY could not store drupal_cms_telemetry FALSE'), 'warning');
+            foreach ((array) drush_shell_exec_output() as $tlm_line) {
+              drush_log($tlm_line, 'notice');
+            }
+          }
+        }
+
         // Enforce Aegir policy: never allow web UI tools to overwrite the codebase.
         // Drupal core Automatic Updates emits Status report errors on symlinked/linked codebases by design,
         // so we remove the module right after install if it is enabled.
