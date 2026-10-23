@@ -183,6 +183,13 @@ function drush_provision_grav_pre_provision_deploy_rollback() {
   if (!provision_platform_is_grav(d())) {
     return;
   }
+  // The post hook had already let the parked original go when a later step
+  // failed: the copy is all there is, so it stays as it is, with its
+  // database (provision_deploy_replaced_original()).
+  if (provision_deploy_replaced_original()) {
+    drush_log(dt('The copy at @path had replaced the site and the original was gone when a later step failed: the copy stays.', array('@path' => d()->site_path)), 'warning');
+    return;
+  }
   if (drush_get_option('deploy_replace_site', FALSE)) {
     if (drush_get_option('site_dirs_swapped', FALSE)) {
 
@@ -255,6 +262,11 @@ function drush_provision_grav_post_provision_deploy() {
 
   // Remove the restore directory (or park web-owned residue).
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
+    // From here a Restore's original is gone: a step that fails later keeps
+    // the copy (provision_deploy_replaced_original()).
+    if (drush_get_option('is_restore', FALSE)) {
+      drush_set_option('deploy_replaced_original', TRUE);
+    }
     _provision_grav_remove_tree_or_park(drush_get_option('extract_path'), d()->uri . '-restore');
   }
 }

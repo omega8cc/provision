@@ -4279,9 +4279,11 @@ function provision_probe_new_name($option, $new_name, $platform) {
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the
- * deploy on it; the deploy's own rollback drops the half-built site directory
- * and database, but the context stayed behind, so a site that never came to
- * be kept an alias in ~/.drush, the vhost its deploy wrote and, once the deploy
+ * deploy on it. A deploy that fails normally drops its half-built site
+ * directory and database in its own rollback (one that dies on a PHP fatal
+ * runs none: provision_remove_unfinished_target_copy() removes that copy),
+ * but the context stayed behind either way, so a site that never came to be
+ * kept an alias in ~/.drush, the vhost its deploy wrote and, once the deploy
  * had run site:alias-convert, a yml alias in ~/.drush/sites, until something
  * else removed them. Called from the command rollbacks, which Drush runs on
  * ANY error raised after the command hook completed; so this removes nothing
@@ -4298,12 +4300,12 @@ function provision_probe_new_name($option, $new_name, $platform) {
  * The yml alias is the converted copy of the drushrc alias. The converter
  * writes two files for it: a placeholder named after the drushrc alias, and
  * the alias itself in the file named after all labels but the last, under
- * the last label (see _provision_drush10_alias_twin_remove()). The
- * limited-shell worker regenerates the whole store when it finds a
- * placeholder without its drushrc alias, but only then; so both are removed
- * here with their checksums, and when the alias file cannot go (it holds
- * another alias too, or was edited) the placeholder stays as that worker's
- * cue.
+ * the last label (see _provision_drush10_alias_twin_remove()). BOA's
+ * limited-shell worker rebuilds the whole store once the drushrc aliases
+ * differ from its last finished rebuild, which the removed context makes
+ * them; both are removed here with their checksums so the store is right at
+ * once, and when the alias file cannot go (it holds another alias too, or was
+ * edited) it stays, with its placeholder, for that rebuild.
  */
 function provision_remove_unfinished_context($new_name, $preexisted_option, $deployed_option = '') {
   $new_uri = ltrim((string) $new_name, '@');
@@ -4383,6 +4385,242 @@ function provision_remove_unfinished_context($new_name, $preexisted_option, $dep
         ->fail('Could not remove @path of the unfinished site');
     }
   }
+}
+
+/**
+ * What a failed Migrate does with the copy its deploy built.
+ *
+ * Once a post hook has begun to retire the source (its database dropped, its
+ * directory about to go) after a deploy that came through, the copy is the
+ * site: the migrate is finished forward and the record stays on the target
+ * ('roll_forward'). Before that, a same-name copy has nothing pointing at it
+ * and goes ('remove_copy'), as does a rename's copy whose deploy did not
+ * complete; a rename whose deploy completed keeps its new context and copy
+ * ('keep_new_context'). A source being retired without a confirmed deploy
+ * keeps its copy untouched ('keep_copy'), which a post phase that only runs
+ * after a successful deploy never reaches.
+ *
+ * @param bool $same_name
+ *   The migrate keeps the site's name.
+ * @param bool $retiring
+ *   A post hook set migrate_source_retiring.
+ * @param bool $deployed
+ *   The deploy reported success (migrate_target_deployed).
+ *
+ * @return string
+ *   'roll_forward', 'remove_copy', 'keep_new_context' or 'keep_copy'.
+ */
+function provision_migrate_failure_outcome($same_name, $retiring, $deployed) {
+  if ($retiring) {
+    return $deployed ? 'roll_forward' : 'keep_copy';
+  }
+  if ($same_name || !$deployed) {
+    return 'remove_copy';
+  }
+  return 'keep_new_context';
+}
+
+/**
+ * Point a failed migrate's result at the site it keeps on its target.
+ *
+ * The last step of a roll-forward (see provision_migrate_failure_outcome()):
+ * the site context is reloaded from the copy's drushrc.php, as a completed
+ * migrate's post hook does, so the task's result carries the copy's
+ * database, profile and packages; migrate_kept_on_target names the target
+ * platform, which the front end checks before it records the site there. A
+ * source database the retirement could not drop is named and left alone.
+ *
+ * @param string $platform
+ *   The target platform's context name.
+ */
+function _provision_migrate_keep_on_target($platform) {
+  $site_path = (string) drush_get_option('new_site_path', '');
+  if ($site_path !== '' && is_file($site_path . '/drushrc.php')) {
+    provision_reload_config('site', $site_path . '/drushrc.php');
+  }
+  $target = d($platform)->name;
+  drush_set_option('migrate_kept_on_target', $target);
+  $source = drush_get_option('provision_migrate_source_db', array());
+  if (is_array($source) && !empty($source['db_name'])
+    && d()->service('db')->database_exists($source['db_name'])) {
+    drush_log(dt('The source database @db could not be dropped; it is left in place.', array('@db' => $source['db_name'])), 'warning');
+  }
+  drush_log(dt('The source was retired when the migrate failed: the site stays on @platform at @path, and its record follows it.', array('@platform' => $target, '@path' => $site_path)), 'warning');
+}
+
+/**
+ * Whether a Restore's deploy had let the original site directory go.
+ *
+ * A deploy that replaces a site directory parks the original beside it as
+ * <dir>.restore, swaps the copy in, and its CMS post hook removes the parked
+ * original once the copy is in place. For a Restore (is_restore)
+ * deploy_replaced_original is set just before that: from then on the
+ * restored copy is all there is of the site, a step that fails afterwards
+ * finds nothing to swap back, so the deploy's rollbacks keep the copy and
+ * its database, and the Restore keeps them too. A Migrate onto a directory
+ * that was there keeps the old rollback: what it parked was a leftover, and
+ * the live site is the source.
+ *
+ * @param array|false|null $result
+ *   A provision-deploy backend result, or NULL to ask the running deploy.
+ *
+ * @return bool
+ *   The original was let go.
+ */
+function provision_deploy_replaced_original($result = NULL) {
+  if ($result === NULL) {
+    return (bool) drush_get_option('deploy_replaced_original', FALSE);
+  }
+  return is_array($result) && isset($result['context']) && is_array($result['context'])
+    && !empty($result['context']['deploy_replaced_original']);
+}
+
+/**
+ * Finish a Restore whose deploy had already replaced the site.
+ *
+ * Called from a Restore's failure branch when its deploy failed after it
+ * let the original go (provision_deploy_replaced_original()): the restored
+ * copy is the site, so the Restore finishes the way a successful one does,
+ * a Verify writing the site's settings and vhost from the copy, instead of
+ * putting back an original that is gone. The task stays failed. The site
+ * context is reloaded from the copy, so the task's result names its
+ * database; restore_kept_replaced keeps the safety copy taken before the
+ * Restore (the pre rollbacks would remove it), keeps the http rollback from
+ * rendering the vhost again from the pre-hook's disabled state, and tells
+ * the front end to list the safety copy. The database the site ran on
+ * before is named when it is still there.
+ */
+function _provision_restore_keep_replaced() {
+  $old_db = (string) drush_get_option('db_name', '', 'site');
+  drush_set_option('restore_kept_replaced', TRUE);
+  // The pre-hook disabled the site in memory only; the copy is served.
+  d()->site_enabled = TRUE;
+  drush_log(dt('The restored copy had replaced the site before a later step of its deploy failed: it stays, and a Verify writes the site\'s settings and vhost from it.'), 'warning');
+  provision_backend_invoke(d()->name, 'provision-verify');
+  if (is_file(d()->site_path . '/drushrc.php')) {
+    provision_reload_config('site', d()->site_path . '/drushrc.php');
+  }
+  if ($old_db !== '' && $old_db !== (string) drush_get_option('db_name', '', 'site')
+    && d()->service('db')->database_exists($old_db)) {
+    drush_log(dt('The database @db the site ran on before the Restore is left in place.', array('@db' => $old_db)), 'warning');
+  }
+}
+
+/**
+ * Remove a Restore's unused safety copy, or keep it when it is all that is
+ * left of the site as it was before (_provision_restore_keep_replaced()).
+ *
+ * @param string $removed
+ *   The success line of the removal.
+ * @param string $failed
+ *   The failure line of the removal.
+ */
+function _provision_restore_drop_safety_copy($removed, $failed) {
+  $package = drush_get_option('backup_file');
+  if (drush_get_option('restore_kept_replaced', FALSE)) {
+    drush_log(dt('Kept the safety copy @path: it holds the site as it was before the Restore.', array('@path' => $package)), 'warning');
+    return;
+  }
+  provision_file()->unlink($package)
+    ->succeed($removed)
+    ->fail($failed);
+}
+
+/**
+ * Take a site out of the maintenance a failed Restore put it in.
+ *
+ * The pre hook disables the site in memory; its rollback runs before the
+ * http one, which renders the vhost from that state. The main hook's failure
+ * branches enable it again themselves, but a failure before them (the safety
+ * copy) left the site on the disabled vhost. A kept restored copy is served
+ * from the vhost its Verify wrote, which the http rollback leaves alone.
+ *
+ * @param string $settings_writer
+ *   The settings writer of a CMS whose settings file carries the maintenance
+ *   state, or '' for one whose vhost alone does.
+ */
+function _provision_restore_reenable_site($settings_writer = '') {
+  if (d()->site_enabled || drush_get_option('restore_kept_replaced', FALSE)) {
+    return;
+  }
+  d()->site_enabled = TRUE;
+  if ($settings_writer !== '' && function_exists($settings_writer)) {
+    call_user_func($settings_writer);
+  }
+}
+
+/**
+ * Read a kept restored copy's settings back into the task before it ends.
+ *
+ * The db post hook reads the site's drushrc.php back once the old database
+ * is dropped. A Restore whose Verify failed after its deploy came through
+ * never runs it, so the task's result still named the database the site ran
+ * on before, and the panel recorded that. Never before the post phase: its
+ * drop takes the database this context names. The old database is named
+ * when it is still there.
+ */
+function _provision_restore_kept_reload() {
+  if (!drush_get_option('restore_kept_replaced', FALSE) || !is_file(d()->site_path . '/drushrc.php')) {
+    return;
+  }
+  $old_db = (string) drush_get_option('db_name', '', 'site');
+  provision_reload_config('site', d()->site_path . '/drushrc.php');
+  if ($old_db !== '' && $old_db !== (string) drush_get_option('db_name', '', 'site')
+    && d()->service('db')->database_exists($old_db)) {
+    drush_log(dt('The database @db the site ran on before the Restore is left in place.', array('@db' => $old_db)), 'warning');
+  }
+}
+
+/**
+ * Finish what an extension retires in its own migrate post hook.
+ *
+ * A roll-forward completes provision's own retirement only, and a post phase
+ * that stopped early never reached the post hooks sorting after the failing
+ * one. The HTTP basic authentication extension removes a renamed site's
+ * old-name password file in its post hook: this does it for a rename through
+ * the extension's own helper, which keeps a file a site vhost still serves
+ * and removes nothing that is already gone.
+ *
+ * @param string|null $new_name
+ *   The migrate's new name, NULL for a same-name move.
+ */
+function _provision_migrate_retire_extras($new_name) {
+  if (!is_null($new_name) && ($new_name != d()->name) && d($new_name)->uri != d()->uri
+    && function_exists('_http_basic_auth_retire_file')) {
+    _http_basic_auth_retire_file(d());
+  }
+}
+
+/**
+ * Whether a failed Migrate's backend result leaves the site on its target.
+ *
+ * For the caller of a provision-migrate that failed: TRUE when its rollback
+ * finished it forward (migrate_kept_on_target names $target), and when the
+ * process died (DRUSH_NOT_COMPLETED: a PHP fatal runs no rollback, but the
+ * result still carries every option set so far) after a completed deploy,
+ * once a post hook had begun to retire the source: the site's alias and
+ * vhost already name the target then, and its record must follow them
+ * there. A process that failed normally and reports no kept flag rolled the
+ * site back itself; one that left no result proves nothing.
+ *
+ * @param array|false $result
+ *   The provision-migrate backend result.
+ * @param string $target
+ *   The target platform's context name.
+ *
+ * @return bool
+ *   The site stays on $target.
+ */
+function provision_migrate_result_kept_on_target($result, $target) {
+  if (!is_array($result) || !isset($result['context']) || !is_array($result['context'])) {
+    return FALSE;
+  }
+  $context = $result['context'];
+  if (!empty($context['migrate_kept_on_target'])) {
+    return $context['migrate_kept_on_target'] === $target;
+  }
+  return !empty($context['migrate_source_retiring']) && !empty($context['migrate_target_deployed'])
+    && isset($result['error_log']['DRUSH_NOT_COMPLETED']);
 }
 
 /**
@@ -4605,9 +4843,13 @@ function provision_target_copy_deployed($option, $deploy_result) {
  * deploy reported it, the copy's settings name it, it is not the source
  * site's, no other site directory on the target platform names it, and it is
  * not a system database; anything short of that names it in a warning and
- * leaves it. The copy's alias records in the target's sites.php stay: they
- * map to a directory that is gone, which Drupal ignores, and the next deploy
- * of that uri rewrites them.
+ * leaves it. The copy's records in the target's sites.php stay: a clone or
+ * rename deploys its new name with no host aliases (a Backdrop one leaves
+ * only its self-map), and a same-name move leaves the source's own records;
+ * they map to a directory that is gone, which Drupal and Backdrop ignore, and
+ * a deploy, install, verify or delete of that uri on that platform rewrites
+ * them. Removing them from here would render the store with the source as
+ * d()'s root.
  *
  * @param string $option
  *   The option provision_target_copy_probe() recorded under.

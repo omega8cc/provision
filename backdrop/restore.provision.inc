@@ -15,6 +15,12 @@ function drush_provision_backdrop_provision_restore_validate($restore_file = nul
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // The http layer builds the site's vhost data once per process, from the
+  // 'site' context as it stands then (its pre hook runs before this layer's).
+  // Every vhost this process renders -- the failure branch, the rollback --
+  // must carry the site's database settings, which Backdrop's settings.php
+  // reads from the vhost, so they are loaded here, before any pre hook.
+  _provision_backdrop_ensure_db_creds_loaded();
   // Backup mode ctrl file cleanup. The safety copy force-defines its own mode
   // and never reads the ctrl file, so without this a dead backup task's
   // leftover would survive the whole restore - adopted by the provision-deploy
@@ -95,9 +101,9 @@ function drush_provision_backdrop_pre_provision_restore_rollback($restore_file) 
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  $success =  provision_file()->unlink(drush_get_option('backup_file'))
-    ->succeed('Removed unused migration site package')
-    ->fail('Could not remove unused migration site package');
+  _provision_restore_reenable_site();
+  _provision_restore_kept_reload();
+  _provision_restore_drop_safety_copy('Removed unused migration site package', 'Could not remove unused migration site package');
   // Belt for the flag cleanup above: rollback of the completed pre phase runs
   // when a later phase fails before the command-level cleanup is reached.
   $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
@@ -146,6 +152,9 @@ function drush_provision_backdrop_provision_restore($restore_file) {
   $deploy_result = provision_backend_invoke(d()->name, 'provision-deploy', array(drush_get_option('restore_file')), $deploy_options);
   provision_target_copy_deployed('restore_target_copy', $deploy_result);
   if (!drush_get_error()) {
+    // The deploy let the original go: the restored copy is the site, and a
+    // later failure keeps it (_provision_restore_keep_replaced()).
+    drush_set_option('restore_kept_replaced', TRUE);
     provision_backend_invoke(d()->name, 'provision-verify');
 
     // Native files symlinking after restore: a files-carrying archive is
@@ -158,6 +167,12 @@ function drush_provision_backdrop_provision_restore($restore_file) {
     _provision_drupal_native_symlink_after_restore(d()->uri);
 
     drush_set_option('installed', false);
+  }
+  elseif (provision_deploy_replaced_original($deploy_result)) {
+    // The deploy had let the original go before a later step of it failed:
+    // the restored copy is the site and stays, finished as above.
+    _provision_restore_keep_replaced();
+    _provision_drupal_native_symlink_after_restore(d()->uri);
   }
   else {
     // The pre-hook took the site into the maintenance (disabled) vhost. A
