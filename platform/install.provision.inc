@@ -565,12 +565,12 @@ function drush_provision_drupal_provision_install() {
         }
 
         // Store the usage data choice itself too. DRUPAL_CMS_TELEMETRY above
-        // reaches only a codebase whose drupal_cms_helper reads it while a
-        // site template is applied, and from helper 2.2.5 a site with no
-        // stored choice sends: a site installed on an older Drupal CMS
-        // platform, or from a template without the helper, would start sending
-        // once a later platform brings the helper in. The key is inert on a
-        // site without it. Non-fatal: the install stands either way.
+        // is read only by drupal_cms_helper 2.2.2 and newer, and only while a
+        // site template recipe is applied, and from helper 2.2.5 a site with
+        // no stored choice sends. A site installed on a Drupal CMS platform
+        // older than 2.2.2, or with no site template, would start sending once
+        // it runs helper 2.2.5 or newer. The key is inert on a site without
+        // the helper. Non-fatal: the install stands either way.
         if ($success) {
           $tlm_command = array(
             $drushPath,
