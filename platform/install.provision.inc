@@ -449,7 +449,17 @@ function drush_provision_drupal_provision_install() {
         $cmd_string = _provision_site_local_drush_cmd(array_slice($command, 1), $php_opts);
         $output = array();
         $rc = 0;
+        // Drupal CMS (drupal_cms_helper 2.2.5 and newer) sends anonymous usage
+        // data to its vendor from cron unless the site opts out. Every site
+        // BOA installs starts opted out, as Backdrop's telemetry is switched
+        // off in its settings: the helper reads this variable while the
+        // installer applies the site template, and nothing else reads it. The
+        // child inherits it through exec(); the previous value comes back after.
+        $cms_telemetry = getenv('DRUPAL_CMS_TELEMETRY');
+        putenv('DRUPAL_CMS_TELEMETRY=0');
+        drush_log(dt('D11/INSTALL/TELEMETRY site-install runs with DRUPAL_CMS_TELEMETRY=0 (a Drupal CMS site starts with its usage data off)'), 'info');
         exec('cd ' . escapeshellarg($appRoot) . ' && ' . $cmd_string . ' 2>&1', $output, $rc);
+        putenv(($cms_telemetry === FALSE) ? 'DRUPAL_CMS_TELEMETRY' : 'DRUPAL_CMS_TELEMETRY=' . $cms_telemetry);
         $result = ($rc === 0);
         // Drive the per-line log status from the exit status (mirrors the
         // deploy updatedb fix: $success was read below but never set, so every

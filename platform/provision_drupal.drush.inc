@@ -1686,15 +1686,51 @@ function _provision_drush10_alias_convert($aegir_root) {
   }
   drush_log(dt('DRUSH/TEN/ALIASES/UPDATE site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
   $result = drush_shell_cd_and_exec($aegir_root, $alias_cmd);
-  $output = implode('', drush_shell_exec_output());
+  $lines = drush_shell_exec_output();
+  $output = implode('', $lines);
+  $shown = _provision_drush10_alias_convert_output($lines);
   if (!$result || preg_match('/\[(preflight|error)\]/i', $output)) {
-    // Named as the server's tool: its raw output (a Composer platform error
-    // above all) otherwise reads as a fault in the site's own codebase.
-    drush_log("DRUSH/TEN/ALIASES/FAIL BOA's Drush 10 (" . (($drush10 !== '') ? $drush10 : 'drush10') . ") did not convert the Drush 9+ aliases: " . $output, 'warning');
+    // Named as the server's tool: its output (a Composer platform error above
+    // all) otherwise reads as a fault in the site's own codebase.
+    drush_log("DRUSH/TEN/ALIASES/FAIL BOA's Drush 10 (" . (($drush10 !== '') ? $drush10 : 'drush10') . ") did not convert the Drush 9+ aliases: " . (($shown !== '') ? $shown : 'no error text'), 'warning');
     return FALSE;
   }
-  drush_log("DRUSH/TEN/ALIASES/LOG " . $output);
+  drush_log("DRUSH/TEN/ALIASES/LOG " . (($shown !== '') ? $shown : 'no alias file written'));
   return TRUE;
+}
+
+/**
+ * The alias converter's output as a task log may show it.
+ *
+ * site:alias-convert ends by printing every alias it found and wrote as yml:
+ * the database admin DSN of each server alias, each site's HTTP basic auth
+ * password, the account's whole site list. The panel shows a task's log to
+ * the site owner, so that listing (legacy_files: onward) is dropped. What
+ * comes before it is the converter's own log lines, or the error that
+ * stopped it; a DSN password or a password value left there is masked.
+ *
+ * PHP 5.6-safe.
+ *
+ * @param array $lines
+ *   The converter's output, drush_shell_exec_output().
+ *
+ * @return string
+ *   The kept lines, trimmed and joined by a space; '' when none.
+ */
+function _provision_drush10_alias_convert_output($lines) {
+  $kept = array();
+  foreach ((array) $lines as $line) {
+    if (preg_match('/^(legacy_files|converted_files):/', $line)) {
+      break;
+    }
+    $line = trim($line);
+    if ($line !== '') {
+      $kept[] = $line;
+    }
+  }
+  $text = implode(' ', $kept);
+  $text = preg_replace('#(\w+://[^:@/\s\'"]*:)[^\s\'"]*@#', '$1***@', $text);
+  return preg_replace('/(\w*pass(?:wd|word)?[\'"]?\s*(?:=>|:|=)\s*)(?:\'[^\']*\'|"[^"]*"|[^\s,;]+)/i', '$1***', $text);
 }
 
 /**
