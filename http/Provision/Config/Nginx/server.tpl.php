@@ -301,9 +301,26 @@ if ($nginx_has_gzip) {
                          # inflates across every status, static files included.
                          # Quoted because it also takes the forms "0.017, 20.400"
                          # and "0.017 : 20.400" when a request hits more than one
-                         # upstream. Trailing field, so log parsers that stop
-                         # earlier are unaffected.
-                         'ut="$upstream_response_time"';
+                         # upstream.
+                         'ut="$upstream_response_time" '
+                         # cfray = the Cf-Ray request header, "-" without one: the
+                         # Ray ID a Cloudflare error page shows, so a report finds
+                         # its line. Any client can send one, so it identifies a
+                         # request and proves nothing.
+                         'cfray="$http_cf_ray" '
+                         # ups = $upstream_status, "-" when nginx answered without
+                         # an upstream. An upstream that failed without answering
+                         # (connect refused, closed early) reads 502 or 504 here
+                         # too, so ups alone cannot tell a relayed 502 from one
+                         # this nginx made.
+                         'ups="$upstream_status" '
+                         # uht = $upstream_header_time, "-" when no response header
+                         # came back: a 502 with uht="-" was made here, one with a
+                         # number is the upstream's own answer. ups and uht are
+                         # quoted for the same list forms as ut. Every field from
+                         # ut on is appended, never reordered, so log parsers that
+                         # stop earlier are unaffected.
+                         'uht="$upstream_header_time"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
