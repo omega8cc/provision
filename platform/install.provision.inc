@@ -452,9 +452,10 @@ function drush_provision_drupal_provision_install() {
         // Drupal CMS (drupal_cms_helper 2.2.5 and newer) sends anonymous usage
         // data to its vendor from cron unless the site opts out. Every site
         // BOA installs starts opted out, as Backdrop's telemetry is switched
-        // off in its settings: the helper reads this variable while the
-        // installer applies the site template, and nothing else reads it. The
-        // child inherits it through exec(); the previous value comes back after.
+        // off in its settings: the helper reads this variable once, while the
+        // installer applies the site template (helper 2.2.2 to 2.2.6) or when
+        // the helper module itself is installed (2.2.7 and newer). The child
+        // inherits it through exec(); the previous value comes back after.
         $cms_telemetry = getenv('DRUPAL_CMS_TELEMETRY');
         putenv('DRUPAL_CMS_TELEMETRY=0');
         drush_log(dt('D11/INSTALL/TELEMETRY site-install runs with DRUPAL_CMS_TELEMETRY=0 (a Drupal CMS site starts with its usage data off)'), 'info');
@@ -565,12 +566,13 @@ function drush_provision_drupal_provision_install() {
         }
 
         // Store the usage data choice itself too. DRUPAL_CMS_TELEMETRY above
-        // is read only by drupal_cms_helper 2.2.2 and newer, and only while a
-        // site template recipe is applied, and from helper 2.2.5 a site with
-        // no stored choice sends. A site installed on a Drupal CMS platform
-        // older than 2.2.2, or with no site template, would start sending once
-        // it runs helper 2.2.5 or newer. The key is inert on a site without
-        // the helper. Non-fatal: the install stands either way.
+        // reaches only drupal_cms_helper 2.2.2 and newer, and only an install
+        // that applies a site template (to 2.2.6) or installs the helper
+        // (from 2.2.7); from helper 2.2.5 a site with no stored choice sends.
+        // A site installed on a platform older than 2.2.2, or by an install
+        // the variable did not reach, would start sending once it runs helper
+        // 2.2.5 or newer. The key is inert on a site without the helper.
+        // Non-fatal: the install stands either way.
         if ($success) {
           $tlm_command = array(
             $drushPath,
