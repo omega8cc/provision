@@ -110,6 +110,7 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
     drush_set_option('txp_rename_stale_alias', TRUE);
+    drush_set_option('txp_rename_stale_extras', _provision_txp_stale_extras($new_uri));
     drush_log(dt('A stale !uri alias with no site directory is left over; this rename removes it before saving its own.',
       array('!uri' => $new_uri)), 'info');
   }
@@ -215,6 +216,7 @@ function drush_provision_txp_rename($new_name = NULL) {
         dt('Could not remove the stale !uri alias; the new context would inherit its settings.', array('!uri' => $new_uri)));
     }
     drush_log(dt('Removed the stale !uri alias.', array('!uri' => $new_uri)), 'ok');
+    _provision_txp_remove_stale_extras($new_uri, 'txp_rename_stale_extras', $new_path);
   }
   $options = d()->options;
   $options['uri'] = $new_uri;

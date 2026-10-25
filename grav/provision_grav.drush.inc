@@ -2716,6 +2716,7 @@ function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_p
       dt('A backend context already holds @uri; choose another name.', array('@uri' => $new_uri)));
   }
   drush_set_option('grav_stale_alias', TRUE);
+  drush_set_option('grav_stale_extras', _provision_grav_stale_extras($new_uri));
   drush_log(dt('A stale @uri alias with no site directory is left over; it is removed before the new context is saved.',
     array('@uri' => $new_uri)), 'info');
   return TRUE;
@@ -2735,9 +2736,11 @@ function _provision_grav_check_new_name_alias($new_uri, $error_code, $own_site_p
  * record as a context before it unlinks, and a stale record whose platform
  * or db server context is gone too dies there. Validate read the record from
  * the file and nothing in this process has loaded it, so no context or alias
- * cache holds it.
+ * cache holds it. The holder's own extra alias files go with it
+ * (_provision_grav_remove_stale_extras()); $made is the directory a rename
+ * moved the site into, which a holder on the same platform recorded.
  */
-function _provision_grav_remove_stale_alias($new_uri, $error_code) {
+function _provision_grav_remove_stale_alias($new_uri, $error_code, $made = '') {
   if (!drush_get_option('grav_stale_alias', FALSE)) {
     return TRUE;
   }
@@ -2749,7 +2752,195 @@ function _provision_grav_remove_stale_alias($new_uri, $error_code) {
       dt('Could not remove the stale @uri alias; the new context would inherit its settings.', array('@uri' => $new_uri)));
   }
   drush_log(dt('Removed the stale @uri alias.', array('@uri' => $new_uri)), 'ok');
+  _provision_grav_remove_stale_extras($new_uri, $made);
   return TRUE;
+}
+
+/**
+ * The record an alias file holds for $name, read from the file: exactly one
+ * record keyed $name in a plain file (never a link), else array(). The name
+ * must have an alias name's shape, so no path is ever built from content.
+ */
+function _provision_grav_alias_record($name) {
+  if (!is_string($name) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $name)) {
+    return array();
+  }
+  $file = drush_server_home() . '/.drush/' . $name . '.alias.drushrc.php';
+  if (!is_file($file) || is_link($file)) {
+    return array();
+  }
+  $aliases = _provision_grav_alias_file_records($file);
+  if (!is_array($aliases) || count($aliases) !== 1 || !isset($aliases[$name]) || !is_array($aliases[$name])) {
+    return array();
+  }
+  return $aliases[$name];
+}
+
+/**
+ * Every record an alias file holds, included in this function's own scope
+ * the way Drush loads one; FALSE when the file cannot be read.
+ */
+function _provision_grav_alias_file_records($file) {
+  $aliases = array();
+  if ((@include $file) === FALSE || !is_array($aliases)) {
+    return FALSE;
+  }
+  return $aliases;
+}
+
+/**
+ * The names a record lists as its extra Drush aliases, '@' stripped: a save
+ * keeps them as an array, a rename hands them over as a comma list.
+ */
+function _provision_grav_record_extras($record) {
+  $list = isset($record['drush_aliases']) ? $record['drush_aliases'] : array();
+  if (is_string($list)) {
+    $list = explode(',', $list);
+  }
+  $names = array();
+  foreach (is_array($list) ? $list : array() as $name) {
+    if (is_string($name) && ($name = ltrim(trim($name), '@')) !== '') {
+      $names[] = $name;
+    }
+  }
+  return array_values(array_unique($names));
+}
+
+/**
+ * The site directories a record names: its site_path, and its root's
+ * sites/<the uri it records>.
+ */
+function _provision_grav_record_site_dirs($record) {
+  $dirs = array();
+  if (isset($record['site_path']) && is_string($record['site_path']) && $record['site_path'] !== '') {
+    $dirs[] = $record['site_path'];
+  }
+  if (isset($record['root']) && is_string($record['root']) && $record['root'] !== ''
+    && isset($record['uri']) && is_string($record['uri']) && $record['uri'] !== '') {
+    $dirs[] = rtrim($record['root'], '/') . '/sites/' . $record['uri'];
+  }
+  return array_values(array_unique($dirs));
+}
+
+/**
+ * Whether every directory in $dirs is gone; never for an empty list. One
+ * that resolves to $made, the directory this command moved the site into,
+ * counts as gone: a holder on the site's own platform recorded it.
+ */
+function _provision_grav_dirs_gone($dirs, $made = '') {
+  if (empty($dirs)) {
+    return FALSE;
+  }
+  clearstatcache();
+  $made_real = ($made !== '') ? realpath($made) : FALSE;
+  foreach ($dirs as $dir) {
+    if (!file_exists($dir)) {
+      continue;
+    }
+    if ($made_real === FALSE || realpath($dir) !== $made_real) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * The stale holder's own extra alias files, read in validate before anything
+ * moves: name => the file's md5 and the directories its record names.
+ *
+ * An extra alias file is the holder's whole record saved under another name,
+ * so once the stale alias goes it would stay as a dead copy of the holder's
+ * settings, naming the new site's directory when the holder sat on the same
+ * platform. One qualifies only as a plain file holding exactly one site
+ * record of the stale record's uri, every directory it names gone, and no
+ * live site listing the name (one pass over the account's alias files; a
+ * file that cannot be read keeps every candidate). Anything else stays.
+ */
+function _provision_grav_stale_extras($new_uri) {
+  $stale = _provision_grav_alias_record($new_uri);
+  if (empty($stale) || !isset($stale['uri']) || !is_string($stale['uri']) || $stale['uri'] === '') {
+    return array();
+  }
+  $home = drush_server_home() . '/.drush/';
+  $found = array();
+  foreach (_provision_grav_record_extras($stale) as $name) {
+    if ($name === $new_uri || $name === $stale['uri']) {
+      continue;
+    }
+    $record = _provision_grav_alias_record($name);
+    if (!isset($record['context_type']) || $record['context_type'] !== 'site'
+      || !isset($record['uri']) || $record['uri'] !== $stale['uri']) {
+      continue;
+    }
+    $dirs = _provision_grav_record_site_dirs($record);
+    if (_provision_grav_dirs_gone($dirs)) {
+      $found[$name] = array('md5' => md5_file($home . $name . '.alias.drushrc.php'), 'dirs' => $dirs);
+    }
+  }
+  if (empty($found)) {
+    return array();
+  }
+  $files = glob($home . '*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    $base = basename($file, '.alias.drushrc.php');
+    if ($base === $new_uri || isset($found[$base])) {
+      continue;
+    }
+    $text = @file_get_contents($file);
+    if ($text === FALSE) {
+      return array();
+    }
+    foreach (array_keys($found) as $name) {
+      if (strpos($text, "'" . $name . "'") === FALSE) {
+        continue;
+      }
+      $records = _provision_grav_alias_file_records($file);
+      if (!is_array($records)) {
+        unset($found[$name]);
+        continue;
+      }
+      foreach ($records as $record) {
+        if (is_array($record) && in_array($name, _provision_grav_record_extras($record), TRUE)
+          && !_provision_grav_dirs_gone(_provision_grav_record_site_dirs($record))) {
+          unset($found[$name]);
+          break;
+        }
+      }
+    }
+  }
+  return $found;
+}
+
+/**
+ * Remove the stale holder's extra alias files validate collected, each only
+ * while its file is unchanged and every directory it names is still gone (or
+ * is $made). Never fatal: no context this command saves is built on them.
+ */
+function _provision_grav_remove_stale_extras($new_uri, $made = '') {
+  $extras = drush_get_option('grav_stale_extras', array());
+  $home = drush_server_home() . '/.drush/';
+  foreach (is_array($extras) ? $extras : array() as $name => $facts) {
+    $extra_file = $home . $name . '.alias.drushrc.php';
+    clearstatcache();
+    if (!is_file($extra_file) || is_link($extra_file)) {
+      continue;
+    }
+    if (!is_array($facts) || !isset($facts['md5'], $facts['dirs']) || md5_file($extra_file) !== $facts['md5']
+      || !_provision_grav_dirs_gone($facts['dirs'], $made)) {
+      drush_log(dt('Kept @name, an extra alias of the stale @uri alias: it changed since validate.',
+        array('@name' => $name, '@uri' => $new_uri)), 'notice');
+      continue;
+    }
+    @unlink($extra_file);
+    clearstatcache();
+    if (file_exists($extra_file)) {
+      drush_log(dt('Could not remove @name, an extra alias of the stale @uri alias.',
+        array('@name' => $name, '@uri' => $new_uri)), 'warning');
+      continue;
+    }
+    drush_log(dt('Removed @name, an extra alias of the stale @uri alias.',
+      array('@name' => $name, '@uri' => $new_uri)), 'ok');
+  }
 }
 
 /**

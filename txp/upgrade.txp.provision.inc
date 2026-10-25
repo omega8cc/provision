@@ -138,6 +138,7 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
         dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
     }
     drush_set_option('txp_upgrade_stale_alias', TRUE);
+    drush_set_option('txp_upgrade_stale_extras', _provision_txp_stale_extras($new_uri));
     drush_log(dt('A stale !uri alias with no site directory is left over; the upgrade removes it before saving the copy\'s own.',
       array('!uri' => $new_uri)), 'info');
   }
@@ -370,6 +371,7 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
         dt('Could not remove the stale !uri alias; the copy\'s context would inherit its settings.', array('!uri' => $new_uri)));
     }
     drush_log(dt('Removed the stale !uri alias.', array('!uri' => $new_uri)), 'ok');
+    _provision_txp_remove_stale_extras($new_uri, 'txp_upgrade_stale_extras');
   }
 
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
