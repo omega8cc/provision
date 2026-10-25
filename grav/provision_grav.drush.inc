@@ -2045,6 +2045,10 @@ function _provision_grav_create_admin_account($username, $email) {
     '    super: true',
     '  site:',
     '    login: true',
+    // The cutoff the login and API plugins check sessions and API tokens
+    // against (Login 3.11, API 1.1): a reset signs out every one issued
+    // before it, as the plugin's own password change does.
+    'api_tokens_valid_after: ' . time(),
     '',
   );
   $yaml = $accounts . '/' . $username . '.yaml';
