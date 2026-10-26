@@ -162,7 +162,7 @@ function drush_provision_grav_rename($new_name = NULL) {
   // Drush aliases do, because they name the SITE and the new context rewrites
   // their alias files at the new uri. A stale alias of the new name goes
   // first: the save would build the new context on top of it.
-  if (!_provision_grav_remove_stale_alias($new_uri, 'PROVISION_GRAV_RENAME_FAILED')) {
+  if (!_provision_grav_remove_stale_alias($new_uri, 'PROVISION_GRAV_RENAME_FAILED', $new_path)) {
     return FALSE;
   }
   $options = d()->options;

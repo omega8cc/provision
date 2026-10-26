@@ -113,10 +113,17 @@ function drush_provision_grav_cutover_validate($target_domain = NULL) {
     // recovery. Anything with a real site directory keeps the hard refusal —
     // which is also what a rename stuck at the new path looks like.
     if (provision_file()->exists($aliases_dir . '/' . $target_domain . '.alias.drushrc.php')->status()) {
-      $leftover = d('@' . $target_domain);
-      $leftover_dir = (is_object($leftover) && isset($leftover->site_path) && is_string($leftover->site_path))
-        ? $leftover->site_path : '';
-      if ($leftover_dir === '' || provision_file()->exists($leftover_dir)->status()) {
+      // Read from the file, never through d(): a leftover whose platform is
+      // gone too dies in d() (its services are loaded from that platform),
+      // and this process would keep whatever d() loaded.
+      $leftover_dirs = _provision_grav_alias_site_dirs($target_domain);
+      $occupied = empty($leftover_dirs);
+      foreach ($leftover_dirs as $leftover_dir) {
+        if (provision_file()->exists($leftover_dir)->status()) {
+          $occupied = TRUE;
+        }
+      }
+      if ($occupied) {
         return drush_set_error('PROVISION_GRAV_CUTOVER_TAKEN',
           dt('A backend context already holds !domain but the frontend passed no cutover source; refusing to rename onto an occupied name.',
           array('!domain' => $target_domain)));
