@@ -78,6 +78,33 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
       array('!source' => $source_version, '!target' => $target_version)));
   }
 
+  // An alias of the new name already on disk: provision-save builds the
+  // copy's context on top of the record it finds, and the resets the command
+  // makes never replace what that record holds (in the GET-mode subprocess
+  // an empty array is dropped and a 0 is filtered out), so a retired
+  // holder's aliases, redirection, encryption and key, extra Drush aliases
+  // and cron key would become the copy's, and a live holder's context would
+  // be re-pointed at the copy. A live or empty record is refused; one whose
+  // recorded site directories are all gone is handed to the command, which
+  // removes it, and the holder's own extra alias files, before its save.
+  // Read from the file, never through d().
+  $new_uri = strtolower(ltrim($new_name, '@'));
+  if (provision_file()->exists(drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php')->status()) {
+    $leftover_dirs = _provision_txp_alias_site_dirs($new_uri);
+    $occupied = empty($leftover_dirs);
+    foreach ($leftover_dirs as $leftover_dir) {
+      $occupied = $occupied || provision_file()->exists($leftover_dir)->status();
+    }
+    if ($occupied) {
+      return drush_set_error('PROVISION_TXP_CLONE_TARGET_EXISTS',
+        dt('A backend context already holds !uri.', array('!uri' => $new_uri)));
+    }
+    drush_set_option('txp_clone_stale_alias', TRUE);
+    drush_set_option('txp_clone_stale_extras', _provision_txp_stale_extras($new_uri));
+    drush_log(dt('A stale !uri alias with no site directory is left over; the clone removes it before saving its own.',
+      array('!uri' => $new_uri)), 'info');
+  }
+
   // Clear a stale frontend backup-mode ctrl file before the internal safety
   // backup runs: inheriting a dead task's mode would build the clone source
   // archive in e.g. "database only" mode and deploy a files-less copy that
@@ -210,6 +237,22 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   }
   if ($db_server = drush_get_option('new_db_server', FALSE)) {
     $options['db_server'] = $db_server;
+  }
+
+  // The stale alias validate let through goes first, unlinked here, not by
+  // provision-save --delete: that loads the record as a context first, and
+  // a stale record whose platform is gone too dies there.
+  if (drush_get_option('txp_clone_stale_alias', FALSE)) {
+    $new_uri = strtolower(ltrim($new_name, '@'));
+    $stale_alias = drush_server_home() . '/.drush/' . $new_uri . '.alias.drushrc.php';
+    @unlink($stale_alias);
+    clearstatcache();
+    if (file_exists($stale_alias)) {
+      return drush_set_error('PROVISION_TXP_CLONE_TARGET_EXISTS',
+        dt('Could not remove the stale !uri alias; the copy\'s context would inherit its settings.', array('!uri' => $new_uri)));
+    }
+    drush_log(dt('Removed the stale !uri alias.', array('!uri' => $new_uri)), 'ok');
+    _provision_txp_remove_stale_extras($new_uri, 'txp_clone_stale_extras');
   }
 
   // A context or a site vhost of that name that exists before this clone

@@ -173,6 +173,15 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # duration of every backup).
   location ~* ^/(drushrc\.php|settings\.php|local\.settings\.php)$ { return 404; }
   location ~* \.sql$ { return 404; }
+  # SQLite databases and their write-ahead and journal siblings, wherever a
+  # site keeps them (a KahunaCart store, its search index, the API audit log;
+  # user/data is denied below, but a store's path is the owner's setting).
+  # Only a file that exists is refused: an API route that merely ends in .db
+  # (an Admin2 media delete) goes to the front controller, as location / does.
+  location ~* \.(?:sqlite3?|db)(?:-(?:wal|shm|journal))?$ {
+    if (-f $request_filename) { return 404; }
+    try_files $uri /index.php?$args;
+  }
 
   # Root metadata (dependency inventory + docs -- /composer.lock served 271KB
   # under upstream's own config; caught live in a spike).
