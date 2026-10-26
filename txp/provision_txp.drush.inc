@@ -747,7 +747,8 @@ function _provision_txp_stale_extras($new_uri) {
       return array();
     }
     foreach (array_keys($found) as $name) {
-      if (strpos($text, "'" . $name . "'") === FALSE) {
+      // The bare name: a record may list it as '@name' or ' name'.
+      if (strpos($text, $name) === FALSE) {
         continue;
       }
       $records = _provision_txp_alias_file_records($file);

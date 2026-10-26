@@ -2891,7 +2891,8 @@ function _provision_grav_stale_extras($new_uri) {
       return array();
     }
     foreach (array_keys($found) as $name) {
-      if (strpos($text, "'" . $name . "'") === FALSE) {
+      // The bare name: a record may list it as '@name' or ' name'.
+      if (strpos($text, $name) === FALSE) {
         continue;
       }
       $records = _provision_grav_alias_file_records($file);
