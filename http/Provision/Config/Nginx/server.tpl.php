@@ -901,7 +901,16 @@ map $http_user_agent $is_bot {
 ### past both maps with ~16,000 fulltext searches from ~14,700 addresses over
 ### two days on one hosted site.  The carve-outs are the majors a real machine
 ### can be pinned at for life, the last release for an old macOS, Windows or
-### Android, so they are the only stale majors a genuine browser can present.
+### Android.
+###
+### Only Chrome's own UA shape is judged: Chrome (or HeadlessChrome) right
+### after "(KHTML, like Gecko)", then Safari/537.36 and nothing more but an
+### Edg/ token.  Browsers whose Chrome token follows their own release train
+### or their device carry something in between or after it (Samsung Internet,
+### Silk, Huawei, MIUI, Opera, Yandex, Android webviews' Version/4.0), and
+### Chromebooks and TVs stay on the last major their device received, so the
+### first line keeps those out: a stale token there is a real visitor.  Every
+### observed search bot sent the plain shape.
 ###
 ### Maintenance: move the upper bound by release DATE, never by counting
 ### versions (a major every ~4 weeks until Chrome/153 on 2026-09-08, every ~2
@@ -915,7 +924,8 @@ map $http_user_agent $is_bot {
 ###
 map $http_user_agent $is_stale_chrome {
   default  0;
-  ~*Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.  1;   # Chrome/100–141 minus the pins
+  ~*\bCrOS\b|smart-?tv|web0s|tizen|\btv\b  0;   # versions follow the device
+  "~*\(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ (?:Mobile )?Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Chrome/100–141 minus the pins
 }
 
 ###
@@ -937,11 +947,11 @@ map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
 ### Chrome/132 since).  Staleness is what makes it safe.  Applied directly in
 ### the /search location blocks so no dependency on $has_fulltext_search; the
 ### search location scope limits false-positive risk.  Keep the pattern in step
-### with $is_stale_chrome above, including its carve-outs.
+### with $is_stale_chrome above, including its carve-outs and its UA shape.
 ###
 map $http_user_agent $is_catalina_stale_chrome {
   default  0;
-  "~*Mac OS X 10_15_7.*Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\."  1;   # Mac Chrome/100–141 minus the pins
+  "~*Mac OS X 10_15_7\) AppleWebKit/537\.36 \(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Mac Chrome/100–141 minus the pins
 }
 
 ###
