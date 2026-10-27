@@ -40,6 +40,16 @@ function drush_provision_backdrop_provision_install_validate() {
       )));
   }
 
+  // A fresh install, or a forced one, never inherits a files store still at
+  // its name: the store is set aside first, and the install is refused
+  // while it cannot be, before anything is dropped or created.
+  if (!_provision_drupal_site_exists() || drush_get_option('force-reinstall', FALSE)) {
+    $store_state = _provision_drupal_install_store_check(d()->uri);
+    if ($store_state == 'SHARED' || $store_state == 'KEPT' || $store_state == 'LEFT') {
+      return drush_set_error('PROVISION_SITE_STORE_AT_NAME', _provision_drupal_install_store_message(d()->uri, $store_state));
+    }
+  }
+
   if (_provision_drupal_site_exists()) {
 
     // If "force-reinstall" option is set, delete the database and files.

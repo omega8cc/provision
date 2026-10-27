@@ -1096,6 +1096,75 @@ function _provision_drupal_native_symlink($url, $force_unshare = FALSE, $account
 }
 
 /**
+ * Clear a site's name of a per-account static store before a fresh install.
+ *
+ * A new site at a name whose store is still in place (left for a share, or
+ * kept by the operator's report-only switch) would otherwise be linked to
+ * that store: a fresh install holds only regenerated residue, which the
+ * files-storage tool reads as the recovery case a restore needs, and it
+ * re-links. The install is the one caller that never owns the store at its
+ * name, so the store is set aside first through the same move a Delete
+ * makes, and the install is refused while it cannot be: a share names it,
+ * a site still reads it, the operator keeps stores in place, or the move
+ * failed. Restore keeps the re-link, which exists for it.
+ *
+ * Returns NONE (no store, or a site outside the store's scope), ARCHIVED,
+ * or the reason the store stays: SHARED, KEPT or LEFT.
+ */
+function _provision_drupal_install_store_check($url) {
+  if (empty($url) || $url == 'all') {
+    return 'NONE';
+  }
+  $aegir_root = d('@server_master')->aegir_root;
+  if (empty($aegir_root) || strpos($aegir_root, '/data/disk/') !== 0) {
+    return 'NONE';
+  }
+  if (!is_file('/usr/local/bin/fix-drupal-site-symlinks.sh')) {
+    return 'NONE';
+  }
+  if (!preg_match('/^[a-z0-9][a-z0-9._-]*$/i', $url) || strpos($url, '..') !== FALSE) {
+    return 'NONE';
+  }
+  $store = $aegir_root . '/static/files/' . $url;
+  clearstatcache();
+  if (!is_dir($store) && !is_link($store)) {
+    return 'NONE';
+  }
+  // The share file for this exact name, never a pattern: a share declared
+  // for a subdomain site does not hold this name.
+  if (is_file($aegir_root . '/static/control/share.files.' . $url . '.info')) {
+    return 'SHARED';
+  }
+  if (is_file('/data/conf/disable_orphan_store_archiving.cnf')) {
+    return 'KEPT';
+  }
+  _provision_drupal_archive_static_store($url, 'INSTALL');
+  clearstatcache();
+  if (!is_dir($store) && !is_link($store)) {
+    return 'ARCHIVED';
+  }
+  return 'LEFT';
+}
+
+/**
+ * The install refusal for a store still at the new site's name.
+ *
+ * Built from what the account can see (the share file, the host's switch);
+ * a store the wrapper left says only that a site still reads it or the
+ * move failed, never what the wrapper printed.
+ */
+function _provision_drupal_install_store_message($url, $state) {
+  $args = array('@url' => $url, '@store' => '~/static/files/' . $url);
+  if ($state == 'SHARED') {
+    return dt('A files store is still at @store and a share file names it (static/control/share.files.@url.info), so another site reads it and this new site cannot take the name. Remove the share file if no site uses the store any more, or ask your host to archive or move it, then run the task again.', $args);
+  }
+  if ($state == 'KEPT') {
+    return dt('A files store is still at @store and your host keeps stores in place, so this new site cannot take the name until the store is moved. Ask your host to archive or move it, then run the task again.', $args);
+  }
+  return dt('A files store is still at @store and could not be set aside: a site still reads it, or the move failed, and your host can see why. Ask your host to archive or move it, then run the task again.', $args);
+}
+
+/**
  * Set a site's per-account static store aside at delete time.
  *
  * The Delete task removes the site directory and its two links, never the
