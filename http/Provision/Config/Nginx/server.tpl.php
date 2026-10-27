@@ -625,12 +625,18 @@ map $remote_addr $boa_per_ip_limit_key {
 ### Pinterest, Sogou and TikTok (legitimate preview/search crawlers) and the
 ### generic Go-http-client library token are deliberately NOT listed: a hard
 ### 444 on them blocks real user-facing services, not scrapers.
+### The last line holds the crawlers of brand, media and social-listening
+### tools (Awario's three, SentiOne's SentiBot, trendiction's) and QlyzeBot,
+### whose purpose is not published: like the SEO crawlers above they collect
+### for a third party's product, not for a site's visitors or for search, and
+### each token matches only its vendor's own agents in the hosted logs.
 ###
 map $http_user_agent $is_crawler {
   default  '';
   ~*Ahrefs|Aspiegel|Automatic|Barkrowler|BrokenLinkCheck|BuzzTrack|DBot  is_crawler;
   ~*GSLFbot|HiScan|HTMLParser|HTTrack|IbouBot|ImagesiftBot|Mireo|MJ12|Morfeus|Nutch|Offline|PChomebot|SWEB  is_crawler;
   ~*PECL|PetalBot|Riddler|Scrap|Semrush|SEOkicks|serpstatbot|Sistrix|SiteBot|SleepBot|Turnitin  is_crawler;
+  ~*Awario|Qlyze|SentiBot|trendiction  is_crawler;
 }
 
 ###
