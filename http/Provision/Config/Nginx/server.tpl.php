@@ -894,14 +894,14 @@ map $http_user_agent $is_bot {
 ### spot — they avoid the obviously-bogus Opera/8 or MSIE/6 that trigger
 ### $is_bot, but their UA is still detectably stale.
 ###
-### Regex covers Chrome/100–141 minus 103, 106, 109, 116, 119, 128 and 138:
-### 1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01]).  Chrome/141 reached stable
-### on 2025-09-30, so the whole range is more than 12 months old.  The bound
-### used to stop at 131, and an observed botnet presenting Chrome/132 walked
-### past both maps with ~16,000 fulltext searches from ~14,700 addresses over
-### two days on one hosted site.  The carve-outs are the majors a real machine
-### can be pinned at for life, the last release for an old macOS, Windows or
-### Android.
+### The stale majors are worked out when this file is rendered: every major
+### from 100 on whose stable release in the table below is more than 365 days
+### before the render date, minus the pinned majors.  Each server Verify (every
+### BOA upgrade pass) moves the bound forward, and between renders it can only
+### fall behind, which refuses less, never more.  A hand-moved bound once stopped
+### at 131 while an observed botnet presenting Chrome/132 walked past both maps
+### with ~16,000 fulltext searches from ~14,700 addresses over two days on one
+### hosted site.
 ###
 ### Only Chrome's own UA shape is judged: Chrome (or HeadlessChrome) right
 ### after "(KHTML, like Gecko)", then Safari/537.36 and nothing more but an
@@ -912,20 +912,68 @@ map $http_user_agent $is_bot {
 ### first line keeps those out: a stale token there is a real visitor.  Every
 ### observed search bot sent the plain shape.
 ###
-### Maintenance: move the upper bound by release DATE, never by counting
-### versions (a major every ~4 weeks until Chrome/153 on 2026-09-08, every ~2
-### weeks since).  Widen to the newest major more than 12 months old, carve out
-### the last major any old system is pinned at, and keep the Mac map below in
-### step.  Since Chrome/107 every Mac reports 10_15_7 and every Windows 10.0,
-### so the platform token cannot tell a pinned machine: the carve-outs are the
-### pinned majors themselves (103 macOS 10.11/10.12, 106 Android 6, 109
+### Maintenance: add each new major to the table with the day it reached
+### stable, from Chrome's own release schedule (the day it shipped where that
+### was later than planned), never a date counted from versions (a major every
+### ~4 weeks until Chrome/153 on 2026-09-08, every ~2 weeks since).  A major
+### newer than the last row is never stale, so a table that falls behind
+### refuses less, never more.  BOA's nginx_fleet.sh carries the same table for
+### its stale-browser refusal: keep the two equal.  Since Chrome/107 every Mac
+### reports 10_15_7 and every Windows 10.0, so the platform token cannot tell a
+### pinned machine: the carve-outs are the pinned majors themselves, the last
+### release an old system can run (103 macOS 10.11/10.12, 106 Android 6, 109
 ### Windows 7/8.1, 116 macOS 10.13/10.14, 119 Android 7, 128 macOS 10.15, 138
-### macOS 11 and Android 8/9; 150, macOS 12, once it is a year old).
+### macOS 11 and Android 8/9, 150 macOS 12).
 ###
+<?php
+$stale_chrome_stable = '
+  100:2022-03-29 101:2022-04-26 102:2022-05-24 103:2022-06-21 104:2022-08-02
+  105:2022-08-30 106:2022-09-27 107:2022-10-25 108:2022-11-29 109:2023-01-10
+  110:2023-02-07 111:2023-03-07 112:2023-04-04 113:2023-05-02 114:2023-05-30
+  115:2023-07-18 116:2023-08-15 117:2023-09-12 118:2023-10-10 119:2023-10-31
+  120:2023-12-05 121:2024-01-23 122:2024-02-20 123:2024-03-19 124:2024-04-16
+  125:2024-05-15 126:2024-06-11 127:2024-07-23 128:2024-08-21 129:2024-09-17
+  130:2024-10-15 131:2024-11-12 132:2025-01-14 133:2025-02-04 134:2025-03-04
+  135:2025-04-01 136:2025-04-29 137:2025-05-27 138:2025-06-24 139:2025-08-05
+  140:2025-09-02 141:2025-09-30 142:2025-10-28 143:2025-12-02 144:2026-01-13
+  145:2026-02-10 146:2026-03-10 147:2026-04-07 148:2026-05-05 149:2026-06-02
+  150:2026-06-30 151:2026-07-29 152:2026-08-25 153:2026-09-08 154:2026-09-22
+  155:2026-10-06 156:2026-10-20
+';
+$stale_chrome_pins = array(103, 106, 109, 116, 119, 128, 138, 150);
+// Whole days since 1970-01-01 in UTC, by arithmetic only: no date function,
+// so the PHP timezone setting is never read.
+$stale_chrome_today = (int) floor(time() / 86400);
+$stale_chrome_majors = array();
+preg_match_all('/([0-9]+):([0-9]{4})-([0-9]{2})-([0-9]{2})/', $stale_chrome_stable, $stale_chrome_rows, PREG_SET_ORDER);
+foreach ($stale_chrome_rows as $stale_chrome_row) {
+  $stale_chrome_major = (int) $stale_chrome_row[1];
+  if ($stale_chrome_major < 100 || in_array($stale_chrome_major, $stale_chrome_pins)) {
+    continue;
+  }
+  // Days from civil date (proleptic Gregorian), the same as nginx_fleet.sh.
+  $stale_chrome_y = (int) $stale_chrome_row[2];
+  $stale_chrome_m = (int) $stale_chrome_row[3];
+  $stale_chrome_d = (int) $stale_chrome_row[4];
+  if ($stale_chrome_m <= 2) {
+    $stale_chrome_y--;
+  }
+  $stale_chrome_era = (int) floor($stale_chrome_y / 400);
+  $stale_chrome_yoe = $stale_chrome_y - $stale_chrome_era * 400;
+  $stale_chrome_doy = (int) floor((153 * ($stale_chrome_m > 2 ? $stale_chrome_m - 3 : $stale_chrome_m + 9) + 2) / 5) + $stale_chrome_d - 1;
+  $stale_chrome_doe = $stale_chrome_yoe * 365 + (int) floor($stale_chrome_yoe / 4) - (int) floor($stale_chrome_yoe / 100) + $stale_chrome_doy;
+  $stale_chrome_day = $stale_chrome_era * 146097 + $stale_chrome_doe - 719468;
+  if ($stale_chrome_today - $stale_chrome_day > 365) {
+    $stale_chrome_majors[] = $stale_chrome_major;
+  }
+}
+// (?!) never matches, for a render before any listed major is a year old.
+$stale_chrome_re = $stale_chrome_majors ? '(?:' . implode('|', $stale_chrome_majors) . ')' : '(?!)';
+?>
 map $http_user_agent $is_stale_chrome {
   default  0;
   ~*\bCrOS\b|smart-?tv|web0s|tizen|\btv\b  0;   # versions follow the device
-  "~*\(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ (?:Mobile )?Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Chrome/100–141 minus the pins
+  "~*\(KHTML, like Gecko\) (?:Headless)?Chrome/<?php print $stale_chrome_re; ?>\.[0-9.]+ (?:Mobile )?Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # majors a year past stable at render, minus the pins
 }
 
 ###
@@ -946,12 +994,13 @@ map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
 ### search-amplification bot has presented (May 2026 below Chrome/132, and
 ### Chrome/132 since).  Staleness is what makes it safe.  Applied directly in
 ### the /search location blocks so no dependency on $has_fulltext_search; the
-### search location scope limits false-positive risk.  Keep the pattern in step
-### with $is_stale_chrome above, including its carve-outs and its UA shape.
+### search location scope limits false-positive risk.  It takes its majors from
+### the same render-time list as $is_stale_chrome above; keep its UA shape in
+### step with that map.
 ###
 map $http_user_agent $is_catalina_stale_chrome {
   default  0;
-  "~*Mac OS X 10_15_7\) AppleWebKit/537\.36 \(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Mac Chrome/100–141 minus the pins
+  "~*Mac OS X 10_15_7\) AppleWebKit/537\.36 \(KHTML, like Gecko\) (?:Headless)?Chrome/<?php print $stale_chrome_re; ?>\.[0-9.]+ Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Mac majors a year past stable at render, minus the pins
 }
 
 ###
