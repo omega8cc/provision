@@ -378,6 +378,7 @@ map $http_user_agent $is_ai_training {
   ~*Claude-User|Claude-SearchBot|Amzn-SearchBot|Amzn-User                               '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot|KimiBot                              is_ai_training;
+  ~*Reflectionbot|ElevenlabsCrawler                                                      is_ai_training;
   # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
   # sweeping full site content (~1.8k pages/day from 2 IPs, all 200s -- so the
   # status-scoring IDS never sees it); both tokens so a build that drops the
@@ -392,6 +393,7 @@ map $http_user_agent $is_ai_training {
 map $http_user_agent $is_ai_search {
   default  '';
   ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot|Amzn-SearchBot  is_ai_search;
+  ~*meta-webindexer|LinkupBot|KeenableBot|ShapBot                                         is_ai_search;
 }
 
 ###
@@ -479,6 +481,10 @@ map $http_user_agent $ai_search_limit_key {
   ~*Kimi-SearchBot         kimi_searchbot;
   ~*ExaSearchBot           exa_searchbot;
   ~*Amzn-SearchBot         amzn_searchbot;
+  ~*meta-webindexer        meta_webindexer;
+  ~*LinkupBot              linkupbot;
+  ~*KeenableBot            keenablebot;
+  ~*ShapBot                shapbot;
 }
 
 map $http_user_agent $ai_user_limit_key {
@@ -512,11 +518,16 @@ map $http_user_agent $ai_utility_limit_key {
 ### Matched on $uri (decoded, normalised) and anchored to path segments so a
 ### literal ".env" cannot match an arbitrary substring.  $uri normalisation
 ### also defends against percent-encoded evasion (e.g. /%2eenv -> /.env).
+### The npm token file, Google service-account key files and a TLS private
+### key are probed daily from hundreds of addresses; a public copy of any of
+### them would itself be the leak, so no site can need one served.
 ###
 map $uri $is_secret_path {
   default  '';
-  ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
+  ~*(?:^|/)\.(?:env|git|aws|ssh|npmrc)(?:[./]|$)                                 is_secret_path;
   ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)  is_secret_path;
+  ~*(?:^|/)(?:service-account|gcp-credentials|gcp-key|google-credentials|firebase-adminsdk|application_default_credentials)\.json(?:$|/)  is_secret_path;
+  ~*(?:^|/)server\.key(?:$|/)                                                    is_secret_path;
   ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
   ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
   ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
