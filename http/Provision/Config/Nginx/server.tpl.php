@@ -378,6 +378,7 @@ map $http_user_agent $is_ai_training {
   ~*Claude-User|Claude-SearchBot|Amzn-SearchBot|Amzn-User                               '';
   ~*GPTBot|ClaudeBot|Claude-Web|anthropic-ai|CCBot|Bytespider|Amazonbot|AI2Bot|Diffbot  is_ai_training;
   ~*Meta-ExternalAgent|cohere-ai|omgili|DeepSeekBot|KimiBot                              is_ai_training;
+  ~*Reflectionbot|ElevenlabsCrawler                                                      is_ai_training;
   # md-proxy (RetrievableAIAgentProxy): retrieval-agent proxy observed bulk-
   # sweeping full site content (~1.8k pages/day from 2 IPs, all 200s -- so the
   # status-scoring IDS never sees it); both tokens so a build that drops the
@@ -392,6 +393,7 @@ map $http_user_agent $is_ai_training {
 map $http_user_agent $is_ai_search {
   default  '';
   ~*OAI-SearchBot|Claude-SearchBot|PerplexityBot|MistralAI-Index|YouBot|Google-CloudVertexBot|Kimi-SearchBot|ExaSearchBot|Amzn-SearchBot  is_ai_search;
+  ~*meta-webindexer|LinkupBot|KeenableBot|ShapBot                                         is_ai_search;
 }
 
 ###
@@ -479,6 +481,10 @@ map $http_user_agent $ai_search_limit_key {
   ~*Kimi-SearchBot         kimi_searchbot;
   ~*ExaSearchBot           exa_searchbot;
   ~*Amzn-SearchBot         amzn_searchbot;
+  ~*meta-webindexer        meta_webindexer;
+  ~*LinkupBot              linkupbot;
+  ~*KeenableBot            keenablebot;
+  ~*ShapBot                shapbot;
 }
 
 map $http_user_agent $ai_user_limit_key {
@@ -512,11 +518,16 @@ map $http_user_agent $ai_utility_limit_key {
 ### Matched on $uri (decoded, normalised) and anchored to path segments so a
 ### literal ".env" cannot match an arbitrary substring.  $uri normalisation
 ### also defends against percent-encoded evasion (e.g. /%2eenv -> /.env).
+### The npm token file, Google service-account key files and a TLS private
+### key are probed daily from hundreds of addresses; a public copy of any of
+### them would itself be the leak, so no site can need one served.
 ###
 map $uri $is_secret_path {
   default  '';
-  ~*(?:^|/)\.(?:env|git|aws|ssh)(?:[./]|$)                                       is_secret_path;
+  ~*(?:^|/)\.(?:env|git|aws|ssh|npmrc)(?:[./]|$)                                 is_secret_path;
   ~*(?:^|/)(?:secrets|key|credentials|google-services|config|loadable-stats)\.json(?:$|/)  is_secret_path;
+  ~*(?:^|/)(?:service-account|gcp-credentials|gcp-key|google-credentials|firebase-adminsdk|application_default_credentials)\.json(?:$|/)  is_secret_path;
+  ~*(?:^|/)server\.key(?:$|/)                                                    is_secret_path;
   ~*(?:^|/)application\.ya?ml(?:$|/)                                             is_secret_path;
   ~*(?:^|/)settings\.py(?:$|/)                                                   is_secret_path;
   ~*(?:^|/)__/firebase/init\.json(?:$|/)                                         is_secret_path;
@@ -883,23 +894,38 @@ map $http_user_agent $is_bot {
 ### spot — they avoid the obviously-bogus Opera/8 or MSIE/6 that trigger
 ### $is_bot, but their UA is still detectably stale.
 ###
-### Regex covers Chrome/100–139 minus 128 and 138: 1(?:[01][0-9]|2[0-79]|3[0-79]).
-### Chrome/139 reached stable on 2025-08-05, so the whole range is more than 12
-### months old.  The bound used to stop at 131, and an observed botnet presenting
-### Chrome/132 walked past both maps with ~16,000 fulltext searches from ~14,700
-### addresses over two days on one hosted site.  128 and 138 are carved out
-### because a real Mac can be pinned there for life: Chrome/128 was the last
-### release for macOS 10.15 and Chrome/138 the last for macOS 11, so they are
-### the only stale majors a genuine browser can still present.
+### Regex covers Chrome/100–141 minus 103, 106, 109, 116, 119, 128 and 138:
+### 1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01]).  Chrome/141 reached stable
+### on 2025-09-30, so the whole range is more than 12 months old.  The bound
+### used to stop at 131, and an observed botnet presenting Chrome/132 walked
+### past both maps with ~16,000 fulltext searches from ~14,700 addresses over
+### two days on one hosted site.  The carve-outs are the majors a real machine
+### can be pinned at for life, the last release for an old macOS, Windows or
+### Android.
+###
+### Only Chrome's own UA shape is judged: Chrome (or HeadlessChrome) right
+### after "(KHTML, like Gecko)", then Safari/537.36 and nothing more but an
+### Edg/ token.  Browsers whose Chrome token follows their own release train
+### or their device carry something in between or after it (Samsung Internet,
+### Silk, Huawei, MIUI, Opera, Yandex, Android webviews' Version/4.0), and
+### Chromebooks and TVs stay on the last major their device received, so the
+### first line keeps those out: a stale token there is a real visitor.  Every
+### observed search bot sent the plain shape.
 ###
 ### Maintenance: move the upper bound by release DATE, never by counting
 ### versions (a major every ~4 weeks until Chrome/153 on 2026-09-08, every ~2
 ### weeks since).  Widen to the newest major more than 12 months old, carve out
-### the last major any macOS is pinned at, and keep the Mac map below in step.
+### the last major any old system is pinned at, and keep the Mac map below in
+### step.  Since Chrome/107 every Mac reports 10_15_7 and every Windows 10.0,
+### so the platform token cannot tell a pinned machine: the carve-outs are the
+### pinned majors themselves (103 macOS 10.11/10.12, 106 Android 6, 109
+### Windows 7/8.1, 116 macOS 10.13/10.14, 119 Android 7, 128 macOS 10.15, 138
+### macOS 11 and Android 8/9; 150, macOS 12, once it is a year old).
 ###
 map $http_user_agent $is_stale_chrome {
   default  0;
-  ~*Chrome/1(?:[01][0-9]|2[0-79]|3[0-79])\.  1;   # Chrome/100–139 minus 128 and 138
+  ~*\bCrOS\b|smart-?tv|web0s|tizen|\btv\b  0;   # versions follow the device
+  "~*\(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ (?:Mobile )?Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Chrome/100–141 minus the pins
 }
 
 ###
@@ -921,11 +947,11 @@ map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
 ### Chrome/132 since).  Staleness is what makes it safe.  Applied directly in
 ### the /search location blocks so no dependency on $has_fulltext_search; the
 ### search location scope limits false-positive risk.  Keep the pattern in step
-### with $is_stale_chrome above, including its Chrome/128 and /138 carve-out.
+### with $is_stale_chrome above, including its carve-outs and its UA shape.
 ###
 map $http_user_agent $is_catalina_stale_chrome {
   default  0;
-  "~*Mac OS X 10_15_7.*Chrome/1(?:[01][0-9]|2[0-79]|3[0-79])\."  1;   # Mac Chrome/100–139 minus 128 and 138
+  "~*Mac OS X 10_15_7\) AppleWebKit/537\.36 \(KHTML, like Gecko\) (?:Headless)?Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.[0-9.]+ Safari/537\.36(?: Edg/[0-9.]+)?$"  1;   # Mac Chrome/100–141 minus the pins
 }
 
 ###
