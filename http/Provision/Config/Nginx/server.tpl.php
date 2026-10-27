@@ -894,23 +894,28 @@ map $http_user_agent $is_bot {
 ### spot — they avoid the obviously-bogus Opera/8 or MSIE/6 that trigger
 ### $is_bot, but their UA is still detectably stale.
 ###
-### Regex covers Chrome/100–139 minus 128 and 138: 1(?:[01][0-9]|2[0-79]|3[0-79]).
-### Chrome/139 reached stable on 2025-08-05, so the whole range is more than 12
-### months old.  The bound used to stop at 131, and an observed botnet presenting
-### Chrome/132 walked past both maps with ~16,000 fulltext searches from ~14,700
-### addresses over two days on one hosted site.  128 and 138 are carved out
-### because a real Mac can be pinned there for life: Chrome/128 was the last
-### release for macOS 10.15 and Chrome/138 the last for macOS 11, so they are
-### the only stale majors a genuine browser can still present.
+### Regex covers Chrome/100–141 minus 103, 106, 109, 116, 119, 128 and 138:
+### 1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01]).  Chrome/141 reached stable
+### on 2025-09-30, so the whole range is more than 12 months old.  The bound
+### used to stop at 131, and an observed botnet presenting Chrome/132 walked
+### past both maps with ~16,000 fulltext searches from ~14,700 addresses over
+### two days on one hosted site.  The carve-outs are the majors a real machine
+### can be pinned at for life, the last release for an old macOS, Windows or
+### Android, so they are the only stale majors a genuine browser can present.
 ###
 ### Maintenance: move the upper bound by release DATE, never by counting
 ### versions (a major every ~4 weeks until Chrome/153 on 2026-09-08, every ~2
 ### weeks since).  Widen to the newest major more than 12 months old, carve out
-### the last major any macOS is pinned at, and keep the Mac map below in step.
+### the last major any old system is pinned at, and keep the Mac map below in
+### step.  Since Chrome/107 every Mac reports 10_15_7 and every Windows 10.0,
+### so the platform token cannot tell a pinned machine: the carve-outs are the
+### pinned majors themselves (103 macOS 10.11/10.12, 106 Android 6, 109
+### Windows 7/8.1, 116 macOS 10.13/10.14, 119 Android 7, 128 macOS 10.15, 138
+### macOS 11 and Android 8/9; 150, macOS 12, once it is a year old).
 ###
 map $http_user_agent $is_stale_chrome {
   default  0;
-  ~*Chrome/1(?:[01][0-9]|2[0-79]|3[0-79])\.  1;   # Chrome/100–139 minus 128 and 138
+  ~*Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\.  1;   # Chrome/100–141 minus the pins
 }
 
 ###
@@ -932,11 +937,11 @@ map $is_stale_chrome$has_fulltext_search $block_stale_chrome_search {
 ### Chrome/132 since).  Staleness is what makes it safe.  Applied directly in
 ### the /search location blocks so no dependency on $has_fulltext_search; the
 ### search location scope limits false-positive risk.  Keep the pattern in step
-### with $is_stale_chrome above, including its Chrome/128 and /138 carve-out.
+### with $is_stale_chrome above, including its carve-outs.
 ###
 map $http_user_agent $is_catalina_stale_chrome {
   default  0;
-  "~*Mac OS X 10_15_7.*Chrome/1(?:[01][0-9]|2[0-79]|3[0-79])\."  1;   # Mac Chrome/100–139 minus 128 and 138
+  "~*Mac OS X 10_15_7.*Chrome/1(?:0[0-245780]|1[0-578]|2[0-79]|3[0-79]|4[01])\."  1;   # Mac Chrome/100–141 minus the pins
 }
 
 ###
