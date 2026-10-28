@@ -882,6 +882,13 @@ class Provision_Service_db extends Provision_Service {
         }
       }
     }
+
+    // A freshly loaded table reads as empty to the optimizer until InnoDB's
+    // background queue measures it; measure them all before the site is
+    // switched to this database (see refresh_table_statistics()).
+    if (!drush_get_error() && !empty($db_name)) {
+      $this->refresh_table_statistics($db_name);
+    }
   }
 
   function generate_site_credentials() {
@@ -970,6 +977,10 @@ class Provision_Service_db extends Provision_Service {
   }
 
   function import_dump($dump_file, $creds) {
+    return FALSE;
+  }
+
+  function refresh_table_statistics($db_name) {
     return FALSE;
   }
 

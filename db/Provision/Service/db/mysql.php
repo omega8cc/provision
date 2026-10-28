@@ -1155,6 +1155,72 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     return $success;
   }
 
+  /**
+   * Measure the optimizer statistics of every table a site import loaded.
+   *
+   * InnoDB gives a new table the statistics of an empty one and measures it
+   * later from a background queue that, once nothing new wakes it, takes one
+   * table about every ten seconds. A run of Migrate tasks queues thousands of
+   * tables that way: a large site went live while its statistics still read
+   * as empty, its pages were planned as full table scans, and the database
+   * server ran out of CPU long before the queue reached it. ANALYZE TABLE
+   * measures them now, a few seconds for a whole site, before the site is
+   * switched to the new database. It stays in the binary log, as the import
+   * does, so a replica measures the same tables. A table another session
+   * holds is waited for 30 seconds at most. A failure only warns: the data
+   * is in place either way, and InnoDB still measures it later. PHP 5.6-safe.
+   */
+  function refresh_table_statistics($db_name) {
+    $this->ensure_connected();
+    if (!$this->conn || (string) $db_name === '') {
+      return FALSE;
+    }
+    $start = microtime(TRUE);
+    $result = $this->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '%s' AND TABLE_TYPE = 'BASE TABLE' AND ENGINE = 'InnoDB'", $db_name);
+    if (!$result) {
+      drush_log(dt('Could not list the tables of @db to measure their statistics.', array('@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    $tables = array();
+    while ($row = $result->fetch()) {
+      $tables[] = '`' . str_replace('`', '``', $db_name) . '`.`' . str_replace('`', '``', $row[0]) . '`';
+    }
+    if (!count($tables)) {
+      return TRUE;
+    }
+    $old_wait = 0;
+    $wait = $this->query("SELECT @@SESSION.lock_wait_timeout");
+    if ($wait && ($row = $wait->fetch()) && isset($row[0])) {
+      $old_wait = (int) $row[0];
+    }
+    if ($old_wait > 30) {
+      $this->query("SET SESSION lock_wait_timeout = %d", 30);
+    }
+    $failed = array();
+    foreach (array_chunk($tables, 100) as $chunk) {
+      // Doubled percents for the query() rescan (see REVOKE/1 in revoke()).
+      $analyze = $this->query(str_replace('%', '%%', 'ANALYZE TABLE ' . implode(', ', $chunk)));
+      if (!$analyze) {
+        $failed[] = count($chunk) . ' tables refused';
+        continue;
+      }
+      while ($row = $analyze->fetch()) {
+        if (isset($row['Msg_type']) && strtolower($row['Msg_type']) === 'error') {
+          $failed[] = $row['Table'] . ': ' . $row['Msg_text'];
+        }
+      }
+    }
+    if ($old_wait > 30) {
+      $this->query("SET SESSION lock_wait_timeout = %d", $old_wait);
+    }
+    if (count($failed)) {
+      drush_log(dt('Could not measure the optimizer statistics of every table in @db (@failed); InnoDB measures them later on its own.', array('@db' => $db_name, '@failed' => implode('; ', array_slice($failed, 0, 5)))), 'warning');
+      return FALSE;
+    }
+    drush_log(dt('Measured the optimizer statistics of @count tables in @db in @secs s.', array('@count' => count($tables), '@db' => $db_name, '@secs' => round(microtime(TRUE) - $start, 1))), 'info');
+    return TRUE;
+  }
+
   function import_dump($dump_file, $creds) {
     if (empty($creds)) {
       $creds = $this->generate_site_credentials();
