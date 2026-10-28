@@ -30,6 +30,12 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // A clone never inherits a files store still at its new name: the store
+  // is set aside here, before the safety copy, or the clone is refused
+  // while it cannot be (_provision_drupal_copy_target_store_check()).
+  if (!_provision_drupal_copy_target_store_check('CLONE', $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 

@@ -25,6 +25,18 @@ function drush_provision_txp_provision_install_validate() {
     return drush_set_error('PROVISION_TXP_PHP_TOO_OLD',
       dt('No PHP >= 8.4 binary found; TXP tasks refuse to run below the enforced floor.'));
   }
+  // A fresh install, or a forced one, never inherits a files store still at
+  // its name: a store there is what an earlier site of the name left (the
+  // nightly moves only this site's own private/ into the store, later), so
+  // it is set aside first, as the Drupal install sets its own aside, and the
+  // install is refused while it cannot be (a share names it, the operator
+  // keeps stores in place, a site still reads it), before anything is built.
+  if (!_provision_txp_site_exists() || drush_get_option('force-reinstall', FALSE)) {
+    $store_state = _provision_drupal_install_store_check(d()->uri);
+    if ($store_state == 'SHARED' || $store_state == 'KEPT' || $store_state == 'LEFT') {
+      return drush_set_error('PROVISION_SITE_STORE_AT_NAME', _provision_drupal_install_store_message(d()->uri, $store_state));
+    }
+  }
   if (_provision_txp_site_exists()) {
 
     if (drush_get_option('force-reinstall', FALSE)) {
