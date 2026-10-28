@@ -42,6 +42,13 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   if (!provision_cli_php_target_preflight('migrate', $platform, $new_name)) {
     return FALSE;
   }
+  // A site renamed by this migrate never inherits a files store still at
+  // its new name: the store is set aside here, before the safety copy, or
+  // the migrate is refused while it cannot be; a migrate that keeps its
+  // name has no target to check (_provision_drupal_copy_target_store_check()).
+  if (!_provision_drupal_copy_target_store_check('RENAME', $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 

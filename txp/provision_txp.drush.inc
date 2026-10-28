@@ -253,6 +253,24 @@ function _provision_txp_site_exists() {
 }
 
 /**
+ * Was this site never installed at all?
+ *
+ * An install refused in its validate hook (a files store still at the name,
+ * the PHP floor) leaves no site directory: it is the first thing the install
+ * makes. Its Delete then has nothing to copy (the safety copy cannot enter
+ * the directory and the whole task ended in an error, the record stranded),
+ * no database to drop and no store of its own (one at its name is another
+ * site's). A site with a directory, whatever its state, was installed and
+ * keeps every step.
+ */
+function _provision_txp_site_never_installed() {
+  if (d()->type !== 'site') {
+    return FALSE;
+  }
+  return !is_dir(d()->site_path);
+}
+
+/**
  * Resolve the Textpattern core version string (e.g. "4.9.1").
  *
  * Parses $thisversion out of the shared core -- a codebase fact, no DB and no
