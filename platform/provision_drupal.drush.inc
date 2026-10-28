@@ -2647,6 +2647,13 @@ function _provision_drupal_find_modules($scope, $key = '') {
       if (count($function_matches[0])) {
         $schema_version = max($schema_version, max($function_matches[2]));
       }
+      // A module that dropped its old update hooks keeps their last number in
+      // hook_update_last_removed(); core counts it as the module's schema on
+      // install and update, so a site already at that schema is no downgrade.
+      $removed_matches = array();
+      if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{\s*return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
+        $schema_version = max($schema_version, (int) $removed_matches[1]);
+      }
     }
     $files[$name]->schema_version = $schema_version;
 
