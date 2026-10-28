@@ -43,6 +43,14 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
     return;
   }
   if (d()->type === 'site') {
+    // A site whose install was refused before its directory was made has no
+    // credentials to load and nothing to copy: the safety copy cannot enter
+    // the directory (the Delete ended in an error, the record stranded). One
+    // line; the record, the alias and the vhost go as for any site.
+    if (_provision_txp_site_never_installed()) {
+      drush_log(dt('DELETE/NEVER-INSTALLED @url: no site directory, so no safety copy is taken and no store or database step runs; the site record goes', array('@url' => d()->uri)), 'info');
+      return;
+    }
     _provision_txp_ensure_db_creds_loaded();
     // Clear a stale mode ctrl file, ONLY on the path that takes a backup (a
     // platform/server delete takes none, and unlinking there would destroy a
@@ -96,8 +104,11 @@ function drush_provision_txp_provision_delete() {
     // as the Drupal delete does: the privileged wrapper proves the caller
     // owns the site through that alias, and once the nightly has linked
     // private/ into the store the store holds the only copy of config.php
-    // (archived under static/files/.archived, never deleted).
-    _provision_drupal_archive_static_store(d()->uri);
+    // (archived under static/files/.archived, never deleted). A site never
+    // installed owns no store: one at its name is another site's.
+    if (!_provision_txp_site_never_installed()) {
+      _provision_drupal_archive_static_store(d()->uri);
+    }
 
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {

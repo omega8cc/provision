@@ -1110,8 +1110,12 @@ function _provision_drupal_native_symlink($url, $force_unshare = FALSE, $account
  *
  * Returns NONE (no store, or a site outside the store's scope), ARCHIVED,
  * or the reason the store stays: SHARED, KEPT or LEFT.
+ *
+ * $prefix names the task in the archive's log lines (INSTALL for an
+ * install; the copying tasks pass their own, see
+ * _provision_drupal_copy_target_store_check()).
  */
-function _provision_drupal_install_store_check($url) {
+function _provision_drupal_install_store_check($url, $prefix = 'INSTALL') {
   if (empty($url) || $url == 'all') {
     return 'NONE';
   }
@@ -1138,12 +1142,78 @@ function _provision_drupal_install_store_check($url) {
   if (is_file('/data/conf/disable_orphan_store_archiving.cnf')) {
     return 'KEPT';
   }
-  _provision_drupal_archive_static_store($url, 'INSTALL');
+  _provision_drupal_archive_static_store($url, $prefix);
   clearstatcache();
   if (!is_dir($store) && !is_link($store)) {
     return 'ARCHIVED';
   }
   return 'LEFT';
+}
+
+/**
+ * The target name of a clone or a rename, checked for a files store still at
+ * that name the way a fresh install checks its own.
+ *
+ * A clone, and a migrate under a new name, deploy the copy at the target
+ * name and then break the copy's inherited link into the source store with
+ * the storage tool's unshare, whose collision archive moves a store already
+ * at the target name aside with an alert alone (refusing there would leave
+ * the deployed copy on another site's store), so a share file naming the
+ * store, a registered site still reading it and the operator's switch were
+ * all overridden. The check runs in the task's validate hook, before the
+ * safety copy: the store is set aside through the same wrapper move
+ * (<TASK>/STORE/ARCHIVED), or the task is refused with the install's
+ * message while it cannot be (SHARED, KEPT, LEFT). The unshare's own
+ * archive then meets only a store made after this check. A migrate that
+ * keeps its name has no target to check; Restore's re-link is untouched.
+ *
+ * @param $task
+ *   The log prefix: CLONE or RENAME.
+ * @param $new_name
+ *   The target's alias (@name) or name; NULL or the site's own name for a
+ *   migrate without a rename.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function _provision_drupal_copy_target_store_check($task, $new_name) {
+  $url = ltrim((string) $new_name, '@');
+  if ($url === '' || $url == 'all') {
+    return TRUE;
+  }
+  if (d()->type == 'site' && $url == ltrim((string) d()->name, '@')) {
+    return TRUE;
+  }
+  $store_state = _provision_drupal_install_store_check($url, $task);
+  if ($store_state == 'SHARED' || $store_state == 'KEPT' || $store_state == 'LEFT') {
+    drush_set_error('PROVISION_SITE_STORE_AT_NAME', _provision_drupal_install_store_message($url, $store_state));
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Whether this site context was never installed: no settings.php at its
+ * site path and no database name recorded in it.
+ *
+ * An install refused in its validate hook (a files store still at the
+ * name, a platform without the profile) leaves the panel's site record and
+ * its alias and nothing else: the Delete that removes the record has no
+ * safety copy to take (the backup would write a settings.php of empty
+ * credentials, a warning, and archive nothing), no store of its own (one
+ * at its name belongs to another site's history) and no database to drop
+ * (the drop warned of an unknown name), and ended in a warning state for
+ * nothing. A site whose settings.php alone went missing keeps its database
+ * name in the context and is not this case.
+ */
+function _provision_drupal_site_never_installed() {
+  if (d()->type !== 'site') {
+    return FALSE;
+  }
+  if (is_readable(d()->site_path . '/settings.php')) {
+    return FALSE;
+  }
+  return (string) drush_get_option('db_name', '', 'site') === '';
 }
 
 /**

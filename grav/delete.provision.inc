@@ -55,6 +55,14 @@ function drush_provision_grav_pre_provision_delete($backup_file = NULL) {
     if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
       unlink(AEGIR_BACKUP_MODE_CTRL);
     }
+    // A site whose install was refused before its capsule was made has no
+    // site directory: the safety copy cannot enter it (the Delete ended in
+    // an error, the record stranded), and no database was made for it. One
+    // line; the record, the alias and the vhost go as for any site.
+    if (_provision_grav_site_never_installed()) {
+      drush_log(dt('DELETE/NEVER-INSTALLED @url: no site directory, so no safety copy is taken and no store or database step runs; the site record goes', array('@url' => d()->uri)), 'info');
+      return;
+    }
     // A site with a database: its credentials for the db layer's drop, and
     // its dump in the last copy of the site, as the Textpattern delete does.
     // A site on the 'none' server keeps its mode-less final copy.
@@ -81,6 +89,18 @@ function drush_provision_grav_provision_delete() {
     return;
   }
   if (d()->type === 'site') {
+    // A Grav site never uses the per-account files store, so a store at its
+    // name is what an earlier site of the name left before the install
+    // began to set one aside. Set it aside BEFORE the alias goes (the
+    // privileged wrapper proves the caller owns the site through it), as
+    // every other delete does: archived under static/files/.archived, never
+    // deleted, and left in place with a line where a share names it or a
+    // site still reads it. A site never installed owns none either: a store
+    // at its name is another site's and is left alone.
+    if (!_provision_grav_site_never_installed()) {
+      _provision_drupal_archive_static_store(d()->uri);
+    }
+
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {
       drush_invoke_process('@none', 'provision-save', array($alias), array('delete' => TRUE));

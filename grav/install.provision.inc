@@ -26,6 +26,18 @@ function drush_provision_grav_provision_install_validate() {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
       dt('No PHP >= 8.3 binary found; Grav tasks refuse to run below the enforced floor.'));
   }
+  // A fresh install, or a forced one, never inherits a files store still at
+  // its name. A Grav site never uses the per-account store, so a store there
+  // is what an earlier site of the name left; it is set aside first, as the
+  // Drupal install sets its own aside, and the install is refused while it
+  // cannot be (a share names it, the operator keeps stores in place, a site
+  // still reads it), before anything is built.
+  if (!_provision_grav_site_exists() || drush_get_option('force-reinstall', FALSE)) {
+    $store_state = _provision_drupal_install_store_check(d()->uri);
+    if ($store_state == 'SHARED' || $store_state == 'KEPT' || $store_state == 'LEFT') {
+      return drush_set_error('PROVISION_SITE_STORE_AT_NAME', _provision_drupal_install_store_message(d()->uri, $store_state));
+    }
+  }
   if (_provision_grav_site_exists()) {
 
     if (drush_get_option('force-reinstall', FALSE)) {

@@ -310,6 +310,23 @@ function _provision_grav_site_exists() {
 }
 
 /**
+ * Was this site never installed at all?
+ *
+ * An install refused in its validate hook (a files store still at the name,
+ * the PHP floor) leaves no site directory: the capsule is the first thing the
+ * install makes. Its Delete then has nothing to copy (the safety copy cannot
+ * enter the directory, and the whole task ended in an error with the record
+ * stranded) and owns no store (one at its name is another site's). A site
+ * with a directory, whatever its state, was installed and keeps both steps.
+ */
+function _provision_grav_site_never_installed() {
+  if (d()->type !== 'site') {
+    return FALSE;
+  }
+  return !is_dir(d()->site_path);
+}
+
+/**
  * Does this site have a database of its own?
  *
  * A Grav site on hosting_grav's 'none' server (Provision_Service_null) has no

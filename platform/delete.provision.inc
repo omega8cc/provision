@@ -17,6 +17,16 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
     if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
       unlink(AEGIR_BACKUP_MODE_CTRL);
     }
+    // A site whose install was refused before anything was built has no
+    // settings.php and no database: its safety copy would write a
+    // settings.php of empty credentials (a warning) and archive nothing, a
+    // store at its name was never its own, and the database drop warned of
+    // an unknown name, so the Delete ended in a warning state for nothing.
+    // One line; the record, the alias and the vhost go as for any site.
+    if (_provision_drupal_site_never_installed()) {
+      drush_log(dt('DELETE/NEVER-INSTALLED @url: no settings.php and no database recorded, so no safety copy is taken and no store or database step runs; the site record goes', array('@url' => d()->uri)), 'info');
+      return;
+    }
     drush_set_option('force', true, 'process');
     if (!empty($backup_file) && substr($backup_file, 0, 1) !== '/') {
       drush_set_error('PROVISION_DELETE_BACKUP_NAME_RELATIVE', dt('The passed backup name is a relative path, storing that in the site directory which is going to be deleted is probably not intended. Try an absolute name, or no name to let one be generated.'));
@@ -66,8 +76,11 @@ function drush_provision_drupal_provision_delete() {
     // Set the site's per-account static store aside BEFORE its alias goes:
     // the privileged wrapper proves the caller owns the site through that
     // alias, and the final backup keeps files/private as symlinks, so the
-    // store holds the only copy (archived, never deleted).
-    _provision_drupal_archive_static_store(d()->uri);
+    // store holds the only copy (archived, never deleted). A site that was
+    // never installed owns no store: one at its name is another site's.
+    if (!_provision_drupal_site_never_installed()) {
+      _provision_drupal_archive_static_store(d()->uri);
+    }
 
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
     foreach (d()->drush_aliases as $alias) {
