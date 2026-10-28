@@ -192,10 +192,13 @@ if ($nginx_has_gzip) {
   http3_stream_buffer_size        2m;
 <?php endif; ?>
   large_client_header_buffers 32 64k;
-  map_hash_bucket_size           192;
-  # Generated BOA maps can hold thousands of exact keys; at the default max
-  # size every configtest and reload warns "could not build optimal map_hash".
-  map_hash_max_size            32768;
+  # Generated BOA maps can hold tens of thousands of exact keys of 40-80
+  # bytes. A 192-byte bucket fits only two or three of them, so no table size
+  # avoided an overfull bucket and every configtest and reload warned "could
+  # not build optimal map_hash". Both are ceilings: a small map still gets a
+  # small table; a map past a few thousand keys takes about 2 MB.
+  map_hash_bucket_size           512;
+  map_hash_max_size           262144;
   request_pool_size               4k;
   server_names_hash_bucket_size  512;
   server_names_hash_max_size    8192;
