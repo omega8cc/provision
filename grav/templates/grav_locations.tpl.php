@@ -165,8 +165,9 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   ###
   include  <?php print d('@server_master')->aegir_root; ?>/config/server_master/nginx/post.d/nginx_force_include*;
 
-  # Dotfiles (covers /.env and /.env.*) except ACME.
-  location ~ /\.(?!well-known) { return 404; }
+  # Dotfiles (covers /.env and /.env.*) except ACME and the rest of
+  # /.well-known/: a segment that merely starts with ".well-known" is a dotfile.
+  location ~ /\.(?!well-known(?:/|$)) { return 404; }
 
   # Aegir artefacts in the served docroot (capsule model): the option carrier,
   # any settings file, any SQL dump (phase 2 writes database.sql here for the
@@ -196,14 +197,34 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   location ~* ^/(system|vendor)/.*\.(txt|xml|md|html|json|yaml|yml|php|pl|py|cgi|twig|sh|bat)$ { return 404; }
   location ~* ^/user/(config|env|accounts|data)/ { return 404; }
   location ~* ^/user/.*\.(txt|md|yaml|yml|php|pl|py|cgi|twig|sh|bat)$ { return 404; }
+  # Dependency manifests under user/ (plugins ship composer.json, composer.lock
+  # and package.json): the same version inventory refused at the root above.
+  # Page attachments keep serving; Admin2 reads its version.json through PHP.
+  location ~* ^/user/(?!pages/).*\.(json|lock)$ { return 404; }
+
+  # Content-hashed SvelteKit bundles of plugins and themes: Admin2 names its
+  # chunks by their real path under user/plugins/admin2/app/_app/immutable/,
+  # and a name changes with its content, so they cache for a year and a
+  # missing one is a plain 404 instead of a Grav boot. The year-long header
+  # goes on found files only (no "always"): a chunk missing for a moment
+  # during an update must not be cached as a 404. Above the theme fast path
+  # below, which would otherwise take a theme's bundles first. This location
+  # sets its own headers, so the security pair is re-stated (add_header does
+  # not inherit into a location that has its own).
+  location ~* ^/user/(?:plugins|themes)/.+/_app/immutable/.+\.(?:js|css|woff2?)$ {
+    access_log off;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    try_files $uri =404;
+  }
 
   # Real-file fast path for the trees that are static by construction (theme
   # and system assets, the compiled asset dir) -- takes them off the PHP path.
   # Deliberately NOT applied to user/pages media (Grav routes those for media
-  # processing/derivatives) or to plugin _app bundles (served through the
-  # front controller's asset map). Placed BELOW the denies: regex locations
-  # match in order of appearance. expires is not add_header, so the security
-  # header pair above still inherits here.
+  # processing/derivatives). Placed BELOW the denies: regex locations match in
+  # order of appearance. expires is not add_header, so the security header
+  # pair above still inherits here.
   #
   # Code assets take a SHORT window, media and fonts the fleet-standard 30d.
   # The Drupal include can afford a long expiry on css/js because the
