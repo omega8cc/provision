@@ -9,6 +9,9 @@ class Provision_Config_Drupal_Alias_Store extends Provision_Config_Data_Store {
   public $description = 'Drupal sites.php file';
   public $key = 'sites';
   protected $mode = 0644;
+  // Every request of the platform's sites reads it from disk (BOA keeps it
+  // out of the PHP opcache): never rewritten in place.
+  protected $write_by_rename = TRUE;
 
   function filename() {
     $this->root = provision_auto_fix_platform_root($this->root);

@@ -79,7 +79,14 @@ if ($sites_body === FALSE) {
   $sites_body = "<?php\n";
 }
 if (strpos($sites_body, $sites_line) === FALSE) {
-  @file_put_contents($sites_php, rtrim($sites_body, "\n") . "\n" . $sites_line . "\n");
+  // Every request of the platform's sites reads this file from disk: a new
+  // file renamed over the name, never a rewrite in place a request could
+  // read cut short.
+  $sites_tmp = $sites_php . '.provision-' . getmypid() . '-' . mt_rand();
+  if (!(@file_put_contents($sites_tmp, rtrim($sites_body, "\n") . "\n" . $sites_line . "\n") !== FALSE
+    && @chmod($sites_tmp, 0644) && @rename($sites_tmp, $sites_php))) {
+    @unlink($sites_tmp);
+  }
 }
 
 $db_user = urldecode(drush_get_option('db_user', '', 'site'));

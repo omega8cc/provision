@@ -132,6 +132,9 @@ function drush_provision_drupal_provision_delete() {
       if ($local_delete_parent) {
         _provision_platform_parent_writable($local_delete_parent);
       }
+      elseif ($local_delete_holder = _provision_platform_plain_holder(d()->root)) {
+        _provision_platform_parent_writable($local_delete_holder);
+      }
       _provision_recursive_delete(d()->root);
       if ($local_delete_parent) {
         sleep(5);
