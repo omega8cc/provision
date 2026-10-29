@@ -191,6 +191,9 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
   if (!_provision_grav_remove_stale_alias($new_uri, 'PROVISION_GRAV_COPY_UPGRADE_TARGET_EXISTS')) {
     return FALSE;
   }
+  // What the new name had before the save: a failed copy removes only what
+  // it made (_provision_grav_discard_copy()).
+  provision_probe_new_name('copy_upgrade_target_preexisted', $new_name, $options['platform']);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   $deploy_options = array(
@@ -279,7 +282,7 @@ function drush_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
  * and its pre-upgrade safety copy stays registered as a restore point.
  */
 function drush_provision_grav_copy_upgrade_rollback($new_name = NULL, $platform = NULL) {
-  _provision_grav_discard_copy($new_name, $platform, 'copy_upgrade_target_copy');
+  _provision_grav_discard_copy($new_name, $platform, 'copy_upgrade_target_copy', 'copy_upgrade_target_preexisted');
   _provision_grav_internal_backup_flag(FALSE);
   drush_log(dt('provision-grav-copy-upgrade failed; the source site @uri is untouched and still serving at its own domain.',
     array('@uri' => d()->uri)), 'advisory');
