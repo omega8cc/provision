@@ -3039,9 +3039,12 @@ function _provision_platform_parent_writable($parent) {
     if ($why === '' && !empty($said)) {
       $why = end($said);
     }
-    $why = substr(preg_replace('/[^\x20-\x7E]/', '?', $why), 0, 300);
+    // substr() of '' is FALSE on PHP 5.6: only a line that is there is cut.
     if ($why === '') {
       $why = dt('no reason given');
+    }
+    else {
+      $why = substr(preg_replace('/[^\x20-\x7E]/', '?', $why), 0, 300);
     }
     drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not open it (@why); a directory there the backend user cannot write stays', array('@parent' => $parent, '@why' => $why)), 'notice');
   }
