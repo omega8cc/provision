@@ -2729,14 +2729,80 @@ function _provision_drupal_find_modules($scope, $key = '') {
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
     // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    // A Drupal 8+ module that ships no version key at all takes the release
+    // Composer installed; 'VERSION' stays core's, as the site scan reads it.
     if (empty($files[$name]->info['version']) || $files[$name]->info['version'] == 'VERSION') {
-      $files[$name]->version = drush_drupal_version();
+      $composer_version = (empty($files[$name]->info['version']) && drush_drupal_major_version() >= 8)
+        ? _provision_composer_installed_version(dirname($info->filename)) : FALSE;
+      $files[$name]->version = $composer_version ? $composer_version : drush_drupal_version();
     }
     else {
       $files[$name]->version = $files[$name]->info['version'];
     }
   }
   return $files;
+}
+
+/**
+ * The release Composer installed the package holding $dir from, or FALSE.
+ *
+ * A Drupal 8+ module installed from a Git or Packagist source (CiviCRM's
+ * Drupal module, for one) ships no version key: the platform scan recorded
+ * Drupal's own release for it and the site scan none, so the panel showed the
+ * wrong one or "Unknown" and the Migrate form compared those. Composer's
+ * vendor/composer/installed.json, beside the docroot or one level above it,
+ * names the package's release by its install path. Core, a dev branch, a
+ * package Composer 1 recorded without an install path, a directory no package
+ * holds and an installed.json the user cannot read all keep the old reading.
+ */
+function _provision_composer_installed_version($dir) {
+  static $maps = array();
+  $root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
+  $real_dir = realpath($dir);
+  if (empty($root) || $real_dir === FALSE) {
+    return FALSE;
+  }
+  $json = FALSE;
+  foreach (array($root, dirname($root)) as $base) {
+    if (is_file($base . '/vendor/composer/installed.json') && is_readable($base . '/vendor/composer/installed.json')) {
+      $json = $base . '/vendor/composer/installed.json';
+      break;
+    }
+  }
+  if ($json === FALSE) {
+    return FALSE;
+  }
+  if (!isset($maps[$json])) {
+    $maps[$json] = array();
+    $data = json_decode(file_get_contents($json), TRUE);
+    $packages = (is_array($data) && isset($data['packages'])) ? $data['packages'] : $data;
+    if (is_array($packages)) {
+      foreach ($packages as $package) {
+        if (!is_array($package) || empty($package['install-path']) || empty($package['version'])
+          || !isset($package['name']) || $package['name'] === 'drupal/core') {
+          continue;
+        }
+        $version = preg_replace('/^v(?=[0-9])/', '', $package['version']);
+        if (!preg_match('/^[0-9]+(\.[0-9]+)*([-.+][0-9A-Za-z.]+)?$/', $version)
+          || preg_match('/(^dev-|-dev$)/', $version)) {
+          continue;
+        }
+        $path = realpath(dirname($json) . '/' . $package['install-path']);
+        if ($path !== FALSE) {
+          $maps[$json][$path] = $version;
+        }
+      }
+    }
+  }
+  $found = FALSE;
+  $length = 0;
+  foreach ($maps[$json] as $path => $version) {
+    if (($real_dir === $path || strpos($real_dir, $path . '/') === 0) && strlen($path) > $length) {
+      $found = $version;
+      $length = strlen($path);
+    }
+  }
+  return $found;
 }
 
 function provision_parse_info_file($filename) {
