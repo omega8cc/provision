@@ -39,6 +39,13 @@ class Provision_Config {
   protected $group = NULL;
 
   /**
+   * TRUE for a file that requests read from disk while it is rewritten
+   * (sites.php): written as a new file renamed over the name
+   * (_write_by_rename()), never in place.
+   */
+  protected $write_by_rename = FALSE;
+
+  /**
    * An optional data store class to instantiate for this config.
    */
   protected $data_store_class = NULL;
@@ -199,6 +206,10 @@ class Provision_Config {
     if ($filename && ($site_dir = $this->_site_dir_of($filename)) !== NULL) {
       return $this->_write_in_site_dir($filename, $site_dir);
     }
+    if ($filename && $this->write_by_rename
+      && ($dir = realpath(dirname($filename))) !== FALSE && is_dir($dir) && is_writable($dir)) {
+      return $this->_write_by_rename($filename, $dir);
+    }
     // Make directory structure if it does not exist.
     if ($filename && !provision_file()->exists(dirname($filename))->status()) {
       provision_file()->mkdir(dirname($filename))
@@ -238,6 +249,50 @@ class Provision_Config {
             ->fail('Could not change group ownership of @path to @gid');
         }
       }
+    }
+    return $status;
+  }
+
+  /**
+   * Write $filename as a new file made in its directory $dir (the physical
+   * path) and renamed over the name, so a request reading it from disk
+   * finds the old file or the new one, never one cut short: the new file is
+   * made by Provision_FileSystem::_create_here() (never through a link at its
+   * name) with this config's mode, takes an existing file's group, as
+   * writing in place kept it, and is removed again when the write fails.
+   */
+  function _write_by_rename($filename, $dir) {
+    $fs = provision_file();
+    $name = basename($filename);
+    $label = empty($this->description) ? $filename : $this->description . ' (' . $filename . ')';
+    $this->process();
+    $template = $this->load_template();
+    if (!$template) {
+      return FALSE;
+    }
+    $contents = $this->render_template($template, $this->data);
+    $cwd = getcwd();
+    $status = FALSE;
+    if ($fs->_enter($dir)) {
+      clearstatcache();
+      $mode = !is_null($this->mode) ? $this->mode : ((is_file($name) && !is_link($name)) ? fileperms($name) & 07777 : 0666 & ~umask());
+      $tmp = '.' . $name . '.provision-' . getmypid() . '-' . mt_rand();
+      $made = FALSE;
+      $status = $fs->_create_here($tmp, $contents, $mode, $made);
+      if ($status && is_file($name) && !is_link($name)) {
+        @lchgrp($tmp, filegroup($name));
+      }
+      $status = $status && @rename($tmp, $name);
+      if (!$status && $made) {
+        $fs->_remove_own_here($tmp);
+      }
+      $fs->_leave($cwd);
+    }
+    if ($status) {
+      drush_log(dt('Generated config in write(): @label', array('@label' => $label)), 'success');
+    }
+    else {
+      drush_log(dt('Could not generate in write(): @label', array('@label' => $label)), 'warning');
     }
     return $status;
   }

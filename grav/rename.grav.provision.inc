@@ -179,6 +179,9 @@ function drush_provision_grav_rename($new_name = NULL) {
   // provision-save takes for them. An empty list leaves the new context
   // with none.
   $options['drush_aliases'] = implode(',', (array) d()->drush_aliases);
+  // What the new name had before the save: a failed rename removes only
+  // what it made (_provision_grav_discard_copy()).
+  provision_probe_new_name('rename_target_preexisted', $new_name, d()->platform->name);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
   drush_set_option('grav_rename_saved', TRUE);
 
@@ -266,7 +269,7 @@ function drush_provision_grav_rename_rollback($new_name = NULL) {
   // Whatever the new name acquired (its vhost, its context) goes; the capsule
   // is back at the old path, so the helper finds nothing to remove there.
   if (drush_get_option('grav_rename_saved', FALSE)) {
-    _provision_grav_discard_copy($new_name, NULL);
+    _provision_grav_discard_copy($new_name, NULL, '', 'rename_target_preexisted');
     // The extra Drush aliases are the new context's now (its provision-save
     // rewrote their files at the new uri) and the new context is gone, so
     // they go too, before the old context is re-asserted from its own

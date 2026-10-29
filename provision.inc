@@ -3028,6 +3028,26 @@ function _provision_platform_parent_writable($parent) {
 }
 
 /**
+ * The directory holding a plain platform's docroot, or FALSE.
+ *
+ * A plain platform (no vendor/ or composer.lock beside its docroot, as one
+ * uploaded or unpacked into static/platforms/<name>) is removed by unlinking
+ * its emptied docroot from that directory, which the account's logins made:
+ * left 0755, the Delete removes the code and warns that the directory itself
+ * could not go. _provision_platform_parent_writable() opens it the same way.
+ * A holder with vendor/ or composer.lock is _provision_platform_composer_parent()'s
+ * to judge, a link is never followed.
+ */
+function _provision_platform_plain_holder($root) {
+  $holder = dirname($root);
+  if (is_link($holder) || file_exists($holder . '/vendor') || is_link($holder . '/vendor')
+    || file_exists($holder . '/composer.lock') || is_link($holder . '/composer.lock')) {
+    return FALSE;
+  }
+  return $holder;
+}
+
+/**
  * Determine if the currently acting context is the server's hostmaster site.
  *
  * @return
