@@ -3010,7 +3010,8 @@ function _provision_platform_registered_in($real) {
  * those directories the group write static/ carries for the account (02775),
  * as the logins' umask would have. An older helper refuses the argument, and
  * this one a root it leaves as it is, both with a non-zero status: the
- * Delete then goes on as before.
+ * Delete then goes on as before, and the notice carries the helper's own
+ * last line, its reason (drush_shell_exec() captures its error output too).
  */
 function _provision_platform_parent_writable($parent) {
   $aegir_root = d('@server_master')->aegir_root;
@@ -3023,7 +3024,9 @@ function _provision_platform_parent_writable($parent) {
     drush_log(dt('DELETE/PARENT/OPEN @parent: group write set for the Delete', array('@parent' => $parent)), 'info');
   }
   else {
-    drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not run its --app-root leg; a directory there the backend user cannot write stays', array('@parent' => $parent)), 'notice');
+    $said = array_values(array_filter(array_map('trim', (array) drush_shell_exec_output()), 'strlen'));
+    $why = empty($said) ? dt('no reason given') : end($said);
+    drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not open it (@why); a directory there the backend user cannot write stays', array('@parent' => $parent, '@why' => $why)), 'notice');
   }
 }
 
