@@ -3080,7 +3080,7 @@ function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option 
   $record = provision_sitealias_get_record($new_name);
 
   $vhost = d('@server_master')->http_vhostd_path . '/' . $new_uri;
-  $before = ($probe_option !== '') ? drush_get_option($probe_option . '_vhost', NULL) : 'none';
+  $before = ($probe_option !== '') ? drush_get_option($probe_option . '_vhost', NULL) : NULL;
   $now = _provision_vhost_kind(d('@server_master'), $new_uri);
   if (is_file($vhost) && ($now !== 'site' || ($before !== 'none' && $before !== 'placeholder'))) {
     drush_log(dt('The vhost of @name was not written by this task and is left in place.', array('@name' => $new_name)), 'notice');
