@@ -20,6 +20,9 @@ function drush_provision_txp_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
+  if (!provision_refuse_cms_on_subdir_parent(d()->platform->web_server, d()->uri, 'Textpattern')) {
+    return FALSE;
+  }
   // Floor enforcement: refuse the task outright when the box has no >= 8.4 PHP.
   if (_provision_txp_php_bin() === FALSE) {
     return drush_set_error('PROVISION_TXP_PHP_TOO_OLD',

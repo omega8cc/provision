@@ -40,6 +40,9 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     return drush_set_error('PROVISION_TXP_RENAME_FAILED',
       dt('This site is not on a Textpattern platform.'));
   }
+  if (!provision_refuse_cms_on_subdir_parent(d()->platform->web_server, $new_name, 'Textpattern')) {
+    return FALSE;
+  }
   if (_provision_txp_php_bin() === FALSE) {
     return drush_set_error('PROVISION_TXP_PHP_TOO_OLD',
       dt('No PHP >= 8.4 binary found; TXP tasks refuse to run below the enforced floor.'));

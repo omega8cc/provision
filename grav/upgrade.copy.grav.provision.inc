@@ -43,6 +43,13 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
     return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_SOURCE',
       dt('provision-grav-copy-upgrade only applies to sites on Grav platforms.'));
   }
+  $refuse_server = d()->platform->web_server;
+  if (!empty($platform) && is_object(d($platform)) && isset(d($platform)->web_server)) {
+    $refuse_server = d($platform)->web_server;
+  }
+  if (!provision_refuse_cms_on_subdir_parent($refuse_server, $new_name, 'Grav')) {
+    return FALSE;
+  }
   if (_provision_grav_php_bin() === FALSE) {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',
       dt('No PHP >= 8.3 binary found; Grav tasks refuse to run below the enforced floor.'));

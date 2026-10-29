@@ -46,6 +46,9 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
     return drush_set_error('PROVISION_GRAV_RENAME_BAD_SOURCE',
       dt('provision-grav-rename only applies to sites on Grav platforms.'));
   }
+  if (!provision_refuse_cms_on_subdir_parent(d()->platform->web_server, $new_name, 'Grav')) {
+    return FALSE;
+  }
   if (!_provision_grav_site_exists()) {
     return drush_set_error('PROVISION_GRAV_SITE_NOT_FOUND',
       dt('No Grav capsule found at !site.', array('!site' => d()->site_path)));
