@@ -3036,11 +3036,12 @@ function _provision_platform_parent_writable($parent) {
  * left 0755, the Delete removes the code and warns that the directory itself
  * could not go. _provision_platform_parent_writable() opens it the same way.
  * A holder with vendor/ or composer.lock is _provision_platform_composer_parent()'s
- * to judge, a link is never followed.
+ * to judge, a link is never followed: a docroot that is itself a link has its
+ * real holder elsewhere, which the helper would open instead of this one.
  */
 function _provision_platform_plain_holder($root) {
   $holder = dirname($root);
-  if (is_link($holder) || file_exists($holder . '/vendor') || is_link($holder . '/vendor')
+  if (is_link($root) || is_link($holder) || file_exists($holder . '/vendor') || is_link($holder . '/vendor')
     || file_exists($holder . '/composer.lock') || is_link($holder . '/composer.lock')) {
     return FALSE;
   }
