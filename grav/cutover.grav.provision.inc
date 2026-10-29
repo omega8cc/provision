@@ -70,6 +70,9 @@ function drush_provision_grav_cutover_validate($target_domain = NULL) {
       dt('The target domain !domain is not a plausible domain name.',
       array('!domain' => $target_domain)));
   }
+  if (!provision_refuse_cms_on_subdir_parent(d()->platform->web_server, $target_domain, 'Grav')) {
+    return FALSE;
+  }
   if ($target_domain === strtolower(d()->uri)) {
     return drush_set_error('PROVISION_GRAV_CUTOVER_NOOP',
       dt('This site already answers at !domain; nothing to cut over.',

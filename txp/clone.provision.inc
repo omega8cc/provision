@@ -38,6 +38,13 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
     return drush_set_error('PROVISION_TXP_CLONE_CROSS_CMS',
       dt('Refusing a cross-CMS clone: the source site and the target platform must both be Textpattern.'));
   }
+  $refuse_server = d()->platform->web_server;
+  if (!empty($platform) && is_object(d($platform)) && isset(d($platform)->web_server)) {
+    $refuse_server = d($platform)->web_server;
+  }
+  if (!provision_refuse_cms_on_subdir_parent($refuse_server, $new_name, 'Textpattern')) {
+    return FALSE;
+  }
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }

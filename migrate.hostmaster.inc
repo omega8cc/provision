@@ -86,6 +86,7 @@ We are making the following assumptions:
     if (drush_get_error()) {
       return false;
     }
+    _provision_hostmaster_copy_move_marker(d('@hostmaster')->root, $platform);
   }
   else {
 
@@ -147,6 +148,7 @@ We are making the following assumptions:
     if (drush_get_error()) {
       return false;
     }
+    _provision_hostmaster_copy_move_marker($data['publish_path'], $platform);
 
 
     $site_name = '@hostmaster';
@@ -169,6 +171,39 @@ We are making the following assumptions:
     if (drush_get_error()) {
       return false;
     }
+  }
+}
+
+/**
+ * Copy BOA's panel-move marker into the new root.
+ *
+ * Before it calls this command BOA writes sites/.panel-move.info in the root
+ * the panel runs on: the time and the database this move drops. The new root
+ * exists only from the platform verify above, so the marker is copied there
+ * now, before the move saves the panel with the new root: until the deploy
+ * rewrites the new copy's settings, that copy reads the old database and is
+ * held too, while a copy on the new database is not. Only into a root whose
+ * hosting reads the database name (the line panel-move-reads-database): an
+ * older release would hold the move's own last steps on the new database. BOA
+ * removes both markers once this command returns.
+ */
+function _provision_hostmaster_copy_move_marker($old_root, $new_root) {
+  $from = rtrim((string) $old_root, '/') . '/sites/.panel-move.info';
+  $to = rtrim((string) $new_root, '/') . '/sites/.panel-move.info';
+  $hosting = rtrim((string) $new_root, '/') . '/profiles/hostmaster/modules/aegir/hosting/hosting.module';
+  if (!is_file($from) || !is_dir(dirname($to)) || !is_readable($hosting)) {
+    return;
+  }
+  $fields = preg_split('/\s+/', trim((string) @file_get_contents($from)));
+  if (empty($fields[1]) || strpos((string) @file_get_contents($hosting), 'panel-move-reads-database') === FALSE) {
+    return;
+  }
+  if (@copy($from, $to)) {
+    @chmod($to, 0644);
+    drush_log(dt('Copied the panel-move marker into @root.', array('@root' => $new_root)), 'notice');
+  }
+  else {
+    drush_log(dt('Could not copy the panel-move marker into @root.', array('@root' => $new_root)), 'warning');
   }
 }
 

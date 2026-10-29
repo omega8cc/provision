@@ -21,6 +21,9 @@ function drush_provision_grav_provision_install_validate() {
   if (!d()->uri) {
     return drush_set_error("PROVISION_URL_REQUIRED", dt("You need to specify a valid url to install a site"));
   }
+  if (!provision_refuse_cms_on_subdir_parent(d()->platform->web_server, d()->uri, 'Grav')) {
+    return FALSE;
+  }
   // Floor enforcement: refuse the task outright when the box has no >= 8.3 PHP.
   if (_provision_grav_php_bin() === FALSE) {
     return drush_set_error('PROVISION_GRAV_PHP_TOO_OLD',

@@ -3010,7 +3010,8 @@ function _provision_platform_registered_in($real) {
  * those directories the group write static/ carries for the account (02775),
  * as the logins' umask would have. An older helper refuses the argument, and
  * this one a root it leaves as it is, both with a non-zero status: the
- * Delete then goes on as before.
+ * Delete then goes on as before, and the notice carries the helper's own
+ * last line, its reason (drush_shell_exec() captures its error output too).
  */
 function _provision_platform_parent_writable($parent) {
   $aegir_root = d('@server_master')->aegir_root;
@@ -3023,7 +3024,29 @@ function _provision_platform_parent_writable($parent) {
     drush_log(dt('DELETE/PARENT/OPEN @parent: group write set for the Delete', array('@parent' => $parent)), 'info');
   }
   else {
-    drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not run its --app-root leg; a directory there the backend user cannot write stays', array('@parent' => $parent)), 'notice');
+    // The reason is the helper's last Notice or Error line, else its last
+    // line (sudo's own refusal). Names the account chose can be in it: only
+    // printable ASCII goes on, since a byte that is not UTF-8 would keep the
+    // backend from encoding the task's result.
+    $said = array_values(array_filter(array_map('trim', (array) drush_shell_exec_output()), 'strlen'));
+    $why = '';
+    foreach (array_reverse($said) as $line) {
+      if (preg_match('/^(Notice|Error):/', $line)) {
+        $why = $line;
+        break;
+      }
+    }
+    if ($why === '' && !empty($said)) {
+      $why = end($said);
+    }
+    // substr() of '' is FALSE on PHP 5.6: only a line that is there is cut.
+    if ($why === '') {
+      $why = dt('no reason given');
+    }
+    else {
+      $why = substr(preg_replace('/[^\x20-\x7E]/', '?', $why), 0, 300);
+    }
+    drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not open it (@why); a directory there the backend user cannot write stays', array('@parent' => $parent, '@why' => $why)), 'notice');
   }
 }
 
@@ -4278,6 +4301,26 @@ function _provision_vhost_kind($server, $uri) {
     return 'placeholder';
   }
   return 'site';
+}
+
+/**
+ * Refuse a Grav or Textpattern site on a subdirectory parent's name.
+ *
+ * A name that is only the parent of another site's subdirectory alias holds
+ * a placeholder vhost serving <name>/<sub> from that site. A Grav or
+ * Textpattern site carries no subdirectory sites: put on such a name, its
+ * vhost replaces the placeholder and the subdirectory page stops answering
+ * for as long as the site is there. Sets the error and returns FALSE when
+ * $uri holds that placeholder on $server; TRUE otherwise, and when the
+ * server cannot be read.
+ */
+function provision_refuse_cms_on_subdir_parent($server, $uri, $cms) {
+  $uri = strtolower(ltrim((string) $uri, '@'));
+  if (_provision_vhost_kind($server, $uri) !== 'placeholder') {
+    return TRUE;
+  }
+  drush_set_error('PROVISION_SUBDIR_PARENT_NAME', dt('!uri is the parent of another site\'s subdirectory alias (!uri/...); a !cms site carries no subdirectory sites, so that page would stop answering there. Remove the subdirectory alias from its site first, or choose another name.', array('!uri' => $uri, '!cms' => $cms)));
+  return FALSE;
 }
 
 /**
