@@ -136,6 +136,9 @@ function drush_provision_grav_provision_clone($new_name, $platform = NULL) {
   if (!_provision_grav_remove_stale_alias(ltrim($new_name, '@'), 'PROVISION_GRAV_CLONE_TARGET_EXISTS')) {
     return FALSE;
   }
+  // What the new name had before the save: a failed clone removes only what
+  // it made (_provision_grav_discard_copy()).
+  provision_probe_new_name('clone_target_preexisted', $new_name, $options['platform']);
   drush_invoke_process('@none', 'provision-save', array($new_name), $options);
 
   $deploy_options = array(
@@ -209,6 +212,6 @@ function drush_provision_grav_provision_clone_rollback($new_name, $platform = NU
   }
   // The same set a failed copy-upgrade discards: capsule, vhost, context,
   // and for a site with a database the database the copy's deploy made.
-  _provision_grav_discard_copy($new_name, $platform, 'clone_target_copy');
+  _provision_grav_discard_copy($new_name, $platform, 'clone_target_copy', 'clone_target_preexisted');
   _provision_grav_internal_backup_flag(FALSE);
 }

@@ -3031,8 +3031,15 @@ function _provision_grav_copy_options($new_name, $platform = NULL, $label = 'clo
  * provision_remove_unfinished_target_copy() and its guards (never the
  * source's database, never one another site names), while the copy still
  * names it on disk.
+ *
+ * $probe_option names what provision_probe_new_name() recorded of the new
+ * name's vhost before the copy's context was saved. Only a site vhost this
+ * task wrote goes: none before it, or the placeholder a subdirectory parent
+ * that is no site gets, which comes back while subdirectory sites of other
+ * sites remain under the name, as a Delete writes it. A vhost the name had
+ * before, or one of a task that never probed, is left in place.
  */
-function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option = '') {
+function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option = '', $probe_option = '') {
   $new_uri = ltrim($new_name, '@');
   if ($new_uri === '' || $new_uri === d()->uri) {
     return;
@@ -3067,18 +3074,37 @@ function _provision_grav_discard_copy($new_name, $platform = NULL, $copy_option 
     }
   }
 
+  // The alias record, not d(): loading a context that does not exist logs
+  // an error row of its own, and a copy that failed before provision-save
+  // has none.
+  $record = provision_sitealias_get_record($new_name);
+
   $vhost = d('@server_master')->http_vhostd_path . '/' . $new_uri;
-  if (is_file($vhost)) {
+  $before = ($probe_option !== '') ? drush_get_option($probe_option . '_vhost', NULL) : 'none';
+  $now = _provision_vhost_kind(d('@server_master'), $new_uri);
+  if (is_file($vhost) && ($now !== 'site' || ($before !== 'none' && $before !== 'placeholder'))) {
+    drush_log(dt('The vhost of @name was not written by this task and is left in place.', array('@name' => $new_name)), 'notice');
+  }
+  elseif (is_file($vhost) && $before === 'placeholder' && !empty($record)) {
+    // Removed through the copy's context: the subdirectory parent step
+    // writes the placeholder back while subdirectory confs remain. Cleanup,
+    // never the rollback's verdict: the task's error state is kept.
+    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    $root = d()->name;
+    d($new_name, TRUE);
+    d()->service('http')->delete_config('site');
+    d()->service('http')->parse_configs();
+    d($root, TRUE);
+    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+    drush_log(dt('Removed the vhost of the half-built copy @name; its subdirectory parent vhost is back.', array('@name' => $new_name)), 'ok');
+  }
+  elseif (is_file($vhost)) {
     provision_file()->unlink($vhost)
       ->succeed('Removed the vhost of the half-built copy @path')
       ->fail('Could not remove the vhost of the half-built copy @path');
     d('@server_master')->service('http')->parse_configs();
   }
 
-  // The alias record, not d(): loading a context that does not exist logs
-  // an error row of its own, and a copy that failed before provision-save
-  // has none.
-  $record = provision_sitealias_get_record($new_name);
   if (!empty($record)) {
     drush_invoke_process('@none', 'provision-save', array($new_name), array('delete' => TRUE));
     drush_log(dt('Removed the context of the half-built copy @name.', array('@name' => $new_name)), 'ok');
