@@ -86,6 +86,7 @@ We are making the following assumptions:
     if (drush_get_error()) {
       return false;
     }
+    _provision_hostmaster_copy_move_marker(d('@hostmaster')->root, $platform);
   }
   else {
 
