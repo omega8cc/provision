@@ -3024,8 +3024,25 @@ function _provision_platform_parent_writable($parent) {
     drush_log(dt('DELETE/PARENT/OPEN @parent: group write set for the Delete', array('@parent' => $parent)), 'info');
   }
   else {
+    // The reason is the helper's last Notice or Error line, else its last
+    // line (sudo's own refusal). Names the account chose can be in it: only
+    // printable ASCII goes on, since a byte that is not UTF-8 would keep the
+    // backend from encoding the task's result.
     $said = array_values(array_filter(array_map('trim', (array) drush_shell_exec_output()), 'strlen'));
-    $why = empty($said) ? dt('no reason given') : end($said);
+    $why = '';
+    foreach (array_reverse($said) as $line) {
+      if (preg_match('/^(Notice|Error):/', $line)) {
+        $why = $line;
+        break;
+      }
+    }
+    if ($why === '' && !empty($said)) {
+      $why = end($said);
+    }
+    $why = substr(preg_replace('/[^\x20-\x7E]/', '?', $why), 0, 300);
+    if ($why === '') {
+      $why = dt('no reason given');
+    }
     drush_log(dt('DELETE/PARENT/AS-IS @parent: the permissions helper did not open it (@why); a directory there the backend user cannot write stays', array('@parent' => $parent, '@why' => $why)), 'notice');
   }
 }
