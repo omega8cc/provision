@@ -149,6 +149,15 @@ function _provision_system_query($type) {
         if (isset($info['type']) && $info['type'] != 'module') {
           continue;
         }
+        // A module that ships no version key (one installed from a Git or
+        // Packagist source, CiviCRM's for one) takes the release Composer
+        // installed, as the platform scan records it.
+        if (empty($info['version']) && empty($package->version)) {
+          $composer_version = _provision_composer_installed_version(dirname($package->filename));
+          if ($composer_version) {
+            $package->version = $composer_version;
+          }
+        }
       }
     }
 
