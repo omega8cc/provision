@@ -4304,6 +4304,26 @@ function _provision_vhost_kind($server, $uri) {
 }
 
 /**
+ * Refuse a Grav or Textpattern site on a subdirectory parent's name.
+ *
+ * A name that is only the parent of another site's subdirectory alias holds
+ * a placeholder vhost serving <name>/<sub> from that site. A Grav or
+ * Textpattern site carries no subdirectory sites: put on such a name, its
+ * vhost replaces the placeholder and the subdirectory page stops answering
+ * for as long as the site is there. Sets the error and returns FALSE when
+ * $uri holds that placeholder on $server; TRUE otherwise, and when the
+ * server cannot be read.
+ */
+function provision_refuse_cms_on_subdir_parent($server, $uri, $cms) {
+  $uri = strtolower(ltrim((string) $uri, '@'));
+  if (_provision_vhost_kind($server, $uri) !== 'placeholder') {
+    return TRUE;
+  }
+  drush_set_error('PROVISION_SUBDIR_PARENT_NAME', dt('!uri is the parent of another site\'s subdirectory alias (!uri/...); a !cms site carries no subdirectory sites, so that page would stop answering there. Remove the subdirectory alias from its site first, or choose another name.', array('!uri' => $uri, '!cms' => $cms)));
+  return FALSE;
+}
+
+/**
  * Record what a clone's or rename's new name had before the task writes its
  * context on $platform: in $option whether that context existed (1) or not
  * (0), in "{$option}_vhost" what its vhost file was (_provision_vhost_kind()).

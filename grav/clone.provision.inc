@@ -45,6 +45,13 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
     return drush_set_error('PROVISION_GRAV_CLONE_CROSS_CMS',
       dt('Refusing a cross-CMS clone: the source site and the target platform must both be Grav.'));
   }
+  $refuse_server = d()->platform->web_server;
+  if (!empty($platform) && is_object(d($platform)) && isset(d($platform)->web_server)) {
+    $refuse_server = d($platform)->web_server;
+  }
+  if (!provision_refuse_cms_on_subdir_parent($refuse_server, $new_name, 'Grav')) {
+    return FALSE;
+  }
   if (d()->type !== 'site') {
     return drush_set_error('PROVISION_CLONE_CONTEXT', dt('provision-clone must run on a site context.'));
   }
