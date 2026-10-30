@@ -3051,6 +3051,18 @@ function _provision_platform_parent_writable($parent) {
 }
 
 /**
+ * A path glob() matches only as itself.
+ *
+ * A platform or site path can carry a folder name the account chose, and a
+ * [, ], *, ? or backslash in it is a pattern to glob(): a site scan then
+ * counts another folder's sites, or none of its own, and a Delete it guards
+ * goes ahead over live sites. Escaped, they match only themselves.
+ */
+function _provision_glob_quote($path) {
+  return addcslashes($path, '\\*?[]');
+}
+
+/**
  * The directory holding a plain platform's docroot, or FALSE.
  *
  * A plain platform (no vendor/ or composer.lock beside its docroot, as one

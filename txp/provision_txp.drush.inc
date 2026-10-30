@@ -312,7 +312,7 @@ function provision_txp_find_sites($root = NULL) {
     $root = d()->root;
   }
   $sites = array();
-  $configs = glob($root . '/sites/*/private/config.php');
+  $configs = glob(_provision_glob_quote($root) . '/sites/*/private/config.php');
   if (is_array($configs)) {
     foreach ($configs as $config) {
       $dir = dirname(dirname($config));

@@ -208,7 +208,7 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
 
   // Third-party post-update scripts on the TARGET core are a real include glob
   // at the end of the chain.
-  $custom = glob($target_root . '/textpattern/update/custom/post-update*.php');
+  $custom = glob(_provision_glob_quote($target_root) . '/textpattern/update/custom/post-update*.php');
   if (is_array($custom) && !empty($custom)) {
     $names = array();
     foreach ($custom as $file) {

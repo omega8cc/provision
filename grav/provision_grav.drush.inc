@@ -680,7 +680,7 @@ function _provision_grav_blank_licences_signing_secret($site_path) {
   // Host overlays: user/env/<host>/ and, where user/env/ does not exist, the
   // Grav 1.6 shape user/<host>/ that Grav still falls back to.
   foreach (array('/user/env/*/config/plugins/kahunacart-licenses.yaml', '/user/*/config/plugins/kahunacart-licenses.yaml') as $pattern) {
-    $found = glob($site_path . $pattern);
+    $found = glob(_provision_glob_quote($site_path) . $pattern);
     if (is_array($found)) {
       $files = array_merge($files, $found);
     }
@@ -1362,7 +1362,7 @@ function provision_grav_find_sites($root = NULL) {
     $root = d()->root;
   }
   $sites = array();
-  $markers = glob($root . '/sites/*/system/defines.php');
+  $markers = glob(_provision_glob_quote($root) . '/sites/*/system/defines.php');
   if (is_array($markers)) {
     foreach ($markers as $marker) {
       $capsule = dirname(dirname($marker));
@@ -1384,7 +1384,7 @@ function provision_grav_find_sites($root = NULL) {
   // held; a task that died before the move leaves it there. The glob above
   // never sees a hidden name, so it is named here to get it removed: its
   // drushrc.php names the SOURCE store's database.
-  $unfinished = glob($root . '/sites/.*.copy/system/defines.php');
+  $unfinished = glob(_provision_glob_quote($root) . '/sites/.*.copy/system/defines.php');
   if (is_array($unfinished)) {
     foreach ($unfinished as $marker) {
       drush_log(dt('@path is a copy whose task never finished (it names its source\'s database); it is not a site. Remove it.',
