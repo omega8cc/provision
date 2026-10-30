@@ -18,52 +18,64 @@ if ($this->redirection) {
   $aegir_root = d('@server_master')->aegir_root;
   $satellite_mode = d('@server_master')->satellite_mode;
   // Redirect all aliases to the main http url using separate vhosts blocks to avoid if{} in Nginx.
+  $redirect_names = array();
+  $main_redirected = FALSE;
   foreach ($this->aliases as $alias_url) {
     if (!preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)) {
-      print "\n";
-      print "# alias redirection virtual host\n";
-      print "server {\n";
-      print "  listen  *:{$http_port};\n";
       // if we use redirections, we need to change the redirection
       // target to be the original site URL ($this->uri instead of
       // $alias_url)
       if ($this->redirection && $alias_url == $this->redirection) {
         $this->uri = str_replace('/', '.', $this->uri);
-        print "  server_name  {$this->uri};\n";
+        $redirect_names[] = $this->uri;
+        $main_redirected = TRUE;
       } else {
-        $alias_url = str_replace('/', '.', $alias_url);
-        print "  server_name  {$alias_url};\n";
+        $redirect_names[] = str_replace('/', '.', $alias_url);
       }
-      print "  access_log off;\n";
-      print "  log_not_found off;\n";
-      if ($satellite_mode == 'boa') {
-        print "\n";
-        print "  ###\n";
-        print "  ### Allow access to letsencrypt.org ACME challenges directory.\n";
-        print "  ###\n";
-        print "  location ^~ /.well-known/acme-challenge {\n";
-        print "    allow all;\n";
-        print "    alias {$aegir_root}/tools/le/.acme-challenges;\n";
-        print "    try_files \$uri 404;\n";
-        print "  }\n";
-        print "\n";
-      }
-      if (!empty($ssl_redirection)) {
-        // HTTPS required: straight to the main https address, not to the
-        // http one whose own vhost would send a second redirect.
-        print "  return 301 https://{$this->redirection}\$request_uri;\n";
-      }
-      else {
-        // An HTTPS visitor who reached this alias through the wildcard SSL
-        // front arrives here over plain HTTP, with X-Forwarded-Proto: https.
-        print "  set \$boa_visitor_scheme \$scheme;\n";
-        print "  if (\$http_x_forwarded_proto = \"https\") {\n";
-        print "    set \$boa_visitor_scheme \"https\";\n";
-        print "  }\n";
-        print "  return 301 \$boa_visitor_scheme://{$this->redirection}\$request_uri;\n";
-      }
-      print "}\n";
     }
+  }
+  // The main server block below serves only the redirection target, so the
+  // site's own name redirects too when the target is an alias the loop skips
+  // (dev, devel or nodns). Without this block nothing answers the site's own
+  // name, the panel's cron of it included.
+  if (!$main_redirected && $this->redirection != $this->uri) {
+    $redirect_names[] = str_replace('/', '.', $this->uri);
+  }
+  foreach ($redirect_names as $redirect_name) {
+    print "\n";
+    print "# alias redirection virtual host\n";
+    print "server {\n";
+    print "  listen  *:{$http_port};\n";
+    print "  server_name  {$redirect_name};\n";
+    print "  access_log off;\n";
+    print "  log_not_found off;\n";
+    if ($satellite_mode == 'boa') {
+      print "\n";
+      print "  ###\n";
+      print "  ### Allow access to letsencrypt.org ACME challenges directory.\n";
+      print "  ###\n";
+      print "  location ^~ /.well-known/acme-challenge {\n";
+      print "    allow all;\n";
+      print "    alias {$aegir_root}/tools/le/.acme-challenges;\n";
+      print "    try_files \$uri 404;\n";
+      print "  }\n";
+      print "\n";
+    }
+    if (!empty($ssl_redirection)) {
+      // HTTPS required: straight to the main https address, not to the
+      // http one whose own vhost would send a second redirect.
+      print "  return 301 https://{$this->redirection}\$request_uri;\n";
+    }
+    else {
+      // An HTTPS visitor who reached this alias through the wildcard SSL
+      // front arrives here over plain HTTP, with X-Forwarded-Proto: https.
+      print "  set \$boa_visitor_scheme \$scheme;\n";
+      print "  if (\$http_x_forwarded_proto = \"https\") {\n";
+      print "    set \$boa_visitor_scheme \"https\";\n";
+      print "  }\n";
+      print "  return 301 \$boa_visitor_scheme://{$this->redirection}\$request_uri;\n";
+    }
+    print "}\n";
   }
 }
 
