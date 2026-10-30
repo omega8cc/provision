@@ -180,7 +180,7 @@ function _provision_drupal_system_map() {
       $module->schema_version = 0;
     }
     $packages['modules'][$module->name] = $module;
-    $module->version = $module->info['version'];
+    $module->version = isset($module->info['version']) ? $module->info['version'] : NULL;
   }
 
   drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
@@ -201,7 +201,7 @@ function _provision_drupal_system_map() {
     }
 
     $packages['themes'][$theme->name] = $theme;
-    $theme->version = $theme->info['version'];
+    $theme->version = isset($theme->info['version']) ? $theme->info['version'] : NULL;
   }
   drush_log(dt("Found !count themes", array('!count' => count($packages['themes']))), 'info');
   return $packages;
