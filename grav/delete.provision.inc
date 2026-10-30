@@ -129,6 +129,11 @@ function drush_provision_grav_provision_delete() {
         array('!sites' => implode(', ', array_keys($sites)))), 'warning');
     }
     drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
+    // A platform an account built in its static/ is unlinked from the folder
+    // holding it, as a Drupal or Backdrop one is: open that folder first.
+    if ($local_delete_holder = _provision_platform_plain_holder(d()->root)) {
+      _provision_platform_parent_writable($local_delete_holder);
+    }
     _provision_recursive_delete(d()->root);
     d()->service('http')->sync(d()->root);
   }
