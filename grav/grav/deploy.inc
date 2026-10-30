@@ -103,7 +103,7 @@ if ($identity_changes) {
   $stripped = 0;
   $unwritable = array();
   foreach ($accounts_dirs as $accounts_dir) {
-    $yamls = glob($accounts_dir . '/*.yaml');
+    $yamls = glob(_provision_glob_quote($accounts_dir) . '/*.yaml');
     if (!is_array($yamls)) {
       continue;
     }
@@ -169,7 +169,7 @@ if ($identity_changes) {
   $rewritten = 0;
   $rewrite_targets = array();
   foreach ($accounts_dirs as $accounts_dir) {
-    $yamls = glob($accounts_dir . '/*.yaml');
+    $yamls = glob(_provision_glob_quote($accounts_dir) . '/*.yaml');
     if (is_array($yamls)) {
       foreach ($yamls as $yaml) {
         // Top-level "email:" in an account file.
