@@ -111,8 +111,28 @@ $txp_files_open = provision_file()
 ?>
 
 <?php if ($this->redirection): ?>
-<?php foreach ($this->aliases as $alias_url): ?>
-<?php if (!preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)): ?>
+<?php
+$redirect_names = array();
+$main_redirected = FALSE;
+foreach ($this->aliases as $alias_url) {
+  if (!preg_match("/\.(?:nodns|dev|devel)\./", $alias_url)) {
+    if ($alias_url == $this->redirection) {
+      $this->uri = str_replace('/', '.', $this->uri);
+      $redirect_names[] = $this->uri;
+      $main_redirected = TRUE;
+    }
+    else {
+      $redirect_names[] = str_replace('/', '.', $alias_url);
+    }
+  }
+}
+// The main server block below serves only the redirection target, so the
+// site's own name redirects too when the target is not an alias above.
+if (!$main_redirected && $this->redirection != $this->uri) {
+  $redirect_names[] = str_replace('/', '.', $this->uri);
+}
+?>
+<?php foreach ($redirect_names as $redirect_name): ?>
 server {
   listen  <?php print "{$ssl_listen_ipv4}:{$http_ssl_port} {$ssl_args}"; ?>;
 <?php if ($nginx_has_http3): ?>
@@ -123,16 +143,7 @@ server {
 <?php if ($nginx_has_http2): ?>
   http2 on;
 <?php endif; ?>
-<?php
-  if ($this->redirection && $alias_url == $this->redirection) {
-    $this->uri = str_replace('/', '.', $this->uri);
-    print "  server_name  {$this->uri};\n";
-  }
-  else {
-    $alias_url = str_replace('/', '.', $alias_url);
-    print "  server_name  {$alias_url};\n";
-  }
-?>
+  server_name  <?php print $redirect_name; ?>;
   ssl_dhparam /etc/ssl/private/nginx-wild-ssl.dhp;
   ssl_certificate_key <?php print $ssl_cert_key; ?>;
 <?php if (!empty($ssl_chain_cert)) : ?>
@@ -152,7 +163,6 @@ server {
   log_not_found off;
   return 301 $scheme://<?php print $this->redirection; ?>$request_uri;
 }
-<?php endif; ?>
 <?php endforeach; ?>
 <?php endif; ?>
 
