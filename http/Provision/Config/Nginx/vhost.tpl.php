@@ -35,10 +35,9 @@ if ($this->redirection) {
     }
   }
   // The main server block below serves only the redirection target, so the
-  // site's own name redirects too when the target is not an alias above: a
-  // name the site was renamed away from, or an alias the loop skips. Without
-  // this block nothing answers the site's own name, the panel's cron of it
-  // included.
+  // site's own name redirects too when the target is an alias the loop skips
+  // (dev, devel or nodns). Without this block nothing answers the site's own
+  // name, the panel's cron of it included.
   if (!$main_redirected && $this->redirection != $this->uri) {
     $redirect_names[] = str_replace('/', '.', $this->uri);
   }
