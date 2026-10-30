@@ -97,7 +97,7 @@ if ($this->redirection) {
   }
   // The main server block below serves only the redirection target, so the
   // site's own name redirects too when the target is an alias the loop skips
-  // (dev, devel or nodns).
+  // (dev, devel or nodns) or the site's www companion with no alias row.
   if (!$main_redirected && $this->redirection != $this->uri) {
     $redirect_names[] = str_replace('/', '.', $this->uri);
   }
