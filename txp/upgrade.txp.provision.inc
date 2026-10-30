@@ -207,7 +207,10 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
   }
 
   // Third-party post-update scripts on the TARGET core are a real include glob
-  // at the end of the chain.
+  // at the end of the chain. The pattern stays Textpattern's own, unquoted:
+  // _update.php globs it from txpath as given, and the shim checks the same, so
+  // on a root holding glob characters this is what the chain would include,
+  // another platform's scripts among them, never the literal folder.
   $custom = glob($target_root . '/textpattern/update/custom/post-update*.php');
   if (is_array($custom) && !empty($custom)) {
     $names = array();
@@ -685,7 +688,7 @@ function _provision_txp_upgrade_convert($copy_path, $target_root, $new_uri, $sou
  */
 function _provision_txp_upgrade_assert_structure($mysqli, $target_root, $prefix) {
   $tables_dir = $target_root . '/textpattern/vendors/Textpattern/DB/Tables';
-  $files = glob($tables_dir . '/*.table');
+  $files = glob(_provision_glob_quote($tables_dir) . '/*.table');
   if (!is_array($files) || empty($files)) {
     drush_set_error('PROVISION_TXP_UPGRADE_STRUCTURE',
       dt('The target core declares no table structures at !dir; the upgrade cannot be proved.',
