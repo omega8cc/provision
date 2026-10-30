@@ -352,15 +352,20 @@ location ^~ /<?php print $subdir; ?>/ {
   }
 
   ###
-  ### HTTPRL test mode support.
+  ### HTTPRL test mode support: logged-in users only, no bots, as in the
+  ### shared include.
   ###
   location ^~ /<?php print $subdir; ?>/admin/httprl-test {
-    location ~* ^/<?php print $subdir; ?>/admin/httprl-test {
-      access_log off;
-      log_not_found off;
-      set $nocache_details "Skip";
-      try_files $uri @drupal_<?php print $subdir_loc; ?>;
+    if ($cache_uid = '') {
+      return 403;
     }
+    if ( $is_bot ) {
+      return 444;
+    }
+    access_log off;
+    log_not_found off;
+    set $nocache_details "Skip";
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
 <?php

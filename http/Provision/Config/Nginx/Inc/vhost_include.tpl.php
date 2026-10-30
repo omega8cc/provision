@@ -447,7 +447,9 @@ location ^~ /httprl_async_function_callback {
 }
 
 ###
-### HTTPRL test mode support.
+### HTTPRL test mode support: logged-in users only, no bots. The checks sit
+### in the location that serves the path: beside a nested location they
+### never ran, since nginx runs only the chosen location's own checks.
 ###
 location ^~ /admin/httprl-test {
   if ($cache_uid = '') {
@@ -456,10 +458,8 @@ location ^~ /admin/httprl-test {
   if ( $is_bot ) {
     return 444;
   }
-  location ~* ^/admin/httprl-test {
-    set $nocache_details "Skip";
-    try_files $uri @drupal;
-  }
+  set $nocache_details "Skip";
+  try_files $uri @drupal;
 }
 
 <?php
