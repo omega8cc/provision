@@ -2439,7 +2439,7 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
   umask($old_umask);
   $bundle = '';
   if ($extracted) {
-    $tops = glob($tmp . '/*', GLOB_ONLYDIR);
+    $tops = glob(_provision_glob_quote($tmp) . '/*', GLOB_ONLYDIR);
     foreach ((array) $tops as $candidate) {
       if (is_dir($candidate . '/user/plugins') || is_dir($candidate . '/user/themes')) {
         $bundle = $candidate;
@@ -2463,7 +2463,7 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
   $kept = 0;
   $failed = 0;
   foreach (array('plugins', 'themes') as $kind) {
-    $sources = glob($bundle . '/user/' . $kind . '/*', GLOB_ONLYDIR);
+    $sources = glob(_provision_glob_quote($bundle) . '/user/' . $kind . '/*', GLOB_ONLYDIR);
     foreach ((array) $sources as $source) {
       $slug = basename($source);
       $target = $site_path . '/user/' . $kind . '/' . $slug;
