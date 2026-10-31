@@ -259,7 +259,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
       foreach ($new_aliases as $key => $alias) {
         if ($alias !== $was_aliases[$key] && $alias !== $pre_new_uri
           && file_exists(drush_server_home() . '/.drush/' . $alias . '.alias.drushrc.php')) {
-          drush_log(dt('[migrate] Kept alias @was: @new is another site\'s name', array('@was' => $was_aliases[$key], '@new' => $alias)), 'warning');
+          drush_log(dt('[migrate] Kept alias @was: @new is another site\'s name', array('@was' => $was_aliases[$key], '@new' => $alias)), 'notice');
           $new_aliases[$key] = $was_aliases[$key];
         }
       }
