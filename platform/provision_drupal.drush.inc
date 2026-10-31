@@ -2530,16 +2530,16 @@ function _provision_drupal_maintain_aliases() {
     else {
       _provision_drupal_delete_aliases();
       // Drupal 6 finds the site's directory by the request's host name. With
-      // a redirection the vhost redirects every alias but its target, so the
-      // target alone needs a link when it is one of the aliases: the vhost
-      // serves that name, and without the link it answers with the default
-      // site. Names compare as the panel stores aliases.
+      // a redirection the vhost redirects every alias but the ones it still
+      // serves: the target, and a dev, devel or nodns alias, which is never
+      // redirected. Those need a link, or they answer with the default site.
+      // Names compare as the panel stores aliases.
       $links = (array) d()->aliases;
       if (d()->redirection) {
         $target = strtolower(rtrim(trim(d()->redirection), '/'));
         $links = array();
         foreach ((array) d()->aliases as $alias) {
-          if (strtolower(rtrim(trim($alias), '/')) === $target) {
+          if (strtolower(rtrim(trim($alias), '/')) === $target || preg_match("/\.(?:nodns|dev|devel)\./", $alias)) {
             $links[] = $alias;
           }
         }
