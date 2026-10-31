@@ -2529,14 +2529,27 @@ function _provision_drupal_maintain_aliases() {
     }
     else {
       _provision_drupal_delete_aliases();
-      if (!d()->redirection) {
-        foreach (d()->aliases as $alias) {
-          if ($alias = trim($alias)) {
-            provision_file()->symlink(d()->uri, d()->root . '/sites/' . str_replace('/', '.', $alias))
-              ->succeed('Created symlink for alias @target')
-              ->fail('Could not create symlink for alias @target');
-            d()->service('http')->sync(d()->root . '/sites/' . $alias);
+      // Drupal 6 finds the site's directory by the request's host name. With
+      // a redirection the vhost redirects every alias but the ones it still
+      // serves: the target, and a dev, devel or nodns alias, which is never
+      // redirected. Those need a link, or they answer with the default site.
+      // Names compare as the panel stores aliases.
+      $links = (array) d()->aliases;
+      if (d()->redirection) {
+        $target = strtolower(rtrim(trim(d()->redirection), '/'));
+        $links = array();
+        foreach ((array) d()->aliases as $alias) {
+          if (strtolower(rtrim(trim($alias), '/')) === $target || preg_match("/\.(?:nodns|dev|devel)\./", $alias)) {
+            $links[] = $alias;
           }
+        }
+      }
+      foreach ($links as $alias) {
+        if ($alias = trim($alias)) {
+          provision_file()->symlink(d()->uri, d()->root . '/sites/' . str_replace('/', '.', $alias))
+            ->succeed('Created symlink for alias @target')
+            ->fail('Could not create symlink for alias @target');
+          d()->service('http')->sync(d()->root . '/sites/' . $alias);
         }
       }
     }

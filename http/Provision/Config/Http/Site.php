@@ -28,6 +28,17 @@ class Provision_Config_Http_Site extends Provision_Config_Http {
 
     $this->aliases = array_filter($this->aliases, 'trim');
 
+    // The site's own name is never its alias: as one, with a redirection
+    // set, the vhost would give that name a redirect block to itself beside
+    // the main block, and every request would answer with a redirect. Names
+    // compare as the panel stores aliases.
+    $own = strtolower(rtrim(trim($this->uri), '/'));
+    foreach ($this->aliases as $key => $alias) {
+      if (strtolower(rtrim(trim($alias), '/')) === $own) {
+        unset($this->aliases[$key]);
+      }
+    }
+
     // A redirection target that is neither the site's own name nor one of
     // its aliases is never served: a name the site was renamed away from
     // has no sites.php record or site directory behind it (it answered with
