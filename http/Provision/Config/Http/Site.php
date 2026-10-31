@@ -39,6 +39,23 @@ class Provision_Config_Http_Site extends Provision_Config_Http {
       }
     }
 
+    // Nor is the domain a subdirectory alias of the site lives in: that
+    // domain's own vhost serves it and includes the subdirectory. Claimed
+    // here, it would redirect to the subdirectory address, which then
+    // redirects into itself.
+    $parents = array();
+    foreach ($this->aliases as $alias) {
+      $parts = explode('/', strtolower(rtrim(trim($alias), '/')), 2);
+      if (count($parts) == 2 && $parts[1] !== '') {
+        $parents[$parts[0]] = TRUE;
+      }
+    }
+    foreach ($this->aliases as $key => $alias) {
+      if (isset($parents[strtolower(rtrim(trim($alias), '/'))])) {
+        unset($this->aliases[$key]);
+      }
+    }
+
     // A redirection target that is neither the site's own name nor one of
     // its aliases is never served: a name the site was renamed away from
     // has no sites.php record or site directory behind it (it answered with
