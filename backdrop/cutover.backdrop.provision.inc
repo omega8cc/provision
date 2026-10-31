@@ -186,12 +186,24 @@ function drush_provision_backdrop_cutover($target_domain = NULL) {
   // Leg 2 — rename this site to the freed domain via a REAL migrate task on
   // its own platform, so the rename leg plus the frontend post-task
   // bookkeeping (node retitle, context re-registration, Encryption
-  // auto-disable, follow-up verify) all run.
+  // auto-disable, follow-up verify) all run. A subdirectory address is
+  // renamed to its internal name, but the migrate gets the address itself
+  // when the frontend passed it: only a title in that form makes the
+  // subdirectory alias and redirection again. It must be the address of
+  // exactly this internal name.
+  $new_uri = $target_domain;
+  $typed = drush_get_option('cutover_new_uri', '');
+  if (is_string($typed) && strpos($typed, '/') !== FALSE) {
+    $typed = strtolower(rtrim(trim($typed), '/'));
+    if (implode('.', array_reverse(explode('/', $typed, 2))) === $target_domain) {
+      $new_uri = $typed;
+    }
+  }
   provision_backend_invoke('@hostmaster', 'hosting-task', array(
     $old_name,
     'migrate',
     'target_platform=' . $platform_nid,
-    'new_uri=' . $target_domain,
+    'new_uri=' . $new_uri,
     'new_db_server=' . $db_nid,
   ), array('force' => TRUE));
 
