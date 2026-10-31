@@ -169,18 +169,20 @@ if ($uri ~ "^/<?php print $subdir_re; ?>/") {
 ###
 ### Drop repeated /node/<id>/.../node/<id>/ patterns flood (botnet typical abuse)
 ###
-if ($is_node_chain) {
-  return 404;
-}
-
-###
 ### Drop “too many language prefixes” (botnet typical abuse)
 ### The map keys on the full $uri, so a language-like subdir name (/pl,
 ### /pt-br) consumes one of the 4 chain slots — such subdir sites see an
 ### effective site-relative threshold of 3. The same 4 prefixes counted from
 ### this site's own root are dropped by the second test.
 ###
-if ($is_lang_chain) {
+### Guards next to each other with the same answer share one if, as in the
+### shared include: nginx keeps every if and location of this file in each
+### server block of the parent site, about 6 KB apiece. The variables are
+### joined with ':' and the pattern is true when any part is neither empty
+### nor "0", the test an if makes of one variable; none of them holds ':'.
+###
+set $boa_fold "$is_node_chain:$is_lang_chain";
+if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
   return 404;
 }
 if ($uri ~* "^/<?php print $subdir_re; ?>/(?:[a-z][a-z](?:-[a-z0-9]+)?/){4}") {
@@ -230,15 +232,10 @@ if ($http_x_forwarded_proto = "https") {
 ### site's own root: the maps anchor their paths at the domain's root. 404,
 ### as the shared include answers them. Every subdirectory conf of a domain
 ### sets this variable and tests it at once, so none reads another's value.
+### The three patterns are one if, each in (?:...) joined by '|'.
 ###
 set $boa_subdir_flood "$request_method:$has_no_referrer$has_no_session:$uri";
-if ($boa_subdir_flood ~* "^[A-Z]+:1.:/<?php print $subdir_re; ?>/(?:[a-z]{2}/)?(?:printmail/[0-9]|printpdf/[0-9]|printer/[0-9]|print/(?:[0-9]|pdf/|epub/|png/|html/|word_docx/)|printable/(?:print|pdf)/)") {
-  return 404;
-}
-if ($boa_subdir_flood ~* "^(?:GET|HEAD):1.:/<?php print $subdir_re; ?>/(?:[a-z]{2}(?:-[a-z]+)?/)?flag/(?:flag|unflag)/[a-z0-9_]+/[0-9]") {
-  return 404;
-}
-if ($boa_subdir_flood ~* "^(?:GET|HEAD):11:/<?php print $subdir_re; ?>/(?:[a-z]{2}(?:-[a-z]+)?/)?hybridauth/window/[a-z0-9_.-]+/?$") {
+if ($boa_subdir_flood ~* "(?:^[A-Z]+:1.:/<?php print $subdir_re; ?>/(?:[a-z]{2}/)?(?:printmail/[0-9]|printpdf/[0-9]|printer/[0-9]|print/(?:[0-9]|pdf/|epub/|png/|html/|word_docx/)|printable/(?:print|pdf)/))|(?:^(?:GET|HEAD):1.:/<?php print $subdir_re; ?>/(?:[a-z]{2}(?:-[a-z]+)?/)?flag/(?:flag|unflag)/[a-z0-9_]+/[0-9])|(?:^(?:GET|HEAD):11:/<?php print $subdir_re; ?>/(?:[a-z]{2}(?:-[a-z]+)?/)?hybridauth/window/[a-z0-9_.-]+/?$)") {
   return 404;
 }
 
@@ -337,30 +334,35 @@ location ^~ /<?php print $subdir; ?>/ {
   error_page 405 = @drupal_<?php print $subdir_loc; ?>;
 
   ###
-  ### HTTPRL standard support.
+  ### HTTPRL standard support. The prefix carries the directives itself: a
+  ### nested regex location repeating the prefix took every URI it takes, and
+  ### cost a location context more.
   ###
   location ^~ /<?php print $subdir; ?>/httprl_async_function_callback {
-    location ~* ^/<?php print $subdir; ?>/httprl_async_function_callback {
-      if ( $is_bot ) {
-        return 444;
-      }
-      access_log off;
-      log_not_found off;
-      set $nocache_details "Skip";
-      try_files $uri @drupal_<?php print $subdir_loc; ?>;
+    if ( $is_bot ) {
+      return 444;
     }
+    access_log off;
+    log_not_found off;
+    set $nocache_details "Skip";
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
-  ### HTTPRL test mode support.
+  ### HTTPRL test mode support: logged-in users only, no bots, as in the
+  ### shared include.
   ###
   location ^~ /<?php print $subdir; ?>/admin/httprl-test {
-    location ~* ^/<?php print $subdir; ?>/admin/httprl-test {
-      access_log off;
-      log_not_found off;
-      set $nocache_details "Skip";
-      try_files $uri @drupal_<?php print $subdir_loc; ?>;
+    if ($cache_uid = '') {
+      return 403;
     }
+    if ( $is_bot ) {
+      return 444;
+    }
+    access_log off;
+    log_not_found off;
+    set $nocache_details "Skip";
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
 <?php
@@ -592,55 +594,27 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### Deny bots on search uri. The three guards of the shared include, in
   ### order: search params with no referrer, 6+ facets behind a faked
   ### referrer, then the per-IP (search_limit) and per-vhost (search_flood)
-  ### rate caps.
+  ### rate caps. The first two, the stale Chrome checks and $is_bot share
+  ### one if, as in the shared include, and the prefix carries the
+  ### directives itself.
   ###
   location ^~ /<?php print $subdir; ?>/search {
-    location ~* ^/<?php print $subdir; ?>/search {
-      if ( $block_search_no_referrer ) {
-        return 444;
-      }
-      if ( $block_search_root_referer ) {
-        return 444;
-      }
-      if ( $has_excessive_facets ) {
-        return 444;
-      }
-      if ( $block_stale_chrome_search ) {
-        return 444;
-      }
-      if ( $is_catalina_stale_chrome ) {
-        return 444;
-      }
-      if ( $is_bot ) {
-        return 444;
-      }
-      limit_req zone=search_limit burst=5  nodelay;
-      limit_req zone=search_flood burst=40 nodelay;
-      limit_req_status 444;
-      try_files $uri @drupal_<?php print $subdir_loc; ?>;
+    set $boa_fold "$block_search_no_referrer:$block_search_root_referer:$has_excessive_facets:$block_stale_chrome_search:$is_catalina_stale_chrome:$is_bot";
+    if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
+      return 444;
     }
+    limit_req zone=search_limit burst=5  nodelay;
+    limit_req zone=search_flood burst=40 nodelay;
+    limit_req_status 444;
+    try_files $uri @drupal_<?php print $subdir_loc; ?>;
   }
 
   ###
   ### Same three-tier search protection for language-prefixed paths (/xx/search).
   ###
   location ~* ^/<?php print $subdir; ?>/[a-z][a-z]/search {
-    if ( $block_search_no_referrer ) {
-      return 444;
-    }
-    if ( $block_search_root_referer ) {
-      return 444;
-    }
-    if ( $has_excessive_facets ) {
-      return 444;
-    }
-    if ( $block_stale_chrome_search ) {
-      return 444;
-    }
-    if ( $is_catalina_stale_chrome ) {
-      return 444;
-    }
-    if ( $is_bot ) {
+    set $boa_fold "$block_search_no_referrer:$block_search_root_referer:$has_excessive_facets:$block_stale_chrome_search:$is_catalina_stale_chrome:$is_bot";
+    if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
       return 444;
     }
     limit_req zone=search_limit burst=5  nodelay;
@@ -653,19 +627,11 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### Block search-destination abuse via Drupal's login redirect mechanism,
   ### as the shared include does: the /search guards never run for a
   ### /user/login?destination=search... request. "Skip" keeps the login form
-  ### out of Speed Booster.
+  ### out of Speed Booster. The four checks share one if.
   ###
   location ^~ /<?php print $subdir; ?>/user/login {
-    if ( $is_bot ) {
-      return 444;
-    }
-    if ( $block_login_search_destination ) {
-      return 444;
-    }
-    if ( $block_search_root_referer ) {
-      return 444;
-    }
-    if ( $has_excessive_facets ) {
+    set $boa_fold "$is_bot:$block_login_search_destination:$block_search_root_referer:$has_excessive_facets";
+    if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
       return 444;
     }
     set $nocache_details "Skip";
@@ -682,16 +648,14 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ### js.php the request must go to the front controller instead.
   ###
   location ^~ /<?php print $subdir; ?>/js/ {
-    location ~* ^/<?php print $subdir; ?>/js/ {
-      if ( $is_bot ) {
-        return 444;
-      }
-      error_page 418 = @drupal_<?php print $subdir_loc; ?>;
-      if ( !-e $document_root/js.php ) {
-        return 418;
-      }
-      rewrite ^/<?php print $subdir; ?>/(.*)$ /<?php print $subdir; ?>/js.php?q=$1 last;
+    if ( $is_bot ) {
+      return 444;
     }
+    error_page 418 = @drupal_<?php print $subdir_loc; ?>;
+    if ( !-e $document_root/js.php ) {
+      return 418;
+    }
+    rewrite ^/<?php print $subdir; ?>/(.*)$ /<?php print $subdir; ?>/js.php?q=$1 last;
   }
 
   ###
@@ -808,18 +772,16 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ###
   ### Deny listed requests for security reasons.
   ###
-  location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save))$ {
-    access_log off;
-    log_not_found off;
-    return 404;
-  }
-
-  ###
   ### Deny the composer and npm manifests and lock files, as Drupal's own
   ### .htaccess does, ahead of the locations that serve files. Private files
   ### under system/files/ still go to Drupal, which checks access itself.
   ###
-  location ~* ^(?!/<?php print $subdir; ?>(?:/[^/]+)?/system/files/).*composer\.(json|lock)$ {
+  ### Regex locations next to each other with the same body are one location
+  ### whose pattern is each one's pattern in (?:...), joined by '|', as in the
+  ### shared include: nginx tries them in file order. None of the bodies
+  ### joined this way reads $1.
+  ###
+  location ~* (?:(\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save))$)|(?:^(?!/<?php print $subdir; ?>(?:/[^/]+)?/system/files/).*composer\.(json|lock)$) {
     access_log off;
     log_not_found off;
     return 404;
@@ -840,18 +802,10 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   }
 
   ###
-  ### Deny listed requests for security reasons.
+  ### Deny listed requests for security reasons: text files of extensions and
+  ### CiviCRM's private directories.
   ###
-  location ~* /(?:modules|themes|libraries)/.*\.(?:txt|md)$ {
-    access_log off;
-    log_not_found off;
-    return 404;
-  }
-
-  ###
-  ### Deny listed requests for security reasons.
-  ###
-  location ~* /files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) {
+  location ~* (?:/(?:modules|themes|libraries)/.*\.(?:txt|md)$)|(?:/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c)) {
     access_log off;
     log_not_found off;
     return 404;
@@ -900,23 +854,11 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   }
 
   ###
-  ### Deny direct access to private downloads in sites/domain/private.
+  ### Deny direct access to private downloads in sites/domain/private, and
+  ### also for short, rewritten URLs.
   ### Note: this location works with X-Accel-Redirect.
   ###
-  location ~* ^/<?php print $subdir; ?>/sites/[^/]+/private/ {
-    if ( $is_bot ) {
-      return 444;
-    }
-    access_log off;
-    log_not_found off;
-    internal;
-  }
-
-  ###
-  ### Deny direct access to private downloads also for short, rewritten URLs.
-  ### Note: this location works with X-Accel-Redirect.
-  ###
-  location ~* /<?php print $subdir; ?>/files/private/ {
+  location ~* (?:^/<?php print $subdir; ?>/sites/[^/]+/private/)|(?:/<?php print $subdir; ?>/files/private/) {
     if ( $is_bot ) {
       return 444;
     }
@@ -1480,6 +1422,8 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
 
   ###
   ### Make feeds compatible with boost caching and set correct mime type.
+  ### Two plain ifs, not one regex if: a regex if that does not match clears
+  ### the $1 that try_files reads below.
   ###
   location ~* ^/<?php print $subdir; ?>/(.*\.xml)$ {
     if ( $request_method = POST ) {
@@ -1505,14 +1449,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   ###
   ### Deny bots on never cached uri.
   ###
-  location ~* ^/<?php print $subdir; ?>/(?:admin|user|cart|checkout|logout) {
-    if ( $is_bot ) {
-      return 444;
-    }
-    set $nocache_details "Skip";
-    try_files $uri @drupal_<?php print $subdir_loc; ?>;
-  }
-  location ~* ^/<?php print $subdir; ?>/\w\w/(?:admin|user|cart|checkout|logout) {
+  location ~* (?:^/<?php print $subdir; ?>/(?:admin|user|cart|checkout|logout))|(?:^/<?php print $subdir; ?>/\w\w/(?:admin|user|cart|checkout|logout)) {
     if ( $is_bot ) {
       return 444;
     }

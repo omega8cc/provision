@@ -134,15 +134,21 @@ if ($http_x_forwarded_proto = "https") {
 }
 
 ###
+### Guards next to each other that end in the same return share one if: nginx
+### keeps a location context for every if and every location of this file in
+### every server block that includes it, about 6 KB each. The set joins the
+### variables with ':' in the order the separate ifs read them, and the
+### pattern is true when any part is neither empty nor "0", the test an if
+### makes of one variable. So every joined variable takes values without ':'
+### (0 or 1, empty or a word); one that can hold any text comes last, after
+### a part that cannot hold ':'. The patterns have no capturing groups.
+###
+
+###
 ### Block “node-chain” URL mutation spam.
 ### Examples:
 ### /node/1771/pl/node/1771/es/node/1771/...
 ### /pl/node/1771/es/node/1771/...
-###
-if ($is_node_chain) {
-  return 404;
-}
-
 ###
 ### Block “language-prefix chain” URL mutation spam.
 ### Examples (4+ language-like prefixes in a row):
@@ -151,7 +157,8 @@ if ($is_node_chain) {
 ### /zh-hans/ja/ko/en/node/1771
 ### /en/en/en/en/anything
 ###
-if ($is_lang_chain) {
+set $boa_fold "$is_node_chain:$is_lang_chain";
+if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
   return 404;
 }
 
@@ -173,10 +180,6 @@ if ($is_static_chain) {
 ### are content URLs, so a recoverable 404 keeps the false-positive blast radius
 ### small.  Converts the served-200 variant into a no-bootstrap 404.
 ###
-if ($is_content_chain) {
-  return 404;
-}
-
 <?php
 // The $is_amp_chain map is declared in the BOA-written http-scope file, NOT in
 // the master render, and this guard renders only when that file declares it:
@@ -189,7 +192,8 @@ $boa_zones_file = '/etc/nginx/conf.d/limit-req-zones-boa.conf';
 $boa_zones_body = @is_file($boa_zones_file)
   ? (string) @file_get_contents($boa_zones_file)
   : '';
-if (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE):
+$boa_amp_chain = (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE);
+if ($boa_amp_chain):
 ?>
 ###
 ### Block HTML-entity "amp chain" query mutation spam (see the $is_amp_chain
@@ -198,11 +202,7 @@ if (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE):
 ### a broken query, so a recoverable 404 keeps the blast radius small and
 ### tells crawlers to drop the URL.
 ###
-if ($is_amp_chain) {
-  return 404;
-}
 <?php endif; ?>
-
 ###
 ### Block the Referer-less /print* flood (see $is_print_path /
 ### $block_print_no_referer in server.tpl.php).  404, not 444: search crawlers
@@ -216,11 +216,6 @@ if ($is_amp_chain) {
 ### through.  Works regardless of whether any print module is enabled, on D7
 ### and D10+.
 ###
-if ($block_print_no_referer) {
-  return 404;
-}
-
-###
 ### Block the Referer-less Flag-module toggle flood (see $is_flag_toggle /
 ### $block_flag_no_referer in server.tpl.php).  404, not 444, for the same
 ### crawler-safety reasons as the /print* guard above: the no-Referer class
@@ -230,11 +225,6 @@ if ($block_print_no_referer) {
 ### passes straight through; POST-based flagging is untouched (the composed
 ### map is GET-only).  Works regardless of whether the Flag module is
 ### enabled, on D7 and D8+.
-###
-if ($block_flag_no_referer) {
-  return 404;
-}
-
 ###
 ### Block the cold HybridAuth window flood (see $is_hybridauth_window /
 ### $block_hybridauth_no_referer in server.tpl.php).  404, not 444, for the
@@ -248,7 +238,8 @@ if ($block_flag_no_referer) {
 ### target and stays unguarded.  Works regardless of whether the HybridAuth
 ### module is enabled.
 ###
-if ($block_hybridauth_no_referer) {
+set $boa_fold "$is_content_chain<?php if ($boa_amp_chain): ?>:$is_amp_chain<?php endif; ?>:$block_print_no_referer:$block_flag_no_referer:$block_hybridauth_no_referer";
+if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
   return 404;
 }
 
@@ -313,11 +304,6 @@ if ( $args ~* "=PHP[A-Z0-9]{8}-" ) {
 ###
 ### Deny probes for secret/config paths (never valid on a hosted site, any UA).
 ###
-if ($is_secret_path) {
-  return 444;
-}
-
-###
 ### Deny foreign-CMS admin probes (WordPress/Joomla/phpMyAdmin path tokens that
 ### cannot exist on a Drupal/Backdrop/Hostmaster docroot — see $is_cms_probe in
 ### server.tpl.php).  444 drops them before the extensionless variant routes to
@@ -325,15 +311,11 @@ if ($is_secret_path) {
 ### and feeding the scan_nginx 444 counter.  Whole-segment match only; generic
 ### auth words are left to the IDS aggregate detector, not blocked here.
 ###
-if ($is_cms_probe) {
-  return 444;
-}
-
-###
 ### Deny forged AI user-agents.  Google-Extended / Applebot-Extended are
 ### robots.txt-only tokens a real client never sends — proof of forgery.
 ###
-if ($is_ai_forged) {
+set $boa_fold "$is_secret_path:$is_cms_probe:$is_ai_forged";
+if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
   return 444;
 }
 
@@ -365,21 +347,14 @@ set $ai_evasive_block $is_ai_evasive;
 if ($ai_evasive_allow) {
   set $ai_evasive_block '';
 }
-if ($ai_evasive_block) {
-  return 444;
-}
 
 ###
 ### Deny crawlers.
 ###
-if ($is_crawler) {
-  return 444;
-}
-
-###
 ### Block semalt botnet.
 ###
-if ($is_botnet) {
+set $boa_fold "$ai_evasive_block:$is_crawler:$is_botnet";
+if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
   return 444;
 }
 
@@ -389,30 +364,18 @@ if ($is_botnet) {
 include /data/conf/nginx_high_load.con[f];
 
 ###
-### Deny not compatible request methods without 405 response.
-###
-if ( $request_method !~ ^(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$ ) {
-  return 444;
-}
-
+### Deny not compatible request methods without 405 response. A method holds
+### only A-Z, '_' and '-' (nginx refuses any other byte in HTTP/1, 2 and 3),
+### so the first part is matched whole and the truth test starts after it.
 ###
 ### Deny listed requests for security reasons.
 ###
-if ($is_denied) {
-  return 444;
-}
-
-###
 ### Deny false UA/bots trying known security patterns.
-###
-if ($ua_denied) {
-  return 444;
-}
-
 ###
 ### Detect TLS ClientHello sent to a plain HTTP port.
 ###
-if ($tls_on_plain) {
+set $boa_fold "$request_method:$is_denied:$ua_denied:$tls_on_plain";
+if ( $boa_fold ~ "^(?!(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS):)|:(?:[^0:]|0[^:])" ) {
   return 444;
 }
 
@@ -469,22 +432,24 @@ location ^~ /.well-known/mta-sts.txt {
 }
 
 ###
-### HTTPRL standard support.
+### HTTPRL standard support. The prefix carries the directives itself: a
+### nested regex location repeating the prefix took every URI it takes, and
+### cost a location context more.
 ###
 location ^~ /httprl_async_function_callback {
-  location ~* ^/httprl_async_function_callback {
-    if ( $is_bot ) {
-      return 444;
-    }
-    access_log off;
-    log_not_found off;
-    set $nocache_details "Skip";
-    try_files $uri @drupal;
+  if ( $is_bot ) {
+    return 444;
   }
+  access_log off;
+  log_not_found off;
+  set $nocache_details "Skip";
+  try_files $uri @drupal;
 }
 
 ###
-### HTTPRL test mode support.
+### HTTPRL test mode support: logged-in users only, no bots. The checks sit
+### in the location that serves the path: beside a nested location they
+### never ran, since nginx runs only the chosen location's own checks.
 ###
 location ^~ /admin/httprl-test {
   if ($cache_uid = '') {
@@ -493,10 +458,8 @@ location ^~ /admin/httprl-test {
   if ( $is_bot ) {
     return 444;
   }
-  location ~* ^/admin/httprl-test {
-    set $nocache_details "Skip";
-    try_files $uri @drupal;
-  }
+  set $nocache_details "Skip";
+  try_files $uri @drupal;
 }
 
 <?php
@@ -769,53 +732,26 @@ location = /core/cron.php {
 ###      per-vhost global cap (search_flood) for distributed one-IP-per-request
 ###      floods that slip through Tiers 1 and 2.
 ###
+### Tiers 1 and 2, the stale Chrome checks and $is_bot share one if, as the
+### server level guards do; any of them refuses with 444 before the limits.
+###
 location ^~ /search {
-  location ~* ^/search {
-    if ( $block_search_no_referrer ) {
-      return 444;
-    }
-    if ( $block_search_root_referer ) {
-      return 444;
-    }
-    if ( $has_excessive_facets ) {
-      return 444;
-    }
-    if ( $block_stale_chrome_search ) {
-      return 444;
-    }
-    if ( $is_catalina_stale_chrome ) {
-      return 444;
-    }
-    if ( $is_bot ) {
-      return 444;
-    }
-    limit_req zone=search_limit burst=5  nodelay;
-    limit_req zone=search_flood burst=40 nodelay;
-    limit_req_status 444;
-    try_files $uri @drupal;
+  set $boa_fold "$block_search_no_referrer:$block_search_root_referer:$has_excessive_facets:$block_stale_chrome_search:$is_catalina_stale_chrome:$is_bot";
+  if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
+    return 444;
   }
+  limit_req zone=search_limit burst=5  nodelay;
+  limit_req zone=search_flood burst=40 nodelay;
+  limit_req_status 444;
+  try_files $uri @drupal;
 }
 
 ###
 ### Same three-tier search protection for language-prefixed paths (/xx/search).
 ###
 location ~* ^/[a-z][a-z]/search {
-  if ( $block_search_no_referrer ) {
-    return 444;
-  }
-  if ( $block_search_root_referer ) {
-    return 444;
-  }
-  if ( $has_excessive_facets ) {
-    return 444;
-  }
-  if ( $block_stale_chrome_search ) {
-    return 444;
-  }
-  if ( $is_catalina_stale_chrome ) {
-    return 444;
-  }
-  if ( $is_bot ) {
+  set $boa_fold "$block_search_no_referrer:$block_search_root_referer:$has_excessive_facets:$block_stale_chrome_search:$is_catalina_stale_chrome:$is_bot";
+  if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
     return 444;
   }
   limit_req zone=search_limit burst=5  nodelay;
@@ -846,16 +782,8 @@ location ~* ^/[a-z][a-z]/search {
 ### always rendered fresh (consistent with how /admin is handled).
 ###
 location ^~ /user/login {
-  if ( $is_bot ) {
-    return 444;
-  }
-  if ( $block_login_search_destination ) {
-    return 444;
-  }
-  if ( $block_search_root_referer ) {
-    return 444;
-  }
-  if ( $has_excessive_facets ) {
+  set $boa_fold "$is_bot:$block_login_search_destination:$block_search_root_referer:$has_excessive_facets";
+  if ( $boa_fold ~ "(?:^|:)(?:[^0:]|0[^:])" ) {
     return 444;
   }
   set $nocache_details "Skip";
@@ -875,16 +803,11 @@ location ^~ /js/ {
   if ( $is_bot ) {
     return 444;
   }
-  location ~* ^/js/ {
-    if ( $is_bot ) {
-      return 444;
-    }
-    error_page 418 = @drupal;
-    if ( !-e $document_root/js.php ) {
-      return 418;
-    }
-    rewrite ^/(.*)$ /js.php?q=$1 last;
+  error_page 418 = @drupal;
+  if ( !-e $document_root/js.php ) {
+    return 418;
   }
+  rewrite ^/(.*)$ /js.php?q=$1 last;
 }
 
 ###
@@ -1063,18 +986,16 @@ location ~ ^/\.(?!well-known/)|^(?:(?!/[^/]*autocomplete).)+/\. {
 ###
 ### Deny listed requests for security reasons.
 ###
-location ~* (\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save))$ {
-  access_log off;
-  log_not_found off;
-  return 404;
-}
-
-###
 ### Deny the composer and npm manifests and lock files, as Drupal's own
 ### .htaccess does, ahead of the locations that serve files. Private files
 ### under system/files/ still go to Drupal, which checks access itself.
 ###
-location ~* ^(?!(?:/[^/]+)?/system/files/).*composer\.(json|lock)$ {
+### Regex locations next to each other with the same body are one location
+### whose pattern is each one's pattern in (?:...), joined by '|': nginx
+### tries them in file order and one location context costs about 6 KB in
+### every server block. None of the bodies joined this way reads $1.
+###
+location ~* (?:(\.(?:git.*|htaccess|engine|config|inc|ini|info|install|make|module|profile|test|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\..*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock))$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save))$)|(?:^(?!(?:/[^/]+)?/system/files/).*composer\.(json|lock)$) {
   access_log off;
   log_not_found off;
   return 404;
@@ -1095,18 +1016,10 @@ location = /CHANGELOG.txt {
 }
 
 ###
-### Deny listed requests for security reasons.
+### Deny listed requests for security reasons: text files of extensions and
+### CiviCRM's private directories.
 ###
-location ~* /(?:modules|themes|libraries)/.*\.(?:txt|md)$ {
-  access_log off;
-  log_not_found off;
-  return 404;
-}
-
-###
-### Deny listed requests for security reasons.
-###
-location ~* ^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c) {
+location ~* (?:/(?:modules|themes|libraries)/.*\.(?:txt|md)$)|(?:^/sites/.*/files/civicrm/(?:ConfigAndLog|custom|upload|templates_c)) {
   access_log off;
   log_not_found off;
   return 404;
@@ -1150,21 +1063,7 @@ location ~* ^/sites/[^/]+/files/.+\.php$ {
 ### for privacy reasons and to prevent phishing attacks.
 ### The files uploaded should be available only via SFTP.
 ###
-location ~* ^/sites/[^/]+/files/webform/ {
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-  expires 99s;
-  add_header X-Content-Type-Options "nosniff";
-  add_header X-Frame-Options "SAMEORIGIN" always;
-  add_header Cache-Control "public, must-revalidate, proxy-revalidate";
-  try_files $uri =404;
-  ### to deny the access replace the last line with:
-  ### return 404;
-}
-location ~* ^/files/webform/ {
+location ~* (?:^/sites/[^/]+/files/webform/)|(?:^/files/webform/) {
   if ( $is_bot ) {
     return 444;
   }
@@ -1339,23 +1238,11 @@ location ~* ^/sites/.*/files/private/ {
 }
 
 ###
-### Deny direct access to private downloads in sites/domain/private.
+### Deny direct access to private downloads in sites/domain/private, and
+### also for short, rewritten URLs.
 ### Note: this location works with X-Accel-Redirect.
 ###
-location ~* ^/sites/.*/private/ {
-  internal;
-  if ( $is_bot ) {
-    return 444;
-  }
-  access_log off;
-  log_not_found off;
-}
-
-###
-### Deny direct access to private downloads also for short, rewritten URLs.
-### Note: this location works with X-Accel-Redirect.
-###
-location ~* /files/private/ {
+location ~* (?:^/sites/.*/private/)|(?:/files/private/) {
   internal;
   if ( $is_bot ) {
     return 444;
@@ -1398,13 +1285,13 @@ location ~* files/advagg_(?:css|js)/ {
 }
 
 ###
-### Make css files compatible with boost caching.
+### Make css files compatible with boost caching. The if below is true for
+### a POST or for a $cache_uid neither empty nor "0": the session id can
+### hold any text, so it comes last and is read whole after the first ':'.
 ###
 location ~* \.css$ {
-  if ( $request_method = POST ) {
-    return 405;
-  }
-  if ( $cache_uid ) {
+  set $boa_fold "$request_method:$cache_uid";
+  if ( $boa_fold ~ "^POST:|^[^:]*:(?!0?\z)" ) {
     return 405;
   }
   error_page  405 = @uncached;
@@ -1425,10 +1312,8 @@ location = /sw.js {
 ### Make js files compatible with boost caching.
 ###
 location ~* \.(?:js|htc)$ {
-  if ( $request_method = POST ) {
-    return 405;
-  }
-  if ( $cache_uid ) {
+  set $boa_fold "$request_method:$cache_uid";
+  if ( $boa_fold ~ "^POST:|^[^:]*:(?!0?\z)" ) {
     return 405;
   }
   error_page  405 = @uncached;
@@ -1779,10 +1664,8 @@ location ~* \.xml$ {
     log_not_found off;
     return 400;
   }
-  if ( $request_method = POST ) {
-    return 405;
-  }
-  if ( $cache_uid ) {
+  set $boa_fold "$request_method:$cache_uid";
+  if ( $boa_fold ~ "^POST:|^[^:]*:(?!0?\z)" ) {
     return 405;
   }
   error_page 405 = @drupal;
@@ -1802,14 +1685,7 @@ location ~* \.xml$ {
 ###
 ### Deny bots on never cached uri.
 ###
-location ~* ^/(?:admin|user|cart|checkout|logout) {
-  if ( $is_bot ) {
-    return 444;
-  }
-  set $nocache_details "Skip";
-  try_files $uri @drupal;
-}
-location ~* ^/\w\w/(?:admin|user|cart|checkout|logout) {
+location ~* (?:^/(?:admin|user|cart|checkout|logout))|(?:^/\w\w/(?:admin|user|cart|checkout|logout)) {
   if ( $is_bot ) {
     return 444;
   }
@@ -2326,20 +2202,10 @@ location ~* ^/(?:core/)?(?:boost_stats|rtoc|js)\.php$ {
 }
 
 ###
-### Allow access to /update.php only for logged in admin user.
+### Allow access to /update.php, and to Backdrop /core/update.php, only for
+### logged in admin user.
 ###
-location ~ ^/update.php {
-  error_page 418 = @allowupdate;
-  if ( $cache_uid ) {
-    return 418;
-  }
-  return 404;
-}
-
-###
-### Allow access to Backdrop /core/update.php only for logged in admin user.
-###
-location ~ ^/core/update.php {
+location ~ (?:^/update.php)|(?:^/core/update.php) {
   error_page 418 = @allowupdate;
   if ( $cache_uid ) {
     return 418;
