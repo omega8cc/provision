@@ -752,6 +752,36 @@ function drush_provision_login_reset_pre_validate() {
   return provision_task_root_bootstrap();
 }
 
+/**
+ * Implements drush_hook_validate() for provision-delete.
+ *
+ * A platform whose tree another platform also serves is never deleted from
+ * disk: the Delete removes its record alone. When sites still name it the
+ * Delete is refused, --force included: the tree is the other platform's too.
+ * The first hook of the command, so nothing has been touched when it refuses.
+ */
+function drush_provision_delete_validate() {
+  if (d()->type !== 'platform') {
+    return;
+  }
+  $twin = _provision_platform_twin();
+  if ($twin === FALSE) {
+    return;
+  }
+  $sites = _provision_platform_named_by_sites(d()->name);
+  if (!empty($sites)) {
+    return drush_set_error('PROVISION_PLATFORM_SHARED_ROOT', dt('Platform @twin serves the same tree @root, and sites still name this platform (@sites): they must be deleted, or migrated to a platform on another path, before this platform can be deleted. The shared tree is not deleted.', array(
+      '@twin' => $twin,
+      '@root' => d()->root,
+      '@sites' => implode(', ', $sites),
+    )));
+  }
+  drush_log(dt('DELETE/SHARED @root also serves platform @twin: only this platform\'s record is removed, the tree stays', array(
+    '@root' => d()->root,
+    '@twin' => $twin,
+  )), 'warning');
+}
+
 function _provision_default_web_group() {
   $info = posix_getgrgid(posix_getgid());
   $common_groups = array(

@@ -106,6 +106,10 @@ function drush_provision_drupal_provision_delete() {
     provision_drupal_push_site($override_slave_authority = TRUE);
   }
   elseif (d()->type === 'platform') {
+    // A tree another platform also serves stays: only this record goes.
+    if (_provision_platform_delete_record_only()) {
+      return;
+    }
 
     // Add platform root auto-discovery to avoid confusing
     // Composer based D8+ codebase root with Drupal real root.
