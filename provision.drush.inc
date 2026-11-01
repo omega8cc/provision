@@ -780,6 +780,14 @@ function drush_provision_delete_validate() {
     '@root' => d()->root,
     '@twin' => $twin,
   )), 'warning');
+  // A Git or Composer deployed platform's post-delete hooks (hosting_git,
+  // hosting_deploy) remove its repository or project path when it differs
+  // from the root: here that path is the other platform's too. Unset for
+  // this process only, as on a platform deployed by neither; the alias that
+  // holds them is removed.
+  foreach (array('repo_path', 'git_repository_path', 'composer_project_path', 'composer_git_path') as $property) {
+    d()->$property = NULL;
+  }
 }
 
 function _provision_default_web_group() {
