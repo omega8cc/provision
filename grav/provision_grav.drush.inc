@@ -2399,6 +2399,88 @@ function _provision_grav_copy_tree($source, $target) {
 }
 
 /**
+ * Take the capsule's plugin folder lock exclusively.
+ *
+ * Grav 2.2.20 and later hold tmp/plugins.lock shared while a request loads its
+ * configuration and plugins, and exclusively while GPM swaps a plugin folder,
+ * so no request ever loads plugins with a folder missing or half copied. The
+ * lock file is created group-writable when absent (the capsule's tmp/ is
+ * setgid to the web group, so the site's pool can open it too); one the pool
+ * created and the instance user cannot write is opened read-only, which
+ * flock() accepts. Waits up to $timeout seconds for requests already loading
+ * plugins. Returns the handle, NULL when the filesystem gives no lock (the
+ * caller goes on without it, as Grav does), or FALSE when the wait ran out.
+ */
+function _provision_grav_plugins_lock($site_path, $timeout = 30) {
+  $dir = $site_path . '/tmp';
+  if (!is_dir($dir) || is_link($dir)) {
+    return NULL;
+  }
+  $file = $dir . '/plugins.lock';
+  $old_umask = umask(02);
+  $handle = @fopen($file, 'c');
+  umask($old_umask);
+  if (!$handle) {
+    $handle = @fopen($file, 'r');
+  }
+  if (!$handle) {
+    return NULL;
+  }
+  $until = microtime(TRUE) + $timeout;
+  while (TRUE) {
+    $would_block = 0;
+    if (@flock($handle, LOCK_EX | LOCK_NB, $would_block)) {
+      return $handle;
+    }
+    if (!$would_block) {
+      fclose($handle);
+      return NULL;
+    }
+    if (microtime(TRUE) >= $until) {
+      fclose($handle);
+      return FALSE;
+    }
+    usleep(100000);
+  }
+}
+
+/**
+ * Swap a staged package directory in for the capsule's copy.
+ *
+ * The way Grav's own installer replaces a plugin since 2.2.20: the new copy is
+ * complete before anything moves, then two renames run under the capsule's
+ * maintenance flag (index.php answers 503, and drops a flag older than five
+ * minutes by itself) and the exclusive plugin folder lock. The old copy goes
+ * to $stash and is put back when the second rename fails. Returns TRUE, or
+ * FALSE with the capsule's copy where it was.
+ */
+function _provision_grav_swap_in($site_path, $staged, $target, $stash, $timeout = 30) {
+  $flag = $site_path . '/.upgrading';
+  $raised = !file_exists($flag) && @file_put_contents($flag, date('Y-m-d H:i:s')) !== FALSE;
+  $lock = _provision_grav_plugins_lock($site_path, $timeout);
+  $done = FALSE;
+  if ($lock !== FALSE && is_dir($target) && !is_link($target)) {
+    if (@rename($target, $stash)) {
+      if (@rename($staged, $target)) {
+        $done = TRUE;
+      }
+      elseif (!@rename($stash, $target)) {
+        _provision_grav_copy_tree($stash, $target);
+      }
+    }
+  }
+  if (is_resource($lock)) {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+  }
+  if ($raised) {
+    @unlink($flag);
+  }
+  clearstatcache();
+  return $done;
+}
+
+/**
  * Refresh the capsule's bundled plugins and themes from the staged artefact.
  *
  * Grav's own installer ignores user/ entirely (Install::$ignores), so a core
@@ -2418,9 +2500,12 @@ function _provision_grav_copy_tree($source, $target) {
  *  - only user/plugins and user/themes are touched. user/config,
  *    user/accounts, user/pages and user/data are the site's own content and
  *    are never opened here;
- *  - the old directory is moved into the private tmp dir before the new one
- *    lands, so a failed copy is put back rather than left half-written;
- *  - the group/mode model is re-applied per replaced directory, and the cache
+ *  - the new copy is staged complete in the private tmp dir, with the
+ *    group/mode model applied, and only then swapped in by two renames under
+ *    Grav's maintenance flag and plugin folder lock: a request never loads a
+ *    package missing or half copied (a missing Login would leave its pages
+ *    open), and a failed copy or swap leaves the capsule's copy in place;
+ *  - the cache
  *    is cleared in a separate CLI process at the end (one install per process
  *    is a hard Grav constraint, and the same applies to a tree that changed
  *    under a warm cache).
@@ -2487,44 +2572,62 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
           $kept++;
           continue;
         }
-        $stash = $tmp . '/replaced-' . $kind . '-' . $slug;
-        if (!@rename($target, $stash)) {
-          // Web-owned entries inside the package dir: the heal hands the
-          // capsule back, then the move is retried exactly once.
-          _provision_grav_root_heal($site_path);
-          if (!@rename($target, $stash)) {
-            drush_log(dt('Bundle refresh: could not set @kind @slug aside; it keeps version @old.',
-              array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version)), 'warning');
-            $failed++;
-            continue;
-          }
-        }
-        if (!_provision_grav_copy_tree($source, $target)) {
-          _provision_grav_recursive_delete($target);
-          @rename($stash, $target);
-          drush_log(dt('Bundle refresh: copying @kind @slug @new into the capsule failed; the previous @old is back in place.',
+        $staged = $tmp . '/new-' . $kind . '-' . $slug;
+        if (!_provision_grav_copy_tree($source, $staged)) {
+          _provision_grav_recursive_delete($staged);
+          drush_log(dt('Bundle refresh: copying @kind @slug @new failed; the capsule keeps @old.',
             array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'warning');
           $failed++;
           continue;
         }
-        provision_path_web_group_chgrp($target, $web_group, TRUE);
-        _provision_grav_chmod_tree($target, FALSE);
+        provision_path_web_group_chgrp($staged, $web_group, TRUE);
+        _provision_grav_chmod_tree($staged, FALSE);
+        $stash = $tmp . '/replaced-' . $kind . '-' . $slug;
+        if (!_provision_grav_swap_in($site_path, $staged, $target, $stash)) {
+          // Web-owned entries inside the package dir: the heal hands the
+          // capsule back, then the swap is retried exactly once.
+          _provision_grav_root_heal($site_path);
+          if (!_provision_grav_swap_in($site_path, $staged, $target, $stash)) {
+            _provision_grav_recursive_delete($staged);
+            drush_log(dt('Bundle refresh: could not swap in @kind @slug @new (busy or not movable); it keeps version @old.',
+              array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'warning');
+            $failed++;
+            continue;
+          }
+        }
         drush_log(dt('Bundle refresh: @kind @slug @old -> @new.',
           array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version, '@new' => $new_version)), 'ok');
         $replaced++;
         continue;
       }
 
-      // Absent from the capsule: part of the managed bundle, so install it.
-      if (!_provision_grav_copy_tree($source, $target)) {
+      // Absent from the capsule: part of the managed bundle, so install it,
+      // staged complete first and moved in by one rename, so a request never
+      // finds it half copied.
+      $staged = $tmp . '/new-' . $kind . '-' . $slug;
+      $ok = _provision_grav_copy_tree($source, $staged);
+      if ($ok) {
+        provision_path_web_group_chgrp($staged, $web_group, TRUE);
+        _provision_grav_chmod_tree($staged, FALSE);
+        if (!@rename($staged, $target)) {
+          // The private dir sits on another filesystem (the box-wide tmp
+          // fallback), where no rename reaches the capsule: copy into place.
+          _provision_grav_recursive_delete($target);
+          $ok = _provision_grav_copy_tree($source, $target);
+          if ($ok) {
+            provision_path_web_group_chgrp($target, $web_group, TRUE);
+            _provision_grav_chmod_tree($target, FALSE);
+          }
+        }
+      }
+      if (!$ok) {
         _provision_grav_recursive_delete($target);
+        _provision_grav_recursive_delete($staged);
         drush_log(dt('Bundle refresh: could not install the bundled @kind @slug.',
           array('@kind' => $kind, '@slug' => $slug)), 'warning');
         $failed++;
         continue;
       }
-      provision_path_web_group_chgrp($target, $web_group, TRUE);
-      _provision_grav_chmod_tree($target, FALSE);
       drush_log(dt('Bundle refresh: @kind @slug installed at @new (shipped by the bundle, absent from the capsule).',
         array('@kind' => $kind, '@slug' => $slug, '@new' => ($new_version === '' ? dt('unknown') : $new_version))), 'ok');
       $installed++;
