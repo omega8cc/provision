@@ -2452,7 +2452,9 @@ function _provision_grav_plugins_lock($site_path, $timeout = 30) {
  * maintenance flag (index.php answers 503, and drops a flag older than five
  * minutes by itself) and the exclusive plugin folder lock. The old copy goes
  * to $stash and is put back when the second rename fails. Returns TRUE, or
- * FALSE with the capsule's copy where it was.
+ * FALSE with the capsule's copy where it was, or NULL when putting it back
+ * took a copy (both renames failed): $stash then holds the only copy known
+ * to be whole, and the caller keeps it.
  */
 function _provision_grav_swap_in($site_path, $staged, $target, $stash, $timeout = 30) {
   $flag = $site_path . '/.upgrading';
@@ -2466,6 +2468,7 @@ function _provision_grav_swap_in($site_path, $staged, $target, $stash, $timeout 
       }
       elseif (!@rename($stash, $target)) {
         _provision_grav_copy_tree($stash, $target);
+        $done = NULL;
       }
     }
   }
@@ -2503,8 +2506,10 @@ function _provision_grav_swap_in($site_path, $staged, $target, $stash, $timeout 
  *  - the new copy is staged complete in the private tmp dir, with the
  *    group/mode model applied, and only then swapped in by two renames under
  *    Grav's maintenance flag and plugin folder lock: a request never loads a
- *    package missing or half copied (a missing Login would leave its pages
- *    open), and a failed copy or swap leaves the capsule's copy in place;
+ *    plugin missing or half copied (a missing Login would leave its pages
+ *    open), a theme (Grav loads it after letting go of that lock) can be
+ *    missing only between the two renames, and a failed copy or swap leaves
+ *    the capsule's copy in place;
  *  - the cache
  *    is cleared in a separate CLI process at the end (one install per process
  *    is a hard Grav constraint, and the same applies to a tree that changed
@@ -2547,6 +2552,7 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
   $installed = 0;
   $kept = 0;
   $failed = 0;
+  $keep_tmp = FALSE;
   foreach (array('plugins', 'themes') as $kind) {
     $sources = glob(_provision_glob_quote($bundle) . '/user/' . $kind . '/*', GLOB_ONLYDIR);
     foreach ((array) $sources as $source) {
@@ -2583,17 +2589,28 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
         provision_path_web_group_chgrp($staged, $web_group, TRUE);
         _provision_grav_chmod_tree($staged, FALSE);
         $stash = $tmp . '/replaced-' . $kind . '-' . $slug;
-        if (!_provision_grav_swap_in($site_path, $staged, $target, $stash)) {
+        $swapped = _provision_grav_swap_in($site_path, $staged, $target, $stash);
+        if ($swapped === FALSE) {
           // Web-owned entries inside the package dir: the heal hands the
           // capsule back, then the swap is retried exactly once.
           _provision_grav_root_heal($site_path);
-          if (!_provision_grav_swap_in($site_path, $staged, $target, $stash)) {
-            _provision_grav_recursive_delete($staged);
-            drush_log(dt('Bundle refresh: could not swap in @kind @slug @new (busy or not movable); it keeps version @old.',
-              array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'warning');
-            $failed++;
-            continue;
-          }
+          $swapped = _provision_grav_swap_in($site_path, $staged, $target, $stash . '-retry');
+        }
+        if ($swapped === NULL) {
+          // Both renames failed and the old copy went back by a copy: the
+          // stash is the one copy known to be whole, so the private dir stays.
+          $keep_tmp = TRUE;
+          drush_log(dt('Bundle refresh: @kind @slug could not be swapped in, and its previous copy went back by a copy; the untouched previous copy is kept under @dir.',
+            array('@kind' => $kind, '@slug' => $slug, '@dir' => $tmp)), 'warning');
+          $failed++;
+          continue;
+        }
+        if ($swapped !== TRUE) {
+          _provision_grav_recursive_delete($staged);
+          drush_log(dt('Bundle refresh: could not swap in @kind @slug @new (busy or not movable); it keeps version @old.',
+            array('@kind' => $kind, '@slug' => $slug, '@new' => $new_version, '@old' => $old_version)), 'warning');
+          $failed++;
+          continue;
         }
         drush_log(dt('Bundle refresh: @kind @slug @old -> @new.',
           array('@kind' => $kind, '@slug' => $slug, '@old' => $old_version, '@new' => $new_version)), 'ok');
@@ -2634,7 +2651,9 @@ function _provision_grav_refresh_bundle($site_path, $artefact) {
     }
   }
 
-  _provision_grav_recursive_delete($tmp);
+  if (!$keep_tmp) {
+    _provision_grav_recursive_delete($tmp);
+  }
   drush_log(dt('Bundle refresh from @file: @replaced replaced, @installed installed, @kept already current or newer.',
     array('@file' => basename($artefact), '@replaced' => $replaced, '@installed' => $installed, '@kept' => $kept)), 'ok');
   if ($failed > 0) {
