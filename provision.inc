@@ -3076,6 +3076,37 @@ function _provision_platform_named_by_sites($name) {
 }
 
 /**
+ * Keep a deploy folder of the platform being deleted that holds another
+ * platform's root.
+ *
+ * hosting_git's and hosting_deploy's post-delete hooks remove a platform's
+ * repository or Composer project folder when it differs from the root. A
+ * folder that also holds another registered platform's root is that
+ * platform's too: unset its path for this process, as on a platform
+ * deployed by neither, so the hooks pass it over.
+ */
+function _provision_platform_keep_held_deploy_paths() {
+  foreach (array('repo_path', 'git_repository_path', 'composer_project_path', 'composer_git_path') as $property) {
+    $path = d()->$property;
+    if (!is_string($path) || $path === '' || $path === d()->root) {
+      continue;
+    }
+    $real = realpath($path);
+    if ($real === FALSE) {
+      continue;
+    }
+    $other = _provision_platform_registered_in($real);
+    if ($other !== FALSE) {
+      drush_log(dt('DELETE/DEPLOY/KEPT @path also holds the root of @other: it stays', array(
+        '@path' => $path,
+        '@other' => $other,
+      )), 'warning');
+      d()->$property = NULL;
+    }
+  }
+}
+
+/**
  * Delete only the record of a platform another platform shares a tree with.
  *
  * The validate hook has refused already when sites name this platform. The
