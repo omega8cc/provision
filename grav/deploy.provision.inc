@@ -111,8 +111,11 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
+    // The secret subtrees keep the modes the archive carries until the
+    // secrets pass sets them: widened here, they went live with the swap.
     foreach (_provision_grav_writable_dirs() as $dir) {
-      _provision_grav_chmod_tree($extract_path . '/' . $dir);
+      _provision_grav_chmod_tree($extract_path . '/' . $dir, TRUE, NULL,
+        ($dir === 'user') ? array('accounts', 'config', 'env', 'data/licenses.yaml') : array());
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {

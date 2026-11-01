@@ -1781,12 +1781,14 @@ function _provision_grav_create_directories() {
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
   }
+  // The secret subtrees stay out of the writable pass: the secrets pass
+  // below sets them, and nothing widens them in between.
   foreach (_provision_grav_writable_dirs() as $dir) {
-    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path);
+    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path,
+      ($dir === 'user') ? array('accounts', 'config', 'env', 'data/licenses.yaml') : array());
   }
 
-  // AFTER the generic writable pass (which would re-widen them): the secret
-  // subtrees drop their world bits.
+  // The secret subtrees get their own modes, no world bits.
   _provision_grav_secure_secrets($site_path);
 
   // The private secrets exist before the web tier ever needs them, owned by
@@ -2123,8 +2125,13 @@ function provision_grav_system_map() {
  * provision_file()->chmod(..., TRUE) applies one mode to every entry it
  * walks, so 02775 landed on the files too: user content world-executable
  * and setgid after every verify. Links are left alone (chmod follows them).
+ *
+ * $keep names entries below $path the walk leaves as they are ("name", or
+ * "dir/name" one level down): the secrets _provision_grav_secure_secrets()
+ * sets. Widened here and narrowed after the walk, they were world-readable
+ * for as long as the walk of user/ took, seconds with its plugins.
  */
-function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
+function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL, $keep = array()) {
   if (!is_dir($path) || is_link($path)) {
     return;
   }
@@ -2136,7 +2143,55 @@ function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
     if ($place === FALSE || $place['dir'] === NULL || $place['rest'] || $place['link']) {
       return;
     }
-    if (provision_file()->chmod_in($place['dir'], 02775, TRUE, $path, 0664)->status() && $log) {
+    if (!$keep) {
+      $done = provision_file()->chmod_in($place['dir'], 02775, TRUE, $path, 0664)->status();
+    }
+    else {
+      // The top level by hand, each other subtree as a whole.
+      $fs = provision_file();
+      $below = array();
+      foreach ($keep as $k) {
+        if (strpos($k, '/') !== FALSE) {
+          list($top, $rest) = explode('/', $k, 2);
+          $below[$top][] = $rest;
+        }
+      }
+      $cwd = getcwd();
+      $in = $fs->_enter($place['dir']);
+      $names = $in ? @scandir('.') : FALSE;
+      $done = $in && is_array($names);
+      $files = array();
+      foreach ($done ? $names : array() as $name) {
+        if ($name === '.' || $name === '..' || in_array($name, $keep, TRUE) || is_link($name)) {
+          continue;
+        }
+        if (is_dir($name)) {
+          if (isset($below[$name])) {
+            _provision_grav_chmod_tree($path . '/' . $name, FALSE, $site_dir, $below[$name]);
+          }
+          else {
+            $done = $fs->chmod_in($place['dir'] . '/' . $name, 02775, TRUE, $path . '/' . $name, 0664)->status() && $done;
+          }
+          if (!$fs->_enter($place['dir'])) {
+            $in = $done = FALSE;
+            break;
+          }
+          continue;
+        }
+        $st = @lstat($name);
+        if (is_array($st) && ($st['mode'] & 0170000) === 0100000 && $st['uid'] === posix_geteuid()) {
+          $files[] = $name;
+        }
+      }
+      if ($in && $files) {
+        $done = $fs->_chmod_here_nofollow($files, 0664) && $done;
+      }
+      if ($in) {
+        $done = @chmod('.', 02775) && $done;
+      }
+      $fs->_leave($cwd);
+    }
+    if ($done && $log) {
       drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
     }
     return;
@@ -2147,6 +2202,12 @@ function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
   foreach ($it as $entry) {
     if ($entry->isLink()) {
       continue;
+    }
+    $rel = substr($entry->getPathname(), strlen($path) + 1);
+    foreach ($keep as $k) {
+      if ($rel === $k || strpos($rel, $k . '/') === 0) {
+        continue 2;
+      }
     }
     if ($entry->isDir()) {
       @chmod($entry->getPathname(), 02775);
