@@ -24,6 +24,10 @@ function drush_provision_txp_provision_delete_validate() {
   if (d()->type !== 'platform') {
     return;
   }
+  // The sites of a tree another platform also serves are that platform's.
+  if (_provision_platform_twin() !== FALSE) {
+    return;
+  }
   if (drush_get_option('force', FALSE)) {
     return;
   }
@@ -126,6 +130,10 @@ function drush_provision_txp_provision_delete() {
     provision_drupal_push_site($override_slave_authority = TRUE);
   }
   elseif (d()->type === 'platform') {
+    // A tree another platform also serves stays: only this record goes.
+    if (_provision_platform_delete_record_only()) {
+      return;
+    }
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
     // Defensive re-check (validate already refused; force bypasses both).
