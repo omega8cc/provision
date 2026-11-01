@@ -3086,9 +3086,12 @@ function _provision_platform_named_by_sites($name) {
  * deployed by neither, so the hooks pass it over.
  */
 function _provision_platform_keep_held_deploy_paths() {
+  // A path equal to the stored root counts too: the hooks compare it with the
+  // root the Delete serves (its docroot/, html/ or web/ when the folder has
+  // no index.php), and then remove the whole folder.
   foreach (array('repo_path', 'git_repository_path', 'composer_project_path', 'composer_git_path') as $property) {
     $path = d()->$property;
-    if (!is_string($path) || $path === '' || $path === d()->root) {
+    if (!is_string($path) || $path === '') {
       continue;
     }
     $real = realpath($path);
