@@ -184,25 +184,35 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
     try_files $uri /index.php?$args;
   }
 
-  # Root metadata (dependency inventory + docs -- /composer.lock served 271KB
-  # under upstream's own config; caught live in a spike).
-  location ~* ^/(composer\.(json|lock)|now\.json|CHANGELOG\.md|README\.md|SECURITY\.md|LICENSE\.txt|CODE_OF_CONDUCT\.md|CONTRIBUTING\.md)$ { return 404; }
+  # Root metadata (dependency inventory -- /composer.lock served 271KB under
+  # upstream's own config; caught live in a spike) and the sample server
+  # configs, matched as prefixes like upstream's own rule, so a copy such as
+  # /composer.json.bak is refused too. The root's Markdown files (CHANGELOG.md,
+  # README.md and the rest) are refused by the Markdown rule below only when
+  # they exist, so a page whose address takes one of those names keeps its
+  # Markdown output.
+  location ~* ^/(composer\.(json|lock)|now\.json|LICENSE\.txt|nginx\.conf|web\.config|htaccess\.txt) { return 404; }
 
   # Grav internal trees. cache/logs/tmp/backup/bin/tests never serve;
   # webserver-configs is upstream's own gap; modules/ is where an older
   # release left a BOA control INI (no Grav route). system/ and vendor/ serve
   # real assets, so those two deny by extension (upstream's own contract), as
   # does user/ (page media must serve; sources must not).
+  # The extension lists are upstream's own (only /index.php ever executes here,
+  # so these files would only be served raw), plus BOA's .md and .txt rules.
   location ~* ^/(cache|bin|logs|backup|tmp|tests|modules|webserver-configs)/ { return 404; }
-  location ~* ^/(system|vendor)/.*\.(txt|xml|md|html|json|yaml|yml|php|pl|py|cgi|twig|sh|bat)$ { return 404; }
+  location ~* ^/(system|vendor)/.*\.(txt|xml|md|html|htm|shtml|shtm|json|yaml|yml|php|php2|php3|php4|php5|phar|phtml|pl|py|cgi|twig|sh|bat)$ { return 404; }
+  # Scripts in the public cache folders (image derivatives, combined assets).
+  location ~* ^/(images|assets)/.*\.(php|php2|php3|php4|php5|php7|php8|phar|phtml|pht|phtm|phps|pl|py|cgi|sh|bat)$ { return 404; }
   location ~* ^/user/(config|env|accounts|data)/ { return 404; }
-  location ~* ^/user/.*\.(txt|md|yaml|yml|php|pl|py|cgi|twig|sh|bat)$ { return 404; }
+  location ~* ^/user/.*\.(txt|md|yaml|yml|php|php2|php3|php4|php5|phar|phtml|pl|py|cgi|twig|sh|bat)$ { return 404; }
   # Dependency manifests under user/ (plugins ship composer.json, composer.lock
   # and package.json): the same version inventory refused at the root above.
   # Page attachments keep serving; Admin2 reads its version.json through PHP.
   location ~* ^/user/(?!pages/).*\.(json|lock)$ { return 404; }
-  # Markdown files kept on disk anywhere else in the docroot (a README beside
-  # images, notes dropped at the root): upstream's own rule since 2.2.19. Only a
+  # Markdown files kept on disk anywhere in the docroot outside the trees above
+  # (the core's CHANGELOG.md and README.md at the root, a README beside images,
+  # notes dropped there): upstream's own rule since 2.2.19. Only a
   # file that exists is refused: a page route ending in .md is not a file, so
   # Markdown output and the llms-txt views still answer through the front
   # controller.
