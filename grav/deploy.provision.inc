@@ -113,9 +113,13 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     }
     // The secret subtrees keep the modes the archive carries until the
     // secrets pass sets them: widened here, they went live with the swap.
+    $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
+    $overlay = _provision_grav_legacy_overlay($extract_path, d()->uri);
+    if ($overlay !== '') {
+      $keep[] = $overlay;
+    }
     foreach (_provision_grav_writable_dirs() as $dir) {
-      _provision_grav_chmod_tree($extract_path . '/' . $dir, TRUE, NULL,
-        ($dir === 'user') ? array('accounts', 'config', 'env', 'data/licenses.yaml') : array());
+      _provision_grav_chmod_tree($extract_path . '/' . $dir, TRUE, NULL, ($dir === 'user') ? $keep : array());
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {

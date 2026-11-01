@@ -1532,6 +1532,26 @@ function _provision_grav_env_dir($site_path, $uri) {
 }
 
 /**
+ * The host overlay in Grav's older shape, user/<site name>/, read as the
+ * environment's only where user/env/ is not there (_provision_grav_env_dir()).
+ * It holds config overrides as user/config does, and the seeded secrets when
+ * it has a config/ (_provision_grav_config_dir()), so the secrets pass sets it
+ * and the writable pass leaves it. $name is the site's name, the capsule's own
+ * dir name by default (a deploy's extracted tree passes the uri). Returns the
+ * name under user/, or '' when the capsule has none (a link is never one).
+ */
+function _provision_grav_legacy_overlay($site_path, $name = NULL) {
+  if ($name === NULL || $name === '') {
+    $name = basename($site_path);
+  }
+  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/', $name)) {
+    return '';
+  }
+  $dir = $site_path . '/user/' . $name;
+  return (is_dir($dir) && !is_link($dir)) ? $name : '';
+}
+
+/**
  * The directory Grav reads config:// from for this capsule: the environment
  * overlay's config/ when the overlay exists, else user/config. Both secret
  * files (core nonce key, api plugin JWT secret) are keyed off it.
@@ -1783,9 +1803,13 @@ function _provision_grav_create_directories() {
   }
   // The secret subtrees stay out of the writable pass: the secrets pass
   // below sets them, and nothing widens them in between.
+  $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
+  $overlay = _provision_grav_legacy_overlay($site_path);
+  if ($overlay !== '') {
+    $keep[] = $overlay;
+  }
   foreach (_provision_grav_writable_dirs() as $dir) {
-    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path,
-      ($dir === 'user') ? array('accounts', 'config', 'env', 'data/licenses.yaml') : array());
+    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path, ($dir === 'user') ? $keep : array());
   }
 
   // The secret subtrees get their own modes, no world bits.
@@ -1822,7 +1846,12 @@ function _provision_grav_secure_secrets($site_path) {
     _provision_grav_secure_secrets_in($site_path, $web_group);
     return;
   }
-  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+  $trees = array('user/accounts', 'user/config', 'user/env');
+  $overlay = _provision_grav_legacy_overlay($site_path);
+  if ($overlay !== '') {
+    $trees[] = 'user/' . $overlay;
+  }
+  foreach ($trees as $dir) {
     $path = $site_path . '/' . $dir;
     if (!is_dir($path)) {
       continue;
@@ -1875,7 +1904,12 @@ function _provision_grav_secure_secrets($site_path) {
  */
 function _provision_grav_secure_secrets_in($site_path, $web_group) {
   $fs = provision_file();
-  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+  $trees = array('user/accounts', 'user/config', 'user/env');
+  $overlay = _provision_grav_legacy_overlay($site_path);
+  if ($overlay !== '') {
+    $trees[] = 'user/' . $overlay;
+  }
+  foreach ($trees as $dir) {
     $path = $site_path . '/' . $dir;
     if (!is_dir($path)) {
       continue;
