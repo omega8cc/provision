@@ -111,8 +111,19 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
         ->succeed('Changed group ownership of <code>@path</code> to @gid')
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
+    // The secret subtrees keep the modes the archive carries until the
+    // secrets pass sets them: widened here, they went live with the swap.
+    // A copy's archive names the overlay after the source site until the
+    // post hook renames it (_provision_grav_repoint_uri()).
+    $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
+    foreach (array(d()->uri, drush_get_option('old_uri', '')) as $name) {
+      $overlay = ($name === '') ? '' : _provision_grav_legacy_overlay($extract_path, $name);
+      if ($overlay !== '' && !in_array($overlay, $keep, TRUE)) {
+        $keep[] = $overlay;
+      }
+    }
     foreach (_provision_grav_writable_dirs() as $dir) {
-      _provision_grav_chmod_tree($extract_path . '/' . $dir);
+      _provision_grav_chmod_tree($extract_path . '/' . $dir, TRUE, NULL, ($dir === 'user') ? $keep : array());
     }
 
     if (drush_get_option('deploy_replace_site', FALSE)) {
