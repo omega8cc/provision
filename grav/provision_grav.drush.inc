@@ -1532,6 +1532,31 @@ function _provision_grav_env_dir($site_path, $uri) {
 }
 
 /**
+ * The host overlay in Grav's older shape, user/<site name>/, read as the
+ * environment's only where user/env/ is not there (_provision_grav_env_dir()).
+ * It holds config overrides as user/config does, and the seeded secrets when
+ * it has a config/ (_provision_grav_config_dir()), so the secrets pass sets it
+ * and the writable pass leaves it. $name is the site's name: by default the
+ * capsule's own dir name, a .restore or .original sibling's without that
+ * suffix (a deploy's extracted tree passes the uri, a copy's the source's
+ * too). Returns the name under user/, or '' when the capsule has none (a link
+ * is never one).
+ */
+function _provision_grav_legacy_overlay($site_path, $name = NULL) {
+  if ($name === NULL || $name === '') {
+    $name = preg_replace('/\.(restore|original)$/', '', basename($site_path));
+  }
+  // A name of Grav's own user/ folders is never taken for one: a site named
+  // so would make that folder a secret tree nginx no longer reads.
+  $own = array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes');
+  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || in_array($name, $own, TRUE)) {
+    return '';
+  }
+  $dir = $site_path . '/user/' . $name;
+  return (is_dir($dir) && !is_link($dir)) ? $name : '';
+}
+
+/**
  * The directory Grav reads config:// from for this capsule: the environment
  * overlay's config/ when the overlay exists, else user/config. Both secret
  * files (core nonce key, api plugin JWT secret) are keyed off it.
@@ -1781,12 +1806,22 @@ function _provision_grav_create_directories() {
         ->fail('Could not change group ownership of <code>@path</code> to @gid');
     }
   }
+  // The secret subtrees stay out of the writable pass: the secrets pass
+  // below sets them, and nothing widens them in between.
+  // A copy's deploy runs this before the overlay is renamed for the new
+  // site (_provision_grav_repoint_uri()): the source's name is kept too.
+  $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
+  foreach (array(NULL, drush_get_option('old_uri', '')) as $name) {
+    $overlay = _provision_grav_legacy_overlay($site_path, $name);
+    if ($overlay !== '' && !in_array($overlay, $keep, TRUE)) {
+      $keep[] = $overlay;
+    }
+  }
   foreach (_provision_grav_writable_dirs() as $dir) {
-    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path);
+    _provision_grav_chmod_tree($site_path . '/' . $dir, TRUE, $site_path, ($dir === 'user') ? $keep : array());
   }
 
-  // AFTER the generic writable pass (which would re-widen them): the secret
-  // subtrees drop their world bits.
+  // The secret subtrees get their own modes, no world bits.
   _provision_grav_secure_secrets($site_path);
 
   // The private secrets exist before the web tier ever needs them, owned by
@@ -1820,7 +1855,12 @@ function _provision_grav_secure_secrets($site_path) {
     _provision_grav_secure_secrets_in($site_path, $web_group);
     return;
   }
-  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+  $trees = array('user/accounts', 'user/config', 'user/env');
+  $overlay = _provision_grav_legacy_overlay($site_path);
+  if ($overlay !== '') {
+    $trees[] = 'user/' . $overlay;
+  }
+  foreach ($trees as $dir) {
     $path = $site_path . '/' . $dir;
     if (!is_dir($path)) {
       continue;
@@ -1873,7 +1913,12 @@ function _provision_grav_secure_secrets($site_path) {
  */
 function _provision_grav_secure_secrets_in($site_path, $web_group) {
   $fs = provision_file();
-  foreach (array('user/accounts', 'user/config', 'user/env') as $dir) {
+  $trees = array('user/accounts', 'user/config', 'user/env');
+  $overlay = _provision_grav_legacy_overlay($site_path);
+  if ($overlay !== '') {
+    $trees[] = 'user/' . $overlay;
+  }
+  foreach ($trees as $dir) {
     $path = $site_path . '/' . $dir;
     if (!is_dir($path)) {
       continue;
@@ -2123,8 +2168,13 @@ function provision_grav_system_map() {
  * provision_file()->chmod(..., TRUE) applies one mode to every entry it
  * walks, so 02775 landed on the files too: user content world-executable
  * and setgid after every verify. Links are left alone (chmod follows them).
+ *
+ * $keep names entries below $path the walk leaves as they are ("name", or
+ * "dir/name" one level down): the secrets _provision_grav_secure_secrets()
+ * sets. Widened here and narrowed after the walk, they were world-readable
+ * for as long as the walk of user/ took, seconds with its plugins.
  */
-function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
+function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL, $keep = array()) {
   if (!is_dir($path) || is_link($path)) {
     return;
   }
@@ -2136,7 +2186,55 @@ function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
     if ($place === FALSE || $place['dir'] === NULL || $place['rest'] || $place['link']) {
       return;
     }
-    if (provision_file()->chmod_in($place['dir'], 02775, TRUE, $path, 0664)->status() && $log) {
+    if (!$keep) {
+      $done = provision_file()->chmod_in($place['dir'], 02775, TRUE, $path, 0664)->status();
+    }
+    else {
+      // The top level by hand, each other subtree as a whole.
+      $fs = provision_file();
+      $below = array();
+      foreach ($keep as $k) {
+        if (strpos($k, '/') !== FALSE) {
+          list($top, $rest) = explode('/', $k, 2);
+          $below[$top][] = $rest;
+        }
+      }
+      $cwd = getcwd();
+      $in = $fs->_enter($place['dir']);
+      $names = $in ? @scandir('.') : FALSE;
+      $done = $in && is_array($names);
+      $files = array();
+      foreach ($done ? $names : array() as $name) {
+        if ($name === '.' || $name === '..' || in_array($name, $keep, TRUE) || is_link($name)) {
+          continue;
+        }
+        if (is_dir($name)) {
+          if (isset($below[$name])) {
+            _provision_grav_chmod_tree($path . '/' . $name, FALSE, $site_dir, $below[$name]);
+          }
+          else {
+            $done = $fs->chmod_in($place['dir'] . '/' . $name, 02775, TRUE, $path . '/' . $name, 0664)->status() && $done;
+          }
+          if (!$fs->_enter($place['dir'])) {
+            $in = $done = FALSE;
+            break;
+          }
+          continue;
+        }
+        $st = @lstat($name);
+        if (is_array($st) && ($st['mode'] & 0170000) === 0100000 && $st['uid'] === posix_geteuid()) {
+          $files[] = $name;
+        }
+      }
+      if ($in && $files) {
+        $done = $fs->_chmod_here_nofollow($files, 0664) && $done;
+      }
+      if ($in) {
+        $done = @chmod('.', 02775) && $done;
+      }
+      $fs->_leave($cwd);
+    }
+    if ($done && $log) {
       drush_log(dt('Set the modes of <code>@path</code>: directories 2775, files 0664', array('@path' => $path)), 'success');
     }
     return;
@@ -2147,6 +2245,12 @@ function _provision_grav_chmod_tree($path, $log = TRUE, $site_dir = NULL) {
   foreach ($it as $entry) {
     if ($entry->isLink()) {
       continue;
+    }
+    $rel = substr($entry->getPathname(), strlen($path) + 1);
+    foreach ($keep as $k) {
+      if ($rel === $k || strpos($rel, $k . '/') === 0) {
+        continue 2;
+      }
     }
     if ($entry->isDir()) {
       @chmod($entry->getPathname(), 02775);
