@@ -25,6 +25,10 @@ function drush_provision_grav_provision_delete_validate() {
   if (d()->type !== 'platform') {
     return;
   }
+  // The capsules of a tree another platform also serves are that platform's.
+  if (_provision_platform_twin() !== FALSE) {
+    return;
+  }
   // Belt for never-verified platforms: the http layer's own delete guard
   // opendir()s ./sites and error-logs when it is absent (a Grav release
   // archive ships none; platform verify normally creates it).
@@ -120,6 +124,10 @@ function drush_provision_grav_provision_delete() {
     provision_drupal_push_site($override_slave_authority = TRUE);
   }
   elseif (d()->type === 'platform') {
+    // A tree another platform also serves stays: only this record goes.
+    if (_provision_platform_delete_record_only()) {
+      return;
+    }
     // The validate refusal has already run (and --force bypasses it, the
     // shared semantics); belt here for the force path over a populated
     // platform: log what is being destroyed.

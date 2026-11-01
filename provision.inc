@@ -2998,6 +2998,104 @@ function _provision_platform_registered_in($real) {
 }
 
 /**
+ * The real path of the docroot a platform root serves, or FALSE.
+ *
+ * The order of provision_auto_fix_platform_root(), without its log lines.
+ */
+function _provision_platform_real_docroot($root) {
+  $root = rtrim((string) $root, '/');
+  if ($root === '') {
+    return FALSE;
+  }
+  if (!is_file($root . '/index.php')) {
+    foreach (array('docroot', 'html', 'web') as $sub) {
+      if (is_file($root . '/' . $sub . '/index.php')) {
+        $root .= '/' . $sub;
+        break;
+      }
+    }
+  }
+  return realpath($root);
+}
+
+/**
+ * The name of another platform alias serving this platform's docroot, or
+ * FALSE.
+ *
+ * Two platforms can name one tree: the panel did not refuse a second path
+ * before its form checked paths, and an import or a hand-saved alias still
+ * can. Read once per platform, before its Delete removes the alias or moves
+ * d()->root, so every Delete hook gets the same answer.
+ */
+function _provision_platform_twin() {
+  static $twins = array();
+  $name = ltrim((string) d()->name, '@');
+  if (array_key_exists($name, $twins)) {
+    return $twins[$name];
+  }
+  $twins[$name] = FALSE;
+  $mine = _provision_platform_real_docroot(d()->root);
+  if ($mine === FALSE) {
+    return FALSE;
+  }
+  $files = glob(drush_server_home() . '/.drush/platform_*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    if (basename($file) === $name . '.alias.drushrc.php') {
+      continue;
+    }
+    $text = @file_get_contents($file);
+    if (!is_string($text) || !preg_match("/'root' => '([^']+)'/", $text, $m)) {
+      continue;
+    }
+    if (_provision_platform_real_docroot($m[1]) === $mine) {
+      $twins[$name] = basename($file, '.alias.drushrc.php');
+      break;
+    }
+  }
+  return $twins[$name];
+}
+
+/**
+ * The sites whose alias names platform $name as theirs.
+ */
+function _provision_platform_named_by_sites($name) {
+  $name = ltrim((string) $name, '@');
+  $sites = array();
+  $files = glob(drush_server_home() . '/.drush/*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    $text = @file_get_contents($file);
+    if (!is_string($text) || strpos($text, "'context_type' => 'site'") === FALSE) {
+      continue;
+    }
+    if (preg_match("/'platform' => '@?([^']+)'/", $text, $m) && $m[1] === $name) {
+      $sites[] = basename($file, '.alias.drushrc.php');
+    }
+  }
+  sort($sites);
+  return $sites;
+}
+
+/**
+ * Delete only the record of a platform another platform shares a tree with.
+ *
+ * The validate hook has refused already when sites name this platform. The
+ * alias goes; the tree, the shared platform data file and the other
+ * platform's vhost stay. Returns TRUE when it handled the Delete.
+ */
+function _provision_platform_delete_record_only() {
+  static $done = array();
+  if (d()->type !== 'platform' || _provision_platform_twin() === FALSE) {
+    return FALSE;
+  }
+  $name = ltrim((string) d()->name, '@');
+  if (empty($done[$name])) {
+    $done[$name] = TRUE;
+    drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
+  }
+  return TRUE;
+}
+
+/**
  * Let the backend user remove a Composer project root under static/.
  *
  * What the account's shell logins made in the project root (composer.json,
