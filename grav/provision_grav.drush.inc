@@ -1557,6 +1557,24 @@ function _provision_grav_legacy_overlay($site_path, $name = NULL) {
 }
 
 /**
+ * The environment a capsule's own .env names (GRAV_ENVIRONMENT), read from
+ * the file as it stands: an unpacked archive's tree still names the site it
+ * was taken from until the deploy writes it again. Returns '' when there is
+ * no such line, the file is a link, or the name is not a site name.
+ */
+function _provision_grav_env_name($site_path) {
+  $env = $site_path . '/.env';
+  if (!is_file($env) || is_link($env)) {
+    return '';
+  }
+  $data = @file_get_contents($env, FALSE, NULL, 0, 4096);
+  if (!is_string($data) || !preg_match('/^GRAV_ENVIRONMENT=([a-z0-9][a-z0-9.-]*)\s*$/m', $data, $m)) {
+    return '';
+  }
+  return $m[1];
+}
+
+/**
  * The directory Grav reads config:// from for this capsule: the environment
  * overlay's config/ when the overlay exists, else user/config. Both secret
  * files (core nonce key, api plugin JWT secret) are keyed off it.
@@ -1808,10 +1826,11 @@ function _provision_grav_create_directories() {
   }
   // The secret subtrees stay out of the writable pass: the secrets pass
   // below sets them, and nothing widens them in between.
-  // A copy's deploy runs this before the overlay is renamed for the new
-  // site (_provision_grav_repoint_uri()): the source's name is kept too.
+  // A deploy runs this before the overlay is renamed for the site
+  // (_provision_grav_repoint_uri()): the source's name and the archive's own
+  // are kept too.
   $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
-  foreach (array(NULL, drush_get_option('old_uri', '')) as $name) {
+  foreach (array(NULL, drush_get_option('old_uri', ''), drush_get_option('grav_archived_env', '')) as $name) {
     $overlay = _provision_grav_legacy_overlay($site_path, $name);
     if ($overlay !== '' && !in_array($overlay, $keep, TRUE)) {
       $keep[] = $overlay;

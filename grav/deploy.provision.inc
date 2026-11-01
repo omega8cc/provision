@@ -114,9 +114,14 @@ function drush_provision_grav_pre_provision_deploy($backup_file) {
     // The secret subtrees keep the modes the archive carries until the
     // secrets pass sets them: widened here, they went live with the swap.
     // A copy's archive names the overlay after the source site until the
-    // post hook renames it (_provision_grav_repoint_uri()).
+    // post hook renames it (_provision_grav_repoint_uri()), and an archive
+    // taken before a rename after the site's former name: the name its own
+    // .env gives, read before the deploy writes it again, is kept for the
+    // post hook too.
+    $archived = _provision_grav_env_name($extract_path);
+    drush_set_option('grav_archived_env', $archived);
     $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
-    foreach (array(d()->uri, drush_get_option('old_uri', '')) as $name) {
+    foreach (array(d()->uri, drush_get_option('old_uri', ''), $archived) as $name) {
       $overlay = ($name === '') ? '' : _provision_grav_legacy_overlay($extract_path, $name);
       if ($overlay !== '' && !in_array($overlay, $keep, TRUE)) {
         $keep[] = $overlay;
