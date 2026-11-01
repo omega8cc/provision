@@ -201,6 +201,15 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # and package.json): the same version inventory refused at the root above.
   # Page attachments keep serving; Admin2 reads its version.json through PHP.
   location ~* ^/user/(?!pages/).*\.(json|lock)$ { return 404; }
+  # Markdown files kept on disk anywhere else in the docroot (a README beside
+  # images, notes dropped at the root): upstream's own rule since 2.2.19. Only a
+  # file that exists is refused: a page route ending in .md is not a file, so
+  # Markdown output and the llms-txt views still answer through the front
+  # controller.
+  location ~* \.md$ {
+    if (-f $request_filename) { return 404; }
+    try_files $uri /index.php?$args;
+  }
 
   # Content-hashed SvelteKit bundles of plugins and themes: Admin2 names its
   # chunks by their real path under user/plugins/admin2/app/_app/immutable/,
