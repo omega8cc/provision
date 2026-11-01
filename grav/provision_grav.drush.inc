@@ -1546,7 +1546,10 @@ function _provision_grav_legacy_overlay($site_path, $name = NULL) {
   if ($name === NULL || $name === '') {
     $name = preg_replace('/\.(restore|original)$/', '', basename($site_path));
   }
-  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name)) {
+  // A name of Grav's own user/ folders is never taken for one: a site named
+  // so would make that folder a secret tree nginx no longer reads.
+  $own = array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes');
+  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || in_array($name, $own, TRUE)) {
     return '';
   }
   $dir = $site_path . '/user/' . $name;
