@@ -1548,12 +1548,38 @@ function _provision_grav_legacy_overlay($site_path, $name = NULL) {
   }
   // A name of Grav's own user/ folders is never taken for one: a site named
   // so would make that folder a secret tree nginx no longer reads.
-  $own = array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes');
-  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || in_array($name, $own, TRUE)) {
+  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || _provision_grav_user_own_name($name)) {
     return '';
   }
   $dir = $site_path . '/user/' . $name;
   return (is_dir($dir) && !is_link($dir)) ? $name : '';
+}
+
+/**
+ * Whether $name is one of Grav's own user/ folders, never a site's overlay.
+ */
+function _provision_grav_user_own_name($name) {
+  return in_array($name, array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes'), TRUE);
+}
+
+/**
+ * The environment a capsule's own .env names (GRAV_ENVIRONMENT), read from
+ * the file as it stands: an unpacked archive's tree still names the site it
+ * was taken from until the deploy writes it again. Returns '' when there is
+ * no such line, the file is a link, or the name is not a site name (one of
+ * Grav's own user/ folders among them: a Restore would move that folder).
+ */
+function _provision_grav_env_name($site_path) {
+  $env = $site_path . '/.env';
+  if (!is_file($env) || is_link($env)) {
+    return '';
+  }
+  $data = @file_get_contents($env, FALSE, NULL, 0, 4096);
+  if (!is_string($data) || !preg_match('/^GRAV_ENVIRONMENT=([a-z0-9][a-z0-9.-]*)\s*$/m', $data, $m)
+    || _provision_grav_user_own_name($m[1])) {
+    return '';
+  }
+  return $m[1];
 }
 
 /**
@@ -1808,10 +1834,11 @@ function _provision_grav_create_directories() {
   }
   // The secret subtrees stay out of the writable pass: the secrets pass
   // below sets them, and nothing widens them in between.
-  // A copy's deploy runs this before the overlay is renamed for the new
-  // site (_provision_grav_repoint_uri()): the source's name is kept too.
+  // A deploy runs this before the overlay is renamed for the site
+  // (_provision_grav_repoint_uri()): the source's name and the archive's own
+  // are kept too.
   $keep = array('accounts', 'config', 'env', 'data/licenses.yaml');
-  foreach (array(NULL, drush_get_option('old_uri', '')) as $name) {
+  foreach (array(NULL, drush_get_option('old_uri', ''), drush_get_option('grav_archived_env', '')) as $name) {
     $overlay = _provision_grav_legacy_overlay($site_path, $name);
     if ($overlay !== '' && !in_array($overlay, $keep, TRUE)) {
       $keep[] = $overlay;
@@ -2820,7 +2847,23 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
   // versions.yaml, and the updater would replay every historical step.
   _provision_grav_seed_versions_yaml($site_path);
 
+  // Grav raises its maintenance flag only as its installer starts moving
+  // system/ and vendor/, so a request that passed index.php's check a moment
+  // earlier autoloads from a half-moved vendor/ and answers 500. Raise the
+  // flag first and give the requests already running a few seconds to end.
+  // The installer drops the flag when it is done; one raised here goes when
+  // the install returns, either way. The plugin folder lock is not held
+  // across the CLI: the installer takes it itself.
+  $flag = $site_path . '/.upgrading';
+  $raised = !file_exists($flag) && @file_put_contents($flag, date('Y-m-d H:i:s')) !== FALSE;
+  if ($raised) {
+    sleep(5);
+  }
   $ran = _provision_grav_cli('gpm', 'direct-install -y -n ' . escapeshellarg($artefact), $site_path);
+  if ($raised) {
+    @unlink($flag);
+    clearstatcache();
+  }
   if (!$ran) {
     // The CLI seam already logged the command and its output.
     return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
