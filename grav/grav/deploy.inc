@@ -44,6 +44,14 @@ if ($deploy_class === '') {
 }
 
 if ($deploy_class === 'restore') {
+  // An archive taken before the site was renamed carries its overlay under
+  // the former name, which Grav no longer reads: it follows the current
+  // name, keys and all, as a rename moves it.
+  $archived = (string) drush_get_option('grav_archived_env', '');
+  if ($archived !== '' && $archived !== $uri) {
+    _provision_grav_repoint_uri($site_path, $archived, $uri);
+    _provision_grav_secure_secrets($site_path);
+  }
   drush_log(dt('Restored Grav capsule at !uri (deploy class restore; identity preserved: keys, accounts and overlay as archived).', array('!uri' => $uri)), 'ok');
   return TRUE;
 }
@@ -73,6 +81,16 @@ $config_dirs = array_unique(array(
   $site_path . '/user/config',
   _provision_grav_config_dir($site_path, $uri),
 ));
+// An overlay the re-point left under the source's name (both names were in
+// the source) still holds the source's keys: a copy carries none of them.
+$key_dirs = $config_dirs;
+if ($identity_changes && $old_uri !== '' && $old_uri !== $uri) {
+  foreach (array($site_path . '/user/env/' . $old_uri, $site_path . '/user/' . $old_uri) as $stale) {
+    if (is_dir($stale . '/config') && !is_link($stale) && !is_link($stale . '/config')) {
+      $key_dirs[] = $stale . '/config';
+    }
+  }
+}
 
 if ($identity_changes) {
   // ---- (a) cryptographic identity: the copy signs its own nonces and tokens ----
@@ -80,7 +98,7 @@ if ($identity_changes) {
   // JWT secret came along in the archive. Drop every copy the archive may have
   // carried, in both locations Grav could read them from, then seed fresh ones
   // in the location the copy actually resolves.
-  foreach ($config_dirs as $config_dir) {
+  foreach ($key_dirs as $config_dir) {
     foreach (array('/security-private.php', '/plugins/api-private.php') as $secret) {
       if (is_file($config_dir . $secret)) {
         @unlink($config_dir . $secret);
