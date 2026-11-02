@@ -95,7 +95,17 @@ if (!is_valid_email($cfg['user']['email'])) {
   msg(gTxt('email_required'), MSG_ERROR);
 }
 
+// setup_db() probes the site's own clean-URL address, which is never live
+// here: the vhost is reloaded only after this shim. Textpattern 4.9.1 hid the
+// failed probe with @, 4.9.2 lets its warning through into every install's
+// log. The caller sets permlink_mode itself, so only that warning is dropped;
+// any other error still reaches PHP's own handler.
+set_error_handler(function ($no, $str, $file) {
+  return $no === E_WARNING && substr((string) $file, -13) === 'setup_lib.php'
+    && strpos((string) $str, 'file(') === 0;
+});
 setup_db($cfg);
+restore_error_handler();
 msg('install complete');
 setup_die(0);
 
