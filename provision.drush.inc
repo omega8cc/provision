@@ -766,6 +766,7 @@ function drush_provision_delete_validate() {
   }
   $twin = _provision_platform_twin();
   if ($twin === FALSE) {
+    _provision_platform_keep_held_deploy_paths();
     return;
   }
   $sites = _provision_platform_named_by_sites(d()->name);
