@@ -1548,8 +1548,7 @@ function _provision_grav_legacy_overlay($site_path, $name = NULL) {
   }
   // A name of Grav's own user/ folders is never taken for one: a site named
   // so would make that folder a secret tree nginx no longer reads.
-  $own = array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes');
-  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || in_array($name, $own, TRUE)) {
+  if (is_dir($site_path . '/user/env') || !preg_match('/^[a-z0-9][a-z0-9.-]*$/', $name) || _provision_grav_user_own_name($name)) {
     return '';
   }
   $dir = $site_path . '/user/' . $name;
@@ -1557,10 +1556,18 @@ function _provision_grav_legacy_overlay($site_path, $name = NULL) {
 }
 
 /**
+ * Whether $name is one of Grav's own user/ folders, never a site's overlay.
+ */
+function _provision_grav_user_own_name($name) {
+  return in_array($name, array('accounts', 'blueprints', 'config', 'data', 'env', 'images', 'languages', 'pages', 'plugins', 'themes'), TRUE);
+}
+
+/**
  * The environment a capsule's own .env names (GRAV_ENVIRONMENT), read from
  * the file as it stands: an unpacked archive's tree still names the site it
  * was taken from until the deploy writes it again. Returns '' when there is
- * no such line, the file is a link, or the name is not a site name.
+ * no such line, the file is a link, or the name is not a site name (one of
+ * Grav's own user/ folders among them: a Restore would move that folder).
  */
 function _provision_grav_env_name($site_path) {
   $env = $site_path . '/.env';
@@ -1568,7 +1575,8 @@ function _provision_grav_env_name($site_path) {
     return '';
   }
   $data = @file_get_contents($env, FALSE, NULL, 0, 4096);
-  if (!is_string($data) || !preg_match('/^GRAV_ENVIRONMENT=([a-z0-9][a-z0-9.-]*)\s*$/m', $data, $m)) {
+  if (!is_string($data) || !preg_match('/^GRAV_ENVIRONMENT=([a-z0-9][a-z0-9.-]*)\s*$/m', $data, $m)
+    || _provision_grav_user_own_name($m[1])) {
     return '';
   }
   return $m[1];
