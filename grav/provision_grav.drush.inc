@@ -2839,7 +2839,23 @@ function _provision_grav_apply_artefact($site_path, $uri, $artefact, $artefact_v
   // versions.yaml, and the updater would replay every historical step.
   _provision_grav_seed_versions_yaml($site_path);
 
+  // Grav raises its maintenance flag only as its installer starts moving
+  // system/ and vendor/, so a request that passed index.php's check a moment
+  // earlier autoloads from a half-moved vendor/ and answers 500. Raise the
+  // flag first and give the requests already running a few seconds to end.
+  // The installer drops the flag when it is done; one raised here goes when
+  // the install returns, either way. The plugin folder lock is not held
+  // across the CLI: the installer takes it itself.
+  $flag = $site_path . '/.upgrading';
+  $raised = !file_exists($flag) && @file_put_contents($flag, date('Y-m-d H:i:s')) !== FALSE;
+  if ($raised) {
+    sleep(5);
+  }
   $ran = _provision_grav_cli('gpm', 'direct-install -y -n ' . escapeshellarg($artefact), $site_path);
+  if ($raised) {
+    @unlink($flag);
+    clearstatcache();
+  }
   if (!$ran) {
     // The CLI seam already logged the command and its output.
     return drush_set_error('PROVISION_GRAV_UPGRADE_FAILED',
