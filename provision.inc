@@ -5420,7 +5420,12 @@ function provision_inode_margin($total) {
  * wrapper refuses a core that cannot run on it before PHP starts -- but that
  * is after this task's safety copy. So ask the wrapper now: a no-op Drush
  * line on the target root and uri goes through /bin/sh the way the deploy
- * will, and a refusal comes back as its backend packet.
+ * will, and a refusal comes back as its backend packet. On this line the
+ * wrapper also judges the target's pages: a core that cannot run on the
+ * PHP-FPM version the target would get (its multi-fpm.info line, else its
+ * platform's in fpm-per-platform.info, else the account's default) is refused
+ * the same way, where the page check would only move the site after a deploy
+ * that answered HTTP 500.
  *
  * @param $task
  *   'clone' or 'migrate'.
