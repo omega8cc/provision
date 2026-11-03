@@ -523,6 +523,62 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     return $this->grant_privileges($name, $username, $password, $host);
   }
 
+  /**
+   * Keep a site's own login out of its database while an admin login loads it.
+   *
+   * The new site's drushrc.php and settings.php already name this database and
+   * login, so a Drush started by alias during the load bootstraps on the half
+   * loaded tables, and a row it writes can fail the load on a duplicate key.
+   * Locking refuses the connection and nothing else: the grants stay, and the
+   * account stays a valid definer for the stored objects the load creates.
+   * Best effort: a lock refused leaves the load as it was before this existed.
+   *
+   * @return array
+   *   The host rows locked, for release_site_login().
+   */
+  function hold_site_login($username, $loader) {
+    $held = array();
+    // A master_db with no admin pair loads as the site's own login, which must
+    // keep connecting, and the broker keeps logins to itself.
+    if (empty($username) || $username === $loader || $this->broker_mode()) {
+      return $held;
+    }
+    $rows = $this->query("SELECT Host FROM mysql.user WHERE User = '%s'", $username);
+    if (!$rows) {
+      drush_log(dt('Could not read the hosts of @user, so its login stays open during the load.', array('@user' => $username)), 'notice');
+      return $held;
+    }
+    $hosts = array();
+    while ($row = $rows->fetch()) {
+      $hosts[] = $row['Host'];
+    }
+    foreach ($hosts as $host) {
+      if ($this->query("ALTER USER `%s`@`%s` ACCOUNT LOCK", $username, $host)) {
+        $held[] = $host;
+      }
+      else {
+        drush_log(dt('Could not lock the login @user on @host during the load.', array('@user' => $username, '@host' => $host)), 'notice');
+      }
+    }
+    return $held;
+  }
+
+  /**
+   * Give back the login hold_site_login() held. A login left locked is a site
+   * that cannot connect, so a refused unlock fails the task, whose rollback
+   * drops the database and the login.
+   */
+  function release_site_login($username, $held) {
+    $released = TRUE;
+    foreach ($held as $host) {
+      if (!$this->query("ALTER USER `%s`@`%s` ACCOUNT UNLOCK", $username, $host)) {
+        drush_set_error('PROVISION_DB_IMPORT_FAILED', dt('Could not unlock the login @user on @host after the load.', array('@user' => $username, '@host' => $host)));
+        $released = FALSE;
+      }
+    }
+    return $released;
+  }
+
   function create_user($username, $host) {
     $statement = "CREATE USER IF NOT EXISTS `%s`@`%s`";
     return $this->query($statement, $username, $host);
@@ -1412,7 +1468,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             if (provision_file()->exists($myquick_creds_log)->status()) {
               drush_log(dt("MyQuick import_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
             }
+            $held_login = $this->hold_site_login($db_user, $oct_db_user);
             $success = provision_shell_exec_secret($command, array($oct_db_pass));
+            $this->release_site_login($db_user, $held_login);
 
             if (!$success) {
               // Never interpolate $command into messages: it carries --password.
