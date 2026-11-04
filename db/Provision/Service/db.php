@@ -140,6 +140,35 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
+   * Keep a site's own login out of its database while an admin login loads it.
+   * A service without logins holds nothing.
+   */
+  function hold_site_login($username, $loader) {
+    return array();
+  }
+
+  /**
+   * Give back the login hold_site_login() held.
+   */
+  function release_site_login($username, $held) {
+    return TRUE;
+  }
+
+  /**
+   * Unlock a login hold_site_login() left behind. A service without logins has
+   * none to give back.
+   */
+  function release_stale_site_login($username) {
+  }
+
+  /**
+   * A site's Verify gives back a login a killed load left locked.
+   */
+  function verify_site_cmd() {
+    $this->release_stale_site_login(drush_get_option('db_user', '', 'site'));
+  }
+
+  /**
    * Generate a new mysql database and user account for the specified credentials
    */
   function create_site_database($creds = array()) {
@@ -836,7 +865,9 @@ class Provision_Service_db extends Provision_Service {
             if (provision_file()->exists($myquick_creds_log)->status()) {
               drush_log(dt("MyQuick import_site_database db.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
             }
+            $held_login = $this->hold_site_login($db_user, $oct_db_user);
             $success = provision_shell_exec_secret($command, array($oct_db_pass));
+            $this->release_site_login($db_user, $held_login);
 
             if (!$success) {
               // Never interpolate $command into messages: it carries --password.
