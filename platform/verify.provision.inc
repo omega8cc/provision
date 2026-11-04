@@ -21,6 +21,9 @@ function drush_provision_drupal_provision_verify_validate() {
     drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
     provision_prepare_environment();
 
+    // Before the full bootstrap below, which a login left locked would fail.
+    d()->service('db')->release_stale_site_login(drush_get_option('db_user', '', 'site'));
+
     _provision_drupal_create_settings_file();
     provision_drupal_push_site();
 

@@ -569,6 +569,10 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    * drops the database and the login.
    */
   function release_site_login($username, $held) {
+    // The session sat idle through the load, and a load longer than the
+    // server's wait_timeout finds it closed: drop it, so the unlock and what
+    // follows, a rollback too, open a fresh one through ensure_connected().
+    $this->close();
     $released = TRUE;
     foreach ($held as $host) {
       if (!$this->query("ALTER USER `%s`@`%s` ACCOUNT UNLOCK", $username, $host)) {
@@ -577,6 +581,30 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       }
     }
     return $released;
+  }
+
+  /**
+   * Unlock a login hold_site_login() left behind. A task killed during its load
+   * never reaches the release, and the site then cannot connect, nor be backed
+   * up. Nothing else in BOA locks a site's login, and another task on the site
+   * means the load has ended, so a lock found here is that one.
+   */
+  function release_stale_site_login($username) {
+    if (empty($username) || $this->broker_mode()) {
+      return;
+    }
+    $rows = $this->query("SELECT Host FROM mysql.user WHERE User = '%s' AND account_locked = 'Y'", $username);
+    if (!$rows) {
+      return;
+    }
+    $hosts = array();
+    while ($row = $rows->fetch()) {
+      $hosts[] = $row['Host'];
+    }
+    if ($hosts) {
+      drush_log(dt('A load that did not finish left the login @user locked: unlocking it.', array('@user' => $username)), 'warning');
+      $this->release_site_login($username, $hosts);
+    }
   }
 
   function create_user($username, $host) {
