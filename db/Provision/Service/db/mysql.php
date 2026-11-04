@@ -589,15 +589,20 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
    * nor be backed up. Nothing else in BOA locks a site's login, so a lock found
    * here is that one, unless its load is still running: myloader outlives a
    * killed task, and a task past the runner lock's limit has another run beside
-   * it. The read is best effort: a Verify or a files-only Backup that needs no
-   * database must not fail on a server that is down.
+   * it. A Verify or a files-only Backup that needs no database must not fail on
+   * a server that is down, so the connect is a quiet one.
+   *
+   * @return bool
+   *   FALSE while the load still runs, TRUE otherwise.
    */
   function release_stale_site_login() {
     $username = drush_get_option('db_user', '', 'site');
     if (empty($username) || $this->broker_mode()) {
-      return;
+      return TRUE;
     }
-    $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+    if (!$this->conn && !$this->connect(TRUE)) {
+      return TRUE;
+    }
     $hosts = array();
     $rows = $this->query("SELECT Host FROM mysql.user WHERE User = '%s' AND account_locked = 'Y'", $username);
     if ($rows) {
@@ -605,17 +610,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         $hosts[] = $row['Host'];
       }
     }
-    drush_set_context('DRUSH_ERROR_CODE', $pre_error);
     if (!$hosts) {
-      return;
+      return TRUE;
     }
-    $loading = $this->query("SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '%s' AND ID <> CONNECTION_ID() LIMIT 1", drush_get_option('db_name', '', 'site'));
+    // By the login a load runs as, never by anything else sitting in the database:
+    // the nightly dump there, as root, must not keep a site down.
+    $loading = $this->query("SELECT ID FROM information_schema.PROCESSLIST WHERE DB = '%s' AND USER = '%s' AND ID <> CONNECTION_ID() LIMIT 1", drush_get_option('db_name', '', 'site'), $this->creds['user']);
     if ($loading && $loading->fetch()) {
       drush_log(dt('The login @user stays locked: its database is still being loaded.', array('@user' => $username)), 'warning');
-      return;
+      return FALSE;
     }
     drush_log(dt('A load that did not finish left the login @user locked: unlocking it. Its database may be incomplete, so check the site or run its Migrate again.', array('@user' => $username)), 'warning');
     $this->release_site_login($username, $hosts);
+    return TRUE;
   }
 
   function create_user($username, $host) {

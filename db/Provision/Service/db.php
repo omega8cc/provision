@@ -159,6 +159,7 @@ class Provision_Service_db extends Provision_Service {
    * without logins has none to give back.
    */
   function release_stale_site_login() {
+    return TRUE;
   }
 
   /**
