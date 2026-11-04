@@ -1,7 +1,7 @@
 <?php
 
 function drush_db_pre_provision_backup() {
-  d()->service('db')->release_stale_site_login(drush_get_option('db_user', '', 'site'));
+  $load_ended = d()->service('db')->release_stale_site_login();
 
   // The files-only mode promises "without any DB": skip the dump entirely
   // (classic database.sql and the MyQuick tmp_expim path alike). The mode is
@@ -14,6 +14,10 @@ function drush_db_pre_provision_backup() {
       && !is_file($internal_backup_flag)) {
     drush_log(dt('Skipping the database dump for the files-only backup mode.'), 'info');
     return;
+  }
+  // A dump now would read half loaded tables, and clear the store myloader reads.
+  if (!$load_ended) {
+    return drush_set_error('PROVISION_BACKUP_FAILED', dt('The database of this site is still being loaded by a task that did not finish: run the backup when the load has ended.'));
   }
   d()->service('db')->generate_dump();
 }

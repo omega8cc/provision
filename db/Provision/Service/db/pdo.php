@@ -33,7 +33,13 @@ class Provision_Service_db_pdo extends Provision_Service_db {
     drush_log($this->dsn, 'notice');
   }
 
-  function connect() {
+  /**
+   * @param bool $quiet
+   *   A refused connect sets no error, for a caller that can go on without a
+   *   session: under the panel a set error reaches the task's parent at once
+   *   as a backend packet, and nothing here can take it back.
+   */
+  function connect($quiet = FALSE) {
     $user = isset($this->creds['user']) ? $this->creds['user'] : '';
     $pass = isset($this->creds['pass']) ? $this->creds['pass'] : '';
     $options = [];
@@ -54,7 +60,7 @@ class Provision_Service_db_pdo extends Provision_Service_db {
       return $this->conn;
     }
     catch (PDOException $e) {
-      return drush_set_error('PROVISION_DB_CONNECT_FAIL', $e->getMessage());
+      return $quiet ? FALSE : drush_set_error('PROVISION_DB_CONNECT_FAIL', $e->getMessage());
     }
   }
 

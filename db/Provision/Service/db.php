@@ -155,17 +155,18 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
-   * Unlock a login hold_site_login() left behind. A service without logins has
-   * none to give back.
+   * Unlock this site's login if hold_site_login() left it locked. A service
+   * without logins has none to give back.
    */
-  function release_stale_site_login($username) {
+  function release_stale_site_login() {
+    return TRUE;
   }
 
   /**
    * A site's Verify gives back a login a killed load left locked.
    */
   function verify_site_cmd() {
-    $this->release_stale_site_login(drush_get_option('db_user', '', 'site'));
+    $this->release_stale_site_login();
   }
 
   /**
