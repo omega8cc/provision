@@ -1,6 +1,8 @@
 <?php
 
 function drush_db_pre_provision_backup() {
+  d()->service('db')->release_stale_site_login(drush_get_option('db_user', '', 'site'));
+
   // The files-only mode promises "without any DB": skip the dump entirely
   // (classic database.sql and the MyQuick tmp_expim path alike). The mode is
   // latched by the backup validate before this pre hook runs. Never skip for
