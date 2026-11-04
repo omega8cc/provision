@@ -1,7 +1,9 @@
 <?php
 
 function drush_db_pre_provision_backup() {
-  $load_ended = d()->service('db')->release_stale_site_login();
+  $db = d()->service('db');
+  // A site with no database server has the null service, whose every call answers FALSE.
+  $load_ended = ($db instanceof Provision_Service_null) || $db->release_stale_site_login();
 
   // The files-only mode promises "without any DB": skip the dump entirely
   // (classic database.sql and the MyQuick tmp_expim path alike). The mode is
