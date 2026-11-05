@@ -358,8 +358,10 @@ class Provision_Service_db extends Provision_Service {
     if (!is_array($lines)) {
       $lines = array();
     }
+    // Anchored on mydumper's own Message lines: a table's name in another
+    // Message line is no cancellation. 0.19.3 spells it "cacelled".
     foreach ($lines as $line) {
-      if (preg_match('/Shutting down gracefully|Process has been cancelled/', $line)) {
+      if (preg_match('/^\*\* Message: (?:[0-9:.]+: )?(?:Shutting down gracefully|Thread [0-9]+: Process has been can?celled)$/', $line)) {
         return FALSE;
       }
     }
@@ -369,7 +371,7 @@ class Provision_Service_db extends Provision_Service {
     if ($exit_code !== 1) {
       return FALSE;
     }
-    $retry = '/Flush tables failed, we are continuing anyways - ERROR 1317: /';
+    $retry = '/\): WARNING \*\*: (?:[0-9:.]+: )?Flush tables failed, we are continuing anyways - ERROR 1317: /';
     $retried = FALSE;
     foreach ($lines as $line) {
       if (preg_match('/\): (?:CRITICAL|ERROR) \*\*/', $line)) {

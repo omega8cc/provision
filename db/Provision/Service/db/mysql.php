@@ -2123,7 +2123,7 @@ port=%s
           $shown = array();
           foreach ((array) $dump_lines as $line) {
             if (strpos($line, '** Message: ') !== 0
-              || preg_match('/Shutting down gracefully|Process has been cancelled/', $line)) {
+              || preg_match('/^\*\* Message: (?:[0-9:.]+: )?(?:Shutting down gracefully|Thread [0-9]+: Process has been can?celled)$/', $line)) {
               $shown[] = $line;
             }
           }
