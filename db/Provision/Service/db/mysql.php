@@ -2099,7 +2099,14 @@ port=%s
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
         }
-        $success = provision_shell_exec_secret($command, array($oct_db_pass));
+        $dump_exit = NULL;
+        $success = provision_shell_exec_secret($command, array($oct_db_pass), NULL, $dump_exit);
+        // A run whose only counted error is mydumper's own retried table
+        // flush exits 1 with a whole dump: see mydumper_run_ok().
+        if (!$success && $this->mydumper_run_ok($dump_exit, drush_shell_exec_output())) {
+          $success = TRUE;
+          drush_log(dt('mydumper retried its table flush behind a long query and exited 1; the dump of @db is whole.', array('@db' => $db_name)), 'notice');
+        }
 
         if ((!$success || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           // Never interpolate $command into messages: it carries --password.

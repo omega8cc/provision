@@ -328,6 +328,53 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
+   * Whether a mydumper run left a whole dump, by its exit status and output.
+   *
+   * mydumper 1.x counts every failed query it logs into its exit status, its
+   * own retried table flush included. Before the global read lock it sends
+   * FLUSH NO_WRITE_TO_BINLOG TABLES, which waits behind any long query on the
+   * server; after --ftwrl-max-wait-time (60 s) it kills that flush, logs
+   * "Flush tables failed, we are continuing anyways - ERROR 1317" and sends
+   * it again, then takes the read lock and dumps as usual, so the run exits
+   * 1 with a whole dump (0.x exits 0). Waiting longer is no fix: a pending
+   * flush stalls every new query on the tables it waits for. The same rule
+   * as BOA's dump tools.
+   *
+   * @param int $exit_code
+   *   The run's exit status.
+   * @param array $lines
+   *   Its output, written at --verbose=2.
+   *
+   * @return bool
+   *   TRUE on exit 0, or on exit 1 when the output holds at least one such
+   *   retry, every counted error in it is one (a failed query is logged with
+   *   " - ERROR <n>: ", any other error as CRITICAL) and nothing is CRITICAL
+   *   or ERROR. The caller still requires the metadata.
+   */
+  function mydumper_run_ok($exit_code, $lines) {
+    if ($exit_code === 0) {
+      return TRUE;
+    }
+    if ($exit_code !== 1 || !is_array($lines)) {
+      return FALSE;
+    }
+    $retry = '/WARNING \*\*: (?:[0-9:.]+: )?Flush tables failed, we are continuing anyways - ERROR 1317: /';
+    $retried = FALSE;
+    foreach ($lines as $line) {
+      if (preg_match('/\): (?:CRITICAL|ERROR) \*\*/', $line)) {
+        return FALSE;
+      }
+      if (preg_match('/ - ERROR [0-9]+: /', $line)) {
+        if (!preg_match($retry, $line)) {
+          return FALSE;
+        }
+        $retried = TRUE;
+      }
+    }
+    return $retried;
+  }
+
+  /**
    * Gives every stored object of a fast dump its own sql_mode back.
    *
    * mydumper writes a database's triggers, routines and events under one
