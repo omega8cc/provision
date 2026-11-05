@@ -50,6 +50,8 @@ server {
 <?php if ($nginx_has_ktls): ?>
   ssl_conf_command Options KTLS;
 <?php endif; ?>
+  ### No TLS 1.3 tickets: under kernel TLS a client closing unread can lose its request.
+  ssl_conf_command NumTickets 0;
 }
 
 <?php endif; ?>

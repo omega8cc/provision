@@ -97,6 +97,8 @@ server {
 <?php if ($nginx_has_ktls): ?>
   ssl_conf_command Options KTLS;
 <?php endif; ?>
+  ### No TLS 1.3 tickets: under kernel TLS a client closing unread can lose its request.
+  ssl_conf_command NumTickets 0;
 
   ###
   ### Allow access to letsencrypt.org ACME challenges directory.
@@ -205,6 +207,8 @@ server {
 <?php if ($nginx_has_ktls): ?>
   ssl_conf_command Options KTLS;
 <?php endif; ?>
+  ### No TLS 1.3 tickets: under kernel TLS a client closing unread can lose its request.
+  ssl_conf_command NumTickets 0;
   <?php print $extra_config; ?>
   include  <?php print $server->include_path; ?>/ip_access/<?php print $this->uri; ?>.conf*;
   set $boa_ua_lk_self "0";
