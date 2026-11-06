@@ -2095,17 +2095,39 @@ port=%s
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
           . $rows_opt . $this->mydumper_objects_option($mydumper_path) . $locks_opt
           . ' --build-empty-files --threads=' . escapeshellarg($threads)
-          . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=2';
+          . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=3';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
         }
-        $success = provision_shell_exec_secret($command, array($oct_db_pass));
+        $dump_exit = NULL;
+        $success = provision_shell_exec_secret($command, array($oct_db_pass), NULL, $dump_exit);
+        $dump_lines = drush_shell_exec_output();
+        // A run whose only counted error is mydumper's own retried table
+        // flush exits 1 with a whole dump, and one stopped by SIGTERM exits 0
+        // with a partial one: see mydumper_run_ok(). A simulated run has no
+        // exit status and stands as it is.
+        if (!is_null($dump_exit)) {
+          $whole = $this->mydumper_run_ok($dump_exit, $dump_lines);
+          if ($whole && !$success) {
+            drush_log(dt('mydumper retried its table flush behind a long query and exited 1; the dump of @db is whole.', array('@db' => $db_name)), 'notice');
+          }
+          $success = $whole;
+        }
 
         if ((!$success || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           // Never interpolate $command into messages: it carries --password.
           // A run that exits 0 without the final metadata marker still left
           // no restorable dump (killed mid-flight), so treat it as failed.
-          drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", drush_shell_exec_output()))));
+          // mydumper's Message lines are left out, as at --verbose=2, but the
+          // ones that say the run was cancelled.
+          $shown = array();
+          foreach ((array) $dump_lines as $line) {
+            if (strpos($line, '** Message: ') !== 0
+              || preg_match('/^\*\* Message: (?:[0-9:.]+: )?(?:Shutting down gracefully|Thread [0-9]+: Process has been can?celled)$/', $line)) {
+              $shown[] = $line;
+            }
+          }
+          drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => join("\n", $shown))));
         }
         elseif ($success && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');

@@ -3866,11 +3866,14 @@ function provision_password($length = 10) {
  *   The secret values as they appear before escaping.
  * @param string $cd
  *   Optional directory to run the command in.
+ * @param int $exit_code
+ *   Optional, set to the command's exit status (NULL on a simulated run).
  *
  * @return bool
  *   TRUE when the command exits 0.
  */
-function provision_shell_exec_secret($command, $secrets, $cd = NULL) {
+function provision_shell_exec_secret($command, $secrets, $cd = NULL, &$exit_code = NULL) {
+  $exit_code = NULL;
   if ($cd !== NULL) {
     $command = 'cd ' . escapeshellarg($cd) . ' && ' . $command;
   }
@@ -3883,6 +3886,7 @@ function provision_shell_exec_secret($command, $secrets, $cd = NULL) {
   $output = array();
   $result = 0;
   exec($command . ' 2>&1', $output, $result);
+  $exit_code = $result;
   if (function_exists('_drush_shell_exec_output_set')) {
     _drush_shell_exec_output_set($output);
   }

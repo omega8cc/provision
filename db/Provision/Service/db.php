@@ -328,6 +328,66 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
+   * Whether a mydumper run left a whole dump, by its exit status and output.
+   *
+   * mydumper 1.x counts every failed query it logs into its exit status, its
+   * own retried table flush included. Before the global read lock it sends
+   * FLUSH NO_WRITE_TO_BINLOG TABLES, which waits behind any long query on the
+   * server; after --ftwrl-max-wait-time (60 s) it kills that flush, logs
+   * "Flush tables failed, we are continuing anyways - ERROR 1317" and sends
+   * it again, then takes the read lock and dumps as usual, so the run exits
+   * 1 with a whole dump (0.x exits 0). Waiting longer is no fix: a pending
+   * flush stalls every new query on the tables it waits for. A run stopped
+   * by SIGTERM skips what is left yet still writes its metadata and exits 0
+   * (1 after such a retry); it says so only at Message level. The same rule
+   * as BOA's dump tools.
+   *
+   * @param int $exit_code
+   *   The run's exit status.
+   * @param array $lines
+   *   Its output, written at --verbose=3.
+   *
+   * @return bool
+   *   TRUE when nothing in the output says the run was cancelled and the
+   *   exit status is 0, or 1 with at least one such retry, every counted
+   *   error a retry (a failed query is logged as a WARNING with
+   *   " - ERROR <n>: ", any other error as CRITICAL) and nothing CRITICAL or
+   *   ERROR. The caller still requires the metadata.
+   */
+  function mydumper_run_ok($exit_code, $lines) {
+    if (!is_array($lines)) {
+      $lines = array();
+    }
+    // Anchored on mydumper's own Message lines: a table's name in another
+    // Message line is no cancellation. 0.19.3 spells it "cacelled".
+    foreach ($lines as $line) {
+      if (preg_match('/^\*\* Message: (?:[0-9:.]+: )?(?:Shutting down gracefully|Thread [0-9]+: Process has been can?celled)$/', $line)) {
+        return FALSE;
+      }
+    }
+    if ($exit_code === 0) {
+      return TRUE;
+    }
+    if ($exit_code !== 1) {
+      return FALSE;
+    }
+    $retry = '/\): WARNING \*\*: (?:[0-9:.]+: )?Flush tables failed, we are continuing anyways - ERROR 1317: /';
+    $retried = FALSE;
+    foreach ($lines as $line) {
+      if (preg_match('/\): (?:CRITICAL|ERROR) \*\*/', $line)) {
+        return FALSE;
+      }
+      if (preg_match('/\): WARNING \*\*: .* - ERROR [0-9]+: /', $line)) {
+        if (!preg_match($retry, $line)) {
+          return FALSE;
+        }
+        $retried = TRUE;
+      }
+    }
+    return $retried;
+  }
+
+  /**
    * Gives every stored object of a fast dump its own sql_mode back.
    *
    * mydumper writes a database's triggers, routines and events under one
