@@ -565,6 +565,45 @@ class Provision_Service_db extends Provision_Service {
   }
 
   /**
+   * The option that bounds a fast dump's lock waits, or ''.
+   *
+   * A FLUSH TABLES WITH READ LOCK whose mydumper is killed while it waits
+   * behind a long query stays on the server and holds the global read lock,
+   * every write on the server waiting, until that query ends. BOA's dump
+   * tools keep /etc/boa/mydumper-extra.cnf, which gives mydumper's sessions
+   * a 90-second lock wait; read through --defaults-extra-file it is merged
+   * into mydumper's options and leaves the login as it is. mydumper's own
+   * monitor ends a flush that waits 60 s (--ftwrl-max-wait-time), so a live
+   * run never meets the bound at its flushes. Given only when this process
+   * can open the file and the mydumper lists both options in its --help,
+   * read whatever that exits with, so a box whose dump tools have not
+   * written the file yet, and a build without them, gets its arguments as
+   * before. The file is opened, not only tested with is_readable(): a
+   * mydumper that cannot open its extra file fails the whole run, and it
+   * runs under this PHP's AppArmor profile, which access() does not
+   * consult. PHP 5.6-safe.
+   */
+  function mydumper_lockwait_option($mydumper_path) {
+    $file = '/etc/boa/mydumper-extra.cnf';
+    if (!@is_file($file)) {
+      return '';
+    }
+    $handle = @fopen($file, 'rb');
+    if ($handle === FALSE) {
+      return '';
+    }
+    fclose($handle);
+    drush_shell_exec($mydumper_path . ' --help');
+    $help = implode("\n", drush_shell_exec_output());
+    foreach (array('--defaults-extra-file', '--ftwrl-max-wait-time') as $option) {
+      if (!preg_match('/^\s+' . preg_quote($option, '/') . '(\s|=|$)/m', $help)) {
+        return '';
+      }
+    }
+    return ' --defaults-extra-file=' . escapeshellarg($file);
+  }
+
+  /**
    * The options that hand a fast import's views, triggers, routines and
    * events to the site's own database user.
    *
