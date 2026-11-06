@@ -2089,6 +2089,9 @@ port=%s
         // Percona 5.7: the read lock without the backup lock (see
         // mydumper_backup_locks_option()); any other server as before.
         $locks_opt = $this->mydumper_backup_locks_option($mydumper_path);
+        // A flush left waiting by a killed mydumper gives up after 90 s (see
+        // mydumper_lockwait_option()).
+        $lockwait_opt = $this->mydumper_lockwait_option($mydumper_path);
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value with escapeshellarg().
@@ -2098,6 +2101,7 @@ port=%s
         // read lock keeps every write on the server waiting. A Ctrl-C at the
         // terminal of a backup run by hand then never reaches it.
         $command = 'setsid -w ' . $mydumper_path
+          . $lockwait_opt
           . ' --database=' . escapeshellarg($db_name)
           . ' --host=' . escapeshellarg($oct_db_host)
           . ' --user=' . escapeshellarg($oct_db_user)
