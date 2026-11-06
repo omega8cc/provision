@@ -182,9 +182,15 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
     fclose($pipes[2]);
     $status = proc_close($process);
     $this->broker_stderr = $output[2];
+    // The broker's own ALRT and INFO lines reach the task's log, as the
+    // direct path's warnings and notices do (a dump passed after its retried
+    // table flush says so here, not only in the broker's own log).
     foreach (explode("\n", $output[2]) as $line) {
       if (strpos($line, 'ALRT: ') === 0) {
         drush_log(dt('Database broker: @msg', array('@msg' => $this->broker_clean(substr($line, 6)))), 'warning');
+      }
+      elseif (strpos($line, 'INFO: ') === 0) {
+        drush_log(dt('Database broker: @msg', array('@msg' => $this->broker_clean(substr($line, 6)))), 'notice');
       }
     }
     $lines = ($output[1] === '') ? array() : explode("\n", rtrim($output[1], "\n"));
