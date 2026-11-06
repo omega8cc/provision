@@ -2086,7 +2086,12 @@ port=%s
         // SECURITY: $db_name derives from alias context; $oct_db_* originate
         // in BOA root control files but may contain shell-special characters.
         // Escape every interpolated value with escapeshellarg().
-        $command = $mydumper_path
+        // mydumper runs in a session of its own with stdin closed: 1.x takes
+        // SIGINT as a question, pausing every worker and asking on the output
+        // captured here whether to cancel, and a pause as it takes the global
+        // read lock keeps every write on the server waiting. A Ctrl-C at the
+        // terminal of a backup run by hand then never reaches it.
+        $command = 'setsid -w ' . $mydumper_path
           . ' --database=' . escapeshellarg($db_name)
           . ' --host=' . escapeshellarg($oct_db_host)
           . ' --user=' . escapeshellarg($oct_db_user)
@@ -2095,7 +2100,7 @@ port=%s
           . ' --outputdir=' . escapeshellarg($oct_db_dirx)
           . $rows_opt . $this->mydumper_objects_option($mydumper_path) . $locks_opt
           . ' --build-empty-files --threads=' . escapeshellarg($threads)
-          . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=3';
+          . ' --long-query-guard=900 --clear' . $trx_opt . ' --verbose=3 < /dev/null';
         if (provision_file()->exists($myquick_creds_log)->status()) {
           drush_log(dt("MyQuick generate_dump mysql.php Cmd @var", array('@var' => $this->masked_command($command, $oct_db_pass))), 'info');
         }
