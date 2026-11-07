@@ -154,4 +154,55 @@ server {
   if ($user_socket = '') {
     set $user_socket "<?php print $script_user; ?>";
   }
+
+  ###
+  ### The domain's own address answers BOA's placeholder page and every other
+  ### path outside its subdirectory sites a 404: a server with no root of its
+  ### own serves nginx's stock pages instead. The page is a copy of the one
+  ### the catch-all server answers with (BOA's uc.html) plus a line naming
+  ### this domain, so its bytes are its own: a move's probes read a body
+  ### identical to the catch-all page as a name that is not served. The image
+  ### goes by alias, never by a root line: BOA's tools read a vhost rooted in
+  ### /var/www/nginx-default as a disabled site's placeholder.
+  ###
+  location = / {
+    default_type text/html;
+    expires 99s;
+    return 200 '<!doctype html>
+<!-- <?php print $uri; ?> serves its subdirectory sites only -->
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Under Construction</title>
+<style type="text/css">
+<!--
+body {
+background-color: #000000;
+}
+img {
+max-width: 100%;
+height: auto;
+}
+-->
+</style>
+</head>
+<body>
+<table border="0" align="center" cellpadding="0" cellspacing="0">
+<tr>
+<td  width="800" height="600" align="center" valign="middle"><p class="style1"><img src="/under_construction.jpg" alt="Under Construction" width="500" height="300" /></p>
+</td>
+</tr>
+</table>
+</body>
+</html>';
+  }
+
+  location = /under_construction.jpg {
+    alias  /var/www/nginx-default/under_construction.jpg;
+    expires 99s;
+  }
+
+  location / {
+    return 404;
+  }
 }
