@@ -137,6 +137,13 @@ if (!isset($grav_zones_body)) {
 if (strpos($grav_zones_body, '$boa_grav_fe_https') !== FALSE) {
   print "  fastcgi_param HTTPS \$boa_grav_fe_https;\n";
 }
+// The visitor's address for Grav (the Login lockout, the API limits, the Form
+// captcha): through the local HTTPS front every visitor of a cert-less site
+// arrives from the front itself. The shared map believes the front's
+// X-Real-IP from on-box peers alone; presence-gated like the param above.
+if (strpos($grav_zones_body, '$boa_grav_client') !== FALSE) {
+  print "  fastcgi_param REMOTE_ADDR \$boa_grav_client;\n";
+}
 ?>
   listen  *:<?php print $http_port; ?>;
   server_name  <?php
