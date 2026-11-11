@@ -59,6 +59,18 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # the converged foreign-CMS shape.
   if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
 
+  # BOA's Grav setup file: a request creates folders and files with the group
+  # write the hosting model gives them (umask 0002, as the shell's grav command
+  # does), so the account can clear a cache folder the web server made; then
+  # the site's own setup.php as Grav finds it. Named only while the file is
+  # there (Grav stops on a GRAV_SETUP_PATH that names no file); server level,
+  # as a location-level fastcgi_param would cancel the inherited set.
+  set $boa_grav_setup "";
+  if (-f /data/conf/global/global-grav-setup.php) {
+    set $boa_grav_setup /data/conf/global/global-grav-setup.php;
+  }
+  fastcgi_param GRAV_SETUP_PATH $boa_grav_setup if_not_empty;
+
   ###
   ### CMS-agnostic guard chain (fleet classification maps, http scope).
   ###
