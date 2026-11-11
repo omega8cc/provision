@@ -249,11 +249,22 @@ if ($nginx_has_gzip) {
 
   ## GeoIP support
   ### nginx does not start when the geoip_country file is missing, and the
-  ### upgrade path restarts it without a configtest: name the file only when
-  ### it is there. Without it the $geoip_country_* values are empty. BOA's
-  ### nightly graceful.sh keeps it current and reports a config without it.
-<?php if (@is_file('/usr/share/GeoIP/GeoIP.dat')): ?>
-  geoip_country /usr/share/GeoIP/GeoIP.dat;
+  ### upgrade path restarts it without a configtest: name a file only when it
+  ### is there. The IPv6 edition answers IPv4 visitors too, by the
+  ### IPv4-mapped address nginx looks them up by, so it goes first. Without
+  ### either the $geoip_country_* values are empty. BOA's nightly graceful.sh
+  ### keeps both current and reports a config without them.
+<?php
+$boa_geoip_db = '';
+foreach (array('/usr/share/GeoIP/GeoIPv6.dat', '/usr/share/GeoIP/GeoIP.dat') as $boa_geoip_try) {
+  if (@is_file($boa_geoip_try)) {
+    $boa_geoip_db = $boa_geoip_try;
+    break;
+  }
+}
+?>
+<?php if ($boa_geoip_db): ?>
+  geoip_country <?php print $boa_geoip_db; ?>;
 <?php endif; ?>
 
  ## Compression
