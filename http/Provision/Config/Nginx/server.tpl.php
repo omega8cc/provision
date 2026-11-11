@@ -248,7 +248,13 @@ if ($nginx_has_gzip) {
   ssl_prefer_server_ciphers  on;
 
   ## GeoIP support
+  ### nginx does not start when the geoip_country file is missing, and the
+  ### upgrade path restarts it without a configtest: name the file only when
+  ### it is there. Without it the $geoip_country_* values are empty. BOA's
+  ### nightly graceful.sh keeps it current and reports a config without it.
+<?php if (@is_file('/usr/share/GeoIP/GeoIP.dat')): ?>
   geoip_country /usr/share/GeoIP/GeoIP.dat;
+<?php endif; ?>
 
  ## Compression
   gzip_buffers      16 8k;
