@@ -340,7 +340,13 @@ foreach (array('/usr/share/GeoIP/GeoIPv6.dat', '/usr/share/GeoIP/GeoIP.dat') as 
                          # quoted for the same list forms as ut. Every field from
                          # ut on is appended, never reordered, so log parsers that
                          # stop earlier are unaffected.
-                         'uht="$upstream_header_time"';
+                         'uht="$upstream_header_time" '
+                         # bcron = the X-Boa-Cron request header, "-" without one:
+                         # the key the control panel sends with its scheduled cron
+                         # requests, which the cron watchdog compares with the
+                         # account's own. A request without it is never the panel's
+                         # once the account has a key.
+                         'bcron="$http_x_boa_cron"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
