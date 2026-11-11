@@ -1397,12 +1397,13 @@ function provision_grav_find_sites($root = NULL) {
 /**
  * Remove a capsule-shaped tree, or park it for root-side cleanup.
  *
- * The web process creates cache subdirs at 0755 owned by the per-version web
- * user (FPM umask 022), and the CLI owner can neither delete their contents
- * nor chmod them, so a plain recursive delete leaves web-owned residue
- * behind (proven on the restore leg). The root heal (the sudo fix scripts,
- * which know the capsule model) hands the whole tree back to the instance
- * user first, so the delete then succeeds outright. Where the heal is
+ * The web process creates cache subdirs owned by the per-version web user,
+ * at 0755 under FPM's umask 022 where BOA's Grav setup file does not apply
+ * (folders made before it, or a box without it), and the CLI owner can then
+ * neither delete their contents nor chmod them, so a plain recursive delete
+ * leaves web-owned residue behind (proven on the restore leg). The root heal
+ * (the sudo fix scripts, which know the capsule model) hands the whole tree
+ * back to the instance user first, so the delete then succeeds outright. Where the heal is
  * unavailable or something still survives, the fallback is a RENAME out of
  * the live tree into <backup_path>/pending-cleanup/ (rename needs only the
  * parent-dir write we do have), reported in ONE row: the residue is a
