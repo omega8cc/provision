@@ -1713,7 +1713,7 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
     ### nor stored in it, so a monitor never reads a crawler's cached copy and
     ### a backend that is down is never hidden behind a stale one.
     ###
-    if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+    if ( $http_user_agent ~* (?:Pingdom|UptimeRobot|uptime|monitor|statuscake|site24x7|hetrix|freshping|nodeping|updown) ) {
       set $nocache_details "Monitor";
     }
     ###
@@ -1819,7 +1819,7 @@ location @cache_<?php print $subdir_loc; ?> {
     set $nocache_details "DrupalCookie";
     return 405;
   }
-  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot) ) {
+  if ( $http_user_agent ~* (?:Pingdom|UptimeRobot|uptime|monitor|statuscake|site24x7|hetrix|freshping|nodeping|updown) ) {
     set $nocache_details "Monitor";
     return 405;
   }
