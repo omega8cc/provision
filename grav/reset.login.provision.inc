@@ -58,11 +58,12 @@ function drush_provision_grav_provision_login_reset() {
  * (the API plugin's) lifts that, so a reset here does too, or its new password
  * is refused for the rest of the interval. The counters live under
  * cache/login, where the web pool writes them as the per-version web user;
- * in a folder it made under FPM's umask 022 (made before BOA's Grav setup
- * file, or on a box without it) the instance user cannot delete them, so the
- * capsule is handed back first, then Login's own unlock-user command (Login
- * 3.9 and later) clears the account's counters in every context, with the
- * address counters it tripped. The command says it cleared them even when a delete
+ * in a folder it made under FPM's umask 022 (before the site's first Verify
+ * after the upgrade named BOA's Grav setup file in its vhost, or on a box
+ * without the file) the instance user cannot delete them, so the capsule is
+ * handed back first, then Login's own unlock-user command (Login 3.9 and
+ * later) clears the account's counters in every context, with the address
+ * counters it tripped. The command says it cleared them even when a delete
  * failed, so it is only believed after a heal that ran clean. Not fatal: the
  * password is already rotated, and a lockout ends on its own.
  */

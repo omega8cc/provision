@@ -1399,7 +1399,8 @@ function provision_grav_find_sites($root = NULL) {
  *
  * The web process creates cache subdirs owned by the per-version web user,
  * at 0755 under FPM's umask 022 where BOA's Grav setup file does not apply
- * (folders made before it, or a box without it), and the CLI owner can then
+ * (folders made before the site's first Verify after the upgrade named it in
+ * the vhost, or on a box without the file), and the CLI owner can then
  * neither delete their contents nor chmod them, so a plain recursive delete
  * leaves web-owned residue behind (proven on the restore leg). The root heal
  * (the sudo fix scripts, which know the capsule model) hands the whole tree
