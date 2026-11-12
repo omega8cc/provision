@@ -2873,6 +2873,35 @@ function provision_auto_fix_platform_root($isroot) {
 }
 
 /**
+ * Whether a Grav or Textpattern vhost leaves the migration's 503 gate to PHP.
+ *
+ * BOA's /data/conf/global/global-http-off.php runs the rule Drupal and
+ * Backdrop sites follow: a gate file counts only in a control folder that is
+ * the account's own, which nginx cannot judge (it tests a path, never its
+ * owner). The vhost leaves the gate to it only for an Octopus account's site
+ * (the rule covers /data/disk/<account> alone), only while that file is
+ * there, and only when $hook_file, the file the site's PHP loads first,
+ * includes it: Grav's setup file, or a Textpattern site's private/config.php
+ * ($new_ok: one not written yet counts, as this provision writes it with the
+ * include). Otherwise the vhost keeps nginx's path test.
+ */
+function provision_http_off_in_php($aegir_root, $hook_file, $new_ok = FALSE) {
+  $gate = '/data/conf/global/global-http-off.php';
+  if (!preg_match('#^/data/disk/[a-z0-9-]+$#', (string) $aegir_root)
+    || !@is_file($gate) || @is_link($gate)) {
+    return FALSE;
+  }
+  if (!@file_exists($hook_file) && !@is_link($hook_file)) {
+    return $new_ok;
+  }
+  if (!@is_file($hook_file) || @is_link($hook_file)) {
+    return FALSE;
+  }
+  $body = @file_get_contents($hook_file, FALSE, NULL, 0, 1048576);
+  return is_string($body) && strpos($body, $gate) !== FALSE;
+}
+
+/**
  * The Composer project root a platform Delete removes with the docroot.
  *
  * A Composer build keeps vendor/ and composer.lock beside its docroot, and

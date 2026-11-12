@@ -46,6 +46,15 @@ $grav_zone_ok = strpos($grav_zones_body, 'zone=boa_grav_anon') !== FALSE;
 // rule a hostname rename applies) renders the per-host migration gate below.
 $grav_box_fqdn = (string) d('@server_master')->remote_host;
 $grav_box_named = $grav_box_fqdn !== '' && strpos((string) $this->uri, $grav_box_fqdn) !== FALSE;
+// The migration gate: judged in PHP by BOA's own-folder rule once BOA's
+// setup file includes it, else tested in nginx by path (the master's sites
+// always). Read once per render, as the zones file is.
+if (!isset($grav_hoff_php)) {
+  $grav_hoff_php = provision_http_off_in_php(d('@server_master')->aegir_root,
+    '/data/conf/global/global-grav-setup.php');
+}
+$grav_off_ctl = $grav_hoff_php ? '$boa_off_ctl'
+  : d('@server_master')->aegir_root . '/static/control';
 $grav_anon_conn = (int) drush_get_option('nginx_grav_anon_conn', 100);
 if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   // An out-of-range tenant value falls back to the default -- it must never
@@ -72,6 +81,23 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
     set $boa_grav_setup /data/conf/global/global-grav-setup.php;
   }
   fastcgi_param GRAV_SETUP_PATH $boa_grav_setup if_not_empty;
+<?php if ($grav_hoff_php): ?>
+
+  # The migration's 503 gate is judged in PHP: the setup file includes BOA's
+  # global-http-off.php first, the rule Drupal and Backdrop sites follow,
+  # which honours a gate file only in a control folder that is the account's
+  # own (nginx tests a path, never its owner). While either file is missing,
+  # the index.php location below tests the gate files by path again; /dev/null
+  # is never a folder, so otherwise its tests never match. Server level, so no
+  # location switches its configuration for a set.
+  set $boa_off_ctl /dev/null;
+  if ($boa_grav_setup = "") {
+    set $boa_off_ctl <?php print d('@server_master')->aegir_root; ?>/static/control;
+  }
+  if (!-f /data/conf/global/global-http-off.php) {
+    set $boa_off_ctl <?php print d('@server_master')->aegir_root; ?>/static/control;
+  }
+<?php endif; ?>
 
   ###
   ### CMS-agnostic guard chain (fleet classification maps, http scope).
@@ -288,13 +314,14 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # retryable, renders correctly through a fronting CDN, still IDS-visible.
   location = /index.php {
     # Account write barrier parity (the global.inc chain never runs for a
-    # capsule): static/control/http-off.pid holds every PHP request on 503
-    # while a migration freezes the account. Location-scoped like the Drupal
-    # gate, so statics and acme keep serving. The presence test must not ride
-    # the open-file cache: a cached miss would keep PHP serving after the
-    # gate went up, and a cached hit would hold the 503 after it was lifted.
+    # capsule): the account's http-off.pid holds every PHP request on 503
+    # while a migration freezes the account, in PHP where the server level
+    # above leaves it there, else by this path test. Location-scoped like the
+    # Drupal gate, so statics and acme keep serving. The presence test must
+    # not ride the open-file cache: a cached miss would keep PHP serving after
+    # the gate went up, and a cached hit would hold the 503 after it was lifted.
     open_file_cache off;
-    if (-f <?php print d('@server_master')->aegir_root; ?>/static/control/http-off.pid) {
+    if (-f <?php print $grav_off_ctl; ?>/http-off.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
@@ -305,7 +332,7 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
     # hostname is still being renamed there, so it stays held through this
     # file. Rendered only into a vhost named under the box hostname, which
     # is the class the file lists, so its presence is the whole test.
-    if (-f <?php print d('@server_master')->aegir_root; ?>/static/control/http-off-host.pid) {
+    if (-f <?php print $grav_off_ctl; ?>/http-off-host.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;

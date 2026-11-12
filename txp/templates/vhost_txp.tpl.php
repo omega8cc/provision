@@ -13,7 +13,10 @@
  * Account write barrier parity: <aegir_root>/static/control/http-off.pid
  * holds every PHP request on 503 while a migration freezes the account
  * (the Drupal/Backdrop gate lives in the same global settings chain). Same
- * PHP locations, same reason. open_file_cache is off in those locations
+ * PHP locations, same reason. Where provision_http_off_in_php() says so, the
+ * site's config.php runs BOA's own-folder rule (global-http-off.php) and these
+ * locations test the gate files by path only while that file is missing;
+ * otherwise they test them by path. open_file_cache is off in those locations
  * because the presence test would otherwise ride the open-file cache: a
  * cached miss keeps PHP serving after the gate went up, a cached hit holds
  * the 503 after it was lifted. Nothing else in a PHP location opens files.
@@ -70,6 +73,15 @@ $aegir_root = d('@server_master')->aegir_root;
 // exactly what the file lists, so its presence is the whole test.
 $txp_box_fqdn = (string) d('@server_master')->remote_host;
 $txp_box_named = $txp_box_fqdn !== '' && strpos((string) $this->uri, $txp_box_fqdn) !== FALSE;
+// The migration gate: judged in PHP by BOA's own-folder rule once the site's
+// config.php includes it (this provision writes it so), else tested in nginx
+// by path (the master's sites always). Read once per render, before the
+// redirection below rewrites the uri; the https template reads it first.
+if (!isset($txp_hoff_php)) {
+  $txp_hoff_php = provision_http_off_in_php($aegir_root,
+    $this->root . '/sites/' . $this->uri . '/private/config.php', TRUE);
+}
+$txp_off_ctl = $txp_hoff_php ? '$boa_off_ctl' : $aegir_root . '/static/control';
 $satellite_mode = d('@server_master')->satellite_mode;
 
 // Direct /files/ downloads are DENIED by default. Per-site opt-out via
@@ -136,6 +148,19 @@ server {
   fastcgi_param REQUEST_SCHEME $scheme;
   fastcgi_param MAIN_SITE_NAME <?php print $this->uri; ?>;
   set $main_site_name "<?php print $this->uri; ?>";
+<?php if ($txp_hoff_php): ?>
+  # The migration's 503 gate is judged in PHP: the site's private/config.php
+  # includes BOA's global-http-off.php first, the rule Drupal and Backdrop
+  # sites follow, which honours a gate file only in a control folder that is
+  # the account's own (nginx tests a path, never its owner). While that file
+  # is missing, the PHP locations below test the gate files by path again;
+  # /dev/null is never a folder, so otherwise their tests never match.
+  # Server level, so no location switches its configuration for a set.
+  set $boa_off_ctl /dev/null;
+  if (!-f /data/conf/global/global-http-off.php) {
+    set $boa_off_ctl <?php print $aegir_root; ?>/static/control;
+  }
+<?php endif; ?>
   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
 <?php
   // If any of those parameters is empty for any reason, like after an attempt
@@ -347,13 +372,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location = /index.php {
     if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     open_file_cache off;
-    if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+    if (-f <?php print $txp_off_ctl; ?>/http-off.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
     }
 <?php if ($txp_box_named): ?>
-    if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+    if (-f <?php print $txp_off_ctl; ?>/http-off-host.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
@@ -364,13 +389,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
   location = /css.php {
     if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
     open_file_cache off;
-    if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+    if (-f <?php print $txp_off_ctl; ?>/http-off.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
     }
 <?php if ($txp_box_named): ?>
-    if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+    if (-f <?php print $txp_off_ctl; ?>/http-off-host.pid) {
       add_header Retry-After 300 always;
       add_header Cache-Control "no-store, must-revalidate" always;
       return 503;
@@ -397,13 +422,13 @@ if (strpos($txp_zones_body, 'map $boa_fleet_uaid $boa_fleet_block {') !== FALSE)
     location ~ ^/<?php print $txp_admin_path; ?>/index\.php$ {
       if (-f /data/conf/suspended/<?php print $script_user; ?>.pid) { return 503; }
       open_file_cache off;
-      if (-f <?php print $aegir_root; ?>/static/control/http-off.pid) {
+      if (-f <?php print $txp_off_ctl; ?>/http-off.pid) {
         add_header Retry-After 300 always;
         add_header Cache-Control "no-store, must-revalidate" always;
         return 503;
       }
 <?php if ($txp_box_named): ?>
-      if (-f <?php print $aegir_root; ?>/static/control/http-off-host.pid) {
+      if (-f <?php print $txp_off_ctl; ?>/http-off-host.pid) {
         add_header Retry-After 300 always;
         add_header Cache-Control "no-store, must-revalidate" always;
         return 503;
