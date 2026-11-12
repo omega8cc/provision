@@ -94,7 +94,9 @@ if ($grav_anon_conn < 1 || $grav_anon_conn > 65535) {
   # the account's own (nginx tests a path, never its owner). While either file
   # is missing, the index.php location below tests the gate files by path
   # again; /dev/null is never a folder, so otherwise its tests never match.
-  # Server level, so no location switches its configuration for a set.
+  # Server level, so no location switches its configuration for a set; the
+  # open file cache keeps either file's answer up to open_file_cache_valid,
+  # so reload nginx after moving one by hand.
   set $boa_off_ctl /dev/null;
   if ($boa_grav_setup = "") {
     set $boa_off_ctl <?php print d('@server_master')->aegir_root; ?>/static/control;

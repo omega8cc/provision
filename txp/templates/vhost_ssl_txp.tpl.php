@@ -192,7 +192,9 @@ server {
   # the account's own (nginx tests a path, never its owner). While that file
   # is missing, the PHP locations below test the gate files by path again;
   # /dev/null is never a folder, so otherwise their tests never match.
-  # Server level, so no location switches its configuration for a set.
+  # Server level, so no location switches its configuration for a set; the
+  # open file cache keeps the file's answer up to open_file_cache_valid, so
+  # reload nginx after moving it by hand.
   set $boa_off_ctl /dev/null;
   if (!-f /data/conf/global/global-http-off.php) {
     set $boa_off_ctl <?php print $aegir_root; ?>/static/control;
