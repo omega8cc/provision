@@ -2893,8 +2893,13 @@ function provision_http_off_in_php($aegir_root, $hook_file, $new_ok = FALSE) {
     return FALSE;
   }
   if (!@file_exists($hook_file) && !@is_link($hook_file)) {
+    // A folder (or a link at its name) this process cannot search hides a
+    // file that is there; only a folder not made yet is new.
     $dir = dirname($hook_file);
-    return $new_ok && (!@file_exists($dir) || @is_executable($dir));
+    if (@file_exists($dir) || @is_link($dir)) {
+      return $new_ok && @is_dir($dir) && @is_executable($dir);
+    }
+    return $new_ok;
   }
   if (!@is_file($hook_file) || @is_link($hook_file)) {
     return FALSE;
