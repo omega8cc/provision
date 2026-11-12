@@ -2881,9 +2881,10 @@ function provision_auto_fix_platform_root($isroot) {
  * owner). The vhost leaves the gate to it only for an Octopus account's site
  * (the rule covers /data/disk/<account> alone), only while that file is
  * there, and only when $hook_file, the file the site's PHP loads first,
- * includes it: Grav's setup file, or a Textpattern site's private/config.php
- * ($new_ok: one not written yet counts, as this provision writes it with the
- * include). Otherwise the vhost keeps nginx's path test.
+ * includes it: the Grav setup file such a vhost names, or a Textpattern
+ * site's private/config.php ($new_ok: one not written yet counts, as this
+ * provision writes it with the include, but only in a folder this process
+ * can search). Otherwise the vhost keeps nginx's path test.
  */
 function provision_http_off_in_php($aegir_root, $hook_file, $new_ok = FALSE) {
   $gate = '/data/conf/global/global-http-off.php';
@@ -2892,7 +2893,8 @@ function provision_http_off_in_php($aegir_root, $hook_file, $new_ok = FALSE) {
     return FALSE;
   }
   if (!@file_exists($hook_file) && !@is_link($hook_file)) {
-    return $new_ok;
+    $dir = dirname($hook_file);
+    return $new_ok && (!@file_exists($dir) || @is_executable($dir));
   }
   if (!@is_file($hook_file) || @is_link($hook_file)) {
     return FALSE;
