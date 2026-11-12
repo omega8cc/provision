@@ -1713,22 +1713,81 @@ port=%s
   }
 
   /**
+   * The rewrites that keep a MySQL 5.x dump's utf8mb4 tables and columns on
+   * the collation they had there, for a load on a server of another
+   * version.
+   *
+   * 5.x names a utf8mb4 table's or column's collation only when it is not
+   * that character set's default, utf8mb4_general_ci; 8.x's default is
+   * utf8mb4_0900_ai_ci, so such a table or column made from a 5.x dump on
+   * 8.x took that one. 8.x's own dumps name the collation on every utf8mb4
+   * table and column, and these entries are used only for a dump whose
+   * header names a 5.x server (classic_load_collation_regexes()). A stored
+   * routine's parameters and return type are written without a collation
+   * by 5.x and 8.x alike, so the line cannot tell which one it had: they
+   * are left as they are.
+   */
+  function collation_5x_regexes() {
+    return array(
+      // the table's own line, as SHOW CREATE TABLE writes it on 5.x
+      '#^(\) ENGINE=[A-Za-z0-9_]+(?: AUTO_INCREMENT=[0-9]+)? DEFAULT CHARSET=utf8mb4)(?![A-Za-z0-9_]| COLLATE=)#' => '$1 COLLATE=utf8mb4_general_ci',
+      // a column whose character set is not its table's
+      '#^(  `(?:[^`]|``)+` (?:(?:var)?char\([0-9]+\)|(?:tiny|medium|long)?text|(?:enum|set)\(\'(?:[^\'\\\\]|\'\'|\\\\.)*\'(?:,\'(?:[^\'\\\\]|\'\'|\\\\.)*\')*\)) CHARACTER SET utf8mb4)(?![A-Za-z0-9_]| COLLATE )#' => '$1 COLLATE utf8mb4_general_ci',
+    );
+  }
+
+  /**
+   * collation_5x_regexes() for a dump read from $in when its header names a
+   * 5.x server and this service's server is not one (or cannot be asked),
+   * otherwise none. Reads the header only; the caller rewinds. PHP 5.6-safe.
+   */
+  function classic_load_collation_regexes($in) {
+    $made_on = '';
+    for ($i = 0; $i < 12 && ($piece = fgets($in, 4096)) !== FALSE; $i++) {
+      if (preg_match('/^-- Server version\s+([0-9][^\s]*)/', $piece, $m)) {
+        $made_on = $m[1];
+        break;
+      }
+      if (trim($piece) !== '' && strpos($piece, '--') !== 0) {
+        break;
+      }
+    }
+    if (!preg_match('/^5\./', $made_on)) {
+      return array();
+    }
+    // A refused connect sets no error here: the load itself reports it.
+    if (is_null($this->conn)) {
+      $this->connect(TRUE);
+    }
+    $here = $this->conn ? $this->server_version() : FALSE;
+    if (is_string($here) && preg_match('/^5\./', $here)) {
+      return array();
+    }
+    return $this->collation_5x_regexes();
+  }
+
+  /**
    * The dump file a classic load reads: the file itself, or a copy with
-   * get_statement_regexes() applied when a line of it still needs them.
+   * get_statement_regexes() applied when a line of it still needs them, and
+   * with classic_load_collation_regexes() applied for a 5.x dump loaded on
+   * another version.
    *
    * An archive made before the dump filter rewrote those statements keeps
    * ALTER DATABASE lines naming the dumped database around an object made
    * under another collation, and a trigger definer in double quotes; the
    * site's own login may run neither (ERROR 1044, ERROR 1227), so its
-   * Restore failed and rolled back. A dump made since needs no copy. Only a
-   * piece that starts a line is matched: every data row starts with its
-   * INSERT, and a long row is read in pieces. The copy is written to the
-   * instance's backup directory, readable by its owner only, and the caller
-   * removes it after the load; a copy a killed load left there goes at the
-   * next classic load (classic_load_sweep()). The copy is written only when
-   * the filesystem keeps the headroom the space check keeps
-   * (provision_space_margin()) after it. FALSE when the copy cannot be
-   * written. PHP 5.6-safe.
+   * Restore failed and rolled back. A dump made since needs no copy. An
+   * archive made on 5.x and restored after the server's upgrade to 8.x
+   * turned every utf8mb4 table and column that kept 5.x's default collation
+   * to 8.x's default. Only a piece that starts a line is matched: every data
+   * row starts with its INSERT, and a long row is read in pieces. The copy
+   * is written to the instance's backup directory, readable by its owner
+   * only, and the caller removes it after the load; a copy a killed load
+   * left there goes at the next classic load (classic_load_sweep()). The
+   * copy is written only when the filesystem keeps the headroom the space
+   * check keeps (provision_space_margin()) after it. FALSE when the copy
+   * cannot be written and a statement needs it; a copy needed only for the
+   * collations loads the dump as it is, with a warning. PHP 5.6-safe.
    */
   function classic_load_file($dump_file) {
     $regexes = $this->get_statement_regexes();
@@ -1739,15 +1798,23 @@ port=%s
       // The load reports the missing or unreadable file as before.
       return $dump_file;
     }
+    $collation = $this->classic_load_collation_regexes($in);
+    rewind($in);
     $needs = FALSE;
+    $needs_collation = FALSE;
     $start = TRUE;
-    while (!$needs && ($piece = fgets($in, 1048576)) !== FALSE) {
-      if ($start && $this->statement_line($piece, $regexes) !== $piece) {
-        $needs = TRUE;
+    while (!($needs && ($needs_collation || !$collation)) && ($piece = fgets($in, 1048576)) !== FALSE) {
+      if ($start) {
+        if (!$needs && $this->statement_line($piece, $regexes) !== $piece) {
+          $needs = TRUE;
+        }
+        if ($collation && !$needs_collation && $this->statement_line($piece, $collation) !== $piece) {
+          $needs_collation = TRUE;
+        }
       }
       $start = substr($piece, -1) === "\n";
     }
-    if (!$needs) {
+    if (!$needs && !$needs_collation) {
       fclose($in);
       return $dump_file;
     }
@@ -1763,7 +1830,7 @@ port=%s
           '@margin' => round($margin / 1073741824, 1),
           '@free' => round($free / 1073741824, 1),
         )), 'warning');
-        return FALSE;
+        return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
       }
     }
     $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
@@ -1771,17 +1838,28 @@ port=%s
     $out = @fopen($copy, 'xb');
     if ($out === FALSE) {
       fclose($in);
-      return FALSE;
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
     }
     @chmod($copy, 0600);
     rewind($in);
     $ok = TRUE;
     $start = TRUE;
     $rewritten = 0;
+    $recollated = 0;
     while (($piece = fgets($in, 1048576)) !== FALSE) {
-      $line = $start ? $this->statement_line($piece, $regexes) : $piece;
-      if ($line !== $piece) {
-        $rewritten++;
+      $line = $piece;
+      if ($start) {
+        $line = $this->statement_line($piece, $regexes);
+        if ($line !== $piece) {
+          $rewritten++;
+        }
+        if ($collation) {
+          $kept = $this->statement_line($line, $collation);
+          if ($kept !== $line) {
+            $recollated++;
+            $line = $kept;
+          }
+        }
       }
       $start = substr($piece, -1) === "\n";
       $written = fwrite($out, $line);
@@ -1793,15 +1871,27 @@ port=%s
     fclose($in);
     if (!fclose($out) || !$ok) {
       @unlink($copy);
-      return FALSE;
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
     }
     if ($rewritten == 1) {
       drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
     }
-    else {
+    elseif ($rewritten > 1) {
       drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
     }
+    if ($recollated) {
+      drush_log(dt('The dump was made on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load from a copy naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
+    }
     return $copy;
+  }
+
+  /**
+   * $dump_file, after a warning that the copy keeping a 5.x dump's
+   * collations could not be written. PHP 5.6-safe.
+   */
+  function classic_load_collation_skipped($dump_file) {
+    drush_log(dt('The dump was made on MySQL 5.x and loads as it is: its utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.'), 'warning');
+    return $dump_file;
   }
 
   /**
