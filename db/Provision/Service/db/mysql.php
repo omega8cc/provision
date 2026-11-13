@@ -1732,7 +1732,7 @@ port=%s
       // the table's own line, as SHOW CREATE TABLE writes it on 5.x
       '#^(\) ENGINE=[A-Za-z0-9_]+(?: AUTO_INCREMENT=[0-9]+)? DEFAULT CHARSET=utf8mb4)(?![A-Za-z0-9_]| COLLATE=)#' => '$1 COLLATE=utf8mb4_general_ci',
       // a column whose character set is not its table's
-      '#^(  `(?:[^`]|``)+` (?:(?:var)?char\([0-9]+\)|(?:tiny|medium|long)?text|(?:enum|set)\(\'(?:[^\'\\\\]|\'\'|\\\\.)*\'(?:,\'(?:[^\'\\\\]|\'\'|\\\\.)*\')*\)) CHARACTER SET utf8mb4)(?![A-Za-z0-9_]| COLLATE )#' => '$1 COLLATE utf8mb4_general_ci',
+      '#^(  `(?:[^`]|``)+` (?:(?:var)?char\([0-9]+\)|(?:tiny|medium|long)?text|(?:enum|set)\(\'(?:[^\'\\\\]++|\'\'|\\\\.)*+\'(?:,\'(?:[^\'\\\\]++|\'\'|\\\\.)*+\')*+\)) CHARACTER SET utf8mb4)(?![A-Za-z0-9_]| COLLATE )#' => '$1 COLLATE utf8mb4_general_ci',
     );
   }
 
@@ -1822,12 +1822,18 @@ port=%s
     $free = @disk_free_space($dir);
     if (!is_file('/data/conf/disable_space_preflight.cnf') && function_exists('provision_space_margin') && $free !== FALSE) {
       $margin = provision_space_margin($dir);
-      if ($free < $need + $margin) {
+      // A copy needed only for the collations is made only with room for it
+      // and for the load that follows, which writes the database while the
+      // copy is still there, often on the same filesystem (the database is
+      // taken as the dump's size); without that room the dump loads as it is.
+      $room = $needs ? $need + $margin : 2 * $need + $margin;
+      if ($free < $room) {
         fclose($in);
-        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
-          '@need' => round(($need + $margin) / 1073741824, 1),
+        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom@load) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+          '@need' => round($room / 1073741824, 1),
           '@dir' => $dir,
           '@margin' => round($margin / 1073741824, 1),
+          '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
           '@free' => round($free / 1073741824, 1),
         )), 'warning');
         return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
