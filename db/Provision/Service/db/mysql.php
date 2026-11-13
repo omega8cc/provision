@@ -1481,6 +1481,9 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
           }
         }
+        if ($import_allowed) {
+          $this->store_collation_5x($oct_db_dirx);
+        }
         if (!$import_allowed) {
           $found_dumps = array();
           if (is_array($all_dumps)) {
@@ -1898,6 +1901,85 @@ port=%s
   function classic_load_collation_skipped($dump_file) {
     drush_log(dt('The dump was made on MySQL 5.x and loads as it is: its utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.'), 'warning');
     return $dump_file;
+  }
+
+  /**
+   * Keeps a MySQL 5.x server's utf8mb4 collations in a MyQuick store, the
+   * mydumper directory $dir that import_dump() loads with myloader or the
+   * database broker, when this service's server is not 5.x.
+   *
+   * A site moved from a database server on 5.x to one on 8.x is dumped on
+   * the first and loaded on the second; its utf8mb4 tables and columns that
+   * kept 5.x's default collation name none in the dump and took 8.x's
+   * default. mydumper writes no server version, but 8.x names the collation
+   * on every utf8mb4 table and on every column given a character set, so a
+   * line naming none was dumped on 5.x. Each table file (*-schema.sql) gets
+   * collation_5x_regexes() through a new file in the same directory renamed
+   * over it, its mode kept; a file that cannot be rewritten loads as it is,
+   * with a warning. Routines, triggers and views are in other files and
+   * stay as they are. PHP 5.6-safe.
+   */
+  function store_collation_5x($dir) {
+    $files = @glob($dir . '/*-schema.sql');
+    if (!is_array($files) || !$files) {
+      return;
+    }
+    // A refused connect sets no error here: the load itself reports it.
+    if (is_null($this->conn)) {
+      $this->connect(TRUE);
+    }
+    $here = $this->conn ? $this->server_version() : FALSE;
+    if (is_string($here) && preg_match('/^5\./', $here)) {
+      return;
+    }
+    $regexes = $this->collation_5x_regexes();
+    $recollated = 0;
+    $failed = 0;
+    foreach ($files as $file) {
+      if (is_link($file) || !is_file($file)) {
+        continue;
+      }
+      $lines = @file($file);
+      if ($lines === FALSE) {
+        $failed++;
+        continue;
+      }
+      $changed = 0;
+      foreach ($lines as $i => $line) {
+        $kept = $this->statement_line($line, $regexes);
+        if ($kept !== $line) {
+          $lines[$i] = $kept;
+          $changed++;
+        }
+      }
+      if (!$changed) {
+        continue;
+      }
+      $mode = @fileperms($file);
+      $new = $file . '.collation';
+      @unlink($new);
+      $out = @fopen($new, 'xb');
+      $text = implode('', $lines);
+      $ok = $out !== FALSE && fwrite($out, $text) === strlen($text);
+      if ($out !== FALSE && !fclose($out)) {
+        $ok = FALSE;
+      }
+      if ($ok && $mode !== FALSE) {
+        $ok = @chmod($new, $mode & 0777);
+      }
+      if (!$ok || !@rename($new, $file)) {
+        @unlink($new);
+        $failed++;
+        continue;
+      }
+      $recollated += $changed;
+    }
+    if ($recollated) {
+      drush_log(dt('The database was dumped on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
+    }
+    if ($failed) {
+      drush_log(dt('The database was dumped on MySQL 5.x and @n of its table files could not be rewritten: their utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@n' => $failed)), 'warning');
+    }
   }
 
   /**
