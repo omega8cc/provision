@@ -1905,8 +1905,9 @@ port=%s
 
   /**
    * Keeps a MySQL 5.x server's utf8mb4 collations in a MyQuick store, the
-   * mydumper directory $dir that import_dump() loads with myloader or the
-   * database broker, when this service's server is not 5.x.
+   * mydumper directory $dir that a deploy (import_site_database()) or
+   * import_dump() loads with myloader or the database broker, when this
+   * service's server is not 5.x.
    *
    * A site moved from a database server on 5.x to one on 8.x is dumped on
    * the first and loaded on the second; its utf8mb4 tables and columns that
