@@ -925,6 +925,12 @@ class Provision_Service_db extends Provision_Service {
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
           }
         }
+        // A store dumped on a 5.x server keeps its utf8mb4 collations on this
+        // one (the MySQL service's store_collation_5x()), whichever of the
+        // broker and myloader loads it.
+        if ($import_allowed && method_exists($this, 'store_collation_5x')) {
+          $this->store_collation_5x($oct_db_dirx);
+        }
         if (!$import_allowed) {
           $found_dumps = array();
           if (is_array($all_dumps)) {
