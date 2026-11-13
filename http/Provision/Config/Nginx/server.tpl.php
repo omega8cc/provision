@@ -346,7 +346,15 @@ foreach (array('/usr/share/GeoIP/GeoIPv6.dat', '/usr/share/GeoIP/GeoIP.dat') as 
                          # requests, which the cron watchdog compares with the
                          # account's own. A request without it is never the panel's
                          # once the account has a key.
-                         'bcron="$http_x_boa_cron"';
+                         'bcron="$http_x_boa_cron" '
+                         # peer = $realip_remote_addr, the address that opened the
+                         # connection, where the first field is the visitor realip
+                         # resolved from it. They differ only for a request that
+                         # came through a trusted hop: a CDN's edge, the wildcard
+                         # SSL front (127.0.0.1), or another server relaying a moved
+                         # site, which is how the requests still arriving through
+                         # an old server are counted per name.
+                         'peer="$realip_remote_addr"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
