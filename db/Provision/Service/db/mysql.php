@@ -1925,11 +1925,18 @@ port=%s
     if (!is_array($files) || !$files) {
       return;
     }
-    // A refused connect sets no error here: the load itself reports it.
-    if (is_null($this->conn)) {
+    // A refused connect sets no error here: the load itself reports it. A
+    // session opened only to read the version goes again at once: it would
+    // sit idle through the load, which can outlast the server's wait_timeout,
+    // and the statement after the load would meet it closed.
+    $opened = is_null($this->conn);
+    if ($opened) {
       $this->connect(TRUE);
     }
     $here = $this->conn ? $this->server_version() : FALSE;
+    if ($opened && $this->conn && method_exists($this, 'close')) {
+      $this->close();
+    }
     if (is_string($here) && preg_match('/^5\./', $here)) {
       return;
     }
