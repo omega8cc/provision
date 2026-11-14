@@ -2268,6 +2268,48 @@ function _provision_drupal_clear_update_fetch_tasks() {
 }
 
 /**
+ * Say so when updates that did not finish left the site in maintenance mode.
+ *
+ * A Drupal 8 or newer site's own Drush switches maintenance mode on for
+ * updatedb and off at its end. A run that dies in between leaves it on, the
+ * site answers every visitor with its maintenance page, and nothing in a
+ * deploy switches it off: the offline switch of a task is settings.php's,
+ * another thing. A half-updated site is not opened here either. The log names
+ * the state and the command that ends it once the updates are applied.
+ *
+ * The state is read from the site's own database through the db service,
+ * never through the Drush that just failed, and compared as text: a row a
+ * site can write is not unserialized.
+ *
+ * @param string $tag
+ *   The log prefix of the calling task (DEPLOY).
+ *
+ * @return bool
+ *   TRUE when the warning was logged.
+ */
+function _provision_drupal_note_maintenance_left($tag = 'DEPLOY') {
+  $db = (string) drush_get_option('db_name', '');
+  if ($db === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db)) {
+    return FALSE;
+  }
+  $value = FALSE;
+  try {
+    $result = d()->service('db')->query("SELECT value FROM `" . $db . "`.key_value WHERE collection = 'state' AND name = 'system.maintenance_mode'");
+    if ($result) {
+      $value = $result->fetchColumn();
+    }
+  }
+  catch (Exception $e) {
+    $value = FALSE;
+  }
+  if (!in_array($value, array('b:1;', 'i:1;', 's:1:"1";'), TRUE)) {
+    return FALSE;
+  }
+  drush_log(dt('@p the site is left in Drupal\'s maintenance mode: the update run switched it on and ended before switching it off, so visitors get "Site under maintenance". It stays closed while database updates are pending; once they are applied, open it with the site\'s own Drush: maint:set 0', array('@p' => $tag . '9/LOCAL/DRUSH/MAINT')), 'warning');
+  return TRUE;
+}
+
+/**
  * Apply a Drupal 10+ site's pending database updates with its site-local Drush.
  *
  * The one updatedb window for Drupal 10+, shared by the deploy and the

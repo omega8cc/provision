@@ -321,6 +321,12 @@ function drush_provision_drupal_post_provision_deploy() {
       elseif ($strict) {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above DEPLOY9/LOCAL/DRUSH/FAIL)."));
       }
+      // Updates that did not finish, and a move that goes on: a Drush that
+      // died inside updatedb leaves the site in maintenance mode, which the
+      // log then names (a strict move is being rolled back instead).
+      if ($window === FALSE && !drush_get_error()) {
+        _provision_drupal_note_maintenance_left('DEPLOY');
+      }
     }
     else {
       if (drush_drupal_major_version() >= 8) {
