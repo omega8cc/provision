@@ -321,20 +321,6 @@ function drush_provision_drupal_post_provision_deploy() {
       elseif ($strict) {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above DEPLOY9/LOCAL/DRUSH/FAIL)."));
       }
-      // Verify The Old Platform Again Too (a migrate or clone across
-      // platforms), after a window that ran, as before; a skipped window
-      // (DEPLOY4b) has no old-platform verify, as before. The provision-unlock
-      // the old platform used to be sent first is gone: every layer's hook for
-      // that command is a documented no-op ("Nothing needs to happen in the
-      // backend"), so it only cost a backend process and a sleep(5) per D10+
-      // deploy. A strict move that is failing does not verify it either.
-      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE) && !($strict && drush_get_error())) {
-        $old_platform = drush_get_option('old_platform', FALSE);
-        if ($old_platform) {
-          provision_backend_invoke($old_platform, 'provision-verify');
-          sleep(5);
-        }
-      }
     }
     else {
       if (drush_drupal_major_version() >= 8) {
