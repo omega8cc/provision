@@ -2228,6 +2228,18 @@ function _provision_codebase_robo_misfit($approot) {
  *   The message, for a warning.
  */
 function _provision_site_local_drush_dead_text($tag, $approot, $line) {
+  // A Drush that stops because this PHP is below what the codebase's packages
+  // require is sound: it is the PHP the platform's tasks run that is wrong,
+  // and a rebuild under the same PHP would not change it. Composer's own
+  // platform check and Drush's say so in their first line.
+  if (preg_match('/(dependencies require a PHP version|requires? PHP (version )?[>=0-9])/i', $line)) {
+    return dt("@p the platform's own Drush in @root does not start on PHP @php, the PHP this platform's tasks run@line. No site on this platform gets its database updates when it is migrated, cloned or restored here. Name a PHP the codebase accepts for the platform in ~/static/control/cli-per-platform.info, then run Verify on the platform.", array(
+      '@p' => $tag,
+      '@root' => rtrim($approot, '/'),
+      '@php' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
+      '@line' => ' (' . $line . ')',
+    ));
+  }
   $text = dt("@p the platform's own Drush in @root cannot start@line. No site on this platform gets its database updates when it is migrated, cloned or restored here, and that Drush fails the same way for its sites on the command line. The codebase is not repaired in place: build it again with a Drush that starts, add that build as a new platform and move the sites onto it with Migrate.", array(
     '@p' => $tag,
     '@root' => rtrim($approot, '/'),
@@ -2241,6 +2253,32 @@ function _provision_site_local_drush_dead_text($tag, $approot, $line) {
     ));
   }
   return $text;
+}
+
+/**
+ * Record, or ask, whether this process has run the platform's own Drush once.
+ *
+ * In-process only, like _provision_drush_local_unlocked_here(): a task's
+ * verdict on its platform's Drush is given once, by whichever of its steps
+ * runs that Drush first.
+ *
+ * @param string $root
+ *   The platform root.
+ * @param bool $mark
+ *   TRUE to record $root.
+ *
+ * @return bool
+ *   Whether this process has run it for $root (before any mark).
+ */
+function _provision_site_local_drush_checked($root, $mark = FALSE) {
+  static $roots = array();
+  $real = realpath($root);
+  $key = ($real !== FALSE) ? $real : rtrim($root, '/');
+  $seen = isset($roots[$key]);
+  if ($mark) {
+    $roots[$key] = TRUE;
+  }
+  return $seen;
 }
 
 /**
@@ -2304,10 +2342,18 @@ function _provision_site_local_drush_note_dead($root, $tag = 'DRUSH/LOCAL/DEAD')
   if (drush_drupal_major_version() < 10 || !function_exists('_provision_site_local_drush_cmd')) {
     return NULL;
   }
+  // One run and one verdict per process: a deploy's update window has run
+  // this Drush already (and said so when it did not start), and a lock that
+  // closes that window finds no marker when its vendor/drush could not be
+  // closed (_provision_drush_local_unlocked_here() marks only a closed one).
+  if (_provision_site_local_drush_checked($root)) {
+    return NULL;
+  }
   $approot = _provision_site_local_drush_runnable($root);
   if ($approot === '') {
     return NULL;
   }
+  _provision_site_local_drush_checked($root, TRUE);
   $start = _provision_site_local_drush_start($approot);
   if ($start['started']) {
     drush_log(dt('DRUSH/LOCAL/START @line', array('@line' => $start['line'])), 'info');

@@ -2450,10 +2450,15 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   drush_set_option('provision_site_local_drush_started', (bool) $result);
   // A Drush that is there and cannot start is the platform's state, not this
   // site's: it is named here once, with what ends it, before updatedb runs
-  // into the same failure and the 9/LOCAL/DRUSH/FAIL line reports that.
-  if (!$result) {
+  // into the same failure and the 9/LOCAL/DRUSH/FAIL line reports that. Only
+  // a tree that can load its Drush gives that verdict: an unlock can end with
+  // its console patch still in place (a refused revert), and no Drush starts
+  // there, sound or not. A task names it once, whichever step runs it first.
+  if (!$result && !_provision_site_local_drush_checked(d()->root)
+    && _provision_site_local_drush_runnable(d()->root) !== '') {
     drush_log(_provision_site_local_drush_dead_text($tag . '8/LOCAL/DRUSH/DEAD', $appRoot, _provision_site_local_drush_line($version_lines, FALSE)), 'warning');
   }
+  _provision_site_local_drush_checked(d()->root, TRUE);
   // Call The Drush updatedb Command with Site-Local Drush, addressed by
   // --root/--uri like the update_fetch_task clear and the install path's
   // user:login (see above).
