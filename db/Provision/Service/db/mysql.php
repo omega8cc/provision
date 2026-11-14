@@ -1811,10 +1811,15 @@ port=%s
     // for their utf8mb4 parameters and return value; no dump names it, so
     // on a server known to be MySQL 8.x the copy opens with that default for
     // its session (MariaDB runs a comment for 8.x too and has no such
-    // setting, and 8.4 warns that a later release makes it read-only).
+    // setting, and 8.4 warns that a later release makes it read-only). A
+    // routine whose dump sets its own default just before it (a dump made
+    // since generate_dump() writes those lines) needs none: only a routine
+    // without one makes the copy open with it.
     $routine_re = '#^CREATE (?:DEFINER=(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|[^\s@]+)@(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|\S+) )?(?:FUNCTION|PROCEDURE) #';
     $routines_here = $collation && is_string($here) && preg_match('/^8\./', $here);
+    $own_re = '#^SET @BOA_UTF8MB4_SQL = IF\(VERSION\(\) [^\n]*, \'SET @BOA_PREV_UTF8MB4 = #';
     $routines = FALSE;
+    $own = FALSE;
     $tables = FALSE;
     $start = TRUE;
     while (!($needs && ($tables || !$collation) && ($routines || !$routines_here)) && ($piece = fgets($in, 1048576)) !== FALSE) {
@@ -1825,8 +1830,14 @@ port=%s
         if ($collation && !$tables && $this->statement_line($piece, $collation) !== $piece) {
           $tables = TRUE;
         }
-        if ($routines_here && !$routines && preg_match($routine_re, $piece)) {
-          $routines = TRUE;
+        if ($routines_here && !$routines) {
+          if (preg_match($own_re, $piece)) {
+            $own = TRUE;
+          }
+          elseif (preg_match($routine_re, $piece)) {
+            $routines = !$own;
+            $own = FALSE;
+          }
         }
       }
       $start = substr($piece, -1) === "\n";
@@ -2090,7 +2101,9 @@ port=%s
     }
     // Its stored routines took 5.x's default for their utf8mb4 parameters
     // and return value, and no dump names it: their file sets that default
-    // for the load's session just before its first routine, once, when this
+    // for the load's session just before its first routine (unless the file
+    // already sets each routine's own, as one dumped since the object pass
+    // writes those lines does), once, when this
     // server is known to be MySQL 8.x (myloader stops on a versioned-comment
     // SET, so it is plain, and reads the file's first lines as mydumper's
     // header: myloader 1.0.19 crashed on a line put above them; MariaDB has
@@ -2105,6 +2118,7 @@ port=%s
         }
         $text = @file_get_contents($file);
         if ($text === FALSE || strpos($text, "\n" . $head) !== FALSE
+          || preg_match('#^SET @BOA_UTF8MB4_SQL = #m', $text)
           || !preg_match('/^DROP (?:FUNCTION|PROCEDURE) IF EXISTS `/m', $text, $first, PREG_OFFSET_CAPTURE)) {
           continue;
         }
@@ -2496,8 +2510,8 @@ port=%s
       // nothing here depends on.
       $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics%s %s", $gtid_option, $this->mysqldump_objects_option(drush_get_option('db_name')), escapeshellcmd(drush_get_option('db_name')));
 
-      // Each routine dumped from an 8.x server takes its own utf8mb4 default
-      // along (classic_dump_routine_lines()), read before the dump starts.
+      // Each routine takes its own utf8mb4 default along
+      // (classic_dump_routine_lines()), read before the dump starts.
       $routine_state = $this->classic_dump_routine_state(drush_get_option('db_name'));
 
       // Fail if db file already exists.

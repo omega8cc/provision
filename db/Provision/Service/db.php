@@ -445,6 +445,9 @@ class Provision_Service_db extends Provision_Service {
     if (!$result) {
       return FALSE;
     }
+    if ($coll !== $params) {
+      drush_log(dt('The stored routines\' utf8mb4 defaults of @db could not be read: its routines load with the loading server\'s default.', array('@db' => $db_name)), 'warning');
+    }
     $gone = '/^(?:NO_AUTO_CREATE_USER|NO_FIELD_OPTIONS|NO_KEY_OPTIONS|NO_TABLE_OPTIONS|DB2|MAXDB|MSSQL|MYSQL323|MYSQL40|ORACLE|POSTGRESQL)$/';
     $modes = array();
     while ($row = $result->fetch(PDO::FETCH_NUM)) {
