@@ -98,6 +98,11 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // Any other folder at the new name too, not only a capsule: the deploy
+  // would replace and delete it (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
+    return FALSE;
+  }
 }
 
 function drush_provision_grav_pre_provision_clone($new_name, $platform = NULL) {

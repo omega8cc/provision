@@ -4864,6 +4864,68 @@ function provision_probe_new_name($option, $new_name, $platform) {
 }
 
 /**
+ * Refuse a copy onto a folder left at the site directory it is to build.
+ *
+ * A deploy onto an existing site directory replaces it: its validate sees
+ * the directory and extracts beside it, the pre hook swaps the two and the
+ * post hook deletes the one that was there. That is right for a Restore
+ * and for a Migrate that keeps its name on its own platform, whose folder
+ * is the site's own. A Clone, a Migrate under a new name and a Migrate onto
+ * another platform build a site that is not there yet, so a folder at its
+ * path is something else (one no site record holds, what a failed task left)
+ * and was deleted with no word but "Replacing the existing site". Called
+ * from those validates, before the safety copy; the panel site's own move
+ * is left out.
+ *
+ * @param string $task
+ *   The task's name in the message: clone, migrate.
+ * @param string|null $platform
+ *   The target platform's context name; empty for the site's own platform.
+ * @param string|null $new_name
+ *   The new name (@name or name); empty for the site's own name.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_folder_at_new_name($task, $platform = NULL, $new_name = NULL) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $target = empty($platform) ? d()->platform : d($platform);
+  if (!is_object($target) || empty($target->root)) {
+    return TRUE;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '') {
+    $uri = ltrim((string) d()->uri, '@');
+  }
+  $path = provision_auto_fix_platform_root($target->root) . '/sites/' . $uri;
+  if (_provision_folder_at_new_name_state($path, d()->site_path) !== 'TAKEN') {
+    return TRUE;
+  }
+  drush_set_error('PROVISION_FOLDER_AT_NEW_NAME', dt('@path already exists and holds no site of this task: the @task would replace it and delete what it holds. Import it as a site from its platform, or move it away, then run the task again.', array('@path' => $path, '@task' => $task)));
+  return FALSE;
+}
+
+/**
+ * What is at the path a copy is to build: FREE (nothing, not even a link),
+ * OWN (the site's own directory, or a link to it, such as a pre-Drupal 7
+ * alias link that a rename onto the alias removes itself) or TAKEN.
+ */
+function _provision_folder_at_new_name_state($path, $own_path) {
+  clearstatcache();
+  if (!file_exists($path) && !is_link($path)) {
+    return 'FREE';
+  }
+  $real = realpath($path);
+  $own = ((string) $own_path === '') ? FALSE : realpath($own_path);
+  if ($real !== FALSE && $own !== FALSE && $real === $own) {
+    return 'OWN';
+  }
+  return 'TAKEN';
+}
+
+/**
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the

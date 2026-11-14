@@ -129,6 +129,11 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // A folder at the new name that no context holds: the deploy would
+  // replace and delete it (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
+    return FALSE;
+  }
 }
 
 function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {

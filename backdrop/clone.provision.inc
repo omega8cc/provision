@@ -36,6 +36,11 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (!_provision_drupal_copy_target_store_check('CLONE', $new_name)) {
     return FALSE;
   }
+  // Nor a folder at its new name, which the deploy would replace and delete
+  // (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
