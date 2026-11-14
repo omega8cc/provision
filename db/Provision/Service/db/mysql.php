@@ -1945,7 +1945,7 @@ port=%s
   /**
    * What classic_dump_routine_lines() needs through one classic dump of
    * $db_name: each routine's own utf8mb4 default, as
-   * mydumper_object_modes_read() gives it (read from an 8.x server only).
+   * mydumper_object_modes_read() gives it (on any server).
    * PHP 5.6-safe.
    */
   function classic_dump_routine_state($db_name) {
@@ -1991,14 +1991,14 @@ port=%s
       $coll = $state['pending'];
       $state['pending'] = NULL;
       $state['restore'] = TRUE;
-      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
         . " SESSION default_collation_for_utf8mb4 = ''" . $coll . "''', 'DO 0');\n"
         . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
         . "EXECUTE boa_utf8mb4;\n";
     }
     if ($state['restore'] && preg_match('#^/\*!50003 SET sql_mode +=[ ]+@saved_sql_mode \*/ ;$#', $line)) {
       $state['restore'] = FALSE;
-      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n"
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n"
         . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
         . "EXECUTE boa_utf8mb4;\n"
         . "DEALLOCATE PREPARE boa_utf8mb4;\n";

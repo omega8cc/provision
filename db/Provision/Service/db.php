@@ -397,9 +397,9 @@ class Provision_Service_db extends Provision_Service {
    * of the mode the server stored for it before its CREATE and the file's
    * mode after it (myloader stops on a versioned-comment SET in the middle
    * of a file); mode words 8.x refuses are left out, so a 5.7 dump still
-   * loads there. A routine dumped on 8.x whose utf8mb4 parameters and return
-   * value share one of the two defaults default_collation_for_utf8mb4 takes
-   * gets that default the same way, the session's own value back after it,
+   * loads there. A routine whose utf8mb4 parameters and return value share
+   * one of the two defaults default_collation_for_utf8mb4 takes gets that
+   * default the same way, the session's own value back after it,
    * each a statement prepared from one naming MySQL 8 (a 5.x or MariaDB
    * server, which has no such setting, runs DO 0 in its place, so the dump
    * still loads there): no dump names their collation, and the load gave
@@ -424,22 +424,24 @@ class Provision_Service_db extends Provision_Service {
       return FALSE;
     }
     // A routine's utf8mb4 parameters and return value take the loading
-    // session's default_collation_for_utf8mb4, which no dump names: on an
-    // 8.x server (5.x has no such setting) each routine whose parameters and
-    // return value share one of the two defaults that setting takes is read
-    // with it, after a tab in its mode's value (as BOA's dump tools carry it).
-    $coll = "''";
-    $version = method_exists($this, 'server_version') ? $this->server_version() : FALSE;
-    if (is_string($version) && preg_match('/^([0-9]+)\./', $version, $major)
-      && $major[1] >= 8 && stripos($version, 'mariadb') === FALSE) {
-      $coll = "IFNULL((SELECT IF(COUNT(DISTINCT p.COLLATION_NAME) = 1, MIN(p.COLLATION_NAME), '') FROM information_schema.PARAMETERS p"
-        . " WHERE p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA AND p.SPECIFIC_NAME = r.ROUTINE_NAME AND p.ROUTINE_TYPE = r.ROUTINE_TYPE"
-        . " AND p.COLLATION_NAME IN ('utf8mb4_general_ci', 'utf8mb4_0900_ai_ci')), '')";
+    // session's default_collation_for_utf8mb4, which no dump names: each
+    // routine whose parameters and return value share one of the two
+    // defaults that setting takes is read with it, after a tab in its mode's
+    // value (as BOA's dump tools carry it), on any server: a 5.x or MariaDB
+    // one names utf8mb4_general_ci there, which a load on MySQL 8 then keeps.
+    // A server that refuses that read gives the modes alone.
+    $params = "IFNULL((SELECT IF(COUNT(DISTINCT p.COLLATION_NAME) = 1, MIN(p.COLLATION_NAME), '') FROM information_schema.PARAMETERS p"
+      . " WHERE p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA AND p.SPECIFIC_NAME = r.ROUTINE_NAME AND p.ROUTINE_TYPE = r.ROUTINE_TYPE"
+      . " AND p.COLLATION_NAME IN ('utf8mb4_general_ci', 'utf8mb4_0900_ai_ci')), '')";
+    foreach (array($params, "''") as $coll) {
+      $result = $this->query("SELECT 'TRIGGER', HEX(TRIGGER_NAME), SQL_MODE, '' FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '%s'"
+        . " UNION ALL SELECT r.ROUTINE_TYPE, HEX(r.ROUTINE_NAME), r.SQL_MODE, " . $coll . " FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = '%s'"
+        . " UNION ALL SELECT 'EVENT', HEX(EVENT_NAME), SQL_MODE, '' FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '%s'",
+        $db_name, $db_name, $db_name);
+      if ($result) {
+        break;
+      }
     }
-    $result = $this->query("SELECT 'TRIGGER', HEX(TRIGGER_NAME), SQL_MODE, '' FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '%s'"
-      . " UNION ALL SELECT r.ROUTINE_TYPE, HEX(r.ROUTINE_NAME), r.SQL_MODE, " . $coll . " FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = '%s'"
-      . " UNION ALL SELECT 'EVENT', HEX(EVENT_NAME), SQL_MODE, '' FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '%s'",
-      $db_name, $db_name, $db_name);
     if (!$result) {
       return FALSE;
     }
@@ -522,7 +524,7 @@ class Provision_Service_db extends Provision_Service {
           $out[] = "SET SQL_MODE='" . $file_mode . "';\n";
         }
         if ($pending_coll) {
-          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n";
+          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n";
           $out[] = "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n";
           $out[] = "EXECUTE boa_utf8mb4;\n";
           $out[] = "DEALLOCATE PREPARE boa_utf8mb4;\n";
@@ -547,7 +549,7 @@ class Provision_Service_db extends Provision_Service {
           && preg_match('/^utf8mb4_(?:general_ci|0900_ai_ci)$/', $parts[1])) {
           // prepared from a statement naming MySQL 8: a 5.x or MariaDB
           // server, which has no such setting, runs DO 0 in its place
-          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
+          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
             . " SESSION default_collation_for_utf8mb4 = ''" . $parts[1] . "''', 'DO 0');\n";
           $out[] = "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n";
           $out[] = "EXECUTE boa_utf8mb4;\n";
