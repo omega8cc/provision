@@ -3132,6 +3132,90 @@ function _provision_platform_named_by_sites($name) {
 }
 
 /**
+ * Whether the platform's root holds no codebase Drush can bootstrap.
+ */
+function _provision_platform_no_codebase() {
+  $root = rtrim((string) d()->root, '/');
+  return $root === '' || !drush_valid_root($root);
+}
+
+/**
+ * Leave the disk alone on the Delete of a platform with no codebase.
+ *
+ * Whatever stands at such a root was never verified as this platform's code:
+ * a mistyped Platform Path can name a folder that holds anything. Only the
+ * record goes. hosting_git's and hosting_deploy's post-delete hooks remove a
+ * repository or project folder that differs from the root, so those paths
+ * are unset for this process, as on a platform deployed by neither. They are
+ * kept in a context for a hook that can tell the leftover of its own
+ * unfinished build from a folder that was there before.
+ */
+function _provision_platform_no_codebase_keep_disk() {
+  $kept = array();
+  foreach (array('repo_path', 'git_repository_path', 'composer_project_path', 'composer_git_path') as $property) {
+    $path = d()->$property;
+    if (is_string($path) && $path !== '') {
+      $kept[$property] = $path;
+    }
+    d()->$property = NULL;
+  }
+  drush_set_context('PROVISION_NO_CODEBASE_DEPLOY_PATHS', $kept);
+  drush_log(dt('DELETE/NO-CODEBASE only the record of @name goes: nothing at @root was verified as its code, so the backend deletes nothing on disk', array(
+    '@name' => ltrim((string) d()->name, '@'),
+    '@root' => (string) d()->root,
+  )), 'info');
+}
+
+/**
+ * The sites that stand in the way of the platform Delete.
+ *
+ * A root Drush can bootstrap is looked into as it always was. A root it
+ * cannot, where a build failed or never ran or the tree is gone, holds no
+ * codebase: asking for the bootstrap only set the error that failed the
+ * Delete, so the record of a platform that never worked could not be
+ * removed. There the sites are looked for by name and by path: one whose
+ * alias names this platform, and a site folder with a settings.php left at
+ * the root.
+ *
+ * @return array
+ *   The sites found; empty when the Delete may go ahead.
+ */
+function _provision_platform_delete_sites() {
+  static $said = array();
+  if (drush_get_option('force', FALSE)) {
+    return array();
+  }
+  $root = rtrim((string) d()->root, '/');
+  if (!_provision_platform_no_codebase()) {
+    $sites = drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT) ? provision_drupal_find_sites() : array();
+    return is_array($sites) ? $sites : array();
+  }
+  $sites = array();
+  foreach (_provision_platform_named_by_sites(d()->name) as $site) {
+    $sites[$site] = $site;
+  }
+  if ($root !== '') {
+    $files = glob(_provision_glob_quote($root) . '/sites/*/settings.php');
+    foreach (is_array($files) ? $files : array() as $file) {
+      $dir = dirname($file);
+      if (basename($dir) !== 'default' && !is_link($dir)) {
+        $sites[basename($dir)] = $file;
+      }
+    }
+  }
+  $name = ltrim((string) d()->name, '@');
+  if (empty($said[$name])) {
+    $said[$name] = TRUE;
+    drush_log(dt('DELETE/NO-CODEBASE @root holds no codebase to load: sites were looked for by alias and by folder, @count found@sites', array(
+      '@root' => $root,
+      '@count' => count($sites),
+      '@sites' => empty($sites) ? '' : ' (' . implode(', ', array_keys($sites)) . ')',
+    )), 'info');
+  }
+  return $sites;
+}
+
+/**
  * Keep a deploy folder of the platform being deleted that holds another
  * platform's root.
  *
