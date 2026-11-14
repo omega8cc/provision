@@ -4698,21 +4698,33 @@ function provision_migrate_failure_outcome($same_name, $retiring, $deployed) {
  * before the move (provision_upgrade_page_check()). Both are raised before
  * the post phase, so the migrate's rollback removes the copy and the site
  * stays on its old platform (provision_migrate_failure_outcome()). A rename
- * ignores the option. It is read from the command line alone: never a
+ * ignores the option, and so does a move that stays on the site's own
+ * platform: there the deploy replaces the site in place and lets the
+ * original go before it returns, so a check that failed afterwards could
+ * put nothing back. The option is read from the command line alone: never a
  * context property, never set in the site scope, so no alias and no
  * drushrc.php carries it.
  *
+ * @param string|null $platform
+ *   The migrate's platform argument.
  * @param string|null $new_name
  *   The migrate's new name argument.
  *
  * @return bool
- *   TRUE when the option is set and the move keeps the site's name.
+ *   TRUE when the option is set and the move keeps the site's name and
+ *   takes it onto another platform.
  */
-function provision_upgrade_strict($new_name = NULL) {
+function provision_upgrade_strict($platform = NULL, $new_name = NULL) {
   if (!drush_get_option('upgrade_strict', FALSE)) {
     return FALSE;
   }
-  return is_null($new_name) || ($new_name == d()->name);
+  if (!is_null($new_name) && ($new_name != d()->name)) {
+    return FALSE;
+  }
+  if (is_null($platform) || ltrim((string) $platform, '@') === ltrim((string) d()->platform->name, '@')) {
+    return FALSE;
+  }
+  return TRUE;
 }
 
 /**
@@ -4770,7 +4782,7 @@ function provision_upgrade_page_target() {
  * @param string $path
  *   The path, with its query.
  * @param int $timeout
- *   Seconds for the connect and for the whole reply.
+ *   Seconds for the whole request, the connect included.
  *
  * @return array
  *   'ended' is 'answered', or how the request did not answer: 'connect' (no
@@ -4825,9 +4837,14 @@ function _provision_upgrade_page_request($address, $port, $ssl, $host, $path, $t
   if (@fwrite($socket, $request) !== FALSE) {
     // A megabyte is far more than the head and the error page's text need.
     while (!feof($socket) && strlen($raw) < 1048576) {
-      $chunk = @fread($socket, 8192);
-      $meta = stream_get_meta_data($socket);
-      if (!empty($meta['timed_out']) || (microtime(TRUE) - $started) > $timeout) {
+      // The limit is for the whole reply: each read gets what is left of it.
+      $left = $timeout - (microtime(TRUE) - $started);
+      if ($left > 0) {
+        stream_set_timeout($socket, (int) ceil($left));
+        $chunk = @fread($socket, 8192);
+        $meta = stream_get_meta_data($socket);
+      }
+      if ($left <= 0 || !empty($meta['timed_out'])) {
         fclose($socket);
         $reply['ended'] = 'timeout';
         return $reply;
@@ -4937,15 +4954,30 @@ function _provision_upgrade_page_location($location, $scheme, $host, $path) {
 }
 
 /**
- * Take the page check's own query parameter out of a path or a Location.
+ * Take the page check's own query parameter out of a path it follows.
  *
- * Each chain of requests carries a random parameter; a redirect that hands
- * the query on would otherwise never show the same Location twice.
+ * Each chain of requests carries a random parameter, added to every request:
+ * a redirect that hands the query on would otherwise carry it twice.
  */
 function _provision_upgrade_page_untoken($url, $token) {
   $url = str_replace('?' . $token . '&', '?', (string) $url);
   $url = str_replace('&' . $token, '', $url);
   return str_replace('?' . $token, '', $url);
+}
+
+/**
+ * The place a Location names: the address without its query and fragment.
+ *
+ * What a chain that ended on a redirect is recorded and compared by. The
+ * query is left out on purpose: a sign-on redirect carries a new state value
+ * on every request, and the probe's own random parameter comes back inside a
+ * return address, encoded. Printable and bounded: the site's code wrote it,
+ * and it goes into the log.
+ */
+function _provision_upgrade_page_place($location) {
+  $location = (string) preg_replace('`[^\x21-\x7e]`', '', (string) $location);
+  $cut = strcspn($location, '?#');
+  return (string) substr($location, 0, min($cut, 255));
 }
 
 /**
@@ -4986,8 +5018,9 @@ function _provision_upgrade_page_untoken($url, $token) {
  *
  * @return array
  *   'ended' ('answered', 'connect', 'timeout' or 'empty'), 'status' (the
- *   final one), 'location' (when the chain ended on a redirect), 'own',
- *   'error_text', 'hops' (redirects followed).
+ *   final one), 'location' (when the chain ended on a redirect: the place
+ *   it names, see _provision_upgrade_page_place()), 'own', 'error_text',
+ *   'hops' (redirects followed).
  */
 function provision_upgrade_page_probe($name, $path, $address, $http_port, $ssl_port, $ssl, $hosts = array(), $timeout = 30, $retry_wait = 10) {
   $name = strtolower((string) $name);
@@ -5039,10 +5072,8 @@ function _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_
     if ($reply['status'] >= 400) {
       return $record;
     }
-    // Printable and bounded: the site's code wrote it, and it goes into the
-    // log and the comparison.
-    $record['location'] = (string) substr(preg_replace('`[^\x21-\x7e]`', '', _provision_upgrade_page_untoken($reply['location'], $token)), 0, 255);
-    $next = _provision_upgrade_page_location($record['location'], $scheme, $host, $path);
+    $record['location'] = _provision_upgrade_page_place($reply['location']);
+    $next = _provision_upgrade_page_location($reply['location'], $scheme, $host, $path);
     if ($hop == 3 || $next === FALSE || !isset($allowed[$next['host']])) {
       return $record;
     }
@@ -5051,7 +5082,7 @@ function _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_
     }
     $scheme = $next['scheme'];
     $host = $next['host'];
-    $path = $next['path'];
+    $path = _provision_upgrade_page_untoken($next['path'], $token);
   }
   return $record;
 }
@@ -5150,13 +5181,16 @@ function _provision_upgrade_page_verdict($was, $now) {
   if ($now_kind === 'foreign') {
     return array('fail', dt('was not served by this site'));
   }
-  $answered = !empty($now['error_text']) ? dt('showed an error') : dt('answered @status', array('@status' => $now['status']));
+  // A status that is an error says it by its number; Drupal's error page
+  // under a status that is none needs the words.
+  $answered = (!empty($now['error_text']) && $now['status'] < 400) ? dt('showed an error') : dt('answered @status', array('@status' => $now['status']));
   if ($was_kind === 'own') {
     // The site's own page must still be the site's own page.
     return ($now_kind === 'own' && empty($now['error_text'])) ? array('pass', '') : array('fail', $answered);
   }
   if ($was_kind === 'redirect') {
-    // Like for like: the same redirect to the same place.
+    // Like for like: the same redirect to the same place (recorded without
+    // its query, see _provision_upgrade_page_place()).
     if ($now_kind === 'redirect' && $now['status'] == $was['status'] && $now['location'] === $was['location']) {
       return array('pass', '');
     }

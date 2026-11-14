@@ -53,13 +53,19 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   // A strict move (provision_upgrade_strict()) reads the site's home and
   // login pages here, while it still serves: the pre hook is what takes it
   // offline and removes its vhost. The command hook compares them with the
-  // same pages after the move. A rename ignores the option.
+  // same pages after the move. A rename ignores the option, and so does a
+  // move that stays on the site's platform.
   if (drush_get_option('upgrade_strict', FALSE)) {
-    if (!provision_upgrade_strict($new_name)) {
+    if (provision_upgrade_strict($platform, $new_name)) {
+      if (!drush_get_error()) {
+        provision_upgrade_page_baseline();
+      }
+    }
+    elseif (!is_null($new_name) && ($new_name != d()->name)) {
       drush_log(dt('UPGRADE/STRICT ignored: upgrade_strict applies only to a move that keeps the name of the site, and this one renames it.'), 'ok');
     }
-    elseif (!drush_get_error()) {
-      provision_upgrade_page_baseline();
+    else {
+      drush_log(dt('UPGRADE/STRICT ignored: upgrade_strict applies only to a move onto another platform; on its own platform the deploy replaces the site in place, and a failed check could put nothing back.'), 'ok');
     }
   }
 }
@@ -401,7 +407,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   // complete. This array is the only way the option reaches the deploy; it
   // is never a context property and never set in the site scope, so no
   // alias and no drushrc.php carries it.
-  if (provision_upgrade_strict($new_name)) {
+  if (provision_upgrade_strict($platform, $new_name)) {
     $deploy_options['upgrade_strict'] = TRUE;
   }
   // On Drupal 10, 11 and 12 the live site and a copy built under its name, or its
@@ -453,7 +459,7 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // step below, which a strict move runs only while no error is set: a
     // failure raised after it would remove the copy and leave a store at
     // the site's name that the old site does not use.
-    $strict = provision_upgrade_strict($new_name);
+    $strict = provision_upgrade_strict($platform, $new_name);
     if ($strict && !drush_get_error()) {
       sleep(5);
       provision_upgrade_page_check($options['uri'], drush_get_option('upgrade_page_baseline', NULL));
