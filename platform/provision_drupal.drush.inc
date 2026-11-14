@@ -2439,7 +2439,8 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // Check And Display Site-Local Drush Version (run by the backend's own
   // PHP, see _provision_site_local_drush_cmd()).
   $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('--version')));
-  $output = implode('', drush_shell_exec_output());
+  $version_lines = drush_shell_exec_output();
+  $output = implode('', $version_lines);
   drush_log($tag . '7/LOCAL/DRUSH/VERSION ' . $output);
   // Whether the site-local Drush started at all. An executable Drush that
   // dies at start still gets updatedb run against it below and returns
@@ -2447,6 +2448,12 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // (the strict deploy) reads this to name the right cause. Process scope,
   // never saved.
   drush_set_option('provision_site_local_drush_started', (bool) $result);
+  // A Drush that is there and cannot start is the platform's state, not this
+  // site's: it is named here once, with what ends it, before updatedb runs
+  // into the same failure and the 9/LOCAL/DRUSH/FAIL line reports that.
+  if (!$result) {
+    drush_log(_provision_site_local_drush_dead_text($tag . '8/LOCAL/DRUSH/DEAD', $appRoot, _provision_site_local_drush_line($version_lines, FALSE)), 'warning');
+  }
   // Call The Drush updatedb Command with Site-Local Drush, addressed by
   // --root/--uri like the update_fetch_task clear and the install path's
   // user:login (see above).

@@ -2093,6 +2093,231 @@ function _provision_codebase_has_drush($approot) {
 }
 
 /**
+ * Run the codebase's own Drush once: does it start?
+ *
+ * A Drush that is installed and dies at start looks sound everywhere else:
+ * the platform verifies, and the first sign is a deploy whose updatedb
+ * cannot run. Its --version is the cheapest run that loads its whole
+ * application, on the backend's own interpreter as every site-local run
+ * here (_provision_site_local_drush_cmd()). Only a tree that can load it
+ * gives a verdict: on a locked Drupal 10+ codebase no site-local Drush
+ * starts, sound or not, so callers ask
+ * _provision_site_local_drush_runnable() first.
+ *
+ * @param string $approot
+ *   The codebase root (the directory holding vendor/).
+ *
+ * @return array
+ *   'started' (bool) and 'line' (string): the version line of a Drush that
+ *   starts, else the line it printed that says why it does not.
+ */
+function _provision_site_local_drush_start($approot) {
+  $started = (bool) drush_shell_cd_and_exec(rtrim($approot, '/'), _provision_site_local_drush_cmd(array('--version')));
+  return array(
+    'started' => $started,
+    'line' => _provision_site_local_drush_line(drush_shell_exec_output(), $started),
+  );
+}
+
+/**
+ * The one line of a site-local Drush run worth quoting.
+ *
+ * Of a Drush that started, its version line; of one that did not, the first
+ * line naming an error, else the first line it printed. Control characters
+ * go, and the line is cut to a length a task log shows whole.
+ *
+ * @param array $output
+ *   The run's output lines.
+ * @param bool $started
+ *   Whether the run exited 0.
+ *
+ * @return string
+ *   The line, or '' when the run printed nothing.
+ */
+function _provision_site_local_drush_line($output, $started) {
+  $first = '';
+  $picked = '';
+  foreach ((array) $output as $line) {
+    $line = trim(preg_replace('/[\x00-\x1F\x7F]+/', ' ', (string) $line));
+    if ($line === '') {
+      continue;
+    }
+    if ($first === '') {
+      $first = $line;
+    }
+    if ($started ? (stripos($line, 'Drush') !== FALSE && preg_match('/[0-9]+\.[0-9x]/', $line)) : preg_match('/(fatal error|uncaught|exception|call to undefined|\berror\b|requires php)/i', $line)) {
+      $picked = $line;
+      break;
+    }
+  }
+  $line = ($picked !== '') ? $picked : $first;
+  if (strlen($line) > 300) {
+    $line = substr($line, 0, 297) . '...';
+  }
+  return $line;
+}
+
+/**
+ * The Robo and Symfony Console a codebase installed, when the pair cannot run.
+ *
+ * consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call a Symfony Console method that
+ * exists only from 7.4 (see _provision_require_site_local_drush()). Read from
+ * what composer recorded, which a locked platform still shows. It names a
+ * known cause for a Drush already seen not to start, and is never a verdict
+ * by itself: a Drush that brings the method itself runs on that pair.
+ *
+ * @param string $approot
+ *   The codebase root.
+ *
+ * @return array|false
+ *   array('robo' => version, 'console' => version), or FALSE.
+ */
+function _provision_codebase_robo_misfit($approot) {
+  $installed_path = rtrim($approot, '/') . '/vendor/composer/installed.json';
+  if (!is_readable($installed_path)) {
+    return FALSE;
+  }
+  $installed = json_decode(file_get_contents($installed_path), TRUE);
+  if (!is_array($installed)) {
+    return FALSE;
+  }
+  $packages = isset($installed['packages']) ? $installed['packages'] : $installed;
+  if (!is_array($packages)) {
+    return FALSE;
+  }
+  $robo = '';
+  $console = '';
+  foreach ($packages as $package) {
+    if (!is_array($package) || !isset($package['name']) || !isset($package['version'])) {
+      continue;
+    }
+    if ($package['name'] === 'consolidation/robo') {
+      $robo = ltrim((string) $package['version'], 'vV');
+    }
+    elseif ($package['name'] === 'symfony/console') {
+      $console = ltrim((string) $package['version'], 'vV');
+    }
+  }
+  if (in_array($robo, array('5.2.1', '5.2.2', '5.2.3'), TRUE) && $console !== '' && version_compare($console, '7.4', '<')) {
+    return array('robo' => $robo, 'console' => $console);
+  }
+  return FALSE;
+}
+
+/**
+ * The warning for a codebase whose own Drush is there and cannot start.
+ *
+ * One plain statement of what it costs and what ends it. A registered
+ * codebase is never repaired in place here: BOA adds a Drush only to a
+ * codebase without one, and the fix is a fresh build and a Migrate, as for
+ * every code change.
+ *
+ * @param string $tag
+ *   The log marker the line starts with.
+ * @param string $approot
+ *   The codebase root.
+ * @param string $line
+ *   What the Drush printed (_provision_site_local_drush_line()).
+ *
+ * @return string
+ *   The message, for a warning.
+ */
+function _provision_site_local_drush_dead_text($tag, $approot, $line) {
+  $text = dt("@p the platform's own Drush in @root cannot start@line. No site on this platform gets its database updates when it is migrated, cloned or restored here, and that Drush fails the same way for its sites on the command line. The codebase is not repaired in place: build it again with a Drush that starts, add that build as a new platform and move the sites onto it with Migrate.", array(
+    '@p' => $tag,
+    '@root' => rtrim($approot, '/'),
+    '@line' => ($line === '') ? '' : ' (' . $line . ')',
+  ));
+  $misfit = _provision_codebase_robo_misfit($approot);
+  if ($misfit) {
+    $text .= ' ' . dt('This build holds consolidation/robo @robo, which cannot run on its Symfony Console @console: require Drush with those releases ruled out, composer require drush/drush "consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3"', array(
+      '@robo' => $misfit['robo'],
+      '@console' => $misfit['console'],
+    ));
+  }
+  return $text;
+}
+
+/**
+ * Can this codebase load its own Drush right now?
+ *
+ * Yes only for a tree that is open and stock: the three lock directories
+ * traversable, the console and core logger files as their packages ship
+ * them, the genuine psr/log in place. A locked tree and one caught between
+ * the two states answer no, and so does a codebase without a Drush: a start
+ * check there would call a sound platform dead.
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ *
+ * @return string
+ *   The codebase root when its Drush can be run, else ''.
+ */
+function _provision_site_local_drush_runnable($root) {
+  // findAppRoot() walks up from the real path and never ends on a root that
+  // is not there.
+  if (!is_dir($root)) {
+    return '';
+  }
+  $approot = findAppRoot($root);
+  if (empty($approot) || !is_file($approot . '/vendor/drush/drush/drush.php')) {
+    return '';
+  }
+  foreach (array('/vendor/drush', '/vendor/symfony/console/Input', '/vendor/symfony/console/Style') as $dir) {
+    if (!is_dir($approot . $dir) || (fileperms($approot . $dir) & 0500) !== 0500) {
+      return '';
+    }
+  }
+  provision_check_codebase_status();
+  if (d()->isConsolePatched || !d()->isCoreStock) {
+    return '';
+  }
+  $psr_dir = _provision_psr_log_dir($root);
+  if ($psr_dir !== '' && _provision_psr_log_detyped($psr_dir) !== FALSE) {
+    return '';
+  }
+  return $approot;
+}
+
+/**
+ * Say so when a platform's own Drush is installed and cannot start.
+ *
+ * For the two moments a platform stands open and settled without a deploy
+ * running: the lock that closes a window this process did not open (a
+ * codebase's first lock at its first Verify, and the lock after an Unlock
+ * Local Drush task), before it changes anything, and the end of the Unlock
+ * Local Drush task itself. Drupal 10 and newer only: their database updates
+ * run on that Drush alone. A lock that finds the platform closed checks
+ * nothing, so a platform whose state is permanent is named once per window
+ * and never on every task.
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ * @param string $tag
+ *   The log marker of the warning.
+ *
+ * @return bool|null
+ *   TRUE when the Drush starts, FALSE when it does not (the warning is
+ *   logged here), NULL when the tree gives no verdict.
+ */
+function _provision_site_local_drush_note_dead($root, $tag = 'DRUSH/LOCAL/DEAD') {
+  if (drush_drupal_major_version() < 10 || !function_exists('_provision_site_local_drush_cmd')) {
+    return NULL;
+  }
+  $approot = _provision_site_local_drush_runnable($root);
+  if ($approot === '') {
+    return NULL;
+  }
+  $start = _provision_site_local_drush_start($approot);
+  if ($start['started']) {
+    drush_log(dt('DRUSH/LOCAL/START @line', array('@line' => $start['line'])), 'info');
+    return TRUE;
+  }
+  drush_log(_provision_site_local_drush_dead_text($tag, $approot, $start['line']), 'warning');
+  return FALSE;
+}
+
+/**
  * Does this codebase carry composer patches?
  *
  * TRUE when composer.json declares extra.patches or extra.patches-file, or
@@ -2570,6 +2795,7 @@ function provision_lock_drush_local_vnd() {
 
     // Read before anything below changes the modes: is this lock closing a
     // window an earlier task left open? See _provision_drush_local_unlocked_here().
+    $unlocked_here = _provision_drush_local_unlocked_here(d()->root);
     $closes_foreign_window = _provision_drush_local_lock_is_open(d()->root)
       && !_provision_drush_local_unlocked_here(d()->root, FALSE, TRUE);
 
@@ -2595,6 +2821,16 @@ function provision_lock_drush_local_vnd() {
       if (!_provision_codebase_has_drush(d()->root . "/../")) {
         _provision_require_site_local_drush(d()->root . "/../");
       }
+    }
+
+    // The last moment this platform's own Drush can be run before the lock
+    // closes it. When this process did not open the window (a codebase's
+    // first lock, the lock after an Unlock Local Drush task) and the tree is
+    // open and stock, a Drush that is there and cannot start is said now: a
+    // window a task opened itself ran that Drush and reported on it, and a
+    // lock that finds the platform closed checks nothing.
+    if (!$unlocked_here) {
+      _provision_site_local_drush_note_dead(d()->root);
     }
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {

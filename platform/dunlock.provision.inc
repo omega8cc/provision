@@ -58,6 +58,7 @@ function drush_provision_dunlock() {
   provision_check_codebase_status();
   if (provision_drush_local_lock_state() == 'unlocked') {
     drush_log(dt('Local Drush already unlocked in @root; nothing to do.', array('@root' => d()->root)), 'success');
+    _provision_site_local_drush_note_dead(d()->root);
     return;
   }
   if (!provision_unlock_drush_local_vnd()) {
@@ -67,4 +68,7 @@ function drush_provision_dunlock() {
     provision_lock_drush_local_vnd();
     return drush_set_error('PROVISION_PSR_LOG_RESTORE_FAILED', dt('Unlock aborted: the genuine psr/log could not be restored in @root (see the PSR/LOG lines above); the platform was re-locked.', array('@root' => d()->root)));
   }
+  // The task exists so the platform's own Drush can be run: say so when that
+  // Drush is there and cannot start, here as on a platform found unlocked.
+  _provision_site_local_drush_note_dead(d()->root);
 }
