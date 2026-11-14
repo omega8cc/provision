@@ -299,14 +299,36 @@ function drush_provision_drupal_post_provision_deploy() {
       // schema left behind fails the task with the cause named right above
       // the error.
       $window = _provision_drupal_site_local_updatedb('DEPLOY');
+      // A strict move (the migrate's upgrade_strict option, see
+      // provision_upgrade_strict()) fails here on anything but updates that
+      // ran to completion, before anything of the source is retired: this
+      // deploy's rollback and the migrate's then remove the copy and leave
+      // the site on its old platform. The three verdicts get a message each;
+      // a Drush that is executable and dies at start returns FALSE like an
+      // update that failed, so the window records whether it started. With
+      // the error set, the tail below takes its skip branch and leaves
+      // settings.php to the rollback. Without the option nothing changes.
+      $strict = (bool) drush_get_option('upgrade_strict', FALSE);
+      if ($strict && $window === TRUE) {
+        drush_log(dt('UPGRADE/UPDATEDB the database updates completed.'), 'ok');
+      }
+      elseif ($strict && $window === NULL) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB the new platform's own Drush could not be run, so Drupal's database updates were not applied (the DEPLOY4b or DEPLOY2b line above says why)."));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_drush_started', NULL) === FALSE) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB the new platform's own Drush cannot start, so Drupal's database updates were not applied (the DEPLOY7 line above is all it printed)."));
+      }
+      elseif ($strict) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above DEPLOY9/LOCAL/DRUSH/FAIL)."));
+      }
       // Verify The Old Platform Again Too (a migrate or clone across
       // platforms), after a window that ran, as before; a skipped window
       // (DEPLOY4b) has no old-platform verify, as before. The provision-unlock
       // the old platform used to be sent first is gone: every layer's hook for
       // that command is a documented no-op ("Nothing needs to happen in the
       // backend"), so it only cost a backend process and a sleep(5) per D10+
-      // deploy.
-      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE)) {
+      // deploy. A strict move that is failing does not verify it either.
+      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE) && !($strict && drush_get_error())) {
         $old_platform = drush_get_option('old_platform', FALSE);
         if ($old_platform) {
           provision_backend_invoke($old_platform, 'provision-verify');

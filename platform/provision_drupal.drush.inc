@@ -2399,6 +2399,12 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('--version')));
   $output = implode('', drush_shell_exec_output());
   drush_log($tag . '7/LOCAL/DRUSH/VERSION ' . $output);
+  // Whether the site-local Drush started at all. An executable Drush that
+  // dies at start still gets updatedb run against it below and returns
+  // FALSE, like an update that failed; a caller that fails on that verdict
+  // (the strict deploy) reads this to name the right cause. Process scope,
+  // never saved.
+  drush_set_option('provision_site_local_drush_started', (bool) $result);
   // Call The Drush updatedb Command with Site-Local Drush, addressed by
   // --root/--uri like the update_fetch_task clear and the install path's
   // user:login (see above).

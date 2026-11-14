@@ -50,6 +50,18 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+  // A strict move (provision_upgrade_strict()) reads the site's home and
+  // login pages here, while it still serves: the pre hook is what takes it
+  // offline and removes its vhost. The command hook compares them with the
+  // same pages after the move. A rename ignores the option.
+  if (drush_get_option('upgrade_strict', FALSE)) {
+    if (!provision_upgrade_strict($new_name)) {
+      drush_log(dt('UPGRADE/STRICT ignored: upgrade_strict applies only to a move that keeps the name of the site, and this one renames it.'), 'ok');
+    }
+    elseif (!drush_get_error()) {
+      provision_upgrade_page_baseline();
+    }
+  }
 }
 
 /**
@@ -385,6 +397,13 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // the deploy has updated its database (_provision_drupal_deploy_keeps_offline()).
     'provision_deploy_keep_offline' => TRUE,
   );
+  // A strict move: the deploy fails on database updates that did not
+  // complete. This array is the only way the option reaches the deploy; it
+  // is never a context property and never set in the site scope, so no
+  // alias and no drushrc.php carries it.
+  if (provision_upgrade_strict($new_name)) {
+    $deploy_options['upgrade_strict'] = TRUE;
+  }
   // On Drupal 10, 11 and 12 the live site and a copy built under its name, or its
   // www. twin, have cache namespaces of their own (see
   // _provision_valkey_site_copy_prefix()). The deploy's purge spares the live
@@ -425,6 +444,21 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     drush_set_option('provision_save_config', FALSE);
     provision_backend_invoke($target, 'provision-verify');
 
+    // A strict move compares the home and login pages with what the validate
+    // read before the move, and fails on a page that no longer answers as it
+    // did (provision_upgrade_page_check()). Only after a verify that came
+    // through: its errors integrate into this process. The wait: the verify
+    // reloads the web server by a signal, and workers that still hold the
+    // vhost of the old root would answer for the old code. Before the store
+    // step below, which a strict move runs only while no error is set: a
+    // failure raised after it would remove the copy and leave a store at
+    // the site's name that the old site does not use.
+    $strict = provision_upgrade_strict($new_name);
+    if ($strict && !drush_get_error()) {
+      sleep(5);
+      provision_upgrade_page_check($options['uri'], drush_get_option('upgrade_page_baseline', NULL));
+    }
+
     // Native files symlinking for the migrated/renamed site: give it its OWN
     // copy of files/private in its own store and re-symlink -- mirroring the
     // clone path (clone.provision.inc). A migrate deploys from a backup that
@@ -438,7 +472,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // lines), the way a delete does; the nightly sweep stays the safety net.
     // Delegated to the root autosymlink tool via its sudo wrapper; the verify above
     // wrote the vhost so the account auto-resolves. Warn-not-fail.
-    _provision_drupal_native_symlink($options['uri'], TRUE);
+    if (!$strict || !drush_get_error()) {
+      _provision_drupal_native_symlink($options['uri'], TRUE);
+    }
   }
 }
 

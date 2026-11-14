@@ -4689,6 +4689,637 @@ function provision_migrate_failure_outcome($same_name, $retiring, $deployed) {
 }
 
 /**
+ * Whether this Migrate is a strict move.
+ *
+ * The command option upgrade_strict makes a Migrate that keeps the site's
+ * name fail closed: on database updates that did not run to completion
+ * (drush_provision_drupal_post_provision_deploy(), the Drupal 10+ update
+ * window) and on a home or login page that no longer answers as it did
+ * before the move (provision_upgrade_page_check()). Both are raised before
+ * the post phase, so the migrate's rollback removes the copy and the site
+ * stays on its old platform (provision_migrate_failure_outcome()). A rename
+ * ignores the option. It is read from the command line alone: never a
+ * context property, never set in the site scope, so no alias and no
+ * drushrc.php carries it.
+ *
+ * @param string|null $new_name
+ *   The migrate's new name argument.
+ *
+ * @return bool
+ *   TRUE when the option is set and the move keeps the site's name.
+ */
+function provision_upgrade_strict($new_name = NULL) {
+  if (!drush_get_option('upgrade_strict', FALSE)) {
+    return FALSE;
+  }
+  return is_null($new_name) || ($new_name == d()->name);
+}
+
+/**
+ * Where the page check asks for the current site's pages.
+ *
+ * Always this server's loopback address, on the web server's own two ports,
+ * over SSL when the site has it on. 'hosts' are the names a redirect may be
+ * followed to: the site's name, its aliases and its redirection target.
+ *
+ * @return array
+ *   'name', 'address', 'http_port', 'ssl_port', 'ssl', 'hosts'.
+ */
+function provision_upgrade_page_target() {
+  $name = strtolower(ltrim((string) d()->uri, '@'));
+  $hosts = array($name);
+  $aliases = d()->aliases;
+  if (is_array($aliases)) {
+    foreach ($aliases as $alias) {
+      if (is_string($alias) && trim($alias) !== '') {
+        $hosts[] = strtolower(trim($alias));
+      }
+    }
+  }
+  $redirection = d()->redirection;
+  if (is_string($redirection) && trim($redirection) !== '') {
+    $hosts[] = strtolower(trim($redirection));
+  }
+  return array(
+    'name' => $name,
+    'address' => '127.0.0.1',
+    'http_port' => (int) d()->server->http_port,
+    'ssl_port' => (int) d()->server->http_ssl_port,
+    'ssl' => (bool) d()->ssl_enabled,
+    'hosts' => array_values(array_unique($hosts)),
+  );
+}
+
+/**
+ * One request of the page check: a raw HTTP/1.0 GET over a socket.
+ *
+ * HTTP/1.0 with "Connection: close": the reply is never chunked and ends
+ * when the server closes. Over SSL the requested name is sent as SNI and
+ * the peer is not verified, the answer comes from the address given. The
+ * User-Agent is the one BOA's own requests send, which no bot or load rule
+ * matches; the cookie keeps the page caches out.
+ *
+ * @param string $address
+ *   The address to connect to.
+ * @param int $port
+ *   The port to connect to.
+ * @param bool $ssl
+ *   Whether to speak SSL on it.
+ * @param string $host
+ *   The name to ask for (Host header and SNI).
+ * @param string $path
+ *   The path, with its query.
+ * @param int $timeout
+ *   Seconds for the connect and for the whole reply.
+ *
+ * @return array
+ *   'ended' is 'answered', or how the request did not answer: 'connect' (no
+ *   connection, refused or no handshake), 'timeout', 'empty' (closed with no
+ *   reply, as the web server does for a request it drops). When answered:
+ *   'status', 'location' (the first Location header), 'server_names' (every
+ *   X-Server-Name value, lower case) and 'error_text' (the body is Drupal's
+ *   error page).
+ */
+function _provision_upgrade_page_request($address, $port, $ssl, $host, $path, $timeout) {
+  $reply = array(
+    'ended' => 'connect',
+    'status' => 0,
+    'location' => '',
+    'server_names' => array(),
+    'error_text' => FALSE,
+  );
+  $port = (int) $port;
+  $timeout = max(1, (int) $timeout);
+  if ($port < 1 || $port > 65535) {
+    return $reply;
+  }
+  $context = stream_context_create(array('ssl' => array(
+    'peer_name' => $host,
+    'SNI_enabled' => TRUE,
+    'SNI_server_name' => $host,
+    'verify_peer' => FALSE,
+    'verify_peer_name' => FALSE,
+    'allow_self_signed' => TRUE,
+  )));
+  $started = microtime(TRUE);
+  $errno = 0;
+  $errstr = '';
+  // Silenced: a refused connection is an answer here, not a PHP warning in
+  // the task log (and SNI_server_name, which PHP 5.6 still reads, is noted
+  // as deprecated on every connect).
+  $socket = @stream_socket_client(($ssl ? 'ssl' : 'tcp') . '://' . $address . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
+  if (!$socket) {
+    if ((microtime(TRUE) - $started) >= $timeout) {
+      $reply['ended'] = 'timeout';
+    }
+    return $reply;
+  }
+  stream_set_timeout($socket, $timeout);
+  $request = 'GET ' . $path . " HTTP/1.0\r\n"
+    . 'Host: ' . $host . "\r\n"
+    . "User-Agent: iCabProXy\r\n"
+    . "Cookie: NoCacheID=1\r\n"
+    . "Accept: text/html\r\n"
+    . "Connection: close\r\n\r\n";
+  $raw = '';
+  if (@fwrite($socket, $request) !== FALSE) {
+    // A megabyte is far more than the head and the error page's text need.
+    while (!feof($socket) && strlen($raw) < 1048576) {
+      $chunk = @fread($socket, 8192);
+      $meta = stream_get_meta_data($socket);
+      if (!empty($meta['timed_out']) || (microtime(TRUE) - $started) > $timeout) {
+        fclose($socket);
+        $reply['ended'] = 'timeout';
+        return $reply;
+      }
+      if ($chunk === FALSE) {
+        break;
+      }
+      $raw .= $chunk;
+    }
+  }
+  fclose($socket);
+  $cut = strpos($raw, "\r\n\r\n");
+  $head = ($cut === FALSE) ? $raw : (string) substr($raw, 0, $cut);
+  $body = ($cut === FALSE) ? '' : (string) substr($raw, $cut + 4);
+  $lines = explode("\r\n", $head);
+  $match = array();
+  if (!preg_match('`^HTTP/\d\.\d (\d{3})(?:\s|$)`', $lines[0], $match) || (int) $match[1] < 200) {
+    $reply['ended'] = 'empty';
+    return $reply;
+  }
+  $reply['ended'] = 'answered';
+  $reply['status'] = (int) $match[1];
+  foreach (array_slice($lines, 1) as $line) {
+    $colon = strpos($line, ':');
+    if ($colon === FALSE) {
+      continue;
+    }
+    $header = strtolower(trim((string) substr($line, 0, $colon)));
+    $value = trim((string) substr($line, $colon + 1));
+    if ($header === 'location' && $reply['location'] === '') {
+      $reply['location'] = $value;
+    }
+    elseif ($header === 'x-server-name') {
+      $reply['server_names'][] = strtolower($value);
+    }
+  }
+  $reply['error_text'] = (strpos($body, 'The website encountered an unexpected error') !== FALSE);
+  return $reply;
+}
+
+/**
+ * Where a redirect of the page check leads.
+ *
+ * Read by hand: parse_url() answers differently across PHP versions. An
+ * absolute Location gives its scheme (http or https only) and its whole
+ * authority as the host, so one that names a port or userinfo matches none
+ * of the site's names and is not followed; that test is the caller's. A
+ * relative Location is resolved against the request's own scheme, name and
+ * path.
+ *
+ * @param string $location
+ *   The Location header.
+ * @param string $scheme
+ *   The scheme of the request that got it, 'http' or 'https'.
+ * @param string $host
+ *   The name that request asked for.
+ * @param string $path
+ *   The path that request asked for, with its query.
+ *
+ * @return array|false
+ *   'scheme', 'host' (lower case) and 'path' (with its query), or FALSE
+ *   for a Location that cannot be followed.
+ */
+function _provision_upgrade_page_location($location, $scheme, $host, $path) {
+  $location = trim((string) $location);
+  $hash = strpos($location, '#');
+  if ($hash !== FALSE) {
+    $location = (string) substr($location, 0, $hash);
+  }
+  if ($location === '' || preg_match('`[\x00-\x20\x7f]`', $location)) {
+    return FALSE;
+  }
+  $match = array();
+  if (preg_match('`^([A-Za-z][A-Za-z0-9+.\-]*)://([^/?]*)(.*)$`', $location, $match)) {
+    $scheme = strtolower($match[1]);
+    $host = strtolower($match[2]);
+    $rest = $match[3];
+  }
+  elseif (preg_match('`^//([^/?]*)(.*)$`', $location, $match)) {
+    $host = strtolower($match[1]);
+    $rest = $match[2];
+  }
+  elseif (preg_match('`^[A-Za-z][A-Za-z0-9+.\-]*:`', $location)) {
+    return FALSE;
+  }
+  else {
+    $query = strpos($path, '?');
+    $bare = ($query === FALSE) ? $path : (string) substr($path, 0, $query);
+    if ($location[0] === '/') {
+      $rest = $location;
+    }
+    elseif ($location[0] === '?') {
+      $rest = $bare . $location;
+    }
+    else {
+      $slash = strrpos($bare, '/');
+      $rest = (($slash === FALSE) ? '/' : (string) substr($bare, 0, $slash + 1)) . $location;
+    }
+  }
+  if (($scheme !== 'http' && $scheme !== 'https') || $host === '') {
+    return FALSE;
+  }
+  if ($rest === '' || $rest[0] === '?') {
+    $rest = '/' . $rest;
+  }
+  return array('scheme' => $scheme, 'host' => $host, 'path' => $rest);
+}
+
+/**
+ * Take the page check's own query parameter out of a path or a Location.
+ *
+ * Each chain of requests carries a random parameter; a redirect that hands
+ * the query on would otherwise never show the same Location twice.
+ */
+function _provision_upgrade_page_untoken($url, $token) {
+  $url = str_replace('?' . $token . '&', '?', (string) $url);
+  $url = str_replace('&' . $token, '', $url);
+  return str_replace('?' . $token, '', $url);
+}
+
+/**
+ * One page of the page check: the request, its redirects and one retry.
+ *
+ * A redirect is followed at most three times, always to the address given
+ * and on the port its scheme selects, never through DNS, and only to one of
+ * the names in $hosts (the site's own name, its aliases, its redirection
+ * target): the site's code sets the Location and this runs in the backend.
+ * Any other Location ends the chain on that redirect. The whole chain is
+ * tried once more after $retry_wait seconds when it ended without an
+ * answer or on 502 or 504.
+ *
+ * A status alone cannot tell a site from no site: a name with no vhost and
+ * a disabled site answer 200 with the server's default page. The site's own
+ * vhost adds X-Server-Name with the site's name to what PHP answers, which
+ * the web server sends on 2xx and 3xx answers only. So a final 2xx is the
+ * site's own ('own') only when it carries that header with the site's name.
+ *
+ * @param string $name
+ *   The site's name.
+ * @param string $path
+ *   The page: '/' or '/user/login'.
+ * @param string $address
+ *   The address every request connects to.
+ * @param int $http_port
+ *   The web server's plain port there.
+ * @param int $ssl_port
+ *   Its SSL port there.
+ * @param bool $ssl
+ *   Whether the first request goes over SSL.
+ * @param array $hosts
+ *   The names a redirect may be followed to.
+ * @param int $timeout
+ *   Seconds per request.
+ * @param int $retry_wait
+ *   Seconds before the one retry.
+ *
+ * @return array
+ *   'ended' ('answered', 'connect', 'timeout' or 'empty'), 'status' (the
+ *   final one), 'location' (when the chain ended on a redirect), 'own',
+ *   'error_text', 'hops' (redirects followed).
+ */
+function provision_upgrade_page_probe($name, $path, $address, $http_port, $ssl_port, $ssl, $hosts = array(), $timeout = 30, $retry_wait = 10) {
+  $name = strtolower((string) $name);
+  $allowed = array($name => TRUE);
+  if (is_array($hosts)) {
+    foreach ($hosts as $allowed_host) {
+      $allowed[strtolower((string) $allowed_host)] = TRUE;
+    }
+  }
+  $record = array();
+  for ($attempt = 0; $attempt < 2; $attempt++) {
+    if ($attempt && $retry_wait > 0) {
+      sleep((int) $retry_wait);
+    }
+    $record = _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_port, $ssl, $allowed, $timeout);
+    if ($record['ended'] === 'answered' && $record['status'] != 502 && $record['status'] != 504) {
+      break;
+    }
+  }
+  return $record;
+}
+
+/**
+ * One chain of requests for provision_upgrade_page_probe().
+ */
+function _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_port, $ssl, $allowed, $timeout) {
+  $token = 'boa_probe=' . mt_rand(100000, 999999);
+  $scheme = $ssl ? 'https' : 'http';
+  $host = $name;
+  $record = array();
+  for ($hop = 0; $hop <= 3; $hop++) {
+    $asked = $path . ((strpos($path, '?') === FALSE) ? '?' : '&') . $token;
+    $reply = _provision_upgrade_page_request($address, ($scheme === 'https') ? $ssl_port : $http_port, $scheme === 'https', $host, $asked, $timeout);
+    $record = array(
+      'ended' => $reply['ended'],
+      'status' => $reply['status'],
+      'location' => '',
+      'own' => FALSE,
+      'error_text' => $reply['error_text'],
+      'hops' => $hop,
+    );
+    if ($reply['ended'] !== 'answered') {
+      return $record;
+    }
+    if ($reply['status'] < 300) {
+      $record['own'] = (count($reply['server_names']) > 0 && array_unique($reply['server_names']) === array($name));
+      return $record;
+    }
+    if ($reply['status'] >= 400) {
+      return $record;
+    }
+    // Printable and bounded: the site's code wrote it, and it goes into the
+    // log and the comparison.
+    $record['location'] = (string) substr(preg_replace('`[^\x21-\x7e]`', '', _provision_upgrade_page_untoken($reply['location'], $token)), 0, 255);
+    $next = _provision_upgrade_page_location($record['location'], $scheme, $host, $path);
+    if ($hop == 3 || $next === FALSE || !isset($allowed[$next['host']])) {
+      return $record;
+    }
+    if ((int) (($next['scheme'] === 'https') ? $ssl_port : $http_port) < 1) {
+      return $record;
+    }
+    $scheme = $next['scheme'];
+    $host = $next['host'];
+    $path = $next['path'];
+  }
+  return $record;
+}
+
+/**
+ * The site's home and login pages, as the page check reads them.
+ *
+ * @param array $target
+ *   See provision_upgrade_page_target().
+ *
+ * @return array
+ *   'home' and 'login', each a provision_upgrade_page_probe() record.
+ */
+function provision_upgrade_pages($target, $timeout = 30, $retry_wait = 10) {
+  $pages = array();
+  foreach (array('home' => '/', 'login' => '/user/login') as $page => $path) {
+    $pages[$page] = provision_upgrade_page_probe($target['name'], $path, $target['address'], $target['http_port'], $target['ssl_port'], $target['ssl'], $target['hosts'], $timeout, $retry_wait);
+  }
+  return $pages;
+}
+
+/**
+ * What kind of answer a page record is.
+ *
+ * @return string
+ *   'none' (no answer, or no record), 'own' (the site's own 2xx), 'foreign'
+ *   (a 2xx that is not the site's own: the server's default page),
+ *   'redirect' (the chain ended on a 3xx) or 'error' (4xx or 5xx).
+ */
+function _provision_upgrade_page_kind($record) {
+  if (!is_array($record) || !isset($record['ended']) || $record['ended'] !== 'answered') {
+    return 'none';
+  }
+  if ($record['status'] < 300) {
+    return empty($record['own']) ? 'foreign' : 'own';
+  }
+  return ($record['status'] < 400) ? 'redirect' : 'error';
+}
+
+/**
+ * A page record in a few words, for the log.
+ */
+function _provision_upgrade_page_says($record) {
+  if (!is_array($record) || !isset($record['ended'])) {
+    return dt('not read');
+  }
+  switch ($record['ended']) {
+    case 'connect':
+      return dt('no connection');
+
+    case 'timeout':
+      return dt('no answer in time');
+
+    case 'empty':
+      return dt('closed with no reply');
+  }
+  $kind = _provision_upgrade_page_kind($record);
+  if ($kind === 'foreign') {
+    return dt('@status not from this site', array('@status' => $record['status']));
+  }
+  if ($kind === 'redirect') {
+    return dt('@status to !location', array('@status' => $record['status'], '!location' => ($record['location'] === '') ? dt('nowhere') : $record['location']));
+  }
+  if (!empty($record['error_text'])) {
+    return dt("@status with Drupal's error page", array('@status' => $record['status']));
+  }
+  return (string) $record['status'];
+}
+
+/**
+ * Compare one page with its baseline.
+ *
+ * @return array
+ *   The verdict and, for a failure, what the page did, as the rest of the
+ *   sentence "the home page ...". Verdicts: 'skip' (the baseline cannot be
+ *   compared with: it did not answer, or was a 2xx that is not the site's
+ *   own), 'inconclusive' (closed with no reply after the retry, which is
+ *   what the web server's flood limit does), 'pass', 'fail'.
+ */
+function _provision_upgrade_page_verdict($was, $now) {
+  $was_kind = _provision_upgrade_page_kind($was);
+  if ($was_kind === 'none' || $was_kind === 'foreign') {
+    return array('skip', '');
+  }
+  $now_kind = _provision_upgrade_page_kind($now);
+  $ended = (is_array($now) && isset($now['ended'])) ? $now['ended'] : 'empty';
+  if ($ended === 'empty') {
+    return array('inconclusive', '');
+  }
+  if ($ended === 'connect') {
+    return array('fail', dt('could not be reached'));
+  }
+  if ($ended === 'timeout') {
+    return array('fail', dt('did not answer in time'));
+  }
+  if ($now_kind === 'foreign') {
+    return array('fail', dt('was not served by this site'));
+  }
+  $answered = !empty($now['error_text']) ? dt('showed an error') : dt('answered @status', array('@status' => $now['status']));
+  if ($was_kind === 'own') {
+    // The site's own page must still be the site's own page.
+    return ($now_kind === 'own' && empty($now['error_text'])) ? array('pass', '') : array('fail', $answered);
+  }
+  if ($was_kind === 'redirect') {
+    // Like for like: the same redirect to the same place.
+    if ($now_kind === 'redirect' && $now['status'] == $was['status'] && $now['location'] === $was['location']) {
+      return array('pass', '');
+    }
+    if ($now_kind === 'redirect') {
+      return array('fail', dt('answered @status to !location', array('@status' => $now['status'], '!location' => ($now['location'] === '') ? dt('nowhere') : $now['location'])));
+    }
+    return array('fail', $answered);
+  }
+  // A page that answered 4xx or 5xx before (basic auth, maintenance): only
+  // a worse class fails it.
+  if ($was['status'] < 500 && $now['status'] >= 500) {
+    return array('fail', $answered);
+  }
+  return array('pass', '');
+}
+
+/**
+ * Compare the two pages after a move with their baseline.
+ *
+ * @param array|null $baseline
+ *   provision_upgrade_pages() before the move.
+ * @param array $now
+ *   The same after it.
+ *
+ * @return array
+ *   'outcome': 'pass'; 'fail' (a page no longer answers as it did; 'failed'
+ *   holds the sentences); 'inconclusive' (a page was closed with no reply
+ *   after the retry; 'unclear' names the pages); 'not_checked' (the home
+ *   page's baseline cannot be compared with). 'left_out' names a login page
+ *   whose own baseline cannot be compared with beside a home page that was
+ *   checked. 'summary' is the line for the log.
+ */
+function provision_upgrade_page_compare($baseline, $now) {
+  $result = array(
+    'outcome' => 'pass',
+    'failed' => array(),
+    'unclear' => array(),
+    'left_out' => array(),
+    'summary' => '',
+  );
+  $names = array('home' => dt('home'), 'login' => dt('login'));
+  $parts = array();
+  $verdicts = array();
+  foreach ($names as $page => $label) {
+    $was = (is_array($baseline) && isset($baseline[$page])) ? $baseline[$page] : NULL;
+    $is = (is_array($now) && isset($now[$page])) ? $now[$page] : NULL;
+    $verdicts[$page] = _provision_upgrade_page_verdict($was, $is);
+    $parts[] = dt('@page !now (was !was)', array('@page' => $label, '!now' => _provision_upgrade_page_says($is), '!was' => _provision_upgrade_page_says($was)));
+  }
+  $result['summary'] = implode(', ', $parts);
+  if ($verdicts['home'][0] === 'skip') {
+    $result['outcome'] = 'not_checked';
+    return $result;
+  }
+  foreach ($verdicts as $page => $verdict) {
+    if ($verdict[0] === 'fail') {
+      $result['failed'][] = dt('the @page page !did (it !was before)', array(
+        '@page' => $names[$page],
+        '!did' => $verdict[1],
+        '!was' => (_provision_upgrade_page_kind($baseline[$page]) === 'redirect')
+          ? dt('answered @status to !location', array('@status' => $baseline[$page]['status'], '!location' => ($baseline[$page]['location'] === '') ? dt('nowhere') : $baseline[$page]['location']))
+          : dt('answered @status', array('@status' => $baseline[$page]['status'])),
+      ));
+    }
+    elseif ($verdict[0] === 'inconclusive') {
+      $result['unclear'][] = $names[$page];
+    }
+    elseif ($verdict[0] === 'skip') {
+      $result['left_out'][] = $names[$page];
+    }
+  }
+  if (!empty($result['failed'])) {
+    $result['outcome'] = 'fail';
+  }
+  elseif (!empty($result['unclear'])) {
+    $result['outcome'] = 'inconclusive';
+  }
+  return $result;
+}
+
+/**
+ * Read the site's two pages before a strict move.
+ *
+ * Called at the end of the migrate's validate, while the site still serves.
+ * Kept in the process (validate and the command hook are one) for
+ * provision_upgrade_page_check().
+ *
+ * @return array
+ *   provision_upgrade_pages() of the current site.
+ */
+function provision_upgrade_page_baseline($target = NULL, $timeout = 30, $retry_wait = 10) {
+  if (!is_array($target)) {
+    $target = provision_upgrade_page_target();
+  }
+  $baseline = provision_upgrade_pages($target, $timeout, $retry_wait);
+  drush_set_option('upgrade_page_baseline', $baseline);
+  drush_log(dt('UPGRADE/BASELINE before the move: home !home, login !login.', array(
+    '!home' => _provision_upgrade_page_says($baseline['home']),
+    '!login' => _provision_upgrade_page_says($baseline['login']),
+  )), 'ok');
+  return $baseline;
+}
+
+/**
+ * The page check of a strict move.
+ *
+ * Reads the site's home and login pages again and compares them with the
+ * baseline taken before the move. The promise: the two pages must still
+ * answer, as the site's own, as they did, with no new error. A page that
+ * broke sets PROVISION_UPGRADE_PAGE_CHECK, which undoes the move. Two
+ * outcomes go on with a warning: a page closed with no reply after the
+ * retry (the flood limit on the login page does that, and it does not
+ * exempt this server's own address), and a baseline that cannot be compared
+ * with (it did not answer, or the name was not served by this site's vhost
+ * here).
+ *
+ * @param string $uri
+ *   The site's name.
+ * @param array|null $baseline
+ *   provision_upgrade_page_baseline()'s return.
+ * @param array|null $target
+ *   Where to ask; the current site's by default.
+ *
+ * @return bool
+ *   FALSE when the check failed and the error is set.
+ */
+function provision_upgrade_page_check($uri, $baseline, $target = NULL, $timeout = 30, $retry_wait = 10) {
+  if (!is_array($target)) {
+    $target = provision_upgrade_page_target();
+  }
+  $home = (is_array($baseline) && isset($baseline['home'])) ? _provision_upgrade_page_kind($baseline['home']) : 'none';
+  if ($home === 'none' || $home === 'foreign') {
+    drush_log(dt('UPGRADE/PAGES not checked: before the move the home page of @uri could not be read as this site\'s own from this server (home was !home, login was !login), so there is nothing to compare with. Look at the site.', array(
+      '@uri' => $uri,
+      '!home' => _provision_upgrade_page_says(is_array($baseline) && isset($baseline['home']) ? $baseline['home'] : NULL),
+      '!login' => _provision_upgrade_page_says(is_array($baseline) && isset($baseline['login']) ? $baseline['login'] : NULL),
+    )), 'warning');
+    return TRUE;
+  }
+  $result = provision_upgrade_page_compare($baseline, provision_upgrade_pages($target, $timeout, $retry_wait));
+  if ($result['outcome'] === 'fail') {
+    return drush_set_error('PROVISION_UPGRADE_PAGE_CHECK', dt('UPGRADE/PAGES !summary. After the move !failed: the move is undone and @uri stays on its old platform.', array(
+      '!summary' => $result['summary'],
+      '!failed' => implode('; ', $result['failed']),
+      '@uri' => $uri,
+    )));
+  }
+  if ($result['outcome'] === 'inconclusive') {
+    drush_log(dt('UPGRADE/PAGES !summary. Inconclusive: the !pages page gave no reply after one retry, which is what the web server does to requests over its flood limit; the move goes on. Look at the site.', array(
+      '!summary' => $result['summary'],
+      '!pages' => implode(dt(' and the '), $result['unclear']),
+    )), 'warning');
+  }
+  else {
+    drush_log(dt('UPGRADE/PAGES !summary.', array('!summary' => $result['summary'])), 'ok');
+  }
+  if (!empty($result['left_out'])) {
+    drush_log(dt('UPGRADE/PAGES the !pages page was left out of the check: before the move it could not be read as this site\'s own.', array('!pages' => implode(dt(' and the '), $result['left_out']))), 'warning');
+  }
+  return TRUE;
+}
+
+/**
  * Point a failed migrate's result at the site it keeps on its target.
  *
  * The last step of a roll-forward (see provision_migrate_failure_outcome()):
