@@ -1742,9 +1742,10 @@ port=%s
   /**
    * collation_5x_regexes() for a dump read from $in when its header names a
    * 5.x server and this service's server is not one (or cannot be asked),
-   * otherwise none. Reads the header only; the caller rewinds. PHP 5.6-safe.
+   * otherwise none; $here gets that server's version when it was asked.
+   * Reads the header only; the caller rewinds. PHP 5.6-safe.
    */
-  function classic_load_collation_regexes($in) {
+  function classic_load_collation_regexes($in, &$here = NULL) {
     $made_on = '';
     for ($i = 0; $i < 12 && ($piece = fgets($in, 4096)) !== FALSE; $i++) {
       if (preg_match('/^-- Server version\s+([0-9][^\s]*)/', $piece, $m)) {
@@ -1801,22 +1802,36 @@ port=%s
       // The load reports the missing or unreadable file as before.
       return $dump_file;
     }
-    $collation = $this->classic_load_collation_regexes($in);
+    $here = FALSE;
+    $collation = $this->classic_load_collation_regexes($in, $here);
     rewind($in);
     $needs = FALSE;
     $needs_collation = FALSE;
+    // A 5.x dump's stored routines took 5.x's default, utf8mb4_general_ci,
+    // for their utf8mb4 parameters and return value; no dump names it, so
+    // on a server known to be MySQL 8.x the copy opens with that default for
+    // its session (MariaDB runs a comment for 8.x too and has no such
+    // setting, and 8.4 warns that a later release makes it read-only).
+    $routine_re = '#^CREATE (?:DEFINER=(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|[^\s@]+)@(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|\S+) )?(?:FUNCTION|PROCEDURE) #';
+    $routines_here = $collation && is_string($here) && preg_match('/^8\./', $here);
+    $routines = FALSE;
+    $tables = FALSE;
     $start = TRUE;
-    while (!($needs && ($needs_collation || !$collation)) && ($piece = fgets($in, 1048576)) !== FALSE) {
+    while (!($needs && ($tables || !$collation) && ($routines || !$routines_here)) && ($piece = fgets($in, 1048576)) !== FALSE) {
       if ($start) {
         if (!$needs && $this->statement_line($piece, $regexes) !== $piece) {
           $needs = TRUE;
         }
-        if ($collation && !$needs_collation && $this->statement_line($piece, $collation) !== $piece) {
-          $needs_collation = TRUE;
+        if ($collation && !$tables && $this->statement_line($piece, $collation) !== $piece) {
+          $tables = TRUE;
+        }
+        if ($routines_here && !$routines && preg_match($routine_re, $piece)) {
+          $routines = TRUE;
         }
       }
       $start = substr($piece, -1) === "\n";
     }
+    $needs_collation = $tables || $routines;
     if (!$needs && !$needs_collation) {
       fclose($in);
       return $dump_file;
@@ -1839,7 +1854,7 @@ port=%s
           '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
           '@free' => round($free / 1073741824, 1),
         )), 'warning');
-        return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
+        return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
       }
     }
     $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
@@ -1847,7 +1862,7 @@ port=%s
     $out = @fopen($copy, 'xb');
     if ($out === FALSE) {
       fclose($in);
-      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
     }
     @chmod($copy, 0600);
     rewind($in);
@@ -1855,7 +1870,13 @@ port=%s
     $start = TRUE;
     $rewritten = 0;
     $recollated = 0;
-    while (($piece = fgets($in, 1048576)) !== FALSE) {
+    $routines_kept = 0;
+    if ($routines) {
+      // the server was read as 8.x; a comment only 8.x runs all the same
+      $head = "/*!80000 SET SESSION default_collation_for_utf8mb4 = 'utf8mb4_general_ci' */;\n";
+      $ok = fwrite($out, $head) === strlen($head);
+    }
+    while ($ok && ($piece = fgets($in, 1048576)) !== FALSE) {
       $line = $piece;
       if ($start) {
         $line = $this->statement_line($piece, $regexes);
@@ -1867,6 +1888,9 @@ port=%s
           if ($kept !== $line) {
             $recollated++;
             $line = $kept;
+          }
+          if ($routines && preg_match($routine_re, $line)) {
+            $routines_kept++;
           }
         }
       }
@@ -1880,7 +1904,7 @@ port=%s
     fclose($in);
     if (!fclose($out) || !$ok) {
       @unlink($copy);
-      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file);
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
     }
     if ($rewritten == 1) {
       drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
@@ -1891,6 +1915,12 @@ port=%s
     if ($recollated) {
       drush_log(dt('The dump was made on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load from a copy naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
     }
+    if ($routines_kept == 1) {
+      drush_log(dt('The dump was made on MySQL 5.x: its stored routine loads with utf8mb4_general_ci, the default it was made with there, for its utf8mb4 parameters and return value.'), 'notice');
+    }
+    elseif ($routines_kept > 1) {
+      drush_log(dt('The dump was made on MySQL 5.x: its @n stored routines load with utf8mb4_general_ci, the default they were made with there, for their utf8mb4 parameters and return values.', array('@n' => $routines_kept)), 'notice');
+    }
     return $copy;
   }
 
@@ -1898,9 +1928,82 @@ port=%s
    * $dump_file, after a warning that the copy keeping a 5.x dump's
    * collations could not be written. PHP 5.6-safe.
    */
-  function classic_load_collation_skipped($dump_file) {
-    drush_log(dt('The dump was made on MySQL 5.x and loads as it is: its utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.'), 'warning');
+  function classic_load_collation_skipped($dump_file, $tables = TRUE, $routines = FALSE) {
+    if ($tables && $routines) {
+      $what = dt('its utf8mb4 tables and columns that name no collation and its stored routines\' utf8mb4 parameters and return values take');
+    }
+    elseif ($routines) {
+      $what = dt('its stored routines\' utf8mb4 parameters and return values take');
+    }
+    else {
+      $what = dt('its utf8mb4 tables and columns that name no collation take');
+    }
+    drush_log(dt('The dump was made on MySQL 5.x and loads as it is: @what this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@what' => $what)), 'warning');
     return $dump_file;
+  }
+
+  /**
+   * What classic_dump_routine_lines() needs through one classic dump of
+   * $db_name: each routine's own utf8mb4 default, as
+   * mydumper_object_modes_read() gives it (read from an 8.x server only).
+   * PHP 5.6-safe.
+   */
+  function classic_dump_routine_state($db_name) {
+    $colls = array();
+    $read = $this->mydumper_object_modes_read($db_name);
+    if (is_array($read)) {
+      foreach ($read as $key => $value) {
+        $parts = explode("\t", $value, 2);
+        if (isset($parts[1])) {
+          $colls[$key] = $parts[1];
+        }
+      }
+    }
+    return array('colls' => $colls, 'start' => TRUE, 'pending' => NULL, 'restore' => FALSE);
+  }
+
+  /**
+   * $piece of a classic dump, with each routine's own utf8mb4 default around
+   * its CREATE when $state knows one.
+   *
+   * A routine's utf8mb4 parameters and return value take the loading
+   * session's default_collation_for_utf8mb4, which no dump names, so a
+   * Restore gave them the server's default. mysqldump writes each routine
+   * after its DROP line, between a sql_mode line and the line putting the
+   * saved sql_mode back: the default goes after the first and the session's
+   * own value back after the second, each a statement prepared from one
+   * naming MySQL 8 (a 5.x or MariaDB server has no such setting, and 8.4
+   * warns that a later release makes it read-only: those run DO 0 in its
+   * place). $state['start'] says whether $piece starts a line; the caller
+   * keeps it. PHP 5.6-safe.
+   */
+  function classic_dump_routine_lines($piece, &$state) {
+    if (empty($state['start']) || empty($state['colls']) || substr($piece, -1) !== "\n") {
+      return $piece;
+    }
+    $line = substr($piece, 0, -1);
+    if (preg_match('#^/\*!50003 DROP (FUNCTION|PROCEDURE) IF EXISTS `((?:[^`]|``)+)` \*/;$#', $line, $m)) {
+      $key = $m[1] . ' ' . bin2hex(str_replace('``', '`', $m[2]));
+      $state['pending'] = isset($state['colls'][$key]) ? $state['colls'][$key] : NULL;
+      return $piece;
+    }
+    if ($state['pending'] !== NULL && preg_match('#^/\*!50003 SET sql_mode +=[ ]+\'[A-Z0-9_,]*\' \*/ ;$#', $line)) {
+      $coll = $state['pending'];
+      $state['pending'] = NULL;
+      $state['restore'] = TRUE;
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
+        . " SESSION default_collation_for_utf8mb4 = ''" . $coll . "''', 'DO 0');\n"
+        . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
+        . "EXECUTE boa_utf8mb4;\n";
+    }
+    if ($state['restore'] && preg_match('#^/\*!50003 SET sql_mode +=[ ]+@saved_sql_mode \*/ ;$#', $line)) {
+      $state['restore'] = FALSE;
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() REGEXP '^8[.]', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n"
+        . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
+        . "EXECUTE boa_utf8mb4;\n"
+        . "DEALLOCATE PREPARE boa_utf8mb4;\n";
+    }
+    return $piece;
   }
 
   /**
@@ -1984,6 +2087,46 @@ port=%s
     }
     if ($recollated) {
       drush_log(dt('The database was dumped on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
+    }
+    // Its stored routines took 5.x's default for their utf8mb4 parameters
+    // and return value, and no dump names it: their file sets that default
+    // for the load's session just before its first routine, once, when this
+    // server is known to be MySQL 8.x (myloader stops on a versioned-comment
+    // SET, so it is plain, and reads the file's first lines as mydumper's
+    // header: myloader 1.0.19 crashed on a line put above them; MariaDB has
+    // no such setting, and 8.4 warns that a later release makes it
+    // read-only).
+    if ($recollated && is_string($here) && preg_match('/^8\./', $here)) {
+      $head = "SET SESSION default_collation_for_utf8mb4 = 'utf8mb4_general_ci';\n";
+      $posts = @glob($dir . '/*-schema-post.sql');
+      foreach (is_array($posts) ? $posts : array() as $file) {
+        if (is_link($file) || !is_file($file)) {
+          continue;
+        }
+        $text = @file_get_contents($file);
+        if ($text === FALSE || strpos($text, "\n" . $head) !== FALSE
+          || !preg_match('/^DROP (?:FUNCTION|PROCEDURE) IF EXISTS `/m', $text, $first, PREG_OFFSET_CAPTURE)) {
+          continue;
+        }
+        $mode = @fileperms($file);
+        $new = $file . '.collation';
+        @unlink($new);
+        $out = @fopen($new, 'xb');
+        $text = substr($text, 0, $first[0][1]) . $head . substr($text, $first[0][1]);
+        $ok = $out !== FALSE && fwrite($out, $text) === strlen($text);
+        if ($out !== FALSE && !fclose($out)) {
+          $ok = FALSE;
+        }
+        if ($ok && $mode !== FALSE) {
+          $ok = @chmod($new, $mode & 0777);
+        }
+        if (!$ok || !@rename($new, $file)) {
+          @unlink($new);
+          drush_log(dt('The database was dumped on MySQL 5.x and its stored routines\' file could not be rewritten: they take this server\'s default for their utf8mb4 parameters and return value instead of utf8mb4_general_ci.'), 'warning');
+          continue;
+        }
+        drush_log(dt('The database was dumped on MySQL 5.x: its stored routines load with utf8mb4_general_ci, the default they were made with there, for their utf8mb4 parameters and return value.'), 'notice');
+      }
     }
     if ($failed) {
       drush_log(dt('The database was dumped on MySQL 5.x and @n of its table files could not be rewritten: their utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@n' => $failed)), 'warning');
@@ -2353,6 +2496,10 @@ port=%s
       // nothing here depends on.
       $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics%s %s", $gtid_option, $this->mysqldump_objects_option(drush_get_option('db_name')), escapeshellcmd(drush_get_option('db_name')));
 
+      // Each routine dumped from an 8.x server takes its own utf8mb4 default
+      // along (classic_dump_routine_lines()), read before the dump starts.
+      $routine_state = $this->classic_dump_routine_state(drush_get_option('db_name'));
+
       // Fail if db file already exists.
       $dump_file = fopen(d()->site_path . '/database.sql', 'x');
       if ($dump_file === FALSE) {
@@ -2369,7 +2516,12 @@ port=%s
           // At this point we have opened a pipe to that mysqldump command. Now
           // we want to read it one line at a time and do our replacements.
           while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
+            $ends_line = substr($buffer, -1) === "\n";
             $this->filter_line($buffer);
+            if ($buffer) {
+              $buffer = $this->classic_dump_routine_lines($buffer, $routine_state);
+            }
+            $routine_state['start'] = $ends_line;
             // Write the resulting line in the backup file.
             if ($buffer) {
               // fwrite returns the byte count, and a SHORT write (disk full,
