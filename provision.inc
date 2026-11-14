@@ -1684,6 +1684,11 @@ function _provision_lock_stock_swap($root, $patch_tpl) {
  */
 function findAppRoot($startDir) {
   $dir = realpath($startDir);
+  // A start that is not there has no real path, and the walk below would
+  // never reach '/': it would never end.
+  if ($dir === FALSE) {
+    return null;
+  }
   while ($dir !== '/' && !is_dir($dir . '/vendor')) {
     $dir = dirname($dir);
   }
@@ -2254,11 +2259,6 @@ function _provision_site_local_drush_dead_text($tag, $approot, $line) {
  *   The codebase root when its Drush can be run, else ''.
  */
 function _provision_site_local_drush_runnable($root) {
-  // findAppRoot() walks up from the real path and never ends on a root that
-  // is not there.
-  if (!is_dir($root)) {
-    return '';
-  }
   $approot = findAppRoot($root);
   if (empty($approot) || !is_file($approot . '/vendor/drush/drush/drush.php')) {
     return '';
