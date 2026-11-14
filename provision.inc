@@ -1976,8 +1976,24 @@ function provision_drush_local_lock_state() {
  * packages it brings in stable too. Until Drush 14 is released composer
  * refuses that require on stability and changes nothing, which is an
  * advisory naming the constraint, like the skips above; any other failure
- * is the warning every major gets. Other majors keep the bare require
- * exactly as it was.
+ * is the warning every major gets.
+ *
+ * Drupal 10 asks for Drush with three Robo releases ruled out.
+ * consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call Symfony Console's
+ * Application::addCommand(), which exists only from Symfony Console 7.4,
+ * while their own constraints still allow Symfony 6. Drupal 10 keeps
+ * Symfony 6.4, so the bare require resolved one of them and the Drush it
+ * installed died at start on "Call to undefined method
+ * Drush\Application::addCommand()": no database update could run on that
+ * platform, and a codebase that has a Drush never gets this require again.
+ * Measured 2026-11-13 on a fresh Drupal 10.6.21 codebase: Drush 13.8.1 with
+ * Robo 5.2.3 and Symfony Console 6.4.50 fatal, with Robo 5.1.1 running. The
+ * constraint names those releases alone (consolidation/robo issue 1199 is
+ * fixed on its 5.x branch after 5.2.3), so it lets every later release in
+ * and never holds the codebase back; written without a shell operator, it
+ * reads the same whichever shell runs the line. Other majors keep the bare
+ * require exactly as it was: Drupal 11 runs on Symfony 7.4, and the legacy
+ * majors take a Drush that never asks for Robo 5.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
@@ -2007,11 +2023,15 @@ function _provision_require_site_local_drush($approot) {
     $package = 'drush/drush:^14@stable';
     $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
   }
+  elseif ($major == 10) {
+    $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
+    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush %s --no-interaction --no-progress', $package);
+  }
   else {
     $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
-  if ($result && $major == 12) {
+  if ($result && ($major == 12 || $major == 10)) {
     drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
   }
   elseif ($result) {
