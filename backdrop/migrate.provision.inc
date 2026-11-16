@@ -122,6 +122,11 @@ function drush_provision_backdrop_pre_provision_migrate($platform, $new_name = N
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_migrate')) {
+    return FALSE;
+  }
   // Mark the context disabled and re-render settings, mirroring the D-layer
   // pre-hook. NOTE: unlike Drupal's $conf['site_offline'], Backdrop keeps
   // maintenance mode in {state}, which this settings render does NOT set, so
@@ -135,15 +140,6 @@ function drush_provision_backdrop_pre_provision_migrate($platform, $new_name = N
   d()->site_enabled = FALSE;
   _provision_backdrop_create_settings_file();
   drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_migrate'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_migrate';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
-      ->succeed('Generated blank ' . $local_description)
-      ->fail('Could not generate ' . $local_description);
-  }
   drush_invoke('provision-backup');
   provision_drupal_push_site();
 
@@ -204,12 +200,7 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
   // Belt: a crashed migrate must not leave the internal-backup flag behind -
   // a leftover one makes every later backup on the account skip the MyQuick
   // tmp_expim rotation and can leak a dump into a files-only archive.
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
   if (!$kept_on_target) {
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
@@ -544,10 +535,7 @@ function drush_provision_backdrop_post_provision_migrate($platform, $new_name = 
   }
 
   $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  provision_file()->unlink($internal_backup_flag)
-    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate')
-    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
 }
 
 /**

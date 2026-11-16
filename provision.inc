@@ -4353,6 +4353,349 @@ function _scrub_object($input) {
 }
 
 /**
+ * The account's shared fast-dump store and the lock that holds it.
+ *
+ * Every site of an Octopus account dumps into one store, backups/tmp_expim,
+ * and the internal flow flag beside it is one file for the account too. A
+ * flow dumps in one process and imports in another (a Migrate's deploy
+ * child), so the store must stay that flow's from its dump to its import:
+ * two tasks run beside each other (by hand, or past the task runner's lock)
+ * once imported one site's database into another. Every touch of the store
+ * or the flag therefore takes the account's store lock, an flock() on
+ * backups/.tmp_expim.lock, held to the flow's last touch: a second flow
+ * waits for the first to end.
+ *
+ * The lock belongs to the process that took it, and the lock file names
+ * that process. A process it started (a deploy, a verify, any process below
+ * it) works under its lock, the way a task run from inside a task's backend
+ * works under the runner lock of hosting's task: it never waits on its own
+ * ancestor. Each finished dump is marked with the flow's token: a dump of
+ * another database is imported only into the flow that marked it, and a
+ * backup or a deploy moves aside only the dump its own flow marked.
+ *
+ * Owners: 'flow' (the internal flag's flow, provision_internal_flag_set()),
+ * 'dump' (a fast dump and the rotation of the same backup), 'import' (a
+ * deploy's fast import and its rotation). The first one taken holds the
+ * lock and only it releases it; a process exit releases it as well.
+ */
+function &_provision_expim_state() {
+  static $state = array(
+    'fp' => NULL,
+    'token' => '',
+    'owner' => '',
+    'since' => '',
+    'inside' => FALSE,
+    'internal' => FALSE,
+  );
+  return $state;
+}
+
+/**
+ * The store, its lock, its mark and the internal flow flag.
+ */
+function provision_expim_paths() {
+  $backup_path = d('@server_master')->backup_path;
+  return array(
+    'store' => $backup_path . '/tmp_expim',
+    'lock' => $backup_path . '/.tmp_expim.lock',
+    'mark' => $backup_path . '/.tmp_expim.flow',
+    'flag' => $backup_path . '/.internal_backup_flag.pid',
+  );
+}
+
+/**
+ * The key=value lines of a lock or mark file, as an array.
+ */
+function _provision_expim_record($path) {
+  $record = array();
+  $text = @file_get_contents($path);
+  if (!is_string($text)) {
+    return $record;
+  }
+  foreach (explode("\n", $text) as $line) {
+    $pos = strpos($line, '=');
+    if ($pos) {
+      $record[substr($line, 0, $pos)] = substr($line, $pos + 1);
+    }
+  }
+  return $record;
+}
+
+/**
+ * Whether $pid is an ancestor of this process (hosting's runner lock reads
+ * the same chain).
+ */
+function _provision_expim_is_ancestor($pid) {
+  $pid = (int) $pid;
+  if ($pid <= 1) {
+    return FALSE;
+  }
+  $p = (int) getmypid();
+  for ($i = 0; $i < 64 && $p > 1; $i++) {
+    $status = @file_get_contents('/proc/' . $p . '/status');
+    if ($status === FALSE || !preg_match('/^PPid:\s*(\d+)/m', $status, $m)) {
+      return FALSE;
+    }
+    $p = (int) $m[1];
+    if ($p === $pid) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * The holder named in the lock file, for the waiting and refusal messages.
+ */
+function _provision_expim_holder_text($record) {
+  if (empty($record['pid'])) {
+    return dt('a task that is starting or ending');
+  }
+  return dt('process @pid (@command of @site, since @since)', array(
+    '@pid' => $record['pid'],
+    '@command' => empty($record['command']) ? '?' : $record['command'],
+    '@site' => empty($record['site']) ? '?' : $record['site'],
+    '@since' => empty($record['since']) ? '?' : $record['since'],
+  ));
+}
+
+/**
+ * Writes the holder's record into the lock file it holds.
+ */
+function _provision_expim_write_record() {
+  $state = &_provision_expim_state();
+  if (!$state['fp']) {
+    return;
+  }
+  $command = drush_get_command();
+  $text = 'token=' . $state['token'] . "\n"
+    . 'pid=' . getmypid() . "\n"
+    . 'internal=' . ($state['internal'] ? '1' : '0') . "\n"
+    . 'command=' . (empty($command['command']) ? '' : $command['command']) . "\n"
+    . 'site=' . str_replace("\n", ' ', (string) d()->name) . "\n"
+    . 'since=' . $state['since'] . "\n";
+  ftruncate($state['fp'], 0);
+  rewind($state['fp']);
+  fwrite($state['fp'], $text);
+  fflush($state['fp']);
+}
+
+/**
+ * Takes the account's store lock for $owner, or finds this process already
+ * working under it.
+ *
+ * Another task's lock is waited for, for up to expim_lock_wait seconds
+ * (3600 by default), with a line every minute naming the holder; past that
+ * the task fails before it touched the store.
+ *
+ * @return string|bool
+ *   'acquired' when this call took the lock, 'held' when this process holds
+ *   it already, 'inside' when an ancestor of this process holds it, FALSE
+ *   when it could not be had (the error is set).
+ */
+function provision_expim_lock($owner, $what = '') {
+  $state = &_provision_expim_state();
+  if ($state['fp']) {
+    return 'held';
+  }
+  if ($state['inside']) {
+    return 'inside';
+  }
+  $paths = provision_expim_paths();
+  $wait = max(0, (int) drush_get_option('expim_lock_wait', 3600));
+  // 'c' creates it without truncating the holder's record; 'e' keeps it
+  // from the commands this process runs (PHP 7.0.16 and later, 5.6 ignores
+  // it), so nothing they leave running can hold the store.
+  $fp = @fopen($paths['lock'], 'ce');
+  if (!$fp) {
+    return drush_set_error('PROVISION_EXPIM_LOCK', dt('Could not open the lock of the shared dump store, @path.', array('@path' => $paths['lock'])));
+  }
+  $start = time();
+  $told = 0;
+  while (TRUE) {
+    $wouldblock = 0;
+    if (flock($fp, LOCK_EX | LOCK_NB, $wouldblock)) {
+      break;
+    }
+    $record = _provision_expim_record($paths['lock']);
+    if (!empty($record['token']) && !empty($record['pid']) && _provision_expim_is_ancestor($record['pid'])) {
+      fclose($fp);
+      $state['inside'] = TRUE;
+      $state['token'] = $record['token'];
+      $state['internal'] = !empty($record['internal']);
+      drush_log(dt('The shared dump store is held for this task by process @pid, which started this one.', array('@pid' => $record['pid'])), 'info');
+      return 'inside';
+    }
+    $elapsed = time() - $start;
+    if ($elapsed >= $wait) {
+      fclose($fp);
+      return drush_set_error('PROVISION_EXPIM_BUSY', dt('The shared dump store of this account is still held by @holder after @secs s: one task at a time may use it. Nothing of the store was touched for @what; run it again once that task has ended.', array(
+        '@holder' => _provision_expim_holder_text($record),
+        '@secs' => $elapsed,
+        '@what' => $what === '' ? dt('this task') : $what,
+      )));
+    }
+    if (!$told || time() - $told >= 60) {
+      drush_log(dt('Waiting for the shared dump store of this account, held by @holder: @what starts when that task has ended.', array(
+        '@holder' => _provision_expim_holder_text($record),
+        '@what' => $what === '' ? dt('this task') : $what,
+      )), 'notice');
+      $told = time();
+    }
+    sleep(2);
+  }
+  $state['fp'] = $fp;
+  $state['token'] = getmypid() . '-' . str_replace('.', '', uniqid('', TRUE));
+  $state['owner'] = $owner;
+  $state['since'] = date('Y-m-d H:i:s T');
+  $state['internal'] = FALSE;
+  _provision_expim_write_record();
+  if ($told) {
+    drush_log(dt('The shared dump store is free again after @secs s.', array('@secs' => time() - $start)), 'notice');
+  }
+  return 'acquired';
+}
+
+/**
+ * Releases the store lock if $owner took it.
+ */
+function provision_expim_unlock($owner) {
+  $state = &_provision_expim_state();
+  if (!$state['fp'] || $state['owner'] !== $owner) {
+    return FALSE;
+  }
+  ftruncate($state['fp'], 0);
+  fflush($state['fp']);
+  flock($state['fp'], LOCK_UN);
+  fclose($state['fp']);
+  $state['fp'] = NULL;
+  $state['token'] = '';
+  $state['owner'] = '';
+  $state['since'] = '';
+  $state['internal'] = FALSE;
+  return TRUE;
+}
+
+/**
+ * The token of the flow this process works in, or '' outside one.
+ */
+function provision_expim_flow() {
+  $state = &_provision_expim_state();
+  return ($state['fp'] || $state['inside']) ? $state['token'] : '';
+}
+
+/**
+ * Whether this process works inside an internal flow (a Clone, Migrate,
+ * Restore or copying upgrade) that holds the store: its own, or the one of
+ * the process that started it. A flag on disk alone is no longer enough:
+ * with every flow under the store lock, a flag no live flow holds is a
+ * leftover of one that died.
+ */
+function provision_internal_flow_active() {
+  $state = &_provision_expim_state();
+  if (!($state['fp'] || $state['inside']) || !$state['internal']) {
+    return FALSE;
+  }
+  $paths = provision_expim_paths();
+  return is_file($paths['flag']);
+}
+
+/**
+ * Raises the internal flow flag for this process's flow, under the store
+ * lock: a flow waits here for another flow on the account to end.
+ *
+ * The flow that takes the lock writes the flag anew. No other flow can be
+ * live then, so a flag already there is a dead flow's, and the import's
+ * freshness test must count from this flow's start.
+ *
+ * @return bool
+ *   FALSE when the store could not be had (the error is set).
+ */
+function provision_internal_flag_set($description) {
+  $got = provision_expim_lock('flow', $description);
+  if (!$got) {
+    return FALSE;
+  }
+  $state = &_provision_expim_state();
+  $paths = provision_expim_paths();
+  $state['internal'] = TRUE;
+  _provision_expim_write_record();
+  if ($got === 'acquired' || !is_file($paths['flag'])) {
+    provision_file()->file_put_contents($paths['flag'], "Internal-DB-Backup \n")
+      ->succeed('Generated blank ' . $description)
+      ->fail('Could not generate ' . $description);
+  }
+  return TRUE;
+}
+
+/**
+ * Lowers the internal flow flag at the end of this process's flow, then
+ * releases the store. A process that works under no flow leaves the flag
+ * alone: it belongs to another task (a task that gave up waiting for the
+ * store rolls back without the flag of the task it waited for).
+ */
+function provision_internal_flag_clear($description) {
+  $state = &_provision_expim_state();
+  if (!$state['fp'] && !$state['inside']) {
+    return;
+  }
+  $paths = provision_expim_paths();
+  if (is_file($paths['flag'])) {
+    provision_file()->unlink($paths['flag'])
+      ->succeed('Removed ' . $description)
+      ->fail('Could not remove ' . $description);
+  }
+  provision_expim_unlock('flow');
+}
+
+/**
+ * Marks the finished dump in the store as this flow's: the flow's token
+ * and the checksum of the dump's metadata, the file mydumper writes last.
+ */
+function provision_expim_mark_store() {
+  $token = provision_expim_flow();
+  $paths = provision_expim_paths();
+  $sum = is_file($paths['store'] . '/metadata') ? @md5_file($paths['store'] . '/metadata') : FALSE;
+  if ($token === '' || !$sum) {
+    return FALSE;
+  }
+  $tmp = $paths['mark'] . '.' . getmypid();
+  if (@file_put_contents($tmp, 'token=' . $token . "\n" . 'metadata=' . $sum . "\n") === FALSE || !@rename($tmp, $paths['mark'])) {
+    @unlink($tmp);
+    drush_log(dt('Could not mark the dump in the shared store as this task\'s, @path: no other site\'s database can be imported from it.', array('@path' => $paths['mark'])), 'warning');
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Whether the dump in the store is the one this process's flow marked.
+ */
+function provision_expim_store_is_mine() {
+  $token = provision_expim_flow();
+  if ($token === '') {
+    return FALSE;
+  }
+  $paths = provision_expim_paths();
+  $mark = _provision_expim_record($paths['mark']);
+  if (empty($mark['token']) || empty($mark['metadata']) || $mark['token'] !== $token) {
+    return FALSE;
+  }
+  $sum = is_file($paths['store'] . '/metadata') ? @md5_file($paths['store'] . '/metadata') : FALSE;
+  return $sum !== FALSE && $sum === $mark['metadata'];
+}
+
+/**
+ * Removes the store's mark once its dump has been moved aside.
+ */
+function provision_expim_unmark_store() {
+  $paths = provision_expim_paths();
+  if (is_file($paths['mark'])) {
+    @unlink($paths['mark']);
+  }
+}
+
+/**
  * Execute a command against a specific context object.
  *
  * @param $target

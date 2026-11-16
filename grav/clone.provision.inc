@@ -113,7 +113,9 @@ function drush_provision_grav_pre_provision_clone($new_name, $platform = NULL) {
   // offered as a restore point, so it must be self-contained, the same way
   // the restore and delete safety copies are. The deploy half below is
   // switched to match: both halves MUST agree on the transport.
-  _provision_grav_force_safety_mode('Clone', TRUE);
+  if (_provision_grav_force_safety_mode('Clone', TRUE) === FALSE) {
+    return FALSE;
+  }
   drush_log(dt('Invoking drush provision-backup in drush_provision_grav_pre_provision_clone'));
   drush_invoke('provision-backup');
 }

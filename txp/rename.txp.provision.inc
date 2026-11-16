@@ -147,11 +147,10 @@ function drush_provision_txp_pre_provision_txp_rename($new_name = NULL) {
   drush_set_option('backup_mode', 'site_files_with_mysqldump');
   drush_log(dt('Rename safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_txp_rename'));
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, "Internal-DB-Backup \n")
-      ->succeed('Generated blank Internal-DB-Backup Flag-File (txp rename)')
-      ->fail('Could not generate Internal-DB-Backup Flag-File (txp rename)');
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Internal-DB-Backup Flag-File (txp rename)')) {
+    return FALSE;
   }
   drush_invoke('provision-backup');
 }
@@ -160,12 +159,7 @@ function drush_provision_txp_pre_provision_txp_rename($new_name = NULL) {
  * Implements drush_hook_pre_COMMAND_rollback().
  */
 function drush_provision_txp_pre_provision_txp_rename_rollback($new_name = NULL) {
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
 }
 
 /**
@@ -339,12 +333,7 @@ function drush_provision_txp_rename($new_name = NULL) {
   drush_log(dt('Encryption is OFF for !new (the rename disables it — keys are name-bound). Re-enable it deliberately on the site node to issue a certificate for the new name.',
     array('!new' => $new_uri)), 'advisory');
 
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_txp_rename')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_txp_rename');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_txp_rename');
 }
 
 /**

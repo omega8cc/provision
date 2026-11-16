@@ -60,6 +60,11 @@ function drush_provision_grav_pre_provision_restore($restore_file) {
   if (!provision_platform_is_grav(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a second
+  // waits here, before the site goes offline, for the first to end.
+  if (_provision_grav_has_db() && !_provision_grav_internal_backup_flag(TRUE)) {
+    return FALSE;
+  }
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
   // Render it: Grav has no in-tree offline flag, so the disabled vhost is
@@ -70,7 +75,9 @@ function drush_provision_grav_pre_provision_restore($restore_file) {
 
   // The safety copy is registered in the panel as a real backup of this site,
   // so it must honour the backup contract for what this site is.
-  _provision_grav_force_safety_mode('Restore', TRUE);
+  if (_provision_grav_force_safety_mode('Restore', TRUE) === FALSE) {
+    return FALSE;
+  }
   drush_invoke('provision-backup');
 }
 

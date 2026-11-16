@@ -160,7 +160,9 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
  * restore point the front end registers on the source.
  */
 function drush_provision_grav_pre_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
-  _provision_grav_force_safety_mode('Pre-upgrade (source)', TRUE);
+  if (_provision_grav_force_safety_mode('Pre-upgrade (source)', TRUE) === FALSE) {
+    return FALSE;
+  }
   drush_invoke('provision-backup');
 }
 

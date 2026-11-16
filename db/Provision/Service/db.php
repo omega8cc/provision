@@ -849,6 +849,12 @@ class Provision_Service_db extends Provision_Service {
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
+      // The store stays this flow's through the import and the rotation of
+      // the deploy's post hook (provision_expim_lock()).
+      if (!provision_expim_lock('import', dt('the import of @db', array('@db' => $db_name)))) {
+        return FALSE;
+      }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
@@ -946,15 +952,17 @@ class Provision_Service_db extends Provision_Service {
         //   and only when the dump is NEWER than the internal flag - the
         //   flag is written before the flow's own backup dumps, so a
         //   legitimate flow always leaves metadata newer than the flag,
-        //   while a broken task's leftover always predates it: import;
-        // - anything else (mixed store, foreign dump with no flow or a
-        //   stale one): refuse.
+        //   while a broken task's leftover always predates it - and only
+        //   when the dump carries this flow's mark (provision_expim_lock()):
+        //   the flag is the account's, the mark is the flow's: import;
+        // - anything else (mixed store, foreign dump with no flow, a stale
+        //   one, or another task's): refuse.
         $own_dump = glob($oct_db_dirx . '/' . $db_name . '-schema-create.sql*');
         $all_dumps = glob($oct_db_dirx . '/*-schema-create.sql*');
         $own_count = is_array($own_dump) ? count($own_dump) : 0;
         $all_count = is_array($all_dumps) ? count($all_dumps) : 0;
         $internal_flag_file = $backup_path . '/.internal_backup_flag.pid';
-        $internal_flow = is_file($internal_flag_file);
+        $internal_flow = provision_internal_flow_active();
         $import_allowed = FALSE;
         if ($all_count && $own_count == $all_count) {
           $import_allowed = TRUE;
@@ -971,9 +979,12 @@ class Provision_Service_db extends Provision_Service {
           $metadata_file = $oct_db_dirx . '/metadata';
           $dump_fresh = is_file($metadata_file)
             && (@filemtime($metadata_file) >= @filemtime($internal_flag_file));
-          if (count($distinct) == 1 && $dump_fresh) {
+          if (count($distinct) == 1 && $dump_fresh && provision_expim_store_is_mine()) {
             $import_allowed = TRUE;
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
+          }
+          elseif (count($distinct) == 1 && $dump_fresh) {
+            drush_log(dt('The foreign dump @found in the shared store was not made by this task.', array('@found' => implode(', ', $foreign_names))), 'warning');
           }
         }
         // A store dumped on a 5.x server keeps its utf8mb4 collations on this

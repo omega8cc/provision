@@ -42,6 +42,11 @@ function drush_provision_txp_pre_provision_restore($restore_file) {
   if (!provision_platform_is_txp(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Internal-DB-Backup Flag-File (txp restore)')) {
+    return FALSE;
+  }
   d()->site_enabled = FALSE;
   // Reload the persisted db creds BEFORE the re-render below, or the write
   // blanks the live config.php credentials for the whole restore window.
@@ -49,13 +54,6 @@ function drush_provision_txp_pre_provision_restore($restore_file) {
   _provision_txp_create_settings_file();
 
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_restore'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, "Internal-DB-Backup \n")
-      ->succeed('Generated blank Internal-DB-Backup Flag-File (txp restore)')
-      ->fail('Could not generate Internal-DB-Backup Flag-File (txp restore)');
-  }
   // The safety copy registers in the panel as a real backup: it must honour
   // the backup contract (self-contained, DB inside).
   // The classic dump creates the file with fopen($path, 'x'), which FAILS on
@@ -82,12 +80,7 @@ function drush_provision_txp_pre_provision_restore_rollback($restore_file) {
   _provision_restore_reenable_site();
   _provision_restore_kept_reload();
   _provision_restore_drop_safety_copy('Removed unused restore safety package', 'Could not remove unused restore safety package');
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in restore rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in restore rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in restore rollback');
 }
 
 function drush_provision_txp_provision_restore($restore_file) {
@@ -162,10 +155,5 @@ function drush_provision_txp_provision_restore($restore_file) {
 
   // Always clear the flag, success or failure (a leftover one silently ends
   // dated DB-dump retention on the account).
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_txp_provision_restore')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_txp_provision_restore');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_txp_provision_restore');
 }

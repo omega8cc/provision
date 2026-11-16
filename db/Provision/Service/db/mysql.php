@@ -1359,6 +1359,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
+      // The store stays this flow's through the import (provision_expim_lock()).
+      if (!provision_expim_lock('import', dt('the import of @db', array('@db' => $db_name)))) {
+        return;
+      }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
@@ -1442,16 +1447,17 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         // made by older code. Acceptance rules:
         // - a mixed store (two databases' dumps) or an empty one: refuse;
         // - this database's own dump: import;
-        // - a single foreign dump: import ONLY inside an internal flow
-        //   (clone/migrate import a source-named dump into the target
-        //   database, marked by the internal-backup flag); outside one it
-        //   is a stale leftover of another site - the exact shape that
-        //   imported the wrong database in the past - so refuse.
+        // - a single foreign dump: import ONLY inside the internal flow
+        //   that dumped it (clone/migrate import a source-named dump into
+        //   the target database, marked by the internal-backup flag, and
+        //   the dump carries the flow's mark); any other is a leftover or
+        //   another task's dump - the exact shape that imported the wrong
+        //   database in the past - so refuse.
         $own_dump = glob($oct_db_dirx . '/' . $db_name . '-schema-create.sql*');
         $all_dumps = glob($oct_db_dirx . '/*-schema-create.sql*');
         $own_count = is_array($own_dump) ? count($own_dump) : 0;
         $all_count = is_array($all_dumps) ? count($all_dumps) : 0;
-        $internal_flow = is_file($backup_path . '/.internal_backup_flag.pid');
+        $internal_flow = provision_internal_flow_active();
         $import_allowed = FALSE;
         if ($all_count && $own_count == $all_count) {
           $import_allowed = TRUE;
@@ -1476,9 +1482,12 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $metadata_file = $oct_db_dirx . '/metadata';
           $dump_fresh = is_file($metadata_file)
             && (@filemtime($metadata_file) >= @filemtime($backup_path . '/.internal_backup_flag.pid'));
-          if (count($distinct) == 1 && $dump_fresh) {
+          if (count($distinct) == 1 && $dump_fresh && provision_expim_store_is_mine()) {
             $import_allowed = TRUE;
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
+          }
+          elseif (count($distinct) == 1 && $dump_fresh) {
+            drush_log(dt('The foreign dump @found in the shared store was not made by this task.', array('@found' => implode(', ', $foreign_names))), 'warning');
           }
         }
         if ($import_allowed) {
@@ -2303,6 +2312,12 @@ port=%s
 
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
+      // The store is the account's, one flow's at a time: from here to the
+      // import or the rotation of this dump (provision_expim_lock()).
+      if (!provision_expim_lock('dump', dt('the dump of @db', array('@db' => $db_name)))) {
+        return;
+      }
+
       $oct_db_test = $oct_db_dirx . '/metadata';
       $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
       $count = 0;
@@ -2392,6 +2407,9 @@ port=%s
         }
         if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => $dumped ? 'the dump carries no metadata marker' : $this->broker_failure())));
+        }
+        elseif ($dumped && is_file($oct_db_dirx . '/metadata')) {
+          provision_expim_mark_store();
         }
       }
       elseif (is_dir($oct_db_dirx) &&
@@ -2489,6 +2507,9 @@ port=%s
         }
         elseif ($success && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
+        }
+        if ($success && is_file($oct_db_dirx . '/metadata')) {
+          provision_expim_mark_store();
         }
       }
     }

@@ -374,26 +374,28 @@ function drush_provision_grav_post_provision_backup() {
   // into the dated per-site dump dir, the dated DB retention every other CMS
   // gets; a stale tmp_expim left behind would feed a LATER clone or migrate
   // fast-import with the wrong database. Never for an internal backup, whose
-  // deploy reads it.
+  // deploy reads it, and only this backup's own dump
+  // (provision_expim_store_is_mine()).
   if (_provision_grav_has_db()) {
     $backup_path = d('@server_master')->backup_path;
-    $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
     $backup_mode = provision_backup_mode_resolve();
-    if (!is_file($internal_backup_flag) && empty($backup_mode)) {
+    if (!provision_internal_flow_active() && empty($backup_mode)) {
       $oct_db_dirx = $backup_path . '/tmp_expim';
       $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_backup_' . date("Ymd.His", time());
       $enable_myquick = d('@server_master')->aegir_root . '/static/control/MyQuick.info';
-      if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata')) {
+      if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata') && provision_expim_store_is_mine()) {
         provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
           ->succeed('Moving the Post-DB-Backup @path1 to @path2 was successful.')
           ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
         if (is_dir($uri_db_dirz)) {
           _provision_recursive_delete($oct_db_dirx);
+          provision_expim_unmark_store();
           drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_grav_post_provision_backup @var", array('@var' => $oct_db_dirx)), 'info');
         }
       }
     }
   }
+  provision_expim_unlock('dump');
 
   if (d()->client_name) {
     $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
@@ -421,17 +423,19 @@ function drush_provision_grav_provision_backup_rollback() {
     $backup_path = d('@server_master')->backup_path;
     $oct_db_dirx = $backup_path . '/tmp_expim';
     $enable_myquick = d('@server_master')->aegir_root . '/static/control/MyQuick.info';
-    if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata')) {
+    if (is_file($enable_myquick) && is_file($oct_db_dirx . '/metadata') && provision_expim_store_is_mine()) {
       $uri_db_dirz = $backup_path . '/' . d()->uri . '_sql_dump_rollback_' . date("Ymd.His", time());
       provision_file()->switch_paths($oct_db_dirx, $uri_db_dirz)
         ->succeed('Moving the rollback DB dump @path1 to @path2 was successful.')
         ->fail('Moving the rollback DB dump @path1 to @path2 has failed.');
       if (is_dir($uri_db_dirz)) {
         _provision_recursive_delete($oct_db_dirx);
+        provision_expim_unmark_store();
         drush_log(dt("MyQuick tmp_expim dir rotated in drush_provision_grav_provision_backup_rollback @var", array('@var' => $uri_db_dirz)), 'info');
       }
     }
   }
+  provision_expim_unlock('dump');
   if (is_readable($backup_file) && is_file($backup_file)) {
     provision_file()->unlink($backup_file)
       ->succeed('Removed stale backup file @path')
