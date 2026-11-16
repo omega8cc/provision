@@ -1983,22 +1983,32 @@ function provision_drush_local_lock_state() {
  * advisory naming the constraint, like the skips above; any other failure
  * is the warning every major gets.
  *
- * Drupal 10 asks for Drush with three Robo releases ruled out.
- * consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call Symfony Console's
- * Application::addCommand(), which exists only from Symfony Console 7.4,
- * while their own constraints still allow Symfony 6. Drupal 10 keeps
- * Symfony 6.4, so the bare require resolved one of them and the Drush it
- * installed died at start on "Call to undefined method
- * Drush\Application::addCommand()": no database update could run on that
- * platform, and a codebase that has a Drush never gets this require again.
- * Measured 2026-11-13 on a fresh Drupal 10.6.21 codebase: Drush 13.8.1 with
- * Robo 5.2.3 and Symfony Console 6.4.50 fatal, with Robo 5.1.1 running. The
- * constraint names those releases alone (consolidation/robo issue 1199 is
- * fixed on its 5.x branch after 5.2.3), so it lets every later release in
- * and never holds the codebase back; written without a shell operator, it
- * reads the same whichever shell runs the line. Other majors keep the bare
- * require exactly as it was: Drupal 11 runs on Symfony 7.4, and the legacy
- * majors take a Drush that never asks for Robo 5.
+ * A codebase on a Symfony Console older than 7.4 asks for Drush with three
+ * Robo releases ruled out. consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call
+ * Symfony Console's Application::addCommand(), which exists only from
+ * Symfony Console 7.4, while their own constraints allow Symfony 6 and
+ * every Symfony 7. On an older Console the bare require resolved one of
+ * them and the Drush it installed died at start on "Call to undefined
+ * method Drush\Application::addCommand()": no database update could run on
+ * that platform, and a codebase that has a Drush never gets this require
+ * again. Measured 2026-11-13 on a fresh Drupal 10.6.21 codebase: Drush
+ * 13.8.1 with Robo 5.2.3 and Symfony Console 6.4.50 fatal, with Robo 5.1.1
+ * running; 2026-11-16 the same on Drupal 11.1.10 and its Symfony Console
+ * 7.2.9. The constraint names those releases alone (consolidation/robo
+ * issue 1199 is fixed on its 5.x branch after 5.2.3), so it lets every
+ * later release in and never holds the codebase back; written without a
+ * shell operator, it reads the same whichever shell runs the line.
+ *
+ * The rule follows the Console the codebase installed, never its major:
+ * Drupal 10 keeps Symfony 6, Drupal 11.0 has Console 7.1, 11.1 has 7.2 and
+ * 11.2 has 7.3 until 11.2.11; only 11.2.12 and later run on 7.4. The
+ * version is read from what composer recorded
+ * (vendor/composer/installed.json), which a locked platform still shows. A
+ * Console from 7.4 on keeps the bare require, so its composer.json gains no
+ * root requirement it does not need; so does a Console older than 6, which
+ * those releases do not accept (the legacy majors take a Drush that never
+ * asks for Robo 5). Where no Console version can be read the major decides:
+ * Drupal 10 gets the constraint, every other major the bare require.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
@@ -2024,11 +2034,34 @@ function _provision_require_site_local_drush($approot) {
     return FALSE;
   }
   $major = drush_drupal_major_version();
+  // The Symfony Console the codebase installed, as composer recorded it.
+  $console = '';
+  $installed_path = rtrim($approot, '/') . '/vendor/composer/installed.json';
+  if (is_readable($installed_path)) {
+    $installed = json_decode(file_get_contents($installed_path), TRUE);
+    $packages = (is_array($installed) && isset($installed['packages'])) ? $installed['packages'] : $installed;
+    if (is_array($packages)) {
+      foreach ($packages as $entry) {
+        if (is_array($entry) && isset($entry['name']) && isset($entry['version']) && $entry['name'] === 'symfony/console') {
+          $console = ltrim((string) $entry['version'], 'vV');
+          break;
+        }
+      }
+    }
+  }
+  if (preg_match('/^[0-9]+\.[0-9]+/', $console)) {
+    $hold_robo = version_compare($console, '6', '>=') && version_compare($console, '7.4', '<');
+  }
+  else {
+    // No version to read: the major decides, as it did before.
+    $hold_robo = ($major == 10);
+  }
+  $package = '';
   if ($major == 12) {
     $package = 'drush/drush:^14@stable';
     $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
   }
-  elseif ($major == 10) {
+  elseif ($hold_robo) {
     $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
     $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush %s --no-interaction --no-progress', $package);
   }
@@ -2036,7 +2069,7 @@ function _provision_require_site_local_drush($approot) {
     $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
-  if ($result && ($major == 12 || $major == 10)) {
+  if ($result && $package !== '') {
     drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
   }
   elseif ($result) {
