@@ -4386,6 +4386,7 @@ function &_provision_expim_state() {
     'since' => '',
     'inside' => FALSE,
     'internal' => FALSE,
+    'flagged' => FALSE,
   );
   return $state;
 }
@@ -4573,6 +4574,7 @@ function provision_expim_unlock($owner) {
   $state['owner'] = '';
   $state['since'] = '';
   $state['internal'] = FALSE;
+  $state['flagged'] = FALSE;
   return TRUE;
 }
 
@@ -4602,11 +4604,12 @@ function provision_internal_flow_active() {
 
 /**
  * Raises the internal flow flag for this process's flow, under the store
- * lock: a flow waits here for another flow on the account to end.
+ * lock: a flow waits here for another flow on the account to end, when its
+ * command's validate did not take the store already.
  *
- * The flow that takes the lock writes the flag anew. No other flow can be
- * live then, so a flag already there is a dead flow's, and the import's
- * freshness test must count from this flow's start.
+ * The flow that holds the lock writes the flag anew the first time it sets
+ * it. No other flow can be live then, so a flag already there is a dead
+ * flow's, and the import's freshness test must count from this flow's start.
  *
  * @return bool
  *   FALSE when the store could not be had (the error is set).
@@ -4619,9 +4622,13 @@ function provision_internal_flag_set($description) {
   }
   $state = &_provision_expim_state();
   $paths = provision_expim_paths();
+  $fresh = $state['fp'] && !$state['flagged'];
   $state['internal'] = TRUE;
+  if ($state['fp']) {
+    $state['flagged'] = TRUE;
+  }
   _provision_expim_write_record();
-  if ($got === 'acquired' || !is_file($paths['flag'])) {
+  if ($fresh || !is_file($paths['flag'])) {
     provision_file()->file_put_contents($paths['flag'], "Internal-DB-Backup \n")
       ->succeed('Generated blank ' . $description)
       ->fail('Could not generate ' . $description);

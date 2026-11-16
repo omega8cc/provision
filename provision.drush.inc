@@ -270,6 +270,39 @@ function provision_backup_is_own_task() {
 }
 
 /**
+ * Implements drush_hook_COMMAND_validate() for provision-migrate.
+ *
+ * A Migrate's safety copy and deploy use the account's shared dump store and
+ * its flow flag (provision_internal_flag_set()), so the store is taken here,
+ * before any pre hook: the web server's pre hook takes the site's vhost away,
+ * and a task that waited for another one after that would leave its site
+ * without it for the whole wait.
+ */
+function drush_provision_migrate_validate() {
+  return _provision_expim_flow_validate();
+}
+
+/**
+ * Implements drush_hook_COMMAND_validate() for provision-restore.
+ *
+ * The same as a Migrate's (drush_provision_migrate_validate()).
+ */
+function drush_provision_restore_validate() {
+  return _provision_expim_flow_validate();
+}
+
+/**
+ * Takes the shared dump store for the flow this task runs.
+ */
+function _provision_expim_flow_validate() {
+  $command = drush_get_command();
+  if (!provision_expim_lock('flow', empty($command['command']) ? '' : dt('this @command', array('@command' => $command['command'])))) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
  * Implementation of hook_drush_command().
  */
 function provision_drush_command() {
