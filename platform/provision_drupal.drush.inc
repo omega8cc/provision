@@ -2310,6 +2310,53 @@ function _provision_drupal_note_maintenance_left($tag = 'DEPLOY') {
 }
 
 /**
+ * How a site-local updatedb run ended, read from its exit and its output.
+ *
+ * Drush checks Drupal's requirements before it updates, prints each one that
+ * failed as an [error] row and asks whether to continue; --yes answers that
+ * and the updates then run. Those rows judge the site (an extension that
+ * does not allow this core, a module core no longer ships), not the update
+ * run: a run that went on to a [success] row, with no error row after the
+ * question, applied every pending update. Any other run with a [preflight]
+ * or [error] row, or a non-zero exit, did not complete.
+ *
+ * @param bool $result
+ *   TRUE on exit 0.
+ * @param array $output
+ *   The run's output lines.
+ *
+ * @return string
+ *   'complete'; 'requirements' when it completed after requirements errors;
+ *   'failed'.
+ */
+function _provision_site_local_updatedb_verdict($result, array $output) {
+  if (!$result) {
+    return 'failed';
+  }
+  if (!preg_match('/\[(preflight|error)\]/i', implode("\n", $output))) {
+    return 'complete';
+  }
+  $asked = FALSE;
+  foreach ($output as $index => $line) {
+    if (strpos((string) $line, 'Requirements check reports errors') !== FALSE) {
+      $asked = $index;
+      break;
+    }
+  }
+  if ($asked === FALSE) {
+    return 'failed';
+  }
+  $head = implode("\n", array_slice($output, 0, $asked));
+  $tail = implode("\n", array_slice($output, $asked + 1));
+  if (preg_match('/\[preflight\]/i', $head)
+    || preg_match('/\[(preflight|error)\]/i', $tail)
+    || !preg_match('/\[success\]/i', $tail)) {
+    return 'failed';
+  }
+  return 'requirements';
+}
+
+/**
  * Apply a Drupal 10+ site's pending database updates with its site-local Drush.
  *
  * The one updatedb window for Drupal 10+, shared by the deploy and the
@@ -2356,7 +2403,8 @@ function _provision_drupal_note_maintenance_left($tag = 'DEPLOY') {
  *
  * @return bool|null
  *   TRUE when updatedb ran to completion; FALSE when it ran but did not
- *   complete (the warning naming why is logged here, and the caches are still
+ *   complete, or completed after Drupal's requirements check reported errors
+ *   (the warning naming which is logged here, and the caches are still
  *   rebuilt); NULL when it did not run at all: no site-local updatedb applies
  *   (hostmaster, Drupal below 10), no executable site-local Drush even
  *   after the unlock (the 4b/LOCAL/DRUSH/SKIP warning is logged here), or an
@@ -2474,9 +2522,12 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // drush_shell_cd_and_exec() returns TRUE on exit 0, and an exit 0 whose
   // output carries a [preflight] or [error] row did not complete either: one
   // verdict, taken before the lines are logged, so the last line is never
-  // logged as a success right above the FAIL warning.
+  // logged as a success right above the FAIL warning. Drush's requirements
+  // check is told apart there: its rows fail the window as before, with a
+  // warning that says the updates themselves ran.
   $output = drush_shell_exec_output();
-  $complete = $result && !preg_match('/\[(preflight|error)\]/i', implode("\n", $output));
+  $verdict = _provision_site_local_updatedb_verdict($result, $output);
+  $complete = ($verdict === 'complete');
   foreach ($output as $index => $line) {
     if (!$complete) { // Log the entire error as a notice.
       $line_status = 'notice';
@@ -2488,8 +2539,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   }
   // A schema update that did not run is never a notice: the task would
   // otherwise end SUCCESSFUL over a site whose database is behind its code.
+  // Requirements errors are no notice either, but they leave no update
+  // behind, and the warning must not send anyone to apply one by hand.
   if (!$complete) {
-    drush_log(dt('@p updatedb did not run to completion (see the lines above); apply the pending database updates by hand', array('@p' => $tag . '9/LOCAL/DRUSH/FAIL')), 'warning');
+    $why = '@p updatedb did not run to completion (see the lines above); apply the pending database updates by hand';
+    if ($verdict === 'requirements') {
+      $why = "@p updatedb ran to completion after Drupal's requirements check reported errors (the [error] lines above): no database update is left to apply by hand, but resolve what those lines name, since update.php will not run until then";
+    }
+    drush_log(dt($why, array('@p' => $tag . '9/LOCAL/DRUSH/FAIL')), 'warning');
   }
   // Break the Update-module fetch-task deadlock introduced by the DB import
   // (clone/migrate/restore), while the site-local Drush still runs: the
