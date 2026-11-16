@@ -193,6 +193,13 @@ $boa_zones_body = @is_file($boa_zones_file)
   ? (string) @file_get_contents($boa_zones_file)
   : '';
 $boa_amp_chain = (strpos($boa_zones_body, 'map $args $is_amp_chain') !== FALSE);
+// The country part of the Speed Booster cache key.  Its map is declared in
+// the same file and gives an empty value for every vhost the operator has
+// not opted in, so the keys below name it only when that file declares it
+// and stay what they were everywhere else.
+$boa_geo_key_part = (strpos($boa_zones_body, 'map $boa_geo_vary $boa_geo_key {') !== FALSE)
+  ? '$boa_geo_key'
+  : '';
 if ($boa_amp_chain):
 ?>
 ###
@@ -1782,7 +1789,9 @@ location ~ ^/(?<esi>esi/.*)"$ {
   fastcgi_cache_min_uses 1;
   ### The Origin of a CORS request is part of the key: a site allowing two or
   ### more origins answers each with its own, and an ordinary visit sends none.
-  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin";
+  ### The visitor's country is part of it only on a vhost opted in to
+  ### per-country copies; the value is empty on every other vhost.
+  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin<?php print $boa_geo_key_part; ?>";
   fastcgi_cache_valid 200 10s;
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
@@ -2117,6 +2126,9 @@ location = /index.php {
   add_header X-Speed-Cache "$upstream_cache_status";
   add_header X-Speed-Cache-UID "$debug_session_flag";
   add_header X-Speed-Cache-Key "$key_uri";
+<?php if ($boa_geo_key_part): ?>
+  add_header X-Speed-Cache-Geo "$boa_geo_key";
+<?php endif; ?>
   add_header X-NoCache "$nocache_details";
   add_header X-This-Proto "$http_x_forwarded_proto";
   add_header X-Server-Name "$main_site_name";
@@ -2156,7 +2168,9 @@ location = /index.php {
   fastcgi_cache_min_uses 1;
   ### The Origin of a CORS request is part of the key: a site allowing two or
   ### more origins answers each with its own, and an ordinary visit sends none.
-  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin";
+  ### The visitor's country is part of it only on a vhost opted in to
+  ### per-country copies; the value is empty on every other vhost.
+  fastcgi_cache_key "$scheme$is_bot$device$host$request_method$key_uri$cache_uid$http_x_forwarded_proto$sent_http_x_local_proto$cookie_respimg$http_origin<?php print $boa_geo_key_part; ?>";
   fastcgi_cache_valid 200 10s;
   fastcgi_cache_valid 301 302 403 404 1s;
   fastcgi_cache_valid any 1s;
