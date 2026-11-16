@@ -4612,7 +4612,8 @@ function provision_internal_flow_active() {
  *   FALSE when the store could not be had (the error is set).
  */
 function provision_internal_flag_set($description) {
-  $got = provision_expim_lock('flow', $description);
+  $command = drush_get_command();
+  $got = provision_expim_lock('flow', empty($command['command']) ? '' : dt('this @command', array('@command' => $command['command'])));
   if (!$got) {
     return FALSE;
   }
