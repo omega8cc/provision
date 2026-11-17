@@ -5356,6 +5356,66 @@ function _provision_folder_at_new_name_state($path, $own_path) {
 }
 
 /**
+ * Note that a Migrate's target site directory is free when its command hook
+ * begins, before any verify it runs.
+ *
+ * A Migrate that keeps the site's name verifies the site through the front
+ * end before its deploy, on the panel's record of the site. When that record
+ * names the target platform (a move run by hand leaves it behind), the verify
+ * builds the site directory there and fails. Noted here so that the rollback
+ * can tell that directory from one that was there before the task
+ * (provision_migrate_remove_verify_dir()).
+ *
+ * @param string|null $platform
+ *   The migrate's platform argument.
+ * @param string|null $new_name
+ *   The migrate's new name argument.
+ */
+function provision_migrate_target_dir_probe($platform, $new_name = NULL) {
+  $target = empty($platform) ? d()->platform : d($platform);
+  if (!is_object($target) || empty($target->root)) {
+    return;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '') {
+    $uri = ltrim((string) d()->uri, '@');
+  }
+  $path = provision_auto_fix_platform_root($target->root) . '/sites/' . $uri;
+  if (_provision_folder_at_new_name_state($path, d()->site_path) === 'FREE') {
+    drush_set_option('migrate_target_dir_free', $path);
+  }
+}
+
+/**
+ * Remove the site directory a failed Migrate's own verify built on its target.
+ *
+ * Only for a task that failed before its deploy (a deploy that ran recorded
+ * its copy, which provision_remove_unfinished_target_copy() removes), and only
+ * a directory, never a link, that was free when the command hook began
+ * (provision_migrate_target_dir_probe()) and is not the site's own. The
+ * verify wrote it from the site's context: its settings.php names the site's
+ * own database, which stays, so the directory goes alone. The records the
+ * verify wrote into the target's sites.php stay, as a removed copy's do (see
+ * provision_remove_unfinished_target_copy()).
+ */
+function provision_migrate_remove_verify_dir() {
+  $path = drush_get_option('migrate_target_dir_free', '');
+  if (!is_string($path) || $path === '' || is_array(drush_get_option('migrate_target_copy', NULL))) {
+    return;
+  }
+  if (_provision_folder_at_new_name_state($path, d()->site_path) !== 'TAKEN' || is_link($path) || !is_dir($path)) {
+    return;
+  }
+  _provision_recursive_delete($path);
+  clearstatcache();
+  if (is_dir($path)) {
+    drush_log(dt('Could not remove @path, which the verify of this task built on the target platform.', array('@path' => $path)), 'warning');
+    return;
+  }
+  drush_log(dt('Removed @path, which the verify of this task built on the target platform.', array('@path' => $path)), 'notice');
+}
+
+/**
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the

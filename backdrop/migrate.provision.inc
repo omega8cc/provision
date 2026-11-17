@@ -224,6 +224,10 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   $options = d()->options;
   $options['uri'] = d()->uri;
 
+  // Before the verifies below: one of them can build the target's site
+  // directory (see the rollback).
+  provision_migrate_target_dir_probe($platform, $new_name);
+
   $aegir_root = d('@server_master')->aegir_root;
   $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
 
@@ -399,6 +403,13 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
+  // A verify above that failed fails the task, so it stops here, before the
+  // deploy: the site's own verify is the canary that it still verifies, and
+  // a copy built after it failed would only be taken away by the rollback.
+  if (drush_get_error()) {
+    return FALSE;
+  }
+
   // The safety copy took its time; the unpacked copy must still fit.
   if (!provision_copy_task_space_recheck('Migrate of ' . d()->uri)) {
     return FALSE;
@@ -487,9 +498,11 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
   // The copy the deploy built on the target. Under the same name the site
   // record went back to the old platform just above, so nothing points at the
   // copy whether or not its deploy completed. Under a new name a completed
-  // deploy keeps the copy with its context.
+  // deploy keeps the copy with its context. A task that failed before its
+  // deploy may have had its verify build the target's directory.
   if ($outcome === 'remove_copy') {
     provision_remove_unfinished_target_copy('migrate_target_copy');
+    provision_migrate_remove_verify_dir();
   }
   elseif ($outcome === 'keep_copy') {
     $record = drush_get_option('migrate_target_copy', NULL);
