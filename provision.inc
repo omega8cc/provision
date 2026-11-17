@@ -5389,9 +5389,11 @@ function provision_migrate_target_dir_probe($platform, $new_name = NULL) {
 /**
  * Remove the site directory a failed Migrate's own verify built on its target.
  *
- * Only for a task that failed before its deploy (a deploy that ran recorded
- * its copy, which provision_remove_unfinished_target_copy() removes), and only
- * a directory, never a link, that was free when the command hook began
+ * Only for a task that failed before its deploy. The verify that builds the
+ * directory fails (Drush finds no settings.php for the site there), and the
+ * Migrate then stops before its deploy; a deploy that did run probed the
+ * directory as there before the task, and provision_remove_unfinished_target_copy()
+ * keeps it. Only a directory, never a link, that was free when the command hook began
  * (provision_migrate_target_dir_probe()) and is not the site's own. The
  * verify wrote it from the site's context: its settings.php names the site's
  * own database, which stays, so the directory goes alone. The records the
