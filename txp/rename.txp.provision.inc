@@ -51,12 +51,6 @@ function drush_provision_txp_rename_validate($new_name = NULL) {
     return drush_set_error('PROVISION_TXP_RENAME_FAILED',
       dt('No Textpattern site found at !site.', array('!site' => d()->site_path)));
   }
-  // Clear a stale frontend backup-mode ctrl file before the safety copy runs:
-  // inheriting a dead task's mode would produce an archive that cannot restore
-  // the site this task is about to move.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   if (!is_string($new_name) || $new_name === '') {
     return drush_set_error('PROVISION_TXP_RENAME_BAD_NAME', dt('No new uri given.'));

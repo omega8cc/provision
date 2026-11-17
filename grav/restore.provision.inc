@@ -32,12 +32,6 @@ function drush_provision_grav_provision_restore_validate($restore_file = null) {
   if (_provision_grav_has_db()) {
     _provision_grav_ensure_db_creds_loaded();
   }
-  // Backup mode ctrl file cleanup: on the serial queue any file present at
-  // task start is a dead leftover by definition (same rationale as the
-  // Drupal flow); the safety copy below force-defines its own mode.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   $exists = provision_file()->exists($restore_file)
     ->succeed('Restoring site from @path')

@@ -21,14 +21,6 @@ function drush_provision_backdrop_provision_restore_validate($restore_file = nul
   // must carry the site's database settings, which Backdrop's settings.php
   // reads from the vhost, so they are loaded here, before any pre hook.
   _provision_backdrop_ensure_db_creds_loaded();
-  // Backup mode ctrl file cleanup. The safety copy force-defines its own mode
-  // and never reads the ctrl file, so without this a dead backup task's
-  // leftover would survive the whole restore - adopted by the provision-deploy
-  // child and left behind to mis-mode the next modeless backup. On the serial
-  // queue any file present at task start is a dead leftover by definition.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 
   $exists = provision_file()->exists($restore_file)

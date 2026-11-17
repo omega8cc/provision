@@ -26,11 +26,6 @@ function drush_provision_txp_provision_restore_validate($restore_file = NULL) {
     ->fail('Could not find backup file @path', 'PROVISION_BACKUP_NOT_FOUND')
     ->status();
   drush_set_option('restore_file', $restore_file);
-  // Clear a stale frontend backup-mode ctrl file: the safety copy below forces
-  // its own mode, but a leftover would otherwise survive into the next flow.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a restore that cannot fit before its safety copy starts (the
   // shared pre-flight).
   if (!provision_copy_task_space_preflight('restore', NULL, NULL, $restore_file)) {

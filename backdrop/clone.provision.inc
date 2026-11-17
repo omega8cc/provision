@@ -16,10 +16,6 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
-  // Backup mode ctrl file cleanup
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a clone that cannot fit before its safety copy starts (the copy
   // follows the links into the store, the deploy unpacks it all again).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {

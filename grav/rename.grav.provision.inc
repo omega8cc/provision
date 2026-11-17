@@ -90,10 +90,6 @@ function drush_provision_grav_rename_validate($new_name = NULL) {
     return FALSE;
   }
 
-  // Clear a stale frontend backup-mode ctrl file before the safety copy runs.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // The vhost data is built once per process from the 'site' context: the
   // rollback re-renders the old vhost from it, so it must carry the store's
   // database settings from the start.

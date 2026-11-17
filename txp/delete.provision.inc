@@ -56,12 +56,6 @@ function drush_provision_txp_pre_provision_delete($backup_file = NULL) {
       return;
     }
     _provision_txp_ensure_db_creds_loaded();
-    // Clear a stale mode ctrl file, ONLY on the path that takes a backup (a
-    // platform/server delete takes none, and unlinking there would destroy a
-    // concurrent backup task's live mode for nothing).
-    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-      unlink(AEGIR_BACKUP_MODE_CTRL);
-    }
     // The classic dump creates the file with fopen($path, 'x'), which FAILS
     // on an existing file, so a dump left behind by a killed earlier backup
     // would wedge the final safety copy -- on the one flow where there is no

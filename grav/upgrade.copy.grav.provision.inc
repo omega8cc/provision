@@ -123,12 +123,6 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
       array('@uri' => $new_uri)));
   }
 
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: a dead task's database-only mode would make the grav backup
-  // refuse, or a different mode change the archive's transport.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The artefact verdict, measured against the SOURCE capsule -- the copy is
   // materialised from the source's archive, so the source's version is the

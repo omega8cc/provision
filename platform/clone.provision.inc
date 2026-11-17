@@ -19,10 +19,6 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  // Backup mode ctrl file cleanup
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();

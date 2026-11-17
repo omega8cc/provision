@@ -58,13 +58,6 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_SOURCE',
       dt('The source site is not on a Textpattern platform.'));
   }
-  // Clear a stale frontend backup-mode ctrl file before the safety backup
-  // runs: inheriting a dead task's mode would build the source archive in
-  // e.g. "database only" mode and deploy a files-less copy that still reports
-  // success.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The enforced floor, and the one extension the chain asserts for itself:
   // assert_system_requirements() (called from _update.php) txp_die()s without

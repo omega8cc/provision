@@ -48,10 +48,6 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
     return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_SOURCE',
       dt('provision-backdrop-d6-upgrade must run against a site context.'));
   }
-  // Backup mode ctrl file cleanup, as the other lifecycle validates do.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The source must be Drupal 6 lineage, never Backdrop, never Drupal 7+.
   if (provision_platform_is_backdrop(d())) {

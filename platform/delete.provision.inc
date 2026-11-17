@@ -11,12 +11,6 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
     return;
   }
   if (d()->type === 'site') {
-    // Backup mode ctrl file cleanup, only where the safety backup follows:
-    // a platform or server delete takes no backup, and unlinking there would
-    // destroy a concurrent backup task's live mode for nothing.
-    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-      unlink(AEGIR_BACKUP_MODE_CTRL);
-    }
     // A site whose install was refused before anything was built has no
     // settings.php and no database: its safety copy would write a
     // settings.php of empty credentials (a warning) and archive nothing, a

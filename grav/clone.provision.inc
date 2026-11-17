@@ -82,12 +82,6 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_CLONE_TARGET_EXISTS')) {
     return FALSE;
   }
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: a dead task's database-only mode would make the grav
-  // backup refuse, or a different mode change the archive's transport.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a clone that cannot fit before its safety copy starts (the shared
   // pre-flight; a capsule's copies count the same way as a Drupal site's).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {

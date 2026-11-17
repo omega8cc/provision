@@ -81,9 +81,6 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   }
 
   // Backdrop -> Backdrop: mirror the D-layer validate.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a migrate that cannot fit before its safety copy starts (the D
   // layer's pre-flight; the new name is the command's second positional).
   $args = drush_get_arguments();

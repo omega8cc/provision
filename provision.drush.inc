@@ -968,7 +968,18 @@ function provision_backup_mode_resolve() {
   }
   $backup_mode = provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE));
   if (empty($backup_mode)) {
-    if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+    // The control file carries a Backup task's mode from the queue to that
+    // task's provision-backup, the only process the queue writes it for. Any
+    // other process finds it there only beside such a task, or left behind by
+    // one, and took that task's mode: a copying task's deploy then looked for
+    // a dump its modeless safety copy never wrote, and failed. So the safety
+    // copies made inside a task and every deploy never read it.
+    if (!provision_task_is_top_level('provision-backup')) {
+      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+        drush_log(dt('BACKUP/MODE/SKIP the backup mode control file belongs to a Backup task of its own; this process does not read it.'), 'info');
+      }
+    }
+    elseif (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
       $backup_mode = provision_backup_mode_sanitize(@file_get_contents(AEGIR_BACKUP_MODE_CTRL));
       if ($backup_mode) {
         define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);

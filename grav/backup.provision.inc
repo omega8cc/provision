@@ -43,10 +43,12 @@ function drush_provision_grav_provision_backup_validate($backup_file = NULL) {
   // dump: the archive is files-only whatever mode was asked for (a dump
   // with empty credentials would fail the whole backup). The ctrl file
   // this backup was asked through is consumed here, as the resolver's own
-  // read would have.
+  // read would have: only by the Backup task's own process, never by a
+  // safety copy made inside another task (provision_backup_mode_resolve()).
   if (_provision_grav_db_unrecorded() && !defined('SELECTED_BACKUP_MODE')) {
     define('SELECTED_BACKUP_MODE', 'site_files_without_db_backup');
-    if (defined('AEGIR_BACKUP_MODE_CTRL') && file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+    if (defined('AEGIR_BACKUP_MODE_CTRL') && file_exists(AEGIR_BACKUP_MODE_CTRL)
+      && provision_task_is_top_level('provision-backup')) {
       // Asked through the control file, as the queue's Backup task is: say
       // so, as the resolver's read would have (provision_backup_is_own_task())
       if (!provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE))

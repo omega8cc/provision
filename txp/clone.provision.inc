@@ -112,13 +112,6 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
       array('!uri' => $new_uri)), 'info');
   }
 
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: inheriting a dead task's mode would build the clone source
-  // archive in e.g. "database only" mode and deploy a files-less copy that
-  // still reports success.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a clone that cannot fit before its safety copy starts (the shared
   // pre-flight; a Textpattern site's copies count the same way).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
