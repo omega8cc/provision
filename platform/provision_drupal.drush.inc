@@ -2527,6 +2527,9 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // warning that says the updates themselves ran.
   $output = drush_shell_exec_output();
   $verdict = _provision_site_local_updatedb_verdict($result, $output);
+  // Kept for the strict move's error (drush_provision_drupal_post_provision_deploy()),
+  // which says when only the requirements check failed.
+  drush_set_option('provision_site_local_updatedb_verdict', $verdict);
   $complete = ($verdict === 'complete');
   foreach ($output as $index => $line) {
     if (!$complete) { // Log the entire error as a notice.

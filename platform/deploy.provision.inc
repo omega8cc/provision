@@ -303,9 +303,11 @@ function drush_provision_drupal_post_provision_deploy() {
       // provision_upgrade_strict()) fails here on anything but updates that
       // ran to completion, before anything of the source is retired: this
       // deploy's rollback and the migrate's then remove the copy and leave
-      // the site on its old platform. The three verdicts get a message each;
+      // the site on its old platform. Each failure gets a message of its own;
       // a Drush that is executable and dies at start returns FALSE like an
-      // update that failed, so the window records whether it started. With
+      // update that failed, so the window records whether it started, and
+      // whether only Drupal's requirements check failed before updates that
+      // all ran (_provision_site_local_updatedb_verdict()). With
       // the error set, the tail below takes its skip branch and leaves
       // settings.php to the rollback. Without the option nothing changes.
       $strict = (bool) drush_get_option('upgrade_strict', FALSE);
@@ -317,6 +319,11 @@ function drush_provision_drupal_post_provision_deploy() {
       }
       elseif ($strict && drush_get_option('provision_site_local_drush_started', NULL) === FALSE) {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB the new platform's own Drush cannot start, so Drupal's database updates were not applied (the DEPLOY7 line above is all it printed)."));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'requirements') {
+        // The updates ran; Drupal's requirements check failed before them,
+        // which stops a strict move just the same.
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above DEPLOY9/LOCAL/DRUSH/FAIL): its database updates ran, but the move stops on those errors."));
       }
       elseif ($strict) {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above DEPLOY9/LOCAL/DRUSH/FAIL)."));
