@@ -5442,8 +5442,10 @@ function provision_panel_site_platform($site) {
     . ' INNER JOIN {hosting_context} hcp ON hcp.nid = s.platform'
     . ' WHERE hcs.name = :name AND n.type = :type AND s.status <> -2",'
     . ' array(":name" => ' . var_export($site, TRUE) . ', ":type" => "site"))->fetchField()';
-  // Nothing of the read may reach this task. A backend 'integrate' key, even
-  // FALSE, still has Drush raise a child that exits 255 here, and a reply
+  // No error, log or output of the read's child may reach this task (Drush
+  // still logs the command line, as for every backend call). A backend
+  // 'integrate' key, even FALSE, still has Drush raise a child that exits
+  // 255 here, and a reply
   // with no backend packet is raised unless it is read as plain output; in a
   // task an error raised here also goes up to the panel at once. So the
   // child's errors, log and output are kept out by '#' options, which Drush
