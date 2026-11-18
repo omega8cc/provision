@@ -58,6 +58,13 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_SOURCE',
       dt('The source site is not on a Textpattern platform.'));
   }
+  // The upgrade verifies its source through the panel after the copy, on the
+  // panel's record of the site; refused while that record names another
+  // platform than the site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
 
   // The enforced floor, and the one extension the chain asserts for itself:
   // assert_system_requirements() (called from _update.php) txp_die()s without
@@ -245,12 +252,6 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
   // unpacked into the target platform, as for a migrate
   // (provision_copy_task_space_preflight()).
   if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
-    return FALSE;
-  }
-  // The upgrade verifies its source through the panel after the copy, on the
-  // panel's record of the site; refused while that record names another
-  // platform than the site is on (provision_refuse_stale_panel_record()).
-  if (!provision_refuse_stale_panel_record('upgrade')) {
     return FALSE;
   }
 }

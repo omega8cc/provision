@@ -43,6 +43,14 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
       array('@v' => drush_drupal_major_version())));
   }
 
+  // The upgrade verifies its source through the panel, on the panel's record
+  // of the site; refused while that record names another platform than the
+  // site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
+
   // Backdrop's own floor: the conversion runs under this backend PHP.
   if (version_compare(PHP_VERSION, '7.1.0', '<')) {
     return drush_set_error('PROVISION_BACKDROP_PHP_TOO_OLD',
@@ -121,12 +129,6 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
   // unpacked into the Backdrop platform, as for a migrate
   // (provision_copy_task_space_preflight()).
   if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
-    return FALSE;
-  }
-  // The upgrade verifies its source through the panel, on the panel's record
-  // of the site; refused while that record names another platform than the
-  // site is on (provision_refuse_stale_panel_record()).
-  if (!provision_refuse_stale_panel_record('upgrade')) {
     return FALSE;
   }
 }

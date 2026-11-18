@@ -16,6 +16,13 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // A clone verifies its source through the panel before and after its
+  // deploy, on the panel's record of the site; refused while that record
+  // names another platform than the site is on, before this validate changes
+  // anything (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('clone')) {
+    return FALSE;
+  }
   // Refuse a clone that cannot fit before its safety copy starts (the copy
   // follows the links into the store, the deploy unpacks it all again).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
@@ -35,13 +42,6 @@ function drush_provision_backdrop_provision_clone_validate($new_name = null, $pl
   // Nor a folder at its new name, which the deploy would replace and delete
   // (provision_refuse_folder_at_new_name()).
   if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
-    return FALSE;
-  }
-  // A clone verifies its source through the panel before and after its
-  // deploy, on the panel's record of the site; refused while that record
-  // names another platform than the site is on
-  // (provision_refuse_stale_panel_record()).
-  if (!provision_refuse_stale_panel_record('clone')) {
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);

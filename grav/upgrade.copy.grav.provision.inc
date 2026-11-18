@@ -43,6 +43,13 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
     return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_SOURCE',
       dt('provision-grav-copy-upgrade only applies to sites on Grav platforms.'));
   }
+  // The upgrade verifies its source through the panel after the copy, on the
+  // panel's record of the site; refused while that record names another
+  // platform than the site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
   $refuse_server = d()->platform->web_server;
   if (!empty($platform) && is_object(d($platform)) && isset(d($platform)->web_server)) {
     $refuse_server = d($platform)->web_server;
@@ -142,12 +149,6 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
   // unpacked into the target platform, as for a migrate
   // (provision_copy_task_space_preflight()).
   if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
-    return FALSE;
-  }
-  // The upgrade verifies its source through the panel after the copy, on the
-  // panel's record of the site; refused while that record names another
-  // platform than the site is on (provision_refuse_stale_panel_record()).
-  if (!provision_refuse_stale_panel_record('upgrade')) {
     return FALSE;
   }
 }

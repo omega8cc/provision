@@ -19,6 +19,13 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
+  // A Migrate that keeps the site's name verifies it through the panel
+  // before its deploy, on the panel's record of the site; refused while that
+  // record names another platform than the site is on, before this validate
+  // changes anything (provision_refuse_stale_panel_record()).
+  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
+    return FALSE;
+  }
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
@@ -50,13 +57,6 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   // The site's own directory, kept by a move on its own platform, is not
   // refused (provision_refuse_folder_at_new_name()).
   if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
-    return FALSE;
-  }
-  // A Migrate that keeps the site's name verifies it through the panel
-  // before its deploy, on the panel's record of the site; refused while that
-  // record names another platform than the site is on
-  // (provision_refuse_stale_panel_record()).
-  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);

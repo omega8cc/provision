@@ -85,6 +85,13 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   // layer's pre-flight; the new name is the command's second positional).
   $args = drush_get_arguments();
   $new_name = isset($args[2]) ? $args[2] : NULL;
+  // A Migrate that keeps the site's name verifies it through the panel
+  // before its deploy, on the panel's record of the site; refused while that
+  // record names another platform than the site is on, before this validate
+  // changes anything (provision_refuse_stale_panel_record()).
+  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
+    return FALSE;
+  }
   if (!provision_copy_task_space_preflight('migrate', $platform, $new_name)) {
     return FALSE;
   }
@@ -104,13 +111,6 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   // is not there yet: a folder at its path would be replaced and deleted
   // (provision_refuse_folder_at_new_name()).
   if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
-    return FALSE;
-  }
-  // A Migrate that keeps the site's name verifies it through the panel
-  // before its deploy, on the panel's record of the site; refused while that
-  // record names another platform than the site is on
-  // (provision_refuse_stale_panel_record()).
-  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);

@@ -5442,12 +5442,19 @@ function provision_panel_site_platform($site) {
     . ' INNER JOIN {hosting_context} hcp ON hcp.nid = s.platform'
     . ' WHERE hcs.name = :name AND n.type = :type AND s.status <> -2",'
     . ' array(":name" => ' . var_export($site, TRUE) . ', ":type" => "site"))->fetchField()';
-  $options = array('integrate' => FALSE, 'dispatch-using-alias' => TRUE);
+  // Nothing of the read may reach this task. A backend 'integrate' key, even
+  // FALSE, still has Drush raise a child that exits 255 here, and a reply
+  // with no backend packet is raised unless it is read as plain output; in a
+  // task an error raised here also goes up to the panel at once. So the
+  // child's errors, log and output are kept out by '#' options, which Drush
+  // turns into backend options and keeps off the child's command line.
+  $options = array('#integrate' => FALSE, '#log' => FALSE, '#output' => FALSE);
+  $backend = array('dispatch-using-alias' => TRUE, 'convert-stdout-to-backend' => TRUE);
   $record = drush_sitealias_get_record('@hostmaster');
   if (empty($record['remote-host'])) {
-    $options['drush-script'] = DRUSH_COMMAND;
+    $backend['drush-script'] = DRUSH_COMMAND;
   }
-  $result = drush_invoke_process('@hostmaster', 'php-eval', array($php), array(), $options);
+  $result = drush_invoke_process('@hostmaster', 'php-eval', array($php), $options, $backend);
   if (!is_array($result) || !empty($result['error_status'])
     || !isset($result['object']) || !is_string($result['object'])) {
     return '';
@@ -5475,7 +5482,9 @@ function provision_panel_site_platform($site) {
  * Left alone: the panel's own site, FastTrack (no such verify), a record
  * that names the alias's platform or cannot be read, and an alias whose
  * platform does not hold the site's directory: then the record is the true
- * one, and the verify puts the alias right.
+ * one, and the verify puts the alias right. When both platforms hold the
+ * site's directory, as a move that stopped midway leaves them, the task is
+ * refused too, with no import advised (PROVISION_PANEL_RECORD_SPLIT).
  *
  * @param string $task
  *   The task's name in the message: migrate, clone, upgrade.
@@ -5508,6 +5517,24 @@ function provision_refuse_stale_panel_record($task) {
   if ($panel === $alias) {
     drush_log(dt('PANEL/RECORD the panel and the alias of @site both name @platform.', array('@site' => $site, '@platform' => $panel)), 'info');
     return TRUE;
+  }
+  // A site directory on the record's platform as well is what a move that
+  // stopped midway leaves: its alias already names the target and the
+  // platform it left still holds the site. The record may be the true one
+  // then, and an import would record the copy the alias names.
+  $panel_root = '';
+  $panel_context = d('@' . $panel);
+  if (is_object($panel_context) && !empty($panel_context->root)) {
+    $panel_root = provision_auto_fix_platform_root($panel_context->root);
+  }
+  $uri = ltrim((string) d()->uri, '@');
+  if ($panel_root !== '' && $uri !== '' && is_dir($panel_root . '/sites/' . $uri)) {
+    drush_set_error('PROVISION_PANEL_RECORD_SPLIT', dt('The panel\'s record of @site names platform @panel and the site\'s alias names @alias, and both platforms hold a directory for the site, as a move that stopped midway leaves them. Nothing was changed. Do not import the site to bring the record in line: that would record the copy the alias names, which may be the unfinished one. Ask support.', array(
+      '@site' => $site,
+      '@panel' => $panel,
+      '@alias' => $alias,
+    )));
+    return FALSE;
   }
   drush_set_error('PROVISION_PANEL_RECORD_STALE', dt('The panel\'s record of @site names platform @panel, but the site\'s alias and its directory are on @alias: a move or change made outside the panel left the record behind, and the verify this @task runs through the panel would work on @panel. Nothing was changed. Bring the record up to date with "@command", then run the @task again.', array(
     '@site' => $site,

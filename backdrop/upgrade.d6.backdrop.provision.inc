@@ -60,6 +60,14 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
       array('@v' => drush_drupal_major_version())));
   }
 
+  // The upgrade verifies its source through the panel, on the panel's record
+  // of the site; refused while that record names another platform than the
+  // site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
+
   // The D6 -> D7 update hooks, the pinned kit and content_migrate all run
   // under the instance CLI; PHP 7.4 is the proven (and only supported)
   // interpreter for this legacy chain. The backend wrapper runs under the
@@ -154,12 +162,6 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
   // unpacked into the Drupal 7 platform, as for a migrate
   // (provision_copy_task_space_preflight()).
   if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
-    return FALSE;
-  }
-  // The upgrade verifies its source through the panel, on the panel's record
-  // of the site; refused while that record names another platform than the
-  // site is on (provision_refuse_stale_panel_record()).
-  if (!provision_refuse_stale_panel_record('upgrade')) {
     return FALSE;
   }
 }
