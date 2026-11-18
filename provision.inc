@@ -5445,11 +5445,11 @@ function provision_panel_site_platform($site) {
   // No error, log or output of the read's child may reach this task (Drush
   // still logs the command line, as for every backend call). A backend
   // 'integrate' key, even FALSE, still has Drush raise a child that exits
-  // 255 here, and a reply
-  // with no backend packet is raised unless it is read as plain output; in a
-  // task an error raised here also goes up to the panel at once. So the
-  // child's errors, log and output are kept out by '#' options, which Drush
-  // turns into backend options and keeps off the child's command line.
+  // 255 here, and a reply with no backend packet is raised unless it is read
+  // as plain output; in a task an error raised here also goes up to the panel
+  // at once. So the child's errors, log and output are kept out by '#'
+  // options, which Drush turns into backend options and keeps off the
+  // child's command line.
   $options = array('#integrate' => FALSE, '#log' => FALSE, '#output' => FALSE);
   $backend = array('dispatch-using-alias' => TRUE, 'convert-stdout-to-backend' => TRUE);
   $record = drush_sitealias_get_record('@hostmaster');
