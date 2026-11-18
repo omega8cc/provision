@@ -50,6 +50,13 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // A clone verifies its source through the panel before and after its
+  // deploy, on the panel's record of the site; refused while that record
+  // names another platform than the site is on
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('clone')) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 

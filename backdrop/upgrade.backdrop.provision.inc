@@ -123,6 +123,12 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
   if (!provision_copy_task_space_preflight('upgrade', $platform, $new_name)) {
     return FALSE;
   }
+  // The upgrade verifies its source through the panel, on the panel's record
+  // of the site; refused while that record names another platform than the
+  // site is on (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
 }
 
 /**

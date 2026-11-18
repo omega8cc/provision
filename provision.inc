@@ -5418,6 +5418,108 @@ function provision_migrate_remove_verify_dir() {
 }
 
 /**
+ * The platform the control panel's record of a site names, or '' when the
+ * panel holds no record of it (or only a deleted one) or it cannot be read.
+ *
+ * Read on the panel's tables, never through node_load(), so no cache stands
+ * between this and the record. A read that fails never fails the task: the
+ * caller goes on as it did before.
+ *
+ * @param string $site
+ *   The site's context name, with or without its leading @.
+ *
+ * @return string
+ *   The platform's context name without its @, or ''.
+ */
+function provision_panel_site_platform($site) {
+  $site = ltrim((string) $site, '@');
+  if (!preg_match('/^[a-z0-9][a-z0-9.-]*$/i', $site)) {
+    return '';
+  }
+  $php = 'return (string) db_query("SELECT hcp.name FROM {hosting_context} hcs'
+    . ' INNER JOIN {hosting_site} s ON s.nid = hcs.nid'
+    . ' INNER JOIN {node} n ON n.nid = s.nid AND n.vid = s.vid'
+    . ' INNER JOIN {hosting_context} hcp ON hcp.nid = s.platform'
+    . ' WHERE hcs.name = :name AND n.type = :type AND s.status <> -2",'
+    . ' array(":name" => ' . var_export($site, TRUE) . ', ":type" => "site"))->fetchField()';
+  $options = array('integrate' => FALSE, 'dispatch-using-alias' => TRUE);
+  $record = drush_sitealias_get_record('@hostmaster');
+  if (empty($record['remote-host'])) {
+    $options['drush-script'] = DRUSH_COMMAND;
+  }
+  $result = drush_invoke_process('@hostmaster', 'php-eval', array($php), array(), $options);
+  if (!is_array($result) || !empty($result['error_status'])
+    || !isset($result['object']) || !is_string($result['object'])) {
+    return '';
+  }
+  return ltrim($result['object'], '@');
+}
+
+/**
+ * Refuse a task whose verify through the panel would put the site's context
+ * on a platform the site is not on.
+ *
+ * A Migrate that keeps the site's name, a Clone and the copy upgrades verify
+ * the site through the front end (hosting-task @site verify: the Migrate's is
+ * the canary before its deploy, a copy's runs around its deploy). That verify
+ * saves the site's context from the panel's record and verifies it there.
+ * Neither a Migrate nor a Clone saves the context from the record when it is
+ * queued, so a move made outside the panel, which leaves the record on the
+ * platform the site left, reaches that verify with the record and the
+ * site's alias on two platforms. On a test server one such verify passed on
+ * a platform whose default site boots a database: it gave the site's
+ * database user a new password its own drushrc.php no longer held, and left
+ * nginx serving that platform until a reload. Refused in the task's
+ * validate, before its pre hooks touch the site.
+ *
+ * Left alone: the panel's own site, FastTrack (no such verify), a record
+ * that names the alias's platform or cannot be read, and an alias whose
+ * platform does not hold the site's directory: then the record is the true
+ * one, and the verify puts the alias right.
+ *
+ * @param string $task
+ *   The task's name in the message: migrate, clone, upgrade.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_stale_panel_record($task) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  if (is_file(d('@server_master')->aegir_root . '/static/control/FastTrack.info')) {
+    return TRUE;
+  }
+  if (!is_object(d()->platform) || empty(d()->platform->name)) {
+    return TRUE;
+  }
+  clearstatcache();
+  $site_path = (string) d()->site_path;
+  if ($site_path === '' || !is_dir($site_path)) {
+    return TRUE;
+  }
+  $site = ltrim((string) d()->name, '@');
+  $alias = ltrim((string) d()->platform->name, '@');
+  $panel = provision_panel_site_platform($site);
+  if ($panel === '') {
+    drush_log(dt('PANEL/RECORD no record of @site could be read in the panel; the @task goes on.', array('@site' => $site, '@task' => $task)), 'info');
+    return TRUE;
+  }
+  if ($panel === $alias) {
+    drush_log(dt('PANEL/RECORD the panel and the alias of @site both name @platform.', array('@site' => $site, '@platform' => $panel)), 'info');
+    return TRUE;
+  }
+  drush_set_error('PROVISION_PANEL_RECORD_STALE', dt('The panel\'s record of @site names platform @panel, but the site\'s alias and its directory are on @alias: a move or change made outside the panel left the record behind, and the verify this @task runs through the panel would work on @panel. Nothing was changed. Bring the record up to date with "@command", then run the @task again.', array(
+    '@site' => $site,
+    '@panel' => $panel,
+    '@alias' => $alias,
+    '@task' => $task,
+    '@command' => 'drush @hostmaster hosting-import @' . $site,
+  )));
+  return FALSE;
+}
+
+/**
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the

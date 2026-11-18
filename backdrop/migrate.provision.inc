@@ -106,6 +106,13 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
     return FALSE;
   }
+  // A Migrate that keeps the site's name verifies it through the panel
+  // before its deploy, on the panel's record of the site; refused while that
+  // record names another platform than the site is on
+  // (provision_refuse_stale_panel_record()).
+  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
+    return FALSE;
+  }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
 }
 
