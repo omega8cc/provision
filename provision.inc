@@ -1990,13 +1990,26 @@ function provision_drush_local_lock_state() {
  * fails is a warning carrying composer's own message.
  *
  * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
- * holds even where the codebase allows dev stability): no Drush release
- * supports Drupal 12 yet, only 14.x-dev resolves on its core, and a box
- * never pulls a development Drush into a platform; --prefer-stable keeps the
- * packages it brings in stable too. Until Drush 14 is released composer
+ * holds even where the codebase allows dev stability): only 14.x-dev
+ * resolves on its core among the Drush releases this backend can run, and
+ * a box never pulls a development Drush into a platform; --prefer-stable
+ * keeps the packages it brings in stable too. Drush 14 will never be
+ * released (its maintainers support Drush 15 from Drupal 12 on), so composer
  * refuses that require on stability and changes nothing, which is an
  * advisory naming the constraint, like the skips above; any other failure
  * is the warning every major gets.
+ *
+ * A Drupal 11.5 or newer codebase asks for Drush 13 (drush/drush:^13).
+ * Drush 15 works with core 11.5 and newer, has no drush.php and no
+ * site:install, and runs only under core's dr, while this backend's
+ * install, database updates and start check run drush.php: the bare
+ * require would pick Drush 15 the day it is tagged and leave the platform
+ * unable to install a site or update a database. Drush 13 supports 11.5,
+ * and ^13 is what composer writes into composer.json for the Drush 13 it
+ * resolves there today, so the codebase gains no pin it would not have
+ * had. An older core cannot take Drush 15 and keeps the commands below.
+ * The core version is read from what composer recorded, else from the
+ * codebase's core/lib/Drupal.php.
  *
  * A codebase on a Symfony Console older than 7.4 asks for Drush with three
  * Robo releases ruled out. consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call
@@ -2049,20 +2062,43 @@ function _provision_require_site_local_drush($approot) {
     return FALSE;
   }
   $major = drush_drupal_major_version();
-  // The Symfony Console the codebase installed, as composer recorded it.
+  // The Symfony Console and the Drupal core the codebase installed, as
+  // composer recorded them.
   $console = '';
+  $core = '';
   $installed_path = rtrim($approot, '/') . '/vendor/composer/installed.json';
   if (is_readable($installed_path)) {
     $installed = json_decode(file_get_contents($installed_path), TRUE);
     $packages = (is_array($installed) && isset($installed['packages'])) ? $installed['packages'] : $installed;
     if (is_array($packages)) {
       foreach ($packages as $entry) {
-        if (is_array($entry) && isset($entry['name']) && isset($entry['version']) && $entry['name'] === 'symfony/console') {
+        if (!is_array($entry) || !isset($entry['name']) || !isset($entry['version'])) {
+          continue;
+        }
+        if ($entry['name'] === 'symfony/console' && $console === '') {
           $console = ltrim((string) $entry['version'], 'vV');
-          break;
+        }
+        elseif ($entry['name'] === 'drupal/core' && $core === '') {
+          $core = ltrim((string) $entry['version'], 'vV');
         }
       }
     }
+  }
+  if (!preg_match('/^[0-9]+\.[0-9]+/', $core)) {
+    // Not recorded: the core's own version constant, in the docroot or the root.
+    $core = '';
+    foreach (array('/web', '/docroot', '/html', '') as $docroot) {
+      $drupal_php = rtrim($approot, '/') . $docroot . '/core/lib/Drupal.php';
+      if (is_readable($drupal_php) && preg_match("/const VERSION = '([0-9]+\\.[0-9]+[^']*)'/", (string) file_get_contents($drupal_php), $m)) {
+        $core = $m[1];
+        break;
+      }
+    }
+  }
+  // Drupal 11.5 and newer before Drupal 12, where Drush 15 can install.
+  $cap_drush = FALSE;
+  if (preg_match('/^([0-9]+)\.([0-9]+)/', $core, $m)) {
+    $cap_drush = ((int) $m[1] == 11 && (int) $m[2] >= 5);
   }
   if (preg_match('/^[0-9]+\.[0-9]+/', $console)) {
     $hold_robo = version_compare($console, '6', '>=') && version_compare($console, '7.4', '<');
@@ -2075,6 +2111,10 @@ function _provision_require_site_local_drush($approot) {
   if ($major == 12) {
     $package = 'drush/drush:^14@stable';
     $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+  }
+  elseif ($cap_drush) {
+    $package = 'drush/drush:^13';
+    $result = drush_shell_cd_and_exec($approot, 'composer require %s --no-interaction --no-progress', $package);
   }
   elseif ($hold_robo) {
     $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
@@ -2095,7 +2135,7 @@ function _provision_require_site_local_drush($approot) {
     // Composer's own refusal of the unreleased Drush, which changes nothing;
     // any other failure (a conflict, the network, a half-done install) is a
     // warning, as on every other major.
-    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major needs Drush 14 and a box takes only a released Drush, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: no released Drush that this backend runs supports Drupal @major (Drush 14 will never be released, Drush 15 runs only under core\'s dr), so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
       '@package' => $package,
       '@root' => $approot,
       '@major' => $major,
