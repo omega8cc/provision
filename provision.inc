@@ -2213,7 +2213,6 @@ function _provision_codebase_cli($approot, $docroot) {
   $approot = rtrim($approot, '/');
   $docroot = rtrim($docroot, '/');
   $version = '';
-  $normalized = '';
   $installed_path = $approot . '/vendor/composer/installed.json';
   if (is_readable($installed_path)) {
     $installed = json_decode((string) file_get_contents($installed_path), TRUE);
@@ -2223,16 +2222,15 @@ function _provision_codebase_cli($approot, $docroot) {
       foreach ($packages as $package) {
         if (is_array($package) && isset($package['name']) && $package['name'] === 'drush/drush') {
           $version = isset($package['version']) ? (string) $package['version'] : '';
-          $normalized = isset($package['version_normalized']) ? (string) $package['version_normalized'] : '';
           break;
         }
       }
     }
   }
-  // The major from the normalized version (15.x-dev is 15.9999999.9999999.9999999-dev),
-  // else from the version itself (15.0.0, v15.0.0, dev-15.x); 0 when neither says.
+  // The major as Composer recorded the version (15.0.0, v15.0.0, 15.x-dev,
+  // dev-15.x); 0 when it says none (dev-main).
   $major = 0;
-  if (preg_match('/^v?([0-9]+)\./', ($normalized !== '' ? $normalized : $version), $m)) {
+  if (preg_match('/^v?([0-9]+)\./', $version, $m)) {
     $major = (int) $m[1];
   }
   elseif (preg_match('/^dev-([0-9]+)\./', $version, $m)) {
