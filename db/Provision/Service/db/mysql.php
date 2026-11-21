@@ -1568,7 +1568,25 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
       $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+      // A deadlock (1213) or a lock wait timeout (1205) ends only the
+      // statement MySQL picked, with its transaction, and asks the client to
+      // run it again: another session, InnoDB's own background threads among
+      // them, held a lock on the new database for a moment. A load whose first
+      // error is one of them runs again from the start, at most twice, a few
+      // seconds apart; a mysqldump file drops each table, view and stored
+      // object before it creates it, so it lands whole over what the last run
+      // left. A load whose first error is another one, or the third run's
+      // errors, are reported below as before.
+      $attempt = 1;
+      while (TRUE) {
+        $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+        if (!$success || $attempt >= 3 || !$this->import_errors_retryable($this->safe_shell_exec_output)) {
+          break;
+        }
+        drush_log(dt('The first error of the load of database @db is a lock error MySQL asks to retry (@errors): loading the dump again, run @next of 3.', array('@db' => $db_name, '@errors' => $this->import_error_lines($this->safe_shell_exec_output, 3), '@next' => $attempt + 1)), 'notice');
+        sleep(2 * $attempt);
+        $attempt++;
+      }
       if ($load_file !== $dump_file) {
         @unlink($load_file);
       }
@@ -1584,10 +1602,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // whose post-hook drops the ORIGINAL database once no error is set.
       // --force is kept so a salvageable dump still loads as much as it can,
       // but the errors it prints are now read and reported.
-      $import_errors = '';
-      if (preg_match_all('/^ERROR .*/m', $this->safe_shell_exec_output, $matches)) {
-        $import_errors = implode("\n", array_slice($matches[0], 0, 10));
-      }
+      $import_errors = $this->import_error_lines($this->safe_shell_exec_output, 10);
       if (!$success) {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
       }
@@ -1777,6 +1792,31 @@ port=%s
       return array();
     }
     return $this->collation_5x_regexes();
+  }
+
+  /**
+   * The first $max ERROR lines of a load's output, one per line, or ''.
+   */
+  function import_error_lines($output, $max) {
+    if (!preg_match_all('/^ERROR .*/m', $output, $matches)) {
+      return '';
+    }
+    return implode("\n", array_slice($matches[0], 0, $max));
+  }
+
+  /**
+   * TRUE when the first ERROR line of a load's output is a deadlock (1213) or
+   * a lock wait timeout (1205), the two errors MySQL ends with "try
+   * restarting transaction". The errors after it can be its own fallout: a
+   * table its DROP could not remove is then "already exists" (1050) and gets
+   * the dump's rows over its own. A first error of any other kind would only
+   * repeat. PHP 5.6-safe.
+   */
+  function import_errors_retryable($output) {
+    if (!preg_match('/^ERROR .*/m', $output, $match)) {
+      return FALSE;
+    }
+    return preg_match('/^ERROR (1213|1205) \(/', $match[0]) === 1;
   }
 
   /**
