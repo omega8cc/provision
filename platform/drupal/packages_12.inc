@@ -242,9 +242,12 @@ function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
   switch ($scope) {
     case 'base':
-      $searchpaths[] = sprintf("%s/%s", $drupal_root, $type);
+      // Later paths win a name found twice, as in Drupal's own discovery
+      // (core, then sites/all, then the root directory): a contrib copy of a
+      // module core still ships (forum, action) is the one a site runs.
       $searchpaths[] = sprintf("%s/core/%s", $drupal_root, $type);
       $searchpaths[] = sprintf("%s/sites/all/%s", $drupal_root, $type);
+      $searchpaths[] = sprintf("%s/%s", $drupal_root, $type);
       break;
     case 'profiles':
       $profiles = _provision_find_profiles();
