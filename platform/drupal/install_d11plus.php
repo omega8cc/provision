@@ -249,12 +249,20 @@ foreach (array('automatic_updates', 'package_manager') as $module) {
 
 // The one-time login link's path for user 1, as core's user.reset.login route
 // shapes it (user/reset/{uid}/{timestamp}/{hash}/login); provision puts the
-// site's address in front of it.
+// site's address in front of it. The hash comes from core's one-time login
+// service where it exists (11.4 and later; user_pass_rehash() is removed in
+// 13), from user_pass_rehash() before it.
 try {
   $account = \Drupal\user\Entity\User::load(1);
   if ($account) {
     $timestamp = time();
-    echo 'INSTALL/D11PLUS/LOGIN /user/reset/' . $account->id() . '/' . $timestamp . '/' . user_pass_rehash($account, $timestamp) . "/login\n";
+    if (class_exists('Drupal\user\OneTimeAuthentication')) {
+      $hash = \Drupal::service('Drupal\user\OneTimeAuthentication')->generateHmac($account, $timestamp);
+    }
+    else {
+      $hash = user_pass_rehash($account, $timestamp);
+    }
+    echo 'INSTALL/D11PLUS/LOGIN /user/reset/' . $account->id() . '/' . $timestamp . '/' . $hash . "/login\n";
   }
   else {
     echo "INSTALL/D11PLUS/WARN no user 1 to make a login link for\n";
