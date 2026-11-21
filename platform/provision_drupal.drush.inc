@@ -2355,12 +2355,19 @@ function _provision_drupal_clear_update_fetch_tasks_sql() {
   }
   $done = FALSE;
   $error = '';
-  // The db service logs a failed query itself and returns FALSE, and a
-  // refused connect sets an error of its own: kept out of the task's verdict,
-  // as the Drupal 8/9 clear does.
+  $service = d()->service('db');
+  // A session opened quietly first: a refused connect inside query() sets an
+  // error that reaches the panel's task at once as a backend packet, which
+  // nothing here can take back, and this clear must never fail a task.
+  if (property_exists($service, 'conn') && is_null($service->conn) && !$service->connect(TRUE)) {
+    drush_log(dt('UPDFETCH/SQL/SKIP no database session for @db (the connect was refused); update_fetch_task left untouched', array('@db' => $db)), 'warning');
+    return FALSE;
+  }
+  // The db service logs a failed query itself and returns FALSE: kept out of
+  // the task's verdict, as the Drupal 8/9 clear does.
   $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
   try {
-    $result = d()->service('db')->query("DELETE FROM `" . $db . "`.key_value WHERE collection = 'update_fetch_task'");
+    $result = $service->query("DELETE FROM `" . $db . "`.key_value WHERE collection = 'update_fetch_task'");
     $done = ($result !== FALSE && $result !== NULL);
   }
   catch (Exception $e) {
@@ -2733,8 +2740,12 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
     // repairing the site-local Drush.
     if ($cli['kind'] === 'none') {
       // Nothing in this codebase runs updatedb: core alone has no such
-      // command, and a Drush 15 runs only under core's dr.
-      drush_log(dt('@p updatedb skipped: this codebase brings no command line that runs database updates (@why), and Aegir Drush 8 must not run updatedb on D10+; the database updates were not applied. Build it again with drush/drush in the project and move the site onto that build with Migrate: its deploy runs the database updates.', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@why' => $cli['why'])), 'warning');
+      // command, and a Drush 15 runs only under core's dr. A Drush 15 that is
+      // there needs what dr is missing (the reason names it), not drush/drush.
+      $build = ($cli['version'] !== '' || is_dir($appRoot . '/vendor/drush'))
+        ? dt("Build it again so core's dr can start (the reason above names what is missing)")
+        : dt('Build it again with drush/drush in the project');
+      drush_log(dt('@p updatedb skipped: this codebase brings no command line that runs database updates (@why), and Aegir Drush 8 must not run updatedb on D10+; the database updates were not applied. @build and move the site onto that build with Migrate: its deploy runs the database updates.', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@why' => $cli['why'], '@build' => $build)), 'warning');
     }
     else {
       drush_log(dt('@p updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@drush_path' => $drushAbsolutePath)), 'warning');

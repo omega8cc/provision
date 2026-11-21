@@ -2240,18 +2240,35 @@ function _provision_codebase_cli($approot, $docroot) {
     $major = (int) $m[1];
   }
   $drush_php = is_file($approot . '/vendor/drush/drush/drush.php');
+  // The lock closes vendor/drush (0400) only under a Drush that Composer does
+  // not autoload a file from, which is a Drush below 15: drush.php reads as
+  // missing there, and a version that names no major (a fork's dev-<branch>)
+  // would otherwise read as Drush 15.
+  $drush_closed = !$drush_php && is_dir($approot . '/vendor/drush')
+    && ((fileperms($approot . '/vendor/drush') & 0100) === 0)
+    && !_provision_drush_in_autoload_files($approot);
   $has_drush = ($version !== '' || $drush_php || is_dir($approot . '/vendor/drush/drush'));
   $result = array('kind' => 'none', 'version' => $version, 'dr' => '', 'why' => '');
   if (!$has_drush) {
     $result['why'] = 'no drush/drush in this codebase';
     return $result;
   }
-  if (($major > 0 && $major < 15) || ($major === 0 && $drush_php)) {
+  if (($major > 0 && $major < 15) || ($major === 0 && ($drush_php || $drush_closed))) {
     $result['kind'] = 'drush';
     $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' runs through drush.php';
     return $result;
   }
-  $dr = $approot . '/vendor/bin/dr';
+  // Composer writes its bin proxies to config.bin-dir, vendor/bin unless the
+  // project names another.
+  $bin_dir = 'vendor/bin';
+  $json = is_readable($approot . '/composer.json') ? json_decode((string) file_get_contents($approot . '/composer.json'), TRUE) : NULL;
+  if (is_array($json) && isset($json['config']['bin-dir']) && is_string($json['config']['bin-dir'])) {
+    $named = trim(str_replace('{$vendor-dir}', 'vendor', $json['config']['bin-dir']), '/');
+    if ($named !== '' && strpos($named, '..') === FALSE) {
+      $bin_dir = $named;
+    }
+  }
+  $dr = $approot . '/' . $bin_dir . '/dr';
   $core_dr = is_file($docroot . '/core/scripts/dr');
   $runtime = is_file($approot . '/vendor/autoload_runtime.php') && is_file($docroot . '/autoload_runtime.php');
   if ($core_dr && is_file($dr) && $runtime) {
@@ -2260,7 +2277,7 @@ function _provision_codebase_cli($approot, $docroot) {
     $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php; it runs under core\'s dr';
     return $result;
   }
-  $missing = !$core_dr ? 'no core/scripts/dr' : (!is_file($dr) ? 'no vendor/bin/dr' : 'no autoload_runtime.php');
+  $missing = !$core_dr ? 'no core/scripts/dr' : (!is_file($dr) ? 'no ' . $bin_dir . '/dr' : 'no autoload_runtime.php');
   $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php, and core\'s dr cannot start here (' . $missing . ')';
   return $result;
 }

@@ -329,7 +329,9 @@ function drush_provision_drupal_post_provision_deploy() {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above @fail): its database updates ran, but the move stops on those errors.", array('@fail' => $fail)));
       }
       elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'stopped') {
-        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above @fail), and Drush 15 then runs no update: its database updates were not applied, so the move stops.", array('@fail' => $fail)));
+        // Never the words of the 'requirements' message above: the Upgrade
+        // task reads them as "its database updates ran", and here none did.
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drush 15 stopped at Drupal's requirements check on the new platform (the [error] lines above @fail) before running any update: its database updates were not applied, so the move stops.", array('@fail' => $fail)));
       }
       elseif ($strict) {
         drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above @fail).", array('@fail' => $fail)));
