@@ -82,6 +82,10 @@ function drush_provision_backdrop_upgrade_validate($new_name = NULL, $platform =
     return drush_set_error('PROVISION_BACKDROP_UPGRADE_BAD_TARGET',
       dt('sites/@uri already exists on the target platform.', array('@uri' => $new_uri)));
   }
+  // Nor a name another site still holds (provision_refuse_live_site_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('upgrade', $new_name)) {
+    return FALSE;
+  }
 
   // The mapped Backdrop profile must exist on the target platform.
   $profile = drush_get_option('profile', 'standard');

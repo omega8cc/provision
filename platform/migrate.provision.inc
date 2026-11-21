@@ -45,18 +45,24 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   if (!provision_cli_php_target_preflight('migrate', $platform, $new_name)) {
     return FALSE;
   }
+  // A rename onto a name another site still holds is refused before the
+  // store check below moves anything: it would point that site at the
+  // renamed one (provision_refuse_live_site_at_new_name()). A rename, or a
+  // move onto another platform, builds a site directory that is not there
+  // yet: a folder at its path would be replaced and deleted. The site's own
+  // directory, kept by a move on its own platform, is not refused
+  // (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('migrate', $new_name)) {
+    return FALSE;
+  }
+  if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
+    return FALSE;
+  }
   // A site renamed by this migrate never inherits a files store still at
   // its new name: the store is set aside here, before the safety copy, or
   // the migrate is refused while it cannot be; a migrate that keeps its
   // name has no target to check (_provision_drupal_copy_target_store_check()).
   if (!_provision_drupal_copy_target_store_check('RENAME', $new_name)) {
-    return FALSE;
-  }
-  // A rename, or a move onto another platform, builds a site directory that
-  // is not there yet: a folder at its path would be replaced and deleted.
-  // The site's own directory, kept by a move on its own platform, is not
-  // refused (provision_refuse_folder_at_new_name()).
-  if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);

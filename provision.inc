@@ -5506,6 +5506,79 @@ function _provision_folder_at_new_name_state($path, $own_path) {
 }
 
 /**
+ * Refuse a copy or a rename onto a name another site still holds.
+ *
+ * provision-save writes whatever alias it is given. A Clone, a Migrate under
+ * a new name or a Backdrop upgrade copy under a name whose alias still named
+ * another site's directory wrote that alias over with the copy's platform,
+ * the deploy wrote the name's vhost over, and the store check before it set
+ * the holder's files store aside as an orphan: the live site then served the
+ * copy. An alias whose recorded site directories are all gone (what a failed
+ * task left) holds nothing and is let through, and so is one naming the
+ * site's own directory. Grav and Textpattern check their new name the same
+ * way in their own validates. Called before the validate changes anything.
+ *
+ * @param string $task
+ *   The task's name in the message: clone, migrate, upgrade.
+ * @param string|null $new_name
+ *   The new name (@name or name); empty, or the site's own name, for none.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_live_site_at_new_name($task, $new_name = NULL) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '' || $uri === ltrim((string) d()->uri, '@') || $uri === ltrim((string) d()->name, '@')) {
+    return TRUE;
+  }
+  if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $uri)) {
+    return TRUE;
+  }
+  $file = provision_context_alias_file($uri);
+  clearstatcache();
+  if (!is_file($file)) {
+    return TRUE;
+  }
+  $own = ((string) d()->site_path === '') ? FALSE : realpath(d()->site_path);
+  foreach (_provision_alias_file_site_dirs($file, $uri) as $dir) {
+    if (!file_exists($dir) && !is_link($dir)) {
+      continue;
+    }
+    $real = realpath($dir);
+    if ($real !== FALSE && $own !== FALSE && $real === $own) {
+      continue;
+    }
+    drush_set_error('PROVISION_NEW_NAME_HELD', dt('@uri is held by another site, whose alias names @dir: the @task would take the name over from that site. Choose another name, or delete that site first, then run the task again.', array('@uri' => $uri, '@dir' => $dir, '@task' => $task)));
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * The site directories the alias file $file records for $uri, read from the
+ * file, never through d(): the process keeps every context it loads, and a
+ * copy reads the new name's context again after its own provision-save.
+ */
+function _provision_alias_file_site_dirs($file, $uri) {
+  $aliases = array();
+  if ((@include $file) === FALSE || !isset($aliases[$uri]) || !is_array($aliases[$uri])) {
+    return array();
+  }
+  $record = $aliases[$uri];
+  $dirs = array();
+  if (isset($record['site_path']) && is_string($record['site_path']) && $record['site_path'] !== '') {
+    $dirs[] = $record['site_path'];
+  }
+  if (isset($record['root']) && is_string($record['root']) && $record['root'] !== '') {
+    $dirs[] = rtrim($record['root'], '/') . '/sites/' . $uri;
+  }
+  return array_values(array_unique($dirs));
+}
+
+/**
  * Note that a Migrate's target site directory is free when its command hook
  * begins, before any verify it runs.
  *

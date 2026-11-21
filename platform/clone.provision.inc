@@ -46,15 +46,20 @@ function drush_provision_drupal_provision_clone_validate($new_name = null, $plat
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
     return FALSE;
   }
+  // A name another site still holds, or a folder at it, is refused before
+  // the store check below moves anything: the copy would point that site at
+  // itself (provision_refuse_live_site_at_new_name()), and the deploy would
+  // replace and delete the folder (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('clone', $new_name)) {
+    return FALSE;
+  }
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
+    return FALSE;
+  }
   // A clone never inherits a files store still at its new name: the store
   // is set aside here, before the safety copy, or the clone is refused
   // while it cannot be (_provision_drupal_copy_target_store_check()).
   if (!_provision_drupal_copy_target_store_check('CLONE', $new_name)) {
-    return FALSE;
-  }
-  // Nor a folder at its new name, which the deploy would replace and delete
-  // (provision_refuse_folder_at_new_name()).
-  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
