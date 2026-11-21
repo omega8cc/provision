@@ -327,7 +327,6 @@ function drush_provision_drupal_provision_install() {
       elseif (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
         drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
-        drush_log(print_r(drush_get_error_log(), 1), 'error');
         // Re-apply the Aegir patches (restore the at-rest posture) so a
         // degraded/aborted install never leaves the shared platform vendor in the
         // reverted/unlocked state the patched web cannot serve.
@@ -335,7 +334,12 @@ function drush_provision_drupal_provision_install() {
           drush_log(dt('D11/INSTALL4b/LOCAL/DRUSH/LOCK with provision_lock_drush_local_vnd'), 'info');
           provision_lock_drush_local_vnd();
         }
-        return FALSE;
+        // Every failure here sets the error: a bare FALSE ends the backend as a
+        // success, the panel then runs its after-install steps (the site marked
+        // enabled, a Verify and a cache flush queued) over the site this
+        // install has just rolled back, and that Verify writes its folder and
+        // alias back.
+        return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install not run for @uri: no executable drush.php in this codebase', array('@uri' => d()->uri)));
       }
       else {
         // Extract the DB URL from settings.php
@@ -358,7 +362,7 @@ function drush_provision_drupal_provision_install() {
         	  if ($lock_unlock) {
         	    provision_lock_drush_local_vnd();
         	  }
-        	  return FALSE;
+        	  return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install not run for @uri: no database credentials for the site', array('@uri' => d()->uri)));
         	}
           }
         } else {
@@ -368,7 +372,7 @@ function drush_provision_drupal_provision_install() {
           if ($lock_unlock) {
             provision_lock_drush_local_vnd();
           }
-          return FALSE;
+          return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install not run for @uri: no settings.php for the site', array('@uri' => d()->uri)));
         }
 
         $options = drush_get_merged_options();
@@ -421,7 +425,7 @@ function drush_provision_drupal_provision_install() {
             if ($lock_unlock) {
               provision_lock_drush_local_vnd();
             }
-            return FALSE;
+            return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install not run for @uri: the site-install command could not be built', array('@uri' => d()->uri)));
           }
         }
 
