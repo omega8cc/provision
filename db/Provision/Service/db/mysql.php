@@ -1867,13 +1867,18 @@ port=%s
       $room = $needs ? $need + $margin : 2 * $need + $margin;
       if ($free < $room) {
         fclose($in);
-        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom@load) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+        // the figures in a unit that tells the room from the free space
+        // (provision.inc); in gigabytes where only this file is loaded
+        $figures = function_exists('provision_space_figures') ? provision_space_figures($room, $margin, $free) : array(
           '@need' => round($room / 1073741824, 1),
-          '@dir' => $dir,
           '@margin' => round($margin / 1073741824, 1),
-          '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
           '@free' => round($free / 1073741824, 1),
-        )), 'warning');
+          '@unit' => 'GB',
+        );
+        drush_log(dt('The dump\'s rewritten copy needs about @need @unit free on the filesystem holding @dir (@margin @unit of it headroom@load) but only @free @unit is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+          '@dir' => $dir,
+          '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
+        ) + $figures), 'warning');
         return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
       }
     }

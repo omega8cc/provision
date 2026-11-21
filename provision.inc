@@ -7598,14 +7598,11 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
     }
     $margin = provision_space_margin($device['path']);
     if ($free < $device['need'] + $margin) {
-      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need GB free on the filesystem holding @path (@margin GB of it headroom) but only @free GB is free: free space first, nothing was written (@basis; /data/conf/disable_space_preflight.cnf turns this check off)', array(
+      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need @unit free on the filesystem holding @path (@margin @unit of it headroom) but only @free @unit is free: free space first, nothing was written (@basis; /data/conf/disable_space_preflight.cnf turns this check off)', array(
         '@what' => $what,
         '@basis' => $basis,
-        '@need' => round(($device['need'] + $margin) / $gb, 1),
-        '@margin' => round($margin / $gb, 1),
         '@path' => $device['path'],
-        '@free' => round($free / $gb, 1),
-      )));
+      ) + provision_space_figures($device['need'] + $margin, $margin, $free)));
       return FALSE;
     }
   }
@@ -7735,6 +7732,39 @@ function provision_path_device($path) {
 }
 
 /**
+ * The figures of a space message in a unit that tells the need from the free.
+ *
+ * A tenth of a gigabyte hides a shortfall of a few megabytes: a filesystem
+ * 4 MB short of a copy's room read "needs about 3 GB free ... but only 3 GB
+ * is free". The figures stay in gigabytes, rounded to a tenth, while the need
+ * and the free space differ there; otherwise they are given in the first of
+ * MB, KB and bytes that tells the two apart, the headroom in the same unit.
+ *
+ * @return array
+ *   '@need', '@margin' and '@free', and their '@unit'.
+ */
+function provision_space_figures($need, $margin, $free) {
+  $units = array(
+    array(1073741824, 1, 'GB'),
+    array(1048576, 0, 'MB'),
+    array(1024, 0, 'KB'),
+    array(1, 0, 'bytes'),
+  );
+  foreach ($units as $unit) {
+    $n = round($need / $unit[0], $unit[1]);
+    $f = round($free / $unit[0], $unit[1]);
+    if ($n != $f || $unit[0] == 1) {
+      return array(
+        '@need' => $n,
+        '@margin' => round($margin / $unit[0], $unit[1]),
+        '@free' => $f,
+        '@unit' => $unit[2],
+      );
+    }
+  }
+}
+
+/**
  * The headroom a copying task must leave on a filesystem: 2 GB, or 2% of
  * the filesystem when that is more. A copy that lands the box at zero is
  * the failure this exists to prevent, and BOA's own scripts stop at 90%.
@@ -7775,16 +7805,12 @@ function provision_copy_task_space_recheck($what) {
   if ($free === FALSE) {
     return TRUE;
   }
-  $gb = 1073741824;
   $margin = provision_space_margin($probe);
   if ($free < $bytes + $margin) {
-    drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what: the safety copy is done, but only @free GB is free on the filesystem holding @path for the @need GB unpacked copy (@margin GB of it headroom); the room went elsewhere since the pre-flight, free space and retry', array(
+    drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what: the safety copy is done, but only @free @unit is free on the filesystem holding @path for the @need @unit unpacked copy (@margin @unit of it headroom); the room went elsewhere since the pre-flight, free space and retry', array(
       '@what' => $what,
-      '@free' => round($free / $gb, 1),
       '@path' => $probe,
-      '@need' => round(($bytes + $margin) / $gb, 1),
-      '@margin' => round($margin / $gb, 1),
-    )));
+    ) + provision_space_figures($bytes + $margin, $margin, $free)));
     return FALSE;
   }
   // The same for the inodes the unpacked copy's files take
