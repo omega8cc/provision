@@ -33,8 +33,13 @@ function _provision_drupal_find_themes($scope, $key = '') {
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
     // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    // A theme that ships no version key at all takes the release Composer
+    // installed, as a module does; 'VERSION' stays core's, as the site scan
+    // reads it.
     if (empty($files[$name]->info['version']) || $files[$name]->info['version'] == 'VERSION') {
-      $files[$name]->version = drush_drupal_version();
+      $composer_version = empty($files[$name]->info['version'])
+        ? _provision_composer_installed_version(dirname($file->filename)) : FALSE;
+      $files[$name]->version = $composer_version ? $composer_version : drush_drupal_version();
     }
     else {
       $files[$name]->version = $files[$name]->info['version'];
@@ -137,6 +142,16 @@ function _provision_system_query($type) {
     $package->status = $extension_data->status;
     $package->filename = realpath($package->filename);
 
+    // A theme that ships no version key (one inside an install profile
+    // installed from Packagist, for one) takes the release Composer
+    // installed, as the platform scan records it.
+    if ($type == 'theme' && empty($package->version) && $package->filename) {
+      $composer_version = _provision_composer_installed_version(dirname($package->filename));
+      if ($composer_version) {
+        $package->version = $composer_version;
+      }
+    }
+
     if ($type == 'module') {
       if (drush_drupal_major_version() <= 9) {
         $package->schema_version = drupal_get_installed_schema_version($name);
@@ -170,6 +185,14 @@ function _provision_system_query($type) {
           }
         }
       }
+    }
+
+    // Code that names no release anywhere, neither a version key nor a
+    // Composer package (custom code, a dev branch), takes Drupal's own
+    // release, as the platform scan records it, so the two agree and the
+    // Migrate form counts no upgrade between identical platforms.
+    if (empty($package->version)) {
+      $package->version = drush_drupal_version();
     }
 
     $packages[$name] = $package;

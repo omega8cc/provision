@@ -2819,8 +2819,13 @@ function _provision_drupal_find_modules($scope, $key = '') {
     }
     $install_file = sprintf("%s/%s.install", dirname($info->filename), $name);
     // Drupal now enforces a minimum schema version see: https://www.drupal.org/node/2186315
+    // It is \Drupal::CORE_MINIMUM_SCHEMA_VERSION, 8000 on every release from
+    // 8 on: a module with no update hook is installed at 8000. A floor of
+    // major * 1000 put such a module above what a site records from Drupal 9
+    // on, so the Migrate form counted it as an upgrade between identical
+    // platforms and the schema checks could not see a downgrade below it.
     if (drush_drupal_major_version() >= 8) {
-      $schema_version = drush_drupal_major_version() * 1000;
+      $schema_version = 8000;
     }
     else {
       $schema_version = 0;
