@@ -1575,15 +1575,24 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // error is one of them runs again from the start, at most twice, a few
       // seconds apart; a mysqldump file drops each table, view and stored
       // object before it creates it, so it lands whole over what the last run
-      // left. A load whose first error is another one, or the third run's
-      // errors, are reported below as before.
+      // left. It does not run again while another session of the loading
+      // login is on the database, and the events the last run made are
+      // dropped first (import_rerun_ready()). A load whose first error is
+      // another one, or the last run's errors, are reported below as before.
       $attempt = 1;
       while (TRUE) {
         $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
         if (!$success || $attempt >= 3 || !$this->import_errors_retryable($this->safe_shell_exec_output)) {
           break;
         }
-        drush_log(dt('The first error of the load of database @db is a lock error MySQL asks to retry (@errors): loading the dump again, run @next of 3.', array('@db' => $db_name, '@errors' => $this->import_error_lines($this->safe_shell_exec_output, 3), '@next' => $attempt + 1)), 'notice');
+        // The rerun check runs its own queries: the load's output is kept
+        // for the error read below when the load does not run again.
+        $load_output = $this->safe_shell_exec_output;
+        if (!$this->import_rerun_ready($db_name, $db_host, $db_user, $db_passwd)) {
+          $this->safe_shell_exec_output = $load_output;
+          break;
+        }
+        drush_log(dt('The first error of the load of database @db is a lock error MySQL asks to retry (@errors): loading the dump again, run @next of 3.', array('@db' => $db_name, '@errors' => $this->import_error_lines($load_output, 3), '@next' => $attempt + 1)), 'notice');
         sleep(2 * $attempt);
         $attempt++;
       }
@@ -1817,6 +1826,53 @@ port=%s
       return FALSE;
     }
     return preg_match('/^ERROR (1213|1205) \(/', $match[0]) === 1;
+  }
+
+  /**
+   * Before a classic load of database $db_name runs again, as the loading
+   * login. FALSE when another session of that login is on the database (a
+   * Drush or a web request of the site, whose writes into the half-loaded
+   * tables the next run would not see), or when that cannot be read. Then
+   * it drops the events the last run made: the dump creates them after the
+   * data, and an enabled one would fire while the next run loads the tables
+   * again. TRUE once none is left. PHP 5.6-safe.
+   */
+  function import_rerun_ready($db_name, $db_host, $db_user, $db_passwd) {
+    $client = 'mysql --defaults-file=/dev/fd/3 -B -N -e ';
+    $db = ' ' . escapeshellarg($db_name);
+    $sessions = 'SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB = DATABASE() AND ID <> CONNECTION_ID()';
+    if (!$this->safe_shell_exec($client . escapeshellarg($sessions) . $db, $db_host, $db_user, $db_passwd)
+      || !preg_match('/^([0-9]+)$/m', $this->safe_shell_exec_output, $match)) {
+      drush_log(dt('Could not read which sessions are on database @db, so its load does not run again.', array('@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    if ($match[1] !== '0') {
+      drush_log(dt('@n other session(s) of the loading login are on database @db, so its load does not run again.', array('@n' => $match[1], '@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    $events = 'SELECT EVENT_NAME FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()';
+    if (!$this->safe_shell_exec($client . escapeshellarg($events) . $db, $db_host, $db_user, $db_passwd)) {
+      drush_log(dt('Could not list the events of database @db, so its load does not run again.', array('@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    $names = array();
+    foreach (explode("\n", $this->safe_shell_exec_output) as $line) {
+      if ($line !== '') {
+        // -B writes a backslash, a tab and a newline in a value escaped.
+        $names[] = strtr($line, array('\\\\' => '\\', '\\t' => "\t", '\\n' => "\n", '\\0' => "\0"));
+      }
+    }
+    foreach ($names as $name) {
+      $drop = 'DROP EVENT IF EXISTS `' . str_replace('`', '``', $name) . '`';
+      if (!$this->safe_shell_exec($client . escapeshellarg($drop) . $db, $db_host, $db_user, $db_passwd)) {
+        drush_log(dt('Could not drop the event @name the last load of database @db made, so its load does not run again.', array('@name' => $name, '@db' => $db_name)), 'warning');
+        return FALSE;
+      }
+    }
+    if ($names) {
+      drush_log(dt('Dropped @n event(s) the last load of database @db made, before loading it again.', array('@n' => count($names), '@db' => $db_name)), 'notice');
+    }
+    return TRUE;
   }
 
   /**
