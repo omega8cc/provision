@@ -311,6 +311,9 @@ function drush_provision_drupal_post_provision_deploy() {
       // the error set, the tail below takes its skip branch and leaves
       // settings.php to the rollback. Without the option nothing changes.
       $strict = (bool) drush_get_option('upgrade_strict', FALSE);
+      // A Drush 15 codebase's window logs under DR, and its requirements
+      // check stops every update (verdict 'stopped').
+      $fail = (drush_get_option('provision_site_local_cli_kind', '') === 'dr') ? 'DEPLOY9/LOCAL/DR/FAIL' : 'DEPLOY9/LOCAL/DRUSH/FAIL';
       if ($strict && $window === TRUE) {
         drush_log(dt('UPGRADE/UPDATEDB the database updates completed.'), 'ok');
       }
@@ -323,10 +326,13 @@ function drush_provision_drupal_post_provision_deploy() {
       elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'requirements') {
         // The updates ran; Drupal's requirements check failed before them,
         // which stops a strict move just the same.
-        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above DEPLOY9/LOCAL/DRUSH/FAIL): its database updates ran, but the move stops on those errors."));
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above @fail): its database updates ran, but the move stops on those errors.", array('@fail' => $fail)));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'stopped') {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above @fail), and Drush 15 then runs no update: its database updates were not applied, so the move stops.", array('@fail' => $fail)));
       }
       elseif ($strict) {
-        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above DEPLOY9/LOCAL/DRUSH/FAIL)."));
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above @fail).", array('@fail' => $fail)));
       }
       // Updates that did not finish, and a move that goes on: a Drush that
       // died inside updatedb leaves the site in maintenance mode, which the

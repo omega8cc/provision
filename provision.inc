@@ -2192,8 +2192,11 @@ function _provision_codebase_has_drush($approot) {
  * 'drush': a Drush below 15, run through vendor/drush/drush/drush.php as every
  * site-local step here runs it. 'dr': Drush 15 or newer, which has no
  * drush.php and no site:install and runs only under Drupal core's own console,
- * core/scripts/dr, with the two autoload_runtime.php files Composer writes for
- * it. 'none': no Drush at all, or a Drush 15 whose dr cannot start. Read from
+ * core/scripts/dr, through Composer's vendor/bin/dr with the two
+ * autoload_runtime.php files Composer writes for it: core/scripts/dr run
+ * directly looks for vendor/ beside the docroot and dies in a build that keeps
+ * vendor/ above it. 'none': no Drush at all, or a Drush 15 whose dr cannot
+ * start. Read from
  * what Composer recorded and from the entry files, never by running: the
  * platform lock holds vendor/drush (for a Drush below 15) and the console
  * closed at rest, so nothing site-local starts on a locked codebase, while
@@ -2206,8 +2209,8 @@ function _provision_codebase_has_drush($approot) {
  *
  * @return array
  *   'kind' ('drush', 'dr' or 'none'), 'version' (drush/drush as Composer
- *   recorded it, or ''), 'dr' (core's dr for kind 'dr', else '') and 'why'
- *   (one line saying how the kind was read).
+ *   recorded it, or ''), 'dr' (vendor/bin/dr for kind 'dr', else '') and
+ *   'why' (one line saying how the kind was read).
  */
 function _provision_codebase_cli($approot, $docroot) {
   $approot = rtrim($approot, '/');
@@ -2248,15 +2251,17 @@ function _provision_codebase_cli($approot, $docroot) {
     $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' runs through drush.php';
     return $result;
   }
-  $dr = $docroot . '/core/scripts/dr';
+  $dr = $approot . '/vendor/bin/dr';
+  $core_dr = is_file($docroot . '/core/scripts/dr');
   $runtime = is_file($approot . '/vendor/autoload_runtime.php') && is_file($docroot . '/autoload_runtime.php');
-  if (is_file($dr) && $runtime) {
+  if ($core_dr && is_file($dr) && $runtime) {
     $result['kind'] = 'dr';
     $result['dr'] = $dr;
     $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php; it runs under core\'s dr';
     return $result;
   }
-  $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php, and core\'s dr cannot start here (' . (is_file($dr) ? 'no autoload_runtime.php' : 'no core/scripts/dr') . ')';
+  $missing = !$core_dr ? 'no core/scripts/dr' : (!is_file($dr) ? 'no vendor/bin/dr' : 'no autoload_runtime.php');
+  $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php, and core\'s dr cannot start here (' . $missing . ')';
   return $result;
 }
 
@@ -2267,20 +2272,32 @@ function _provision_codebase_cli($approot, $docroot) {
  * the platform verifies, and the first sign is a deploy whose updatedb
  * cannot run. Its --version is the cheapest run that loads its whole
  * application, on the backend's own interpreter as every site-local run
- * here (_provision_site_local_drush_cmd()). Only a tree that can load it
+ * here (_provision_site_local_drush_cmd()). A Drush 15 codebase runs core's
+ * dr instead, from the docroot (_provision_site_local_dr_cmd()): its version
+ * line names Drupal, and it needs no site. Only a tree that can load it
  * gives a verdict: on a locked Drupal 10+ codebase no site-local Drush
  * starts, sound or not, so callers ask
  * _provision_site_local_drush_runnable() first.
  *
  * @param string $approot
  *   The codebase root (the directory holding vendor/).
+ * @param string $docroot
+ *   The docroot (the directory holding core/), to tell a Drush 15 codebase;
+ *   without it the codebase's drush.php is run.
  *
  * @return array
  *   'started' (bool) and 'line' (string): the version line of a Drush that
  *   starts, else the line it printed that says why it does not.
  */
-function _provision_site_local_drush_start($approot) {
-  $started = (bool) drush_shell_cd_and_exec(rtrim($approot, '/'), _provision_site_local_drush_cmd(array('--version')));
+function _provision_site_local_drush_start($approot, $docroot = '') {
+  $approot = rtrim($approot, '/');
+  $cli = ($docroot !== '') ? _provision_codebase_cli($approot, $docroot) : array('kind' => 'drush');
+  if ($cli['kind'] === 'dr' && function_exists('_provision_site_local_dr_cmd')) {
+    $started = (bool) drush_shell_cd_and_exec(rtrim($docroot, '/'), _provision_site_local_dr_cmd($cli['dr'], '', array('--version')));
+  }
+  else {
+    $started = (bool) drush_shell_cd_and_exec($approot, _provision_site_local_drush_cmd(array('--version')));
+  }
   return array(
     'started' => $started,
     'line' => _provision_site_local_drush_line(drush_shell_exec_output(), $started),
@@ -2390,21 +2407,25 @@ function _provision_codebase_robo_misfit($approot) {
  * @return string
  *   The message, for a warning.
  */
-function _provision_site_local_drush_dead_text($tag, $approot, $line) {
+function _provision_site_local_drush_dead_text($tag, $approot, $line, $kind = 'drush') {
+  // Drush 15 runs under core's dr: name what does not start.
+  $what = ($kind === 'dr') ? dt("core's dr (Drush 15)") : dt("the platform's own Drush");
   // A Drush that stops because this PHP is below what the codebase's packages
   // require is sound: it is the PHP the platform's tasks run that is wrong,
   // and a rebuild under the same PHP would not change it. Composer's own
   // platform check and Drush's say so in their first line.
   if (preg_match('/(dependencies require a PHP version|requires? PHP (version )?[>=0-9])/i', $line)) {
-    return dt("@p the platform's own Drush in @root does not start on PHP @php, the PHP this platform's tasks run@line. No site on this platform gets its database updates when it is migrated, cloned or restored here. Name a PHP the codebase accepts for the platform in ~/static/control/cli-per-platform.info, then run Verify on the platform.", array(
+    return dt("@p @what in @root does not start on PHP @php, the PHP this platform's tasks run@line. No site on this platform gets its database updates when it is migrated, cloned or restored here. Name a PHP the codebase accepts for the platform in ~/static/control/cli-per-platform.info, then run Verify on the platform.", array(
       '@p' => $tag,
+      '@what' => $what,
       '@root' => rtrim($approot, '/'),
       '@php' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
       '@line' => ' (' . $line . ')',
     ));
   }
-  $text = dt("@p the platform's own Drush in @root cannot start@line. No site on this platform gets its database updates when it is migrated, cloned or restored here, and that Drush fails the same way for its sites on the command line. The codebase is not repaired in place: build it again with a Drush that starts, add that build as a new platform and move the sites onto it with Migrate.", array(
+  $text = dt("@p @what in @root cannot start@line. No site on this platform gets its database updates when it is migrated, cloned or restored here, and it fails the same way for its sites on the command line. The codebase is not repaired in place: build it again with a Drush that starts, add that build as a new platform and move the sites onto it with Migrate.", array(
     '@p' => $tag,
+    '@what' => $what,
     '@root' => rtrim($approot, '/'),
     '@line' => ($line === '') ? '' : ' (' . $line . ')',
   ));
@@ -2451,7 +2472,8 @@ function _provision_site_local_drush_checked($root, $mark = FALSE) {
  * traversable, the console and core logger files as their packages ship
  * them, the genuine psr/log in place. A locked tree and one caught between
  * the two states answer no, and so does a codebase without a Drush: a start
- * check there would call a sound platform dead.
+ * check there would call a sound platform dead. A Drush 15 codebase, which has
+ * no drush.php, counts when core's dr can run it (_provision_codebase_cli()).
  *
  * @param string $root
  *   The platform root (d()->root).
@@ -2461,8 +2483,14 @@ function _provision_site_local_drush_checked($root, $mark = FALSE) {
  */
 function _provision_site_local_drush_runnable($root) {
   $approot = findAppRoot($root);
-  if (empty($approot) || !is_file($approot . '/vendor/drush/drush/drush.php')) {
+  if (empty($approot)) {
     return '';
+  }
+  if (!is_file($approot . '/vendor/drush/drush/drush.php')) {
+    $cli = _provision_codebase_cli($approot, $root);
+    if ($cli['kind'] !== 'dr') {
+      return '';
+    }
   }
   foreach (array('/vendor/drush', '/vendor/symfony/console/Input', '/vendor/symfony/console/Style') as $dir) {
     if (!is_dir($approot . $dir) || (fileperms($approot . $dir) & 0500) !== 0500) {
@@ -2517,12 +2545,13 @@ function _provision_site_local_drush_note_dead($root, $tag = 'DRUSH/LOCAL/DEAD')
     return NULL;
   }
   _provision_site_local_drush_checked($root, TRUE);
-  $start = _provision_site_local_drush_start($approot);
+  $cli = _provision_codebase_cli($approot, $root);
+  $start = _provision_site_local_drush_start($approot, $root);
   if ($start['started']) {
-    drush_log(dt('DRUSH/LOCAL/START @line', array('@line' => $start['line'])), 'info');
+    drush_log(dt('DRUSH/LOCAL/START @line', array('@line' => ($cli['kind'] === 'dr' ? 'dr: ' : '') . $start['line'])), 'info');
     return TRUE;
   }
-  drush_log(_provision_site_local_drush_dead_text($tag, $approot, $start['line']), 'warning');
+  drush_log(_provision_site_local_drush_dead_text($tag, $approot, $start['line'], $cli['kind']), 'warning');
   return FALSE;
 }
 

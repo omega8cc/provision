@@ -1684,6 +1684,59 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
 }
 
 /**
+ * The shell line for one call of core's dr, for a Drush 15 codebase.
+ *
+ *   exec '<php>' -c '<ini>' '<app root>/vendor/bin/dr' ['--url=https://<uri>'] '<arg>' ...
+ *
+ * run from the docroot, on the backend's own interpreter and ini as every
+ * site-local run here. Composer's vendor/bin/dr, never core/scripts/dr: run
+ * directly that file looks for vendor/ beside the docroot and dies where the
+ * build keeps vendor/ above it. --url names the host for links; the site
+ * itself is chosen by DRUPAL_DEV_SITE_PATH, which the caller sets
+ * (_provision_site_local_dr_run()): with --url alone dr reads sites/default,
+ * finds no site there and answers 'Command ... is not defined' (measured on a
+ * BOA box, Drupal 12.0.0-beta2 with Drush 15.x-dev).
+ *
+ * @param string $dr   vendor/bin/dr, as _provision_codebase_cli() found it.
+ * @param string $uri  The site's uri, or '' for a call that needs no site.
+ * @param array $args  dr arguments and options, unescaped.
+ * @return string
+ */
+function _provision_site_local_dr_cmd($dr, $uri, $args) {
+  $all = array();
+  if ((string) $uri !== '') {
+    $all[] = '--url=https://' . $uri;
+  }
+  foreach ((array) $args as $arg) {
+    $all[] = $arg;
+  }
+  return _provision_php_script_cmd((string) $dr, $all);
+}
+
+/**
+ * Run core's dr once for the current site, from its docroot.
+ *
+ * DRUPAL_DEV_SITE_PATH (sites/<uri>) and the cloaked credentials reach the
+ * child only through the real environment, set right before the run and
+ * cleared right after it, so no later run inherits them. Every dr call needs
+ * an unlocked codebase: at rest dr exits 255 and prints nothing.
+ *
+ * @param string $dr    vendor/bin/dr.
+ * @param array $args   dr arguments and options, unescaped.
+ * @return array
+ *   'ok' (exit 0) and 'output' (the lines it printed, stderr included).
+ */
+function _provision_site_local_dr_run($dr, $args) {
+  $uri = (string) d()->uri;
+  putenv('DRUPAL_DEV_SITE_PATH=sites/' . $uri);
+  provision_prepare_environment_subprocess();
+  $ok = (bool) drush_shell_cd_and_exec((string) d()->root, _provision_site_local_dr_cmd($dr, $uri, $args));
+  provision_clear_environment_subprocess();
+  putenv('DRUPAL_DEV_SITE_PATH');
+  return array('ok' => $ok, 'output' => drush_shell_exec_output());
+}
+
+/**
  * Command line running any PHP script on the backend's own interpreter and
  * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
  *
@@ -2223,6 +2276,14 @@ function _provision_drupal_clear_update_fetch_tasks() {
     // Aliases were already converted in the updatedb branch (site:alias-convert)
     // before this helper is called, so the site-local alias resolves.
     $appRoot = findAppRoot(d()->root);
+    // A codebase with Drush 15 (core's dr) or no Drush at all: the documented
+    // SQL delete, through provision's own database service, with no command
+    // line, so it runs the same locked or not.
+    $cli = _provision_codebase_cli($appRoot, d()->root);
+    if ($cli['kind'] !== 'drush') {
+      _provision_drupal_clear_update_fetch_tasks_sql();
+      return;
+    }
     $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
     if (is_executable($drushAbsolutePath)) {
       // SECURITY: $appRoot/$uri derive from the alias context;
@@ -2268,6 +2329,56 @@ function _provision_drupal_clear_update_fetch_tasks() {
 }
 
 /**
+ * Clear the Update module's fetch tasks with SQL, for a Drupal 10+ codebase
+ * whose command line is core's dr or none.
+ *
+ * The documented workaround of the fetch-task deadlock
+ * (https://www.drupal.org/project/drupal/issues/2920285): the key_value rows
+ * of collection update_fetch_task deleted in the site's own database, through
+ * provision's db service as _provision_drupal_note_maintenance_left() reads
+ * it. A site whose tables carry a prefix has no plain key_value table; the
+ * query then fails and the clear is skipped with a warning, never guessed.
+ * Non-fatal by design, as the Drush path: a cosmetic reset never fails a
+ * deploy.
+ *
+ * @return bool
+ *   TRUE when the delete ran.
+ */
+function _provision_drupal_clear_update_fetch_tasks_sql() {
+  $db = (string) drush_get_option('db_name', '', 'site');
+  if ($db === '') {
+    $db = (string) drush_get_option('db_name', '');
+  }
+  if ($db === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db)) {
+    drush_log(dt('UPDFETCH/SQL/SKIP no database name for this site; update_fetch_task left untouched'), 'warning');
+    return FALSE;
+  }
+  $done = FALSE;
+  $error = '';
+  // The db service logs a failed query itself and returns FALSE, and a
+  // refused connect sets an error of its own: kept out of the task's verdict,
+  // as the Drupal 8/9 clear does.
+  $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+  try {
+    $result = d()->service('db')->query("DELETE FROM `" . $db . "`.key_value WHERE collection = 'update_fetch_task'");
+    $done = ($result !== FALSE && $result !== NULL);
+  }
+  catch (Exception $e) {
+    $error = $e->getMessage();
+  }
+  drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+  if ($done) {
+    drush_log(dt('UPDFETCH/SQL key_value rows of update_fetch_task deleted in @db (no command line)', array('@db' => $db)), 'info');
+    return TRUE;
+  }
+  drush_log(dt('UPDFETCH/SQL/SKIP the delete of update_fetch_task in @db did not run@why; update_fetch_task left untouched', array(
+    '@db' => $db,
+    '@why' => ($error !== '') ? ' (' . $error . ')' : '',
+  )), 'warning');
+  return FALSE;
+}
+
+/**
  * Say so when updates that did not finish left the site in maintenance mode.
  *
  * A Drupal 8 or newer site's own Drush switches maintenance mode on for
@@ -2305,7 +2416,10 @@ function _provision_drupal_note_maintenance_left($tag = 'DEPLOY') {
   if (!in_array($value, array('b:1;', 'i:1;', 's:1:"1";'), TRUE)) {
     return FALSE;
   }
-  drush_log(dt('@p the site is left in Drupal\'s maintenance mode: the update run switched it on and ended before switching it off, so visitors get "Site under maintenance". It stays closed while database updates are pending; once they are applied, open it with the site\'s own Drush: maint:set 0', array('@p' => $tag . '9/LOCAL/DRUSH/MAINT')), 'warning');
+  // Drush 15 under core's dr has maint:disable, no maint:set.
+  $cli = _provision_codebase_cli(findAppRoot(d()->root), d()->root);
+  $open = ($cli['kind'] === 'dr') ? "core's dr: maint:disable" : "the site's own Drush: maint:set 0";
+  drush_log(dt('@p the site is left in Drupal\'s maintenance mode: the update run switched it on and ended before switching it off, so visitors get "Site under maintenance". It stays closed while database updates are pending; once they are applied, open it with @open', array('@p' => $tag . '9/LOCAL/DRUSH/MAINT', '@open' => $open)), 'warning');
   return TRUE;
 }
 
@@ -2354,6 +2468,153 @@ function _provision_site_local_updatedb_verdict($result, array $output) {
     return 'failed';
   }
   return 'requirements';
+}
+
+/**
+ * How a dr updatedb run ended (Drush 15 under core's dr), from its exit and
+ * its output.
+ *
+ * Measured on a BOA box (Drupal 12.0.0-beta2, Drush 15.x-dev, updatedb
+ * --no-interaction): updates applied end with "[OK] Finished performing
+ * updates." and none pending with "[OK] No database updates required.", both
+ * on exit 0; an update that throws ends with "[ERROR] Update aborted by: ..."
+ * on exit 1; Drupal's requirements check reporting errors ends with "[ERROR]
+ * Requirements check reports errors. Resolve them and run updatedb again." on
+ * exit 1, and no update runs (Drush below 15 went on after --yes); a site dr
+ * did not boot answers 'Command "updatedb" is not defined.' on exit 1. A run
+ * is complete only on exit 0 with its [OK] line and no [error] row.
+ *
+ * @param bool $result
+ *   TRUE on exit 0.
+ * @param array $output
+ *   The run's output lines.
+ *
+ * @return string
+ *   'complete'; 'stopped' when Drupal's requirements check stopped it before
+ *   any update; 'boot' when dr did not boot the site; 'failed'.
+ */
+function _provision_site_local_dr_updatedb_verdict($result, array $output) {
+  $text = implode("\n", $output);
+  if (preg_match('/Command "[^"]*" is not defined/', $text)) {
+    return 'boot';
+  }
+  if (strpos($text, 'Requirements check reports errors') !== FALSE) {
+    return 'stopped';
+  }
+  if ($result
+    && preg_match('/\[OK\] (Finished performing updates|No database updates required)/', $text)
+    && !preg_match('/\[(error|preflight)\]/i', $text)) {
+    return 'complete';
+  }
+  return 'failed';
+}
+
+/**
+ * The database update window for a Drupal 10+ codebase that runs Drush 15
+ * under core's dr (_provision_codebase_cli() kind 'dr').
+ *
+ * The same window as the site-local Drush one below, step for step and with
+ * the same step numbers in its markers (DEPLOY2 .. DEPLOY10, UPDATE2 ..
+ * UPDATE10), so every caller reads it the same way: a real unlock when the
+ * codebase cannot run its CLI at rest (dr exits 255 there), the start check
+ * (dr --version), dr updatedb for this site, the Update module's fetch-task
+ * clear, a real re-lock, then core's own container rebuild as the window's
+ * last write. Its own verdict (_provision_site_local_dr_updatedb_verdict())
+ * tells an update that failed from Drupal's requirements check, which with
+ * Drush 15 stops every update. The remedy it names is a new build and a
+ * Migrate, whose deploy runs the updates: site owners have no dr yet.
+ *
+ * @param string $tag
+ *   The marker prefix ('DEPLOY' or 'UPDATE'), already cleaned.
+ * @param string $appRoot
+ *   The codebase root.
+ * @param array $cli
+ *   _provision_codebase_cli() of this codebase.
+ *
+ * @return bool|null
+ *   As _provision_drupal_site_local_updatedb().
+ */
+function _provision_drupal_site_local_updatedb_dr($tag, $appRoot, array $cli) {
+  drush_log(dt('@p @why (@dr)', array('@p' => $tag . '3/LOCAL/DR/CHECK', '@why' => $cli['why'], '@dr' => $cli['dr'])), 'info');
+  // The site's folder is sites/<uri>, chosen through the environment: a uri
+  // that could leave sites/ never gets there.
+  if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._\-]*$/', (string) d()->uri)) {
+    drush_log(dt('@p updatedb skipped: the site uri @uri cannot name a folder under sites/; the database updates were not applied', array('@p' => $tag . '4b/LOCAL/DR/SKIP', '@uri' => d()->uri)), 'warning');
+    _provision_drupal_clear_update_fetch_tasks();
+    _provision_drupal_rebuild_d8plus();
+    return NULL;
+  }
+
+  $unlocked_here = FALSE;
+  if (_provision_site_local_drush_runnable(d()->root) === '') {
+    drush_log(dt('@p with provision_unlock_drush_local_vnd (core\'s dr does not run on a locked codebase)', array('@p' => $tag . '2/LOCAL/DR/UNLOCK')), 'info');
+    if (!provision_unlock_drush_local_vnd()) {
+      drush_log(dt('@p updatedb skipped: the unlock could not restore the genuine psr/log in this codebase (see the PSR/LOG lines), and core\'s dr does not start against the Aegir overlay; the database updates were not applied', array('@p' => $tag . '2b/LOCAL/DR/SKIP')), 'warning');
+      drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '2c/LOCAL/DR/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+      _provision_drupal_clear_update_fetch_tasks();
+      _provision_drupal_rebuild_d8plus();
+      return NULL;
+    }
+    $unlocked_here = TRUE;
+  }
+
+  if (_provision_site_local_drush_runnable(d()->root) === '') {
+    // Unlocked and still not open and stock: no dr starts here.
+    drush_log(dt('@p updatedb skipped: core\'s dr cannot run in @root even after the unlock (its console folders or core files are not as their packages ship them); the database updates were not applied', array('@p' => $tag . '4b/LOCAL/DR/SKIP', '@root' => $appRoot)), 'warning');
+    _provision_drupal_clear_update_fetch_tasks();
+    if ($unlocked_here) {
+      drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '5/LOCAL/DR/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+    }
+    _provision_drupal_rebuild_d8plus();
+    return NULL;
+  }
+
+  // The start check: dr --version needs no site, and names Drupal.
+  drush_log(dt('@p dr --version in @root', array('@p' => $tag . '6/LOCAL/DR/CMD', '@root' => d()->root)), 'info');
+  $start = _provision_site_local_drush_start($appRoot, d()->root);
+  drush_log($tag . '7/LOCAL/DR/VERSION ' . $start['line']);
+  drush_set_option('provision_site_local_drush_started', (bool) $start['started']);
+  if (!$start['started'] && !_provision_site_local_drush_checked(d()->root)) {
+    drush_log(_provision_site_local_drush_dead_text($tag . '8/LOCAL/DR/DEAD', $appRoot, $start['line'], 'dr'), 'warning');
+  }
+  _provision_site_local_drush_checked(d()->root, TRUE);
+
+  drush_log(dt('@p dr --url=https://@uri updatedb --no-interaction in @root (DRUPAL_DEV_SITE_PATH=sites/@uri)', array('@p' => $tag . '9/LOCAL/DR/CMD', '@uri' => d()->uri, '@root' => d()->root)), 'info');
+  $run = _provision_site_local_dr_run($cli['dr'], array('updatedb', '--no-interaction'));
+  $output = $run['output'];
+  $verdict = _provision_site_local_dr_updatedb_verdict($run['ok'], $output);
+  // Kept, with the kind, for the strict move's error
+  // (drush_provision_drupal_post_provision_deploy()). Process scope.
+  drush_set_option('provision_site_local_updatedb_verdict', $verdict);
+  drush_set_option('provision_site_local_cli_kind', 'dr');
+  $complete = ($verdict === 'complete');
+  $last = count($output) - 1;
+  foreach ($output as $index => $line) {
+    if (trim((string) $line) === '') {
+      continue;
+    }
+    drush_log($line, ($complete && $index == $last) ? 'success' : 'notice');
+  }
+  if ($complete) {
+    drush_log(dt('@p updatedb ran to completion', array('@p' => $tag . '9/LOCAL/DR/DONE')), 'success');
+  }
+  else {
+    $texts = array(
+      'stopped' => "@p updatedb stopped at Drupal's requirements check (the [error] lines above) before running any update, so every pending database update still waits. Resolve what those lines name in the codebase, build it again and move the site onto that build with Migrate: its deploy runs the database updates.",
+      'boot' => "@p core's dr did not start Drupal for this site (the 'is not defined' line above): no database update ran. Check the site's settings.php and database, then Migrate the site again: its deploy runs the database updates.",
+      'failed' => "@p updatedb did not run to completion (see the lines above): an update failed and the ones after it still wait. Fix it in the codebase, build it again and move the site onto that build with Migrate: its deploy runs the database updates.",
+    );
+    drush_log(dt($texts[isset($texts[$verdict]) ? $verdict : 'failed'], array('@p' => $tag . '9/LOCAL/DR/FAIL')), 'warning');
+  }
+  _provision_drupal_clear_update_fetch_tasks();
+  if ($unlocked_here) {
+    drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '10/LOCAL/DR/LOCK')), 'info');
+    provision_lock_drush_local_vnd();
+  }
+  _provision_drupal_rebuild_d8plus();
+  return $complete;
 }
 
 /**
@@ -2425,6 +2686,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // Find The App Root Directory
   $appRoot = findAppRoot(d()->root);
 
+  // A Drush 15 codebase has no drush.php: its updates run under core's dr,
+  // in a window of the same shape (_provision_drupal_site_local_updatedb_dr()).
+  // Every other codebase takes the site-local Drush path below unchanged.
+  $cli = _provision_codebase_cli($appRoot, d()->root);
+  if ($cli['kind'] === 'dr') {
+    return _provision_drupal_site_local_updatedb_dr($tag, $appRoot, $cli);
+  }
+
   // Define Local Drush Path
   $drushPath = 'vendor/drush/drush/drush.php';
 
@@ -2462,7 +2731,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
     // Drush 8 (see above). Skip with a warning; the schema update must be
     // applied manually (Unlock Local Drush, then 'vdrush @alias updb') or by
     // repairing the site-local Drush.
-    drush_log(dt('@p updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@drush_path' => $drushAbsolutePath)), 'warning');
+    if ($cli['kind'] === 'none') {
+      // Nothing in this codebase runs updatedb: core alone has no such
+      // command, and a Drush 15 runs only under core's dr.
+      drush_log(dt('@p updatedb skipped: this codebase brings no command line that runs database updates (@why), and Aegir Drush 8 must not run updatedb on D10+; the database updates were not applied. Build it again with drush/drush in the project and move the site onto that build with Migrate: its deploy runs the database updates.', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@why' => $cli['why'])), 'warning');
+    }
+    else {
+      drush_log(dt('@p updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@drush_path' => $drushAbsolutePath)), 'warning');
+    }
     // Break the Update-module fetch-task deadlock introduced by the DB
     // import (clone/migrate/restore). On this degraded D10+ path the
     // site-local Drush is not executable, so the helper logs and skips
