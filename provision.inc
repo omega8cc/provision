@@ -2187,6 +2187,82 @@ function _provision_codebase_has_drush($approot) {
 }
 
 /**
+ * Which command line a codebase brings, read without running anything.
+ *
+ * 'drush': a Drush below 15, run through vendor/drush/drush/drush.php as every
+ * site-local step here runs it. 'dr': Drush 15 or newer, which has no
+ * drush.php and no site:install and runs only under Drupal core's own console,
+ * core/scripts/dr, with the two autoload_runtime.php files Composer writes for
+ * it. 'none': no Drush at all, or a Drush 15 whose dr cannot start. Read from
+ * what Composer recorded and from the entry files, never by running: the
+ * platform lock holds vendor/drush (for a Drush below 15) and the console
+ * closed at rest, so nothing site-local starts on a locked codebase, while
+ * vendor/composer/installed.json stays readable.
+ *
+ * @param string $approot
+ *   The codebase root (the directory holding vendor/).
+ * @param string $docroot
+ *   The docroot (the directory holding core/).
+ *
+ * @return array
+ *   'kind' ('drush', 'dr' or 'none'), 'version' (drush/drush as Composer
+ *   recorded it, or ''), 'dr' (core's dr for kind 'dr', else '') and 'why'
+ *   (one line saying how the kind was read).
+ */
+function _provision_codebase_cli($approot, $docroot) {
+  $approot = rtrim($approot, '/');
+  $docroot = rtrim($docroot, '/');
+  $version = '';
+  $normalized = '';
+  $installed_path = $approot . '/vendor/composer/installed.json';
+  if (is_readable($installed_path)) {
+    $installed = json_decode((string) file_get_contents($installed_path), TRUE);
+    // Composer 2 wraps the list in "packages"; composer 1 wrote the list.
+    $packages = (is_array($installed) && isset($installed['packages'])) ? $installed['packages'] : $installed;
+    if (is_array($packages)) {
+      foreach ($packages as $package) {
+        if (is_array($package) && isset($package['name']) && $package['name'] === 'drush/drush') {
+          $version = isset($package['version']) ? (string) $package['version'] : '';
+          $normalized = isset($package['version_normalized']) ? (string) $package['version_normalized'] : '';
+          break;
+        }
+      }
+    }
+  }
+  // The major from the normalized version (15.x-dev is 15.9999999.9999999.9999999-dev),
+  // else from the version itself (15.0.0, v15.0.0, dev-15.x); 0 when neither says.
+  $major = 0;
+  if (preg_match('/^v?([0-9]+)\./', ($normalized !== '' ? $normalized : $version), $m)) {
+    $major = (int) $m[1];
+  }
+  elseif (preg_match('/^dev-([0-9]+)\./', $version, $m)) {
+    $major = (int) $m[1];
+  }
+  $drush_php = is_file($approot . '/vendor/drush/drush/drush.php');
+  $has_drush = ($version !== '' || $drush_php || is_dir($approot . '/vendor/drush/drush'));
+  $result = array('kind' => 'none', 'version' => $version, 'dr' => '', 'why' => '');
+  if (!$has_drush) {
+    $result['why'] = 'no drush/drush in this codebase';
+    return $result;
+  }
+  if (($major > 0 && $major < 15) || ($major === 0 && $drush_php)) {
+    $result['kind'] = 'drush';
+    $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' runs through drush.php';
+    return $result;
+  }
+  $dr = $docroot . '/core/scripts/dr';
+  $runtime = is_file($approot . '/vendor/autoload_runtime.php') && is_file($docroot . '/autoload_runtime.php');
+  if (is_file($dr) && $runtime) {
+    $result['kind'] = 'dr';
+    $result['dr'] = $dr;
+    $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php; it runs under core\'s dr';
+    return $result;
+  }
+  $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php, and core\'s dr cannot start here (' . (is_file($dr) ? 'no autoload_runtime.php' : 'no core/scripts/dr') . ')';
+  return $result;
+}
+
+/**
  * Run the codebase's own Drush once: does it start?
  *
  * A Drush that is installed and dies at start looks sound everywhere else:

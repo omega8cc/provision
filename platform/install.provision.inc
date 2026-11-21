@@ -308,9 +308,23 @@ function drush_provision_drupal_provision_install() {
 
       // Check If The Local Drush Exists And Is Executable
       $drushAbsolutePath = $appRoot . '/' . $drushPath;
-      drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
 
-      if (!is_executable($drushAbsolutePath)) {
+      // A codebase whose Drush has no drush.php (Drush 15 and newer run only
+      // under core's dr, and dr's own install writes SQLite) or that carries
+      // no Drush installs through core's installer in a Drush-free child, in
+      // this same unlock window: a Drupal 12 codebase brings Drush 15, the
+      // only Drush that runs it. A Drush below 15 keeps site-install.
+      $cli = _provision_codebase_cli($appRoot, d()->root);
+      drush_log(dt('D11/INSTALL/CLI @kind: @why', array('@kind' => $cli['kind'], '@why' => $cli['why'])), 'info');
+      if ($cli['kind'] === 'drush') {
+        drush_log(dt('D11/INSTALL3/LOCAL/DRUSH/CHECK Path @path', array('@path' => $drushAbsolutePath)), 'info');
+      }
+      if ($cli['kind'] !== 'drush') {
+        if (!_provision_d11_install_drushfree($appRoot, $lock_unlock)) {
+          return FALSE;
+        }
+      }
+      elseif (!is_executable($drushAbsolutePath)) {
         // Log The Useful Info
         drush_log(dt('D11/INSTALL4/LOCAL/DRUSH/CHECK 404 Not Found or is not executable at @drush_path', array('@drush_path' => $drushAbsolutePath)), 'error');
         drush_log(print_r(drush_get_error_log(), 1), 'error');
@@ -777,6 +791,163 @@ function drush_provision_drupal_post_provision_install() {
  * @return string
  *   The db-url, or an empty string when the context carries no credentials.
  */
+/**
+ * Install a Drupal 11+ site with core's installer in a Drush-free child.
+ *
+ * For a codebase whose Drush has no drush.php (Drush 15 and newer) or that
+ * carries no Drush: platform/drupal/install_d11plus.php runs core's
+ * install_drupal() for sites/<uri> on the database of the settings.php this
+ * task already wrote, then stores the usage data choice, removes
+ * automatic_updates and package_manager and prints the login link's path, all
+ * in the same process. It runs in the caller's unlock window, from the
+ * docroot, with site-install's memory floor, error log, shutdown hook and
+ * DRUPAL_CMS_TELEMETRY=0, and the site's cloaked credentials in the
+ * environment. On failure the lock is put back and the install error set.
+ *
+ * @param string $appRoot
+ *   The codebase root (the directory holding vendor/).
+ * @param bool $lock_unlock
+ *   Whether this box locks and unlocks codebases.
+ *
+ * @return bool
+ *   TRUE when the site was installed.
+ */
+function _provision_d11_install_drushfree($appRoot, $lock_unlock) {
+  $root = d()->root;
+  $uri = d()->uri;
+  $script = dirname(__FILE__) . '/drupal/install_d11plus.php';
+  $settings_path = $root . '/sites/' . $uri . '/settings.php';
+  if (!is_file($script) || !is_file($settings_path)) {
+    drush_log(dt('D11/INSTALL/CORE/ERR @what not found at @path', array(
+      '@what' => is_file($script) ? 'settings.php' : 'the install script',
+      '@path' => is_file($script) ? $settings_path : $script,
+    )), 'error');
+    if ($lock_unlock) {
+      provision_lock_drush_local_vnd();
+    }
+    return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install not run for @uri', array('@uri' => $uri)));
+  }
+
+  $options = drush_get_merged_options();
+  $mail = !empty($options['client_email']) ? (string) $options['client_email'] : 'admin@example.com';
+  $name = !empty($options['#name']) ? (string) $options['#name'] : $uri;
+  // The language, checked as for site-install's --locale: a name not shaped
+  // like a language code installs English with a warning.
+  $langcode = 'en';
+  $site_language = d()->language;
+  if (!empty($site_language) && $site_language != 'en') {
+    if (strlen($site_language) <= 12 && preg_match('/^[a-z]{2,3}(-[a-z0-9]{1,8})*\z/', $site_language)) {
+      $langcode = $site_language;
+    }
+    else {
+      drush_log(dt('D11/INSTALL/LOCALE site language @lang is not a Drupal language code, installing in English', array('@lang' => $site_language)), 'warning');
+    }
+  }
+
+  // The same floor, error log and shutdown hook as site-install's child.
+  $mem = _provision_d11_install_memory($appRoot);
+  $php_errlog = _provision_d11_install_errlog_path();
+  @unlink($php_errlog);
+  $php_hook = _provision_d11_install_hook_write($php_errlog);
+  $php_opts = array('-d', 'log_errors=1', '-d', 'error_log=' . $php_errlog);
+  if ($php_hook !== FALSE) {
+    $php_opts[] = '-d';
+    $php_opts[] = 'auto_prepend_file=' . $php_hook;
+  }
+  if ($mem['child_mb'] > 0) {
+    $php_opts[] = '-d';
+    $php_opts[] = 'memory_limit=' . $mem['child_mb'] . 'M';
+  }
+  drush_log(dt('D11/INSTALL/MEM php cli memory_limit @cur; the install child runs with @child (@why; installed RAM @ram MB)', array(
+    '@cur' => $mem['current'],
+    '@child' => ($mem['child_mb'] > 0) ? $mem['child_mb'] . 'M' : $mem['current'],
+    '@why' => $mem['why'],
+    '@ram' => $mem['ram_mb'],
+  )), 'info');
+
+  $cmd_string = _provision_php_script_cmd($script, array($root, $uri, d()->profile, $langcode, $mail, $name), $php_opts);
+  drush_log(dt('D11/INSTALL/CORE/CMD install_d11plus.php @root @uri @profile @lang (core install_drupal, no Drush)', array(
+    '@root' => $root,
+    '@uri' => $uri,
+    '@profile' => d()->profile,
+    '@lang' => $langcode,
+  )), 'info');
+  // Usage data off from the start, as for site-install; the previous value
+  // comes back after. The site's cloaked credentials reach the child only
+  // through the real environment, as for the core rebuild.
+  $cms_telemetry = getenv('DRUPAL_CMS_TELEMETRY');
+  putenv('DRUPAL_CMS_TELEMETRY=0');
+  provision_clear_environment_subprocess();
+  provision_prepare_environment_subprocess();
+  $output = array();
+  $rc = 0;
+  exec('cd ' . escapeshellarg($root) . ' && ' . $cmd_string . ' 2>&1', $output, $rc);
+  provision_clear_environment_subprocess();
+  putenv(($cms_telemetry === FALSE) ? 'DRUPAL_CMS_TELEMETRY' : 'DRUPAL_CMS_TELEMETRY=' . $cms_telemetry);
+
+  // Success is exit 0 and the DONE line: core's installer can exit() from
+  // inside itself. The login link's path is kept out of the log.
+  $done = FALSE;
+  $login_path = '';
+  foreach ($output as $line) {
+    $line = (string) $line;
+    if (strpos($line, 'INSTALL/D11PLUS/LOGIN ') === 0) {
+      $login_path = trim(substr($line, strlen('INSTALL/D11PLUS/LOGIN ')));
+      continue;
+    }
+    if (strpos($line, 'INSTALL/D11PLUS/DONE ') === 0) {
+      $done = TRUE;
+      drush_log($line, 'success');
+      continue;
+    }
+    if (strpos($line, 'INSTALL/D11PLUS/WARN ') === 0) {
+      drush_log($line, 'warning');
+      continue;
+    }
+    drush_log($line, 'notice');
+  }
+  if ($rc !== 0 || !$done) {
+    drush_log(dt('D11/INSTALL/RC install child exit code @rc@note@done', array(
+      '@rc' => $rc,
+      '@note' => _provision_d11_exit_note($rc, $output),
+      '@done' => $done ? '' : ', no DONE line',
+    )), 'error');
+    _provision_d11_log_php_errlog($php_errlog);
+    if ($php_hook !== FALSE) {
+      @unlink($php_hook);
+    }
+    if ($lock_unlock) {
+      drush_log(dt('D11/INSTALL/LOCK re-apply Aegir patches after the failed install'), 'info');
+      provision_lock_drush_local_vnd();
+    }
+    return drush_set_error('PROVISION_DRUPAL_INSTALL_FAILED', dt('Drupal install failed for @uri', array('@uri' => $uri)));
+  }
+  @unlink($php_errlog);
+  if ($php_hook !== FALSE) {
+    @unlink($php_hook);
+  }
+
+  // The installer hardens the site directory on its way out, as after
+  // site-install: drushrc.php, which records the site as installed, is
+  // written only into a writable directory.
+  provision_file()->chmod(d()->site_path, 0755)
+    ->succeed('D11/INSTALL/SITEDIR restored @path to @perm after the installer hardened it')
+    ->fail('D11/INSTALL/SITEDIR could not restore @path to @perm');
+
+  // The address the panel's link opens, as provision_generate_login_reset()
+  // chooses it for the older cores: the redirection target when the site has
+  // one, else the site's own name (a subdirectory address included).
+  if (preg_match('#^/user/reset/[0-9]+/[0-9]+/[A-Za-z0-9_\-]+/login$#', $login_path)) {
+    $host = d()->redirection ? d()->redirection : $uri;
+    drush_set_option('login_link', 'http://' . $host . $login_path);
+    drush_log('D11/INSTALL/CORE/ULI ' . provision_login_link_message(), 'success');
+  }
+  else {
+    drush_log(dt('D11/INSTALL/CORE/ULI the install child gave no one-time login link'), 'warning');
+  }
+  return TRUE;
+}
+
 /**
  * The version string the site's database server reports, or FALSE.
  *
