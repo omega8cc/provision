@@ -46,8 +46,20 @@ $langcode = isset($argv[4]) ? $argv[4] : 'en';
 $mail = isset($argv[5]) ? $argv[5] : '';
 $name = isset($argv[6]) ? $argv[6] : '';
 
-function _install_d11plus_fail($message, $code) {
+function _install_d11plus_fail($message, $code, $e = NULL) {
   fwrite(STDERR, 'INSTALL/D11PLUS/FAIL ' . $message . "\n");
+  // Where an exception came from: its own line and the first frames of its
+  // trace, so a failed install says where it stopped.
+  if (is_object($e) && method_exists($e, 'getTrace')) {
+    fwrite(STDERR, 'INSTALL/D11PLUS/AT ' . $e->getFile() . ':' . $e->getLine() . "\n");
+    $n = 0;
+    foreach ($e->getTrace() as $frame) {
+      if (++$n > 15) {
+        break;
+      }
+      fwrite(STDERR, 'INSTALL/D11PLUS/TRACE ' . (isset($frame['class']) ? $frame['class'] . (isset($frame['type']) ? $frame['type'] : '::') : '') . (isset($frame['function']) ? $frame['function'] : '?') . ' ' . (isset($frame['file']) ? $frame['file'] . ':' . (isset($frame['line']) ? $frame['line'] : '?') : '') . "\n");
+    }
+  }
   exit($code);
 }
 
@@ -109,6 +121,32 @@ define('MAINTENANCE_MODE', 'install');
 $autoloader = require $root . '/autoload.php';
 require_once $root . '/core/includes/install.core.inc';
 
+// BOA's settings send the bootstrap, discovery and config bins of a process
+// without APCu (every command line here) to its chained backend over the
+// site's default backend (global-valkey.inc, global-chained-d8.services.yml),
+// which persists. Core's installer starts on in-memory caches, and from the
+// base system on it rebuilds the container as each group of modules goes in,
+// within this one process; with those bins persistent it read the entity
+// definitions cached when only the system module was in ("The "user" entity
+// type does not exist." in the module batch, Drupal 12.0.0-beta2 and 11.5.0,
+// with Valkey on and off). So for this install only, that backend gives
+// in-memory bins, as the installer's own first phase does for every bin. The
+// site's settings are untouched: once installed, its bins are BOA's again, and
+// provision's core rebuild after the install starts them clean.
+if (!class_exists('InstallD11PlusMemoryBins', FALSE)) {
+  class InstallD11PlusMemoryBins implements \Drupal\Core\DependencyInjection\ServiceModifierInterface {
+    public function alter(\Drupal\Core\DependencyInjection\ContainerBuilder $container) {
+      if ($container->hasDefinition('cache.backend.boa_chained')) {
+        $container->getDefinition('cache.backend.boa_chained')
+          ->setClass('Drupal\Core\Cache\MemoryBackendFactory')
+          ->setArguments(array(new \Symfony\Component\DependencyInjection\Reference('datetime.time')))
+          ->setMethodCalls(array());
+      }
+    }
+  }
+}
+$GLOBALS['conf']['container_service_providers']['InstallD11PlusMemoryBins'] = 'InstallD11PlusMemoryBins';
+
 // A random admin password, as core and Drush make one; never printed: the
 // one-time login link is the way in, and the task log is readable by every
 // login allowed to see the site's tasks.
@@ -144,16 +182,18 @@ $settings = array(
   ),
 );
 
+// The task the installer runs, by its name, as Drush's own callback logs it.
+// Nothing else: a callback that asks the installer for its task list makes it
+// read the profile and its extensions between two tasks, and on a box whose
+// caches persist (BOA's Valkey and chained bins) that stored the entity type
+// definitions of a half-installed site ("The "user" entity type does not
+// exist." in the module batch, measured on Drupal 12.0.0-beta2).
 $task_seen = '';
 $callback = function ($install_state) use (&$task_seen) {
-  $tasks = install_tasks_to_perform($install_state);
-  $task = current($tasks);
-  if (is_array($task) && isset($task['display_name'])) {
-    $label = (string) $task['display_name'];
-    if ($label !== '' && $label !== $task_seen) {
-      $task_seen = $label;
-      echo 'INSTALL/D11PLUS/TASK ' . $label . "\n";
-    }
+  $task = isset($install_state['active_task']) ? (string) $install_state['active_task'] : '';
+  if ($task !== '' && $task !== $task_seen) {
+    $task_seen = $task;
+    echo 'INSTALL/D11PLUS/TASK ' . $task . "\n";
   }
 };
 
@@ -161,10 +201,10 @@ try {
   install_drupal($autoloader, $settings, $callback);
 }
 catch (\Exception $e) {
-  _install_d11plus_fail(get_class($e) . ': ' . $e->getMessage(), 1);
+  _install_d11plus_fail(get_class($e) . ': ' . $e->getMessage(), 1, $e);
 }
 catch (\Throwable $e) {
-  _install_d11plus_fail(get_class($e) . ': ' . $e->getMessage(), 1);
+  _install_d11plus_fail(get_class($e) . ': ' . $e->getMessage(), 1, $e);
 }
 
 if (!class_exists('\Drupal') || !\Drupal::hasContainer()) {

@@ -907,9 +907,18 @@ function _provision_d11_install_drushfree($appRoot, $lock_unlock) {
     drush_log($line, 'notice');
   }
   if ($rc !== 0 || !$done) {
+    if ($rc === 1) {
+      $note = ' (the installer failed: see the INSTALL/D11PLUS/FAIL line and the frames after it above)';
+    }
+    elseif ($rc === 2 || $rc === 3) {
+      $note = ' (the child refused to start: see the INSTALL/D11PLUS/FAIL line above)';
+    }
+    else {
+      $note = _provision_d11_exit_note($rc, $output);
+    }
     drush_log(dt('D11/INSTALL/RC install child exit code @rc@note@done', array(
       '@rc' => $rc,
-      '@note' => _provision_d11_exit_note($rc, $output),
+      '@note' => $note,
       '@done' => $done ? '' : ', no DONE line',
     )), 'error');
     _provision_d11_log_php_errlog($php_errlog);
