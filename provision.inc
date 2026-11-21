@@ -1876,12 +1876,27 @@ function provision_drush_local_lock_state() {
     return 'unknown';
   }
 
-  $bits_locked = ((fileperms($drush) & 0777) === 0400)
-    && ((fileperms($inp) & 0777) === 0400)
-    && ((fileperms($sty) & 0777) === 0400);
-  $bits_unlocked = ((fileperms($drush) & 0777) === 0775)
-    && ((fileperms($inp) & 0777) === 0775)
-    && ((fileperms($sty) & 0777) === 0775);
+  // A Drush whose package Composer's autoloader loads a file from (Drush 15)
+  // keeps vendor/drush traversable in both states, so there the console
+  // directories alone tell locked from unlocked; a vendor/drush an older lock
+  // left at 0400 reads 'partial', and the lock body opens it again.
+  if (_provision_drush_in_autoload_files(d()->root)) {
+    $drush_open = ((fileperms($drush) & 0500) === 0500);
+    $bits_locked = $drush_open
+      && ((fileperms($inp) & 0777) === 0400)
+      && ((fileperms($sty) & 0777) === 0400);
+    $bits_unlocked = $drush_open
+      && ((fileperms($inp) & 0777) === 0775)
+      && ((fileperms($sty) & 0777) === 0775);
+  }
+  else {
+    $bits_locked = ((fileperms($drush) & 0777) === 0400)
+      && ((fileperms($inp) & 0777) === 0400)
+      && ((fileperms($sty) & 0777) === 0400);
+    $bits_unlocked = ((fileperms($drush) & 0777) === 0775)
+      && ((fileperms($inp) & 0777) === 0775)
+      && ((fileperms($sty) & 0777) === 0775);
+  }
 
   $version = drush_drupal_major_version();
 
@@ -2522,7 +2537,87 @@ function _provision_drush_local_lock_is_open($root) {
   if ($drush === '') {
     return FALSE;
   }
+  // vendor/drush stays traversable under the lock where Composer's autoloader
+  // loads a file from it (see _provision_drush_in_autoload_files()), so there
+  // the console Input directory says whether site-local Drush could run.
+  if (_provision_drush_in_autoload_files($root)) {
+    $inp = _provision_first_existing(array(
+      $root . '/vendor/symfony/console/Input',
+      $root . '/../vendor/symfony/console/Input',
+    ));
+    return ($inp !== '' && (fileperms($inp) & 0777) !== 0400);
+  }
   return ((fileperms($drush) & 0777) !== 0400);
+}
+
+/**
+ * Does Composer's autoloader load a file from inside vendor/drush?
+ *
+ * Drush 15 declares an autoload "files" entry (src/Doctor/autoload_file.php),
+ * and Composer's generated loader requires every such file on each load of
+ * vendor/autoload.php, with no check that it can be read. At the lock's 0400,
+ * which no account can traverse, that require is a fatal error in every web
+ * request of every site on the platform, in every Drush 8 bootstrap of them
+ * and in core's own dr. So such a codebase keeps vendor/drush traversable
+ * when locked. Its site-local Drush still cannot run at rest: Drush 15 runs
+ * only under core's dr, a console application, and the lock closes the
+ * console Input and Style directories as before.
+ *
+ * Read from vendor/composer/autoload_files.php, which Composer writes beside
+ * the loader and which names each file by its $vendorDir path; the vendor
+ * directory is the one the lock itself works on (the platform root's own,
+ * else the one above it). Must remain PHP 5.6 compatible (legacy servers).
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ *
+ * @return bool
+ *   TRUE when a file inside vendor/drush is in that list.
+ */
+function _provision_drush_in_autoload_files($root) {
+  $vendor = _provision_first_existing(array(
+    $root . '/vendor/composer',
+    $root . '/../vendor/composer',
+  ));
+  if ($vendor === '' || !is_readable($vendor . '/autoload_files.php')) {
+    return FALSE;
+  }
+  $list = @file_get_contents($vendor . '/autoload_files.php');
+  return ($list !== FALSE && strpos($list, "\$vendorDir . '/drush/") !== FALSE);
+}
+
+/**
+ * Open a vendor/drush an earlier lock closed under a Drush 15, before a root bootstrap.
+ *
+ * Drush 8's bootstrap of a platform root loads vendor/autoload.php, which on
+ * such a codebase requires a file inside vendor/drush. A lock from before
+ * _provision_drush_in_autoload_files() left that folder at 0400, so the
+ * bootstrap dies before any task reaches the lock, and only a chmod by hand
+ * would bring the platform's sites back. Verify, Lock and Unlock Local Drush
+ * and Install call this just before they bootstrap the root, so one Verify
+ * repairs such a platform. A codebase without the entry is never touched.
+ * Must remain PHP 5.6 compatible (legacy servers).
+ *
+ * @param string $root
+ *   The platform root about to be bootstrapped.
+ */
+function _provision_drush_autoload_heal($root) {
+  if (empty($root) || !_provision_drush_in_autoload_files($root)) {
+    return;
+  }
+  $drush = _provision_first_existing(array(
+    $root . '/vendor/drush',
+    $root . '/../vendor/drush',
+  ));
+  if ($drush === '' || (fileperms($drush) & 0500) === 0500) {
+    return;
+  }
+  if (@chmod($drush, 0775)) {
+    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path was closed by an earlier lock while Composer loads a file from it on every request, which stops every site of the platform; it is open again', array('@path' => $drush)), 'warning');
+  }
+  else {
+    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path is closed while Composer loads a file from it on every request, so every site of the platform fails, and this task could not open it: its owner can, with chmod 0775', array('@path' => $drush)), 'error');
+  }
 }
 
 /**
@@ -2912,15 +3007,29 @@ function provision_lock_drush_local_vnd() {
       _provision_site_local_drush_note_dead(d()->root);
     }
 
-    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0400)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
-    }
-    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0400)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    // Where Composer's autoloader loads a file from vendor/drush (Drush 15),
+    // a vendor/drush at 0400 is a fatal error in every request of every site
+    // here: it stays traversable, and one an older lock closed is opened to
+    // the unlock's mode. The console directories below still close.
+    $drush_autoloaded = _provision_drush_in_autoload_files(d()->root);
+    foreach (array($dru_vnd_drush_local, $dru_vnd_drush_above) as $dru_vnd_drush_dir) {
+      if (!provision_file()->exists($dru_vnd_drush_dir)->status()) {
+        continue;
+      }
+      if (!$drush_autoloaded) {
+        provision_file()->chmod($dru_vnd_drush_dir, 0400)
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
+      elseif ((fileperms($dru_vnd_drush_dir) & 0500) !== 0500) {
+        drush_log(dt('LOCK/DRUSH/AUTOLOAD Composer loads a file from @path on every request, so the lock opens it again', array('@path' => $dru_vnd_drush_dir)), 'info');
+        provision_file()->chmod($dru_vnd_drush_dir, 0775)
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
+      else {
+        drush_log(dt('LOCK/DRUSH/AUTOLOAD Composer loads a file from @path on every request, so the lock keeps it open; the console directories close', array('@path' => $dru_vnd_drush_dir)), 'info');
+      }
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {

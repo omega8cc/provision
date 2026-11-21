@@ -44,6 +44,7 @@ function drush_provision_drupal_provision_install_validate() {
   // the INSTALL1 re-lock having run in this process first.
   d()->root = provision_auto_fix_platform_root(d()->root);
   drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
+  _provision_drush_autoload_heal(d()->root);
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT);
   if (drush_get_error()) {
     $errors = drush_get_error_log();
