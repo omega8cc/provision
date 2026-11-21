@@ -2005,9 +2005,10 @@ function provision_drush_local_lock_state() {
  * install, database updates and start check run drush.php: the bare
  * require would pick Drush 15 the day it is tagged and leave the platform
  * unable to install a site or update a database. Drush 13 supports 11.5,
- * and ^13 is what composer writes into composer.json for the Drush 13 it
- * resolves there today, so the codebase gains no pin it would not have
- * had. An older core cannot take Drush 15 and keeps the commands below.
+ * and the bare require writes ^13.8 there today for the Drush 13 it
+ * resolves, already below 14: ^13 holds no tighter, so the codebase gains
+ * no limit it would not have had. An older core cannot take Drush 15 and
+ * keeps the commands below.
  * The core version is read from what composer recorded, else from the
  * codebase's core/lib/Drupal.php.
  *
