@@ -180,7 +180,11 @@ function _provision_drupal_system_map() {
       $module->schema_version = 0;
     }
     $packages['modules'][$module->name] = $module;
-    $module->version = isset($module->info['version']) ? $module->info['version'] : NULL;
+    // A module with no version key, or 'VERSION', takes Drupal's release, as
+    // the platform scan records it, so a module that names no release is no
+    // upgrade between two platforms of the same release.
+    $module->version = (!empty($module->info['version']) && $module->info['version'] != 'VERSION')
+      ? $module->info['version'] : drush_drupal_version();
   }
 
   drush_log(dt("Found !count modules", array('!count' => count($packages['modules']))), 'info');
