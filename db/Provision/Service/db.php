@@ -988,10 +988,15 @@ class Provision_Service_db extends Provision_Service {
           }
         }
         // A store dumped on a 5.x server keeps its utf8mb4 collations on this
-        // one (the MySQL service's store_collation_5x()), whichever of the
-        // broker and myloader loads it.
+        // one (the MySQL service's store_collation_5x()), and one dumped
+        // under an sql_mode naming words MySQL 8.x refuses loads on 8.x
+        // without them (store_sql_mode_8x()), whichever of the broker and
+        // myloader loads it.
         if ($import_allowed && method_exists($this, 'store_collation_5x')) {
           $this->store_collation_5x($oct_db_dirx);
+        }
+        if ($import_allowed && method_exists($this, 'store_sql_mode_8x')) {
+          $this->store_sql_mode_8x($oct_db_dirx);
         }
         if (!$import_allowed) {
           $found_dumps = array();

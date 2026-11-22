@@ -1492,6 +1492,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         }
         if ($import_allowed) {
           $this->store_collation_5x($oct_db_dirx);
+          $this->store_sql_mode_8x($oct_db_dirx);
         }
         if (!$import_allowed) {
           $found_dumps = array();
@@ -1877,9 +1878,12 @@ port=%s
 
   /**
    * The dump file a classic load reads: the file itself, or a copy with
-   * get_statement_regexes() applied when a line of it still needs them, and
+   * get_statement_regexes() applied when a line of it still needs them,
    * with classic_load_collation_regexes() applied for a 5.x dump loaded on
-   * another version.
+   * another version, and with sql_mode_8x_line() applied on a server known
+   * to be MySQL 8.x for a dump whose stored objects were made under a mode
+   * naming a word 8.x refuses (a dump of a 5.7 or MariaDB server, whose
+   * routines, triggers and events 8.x refused to load).
    *
    * An archive made before the dump filter rewrote those statements keeps
    * ALTER DATABASE lines naming the dumped database around an object made
@@ -1896,7 +1900,8 @@ port=%s
    * copy is written only when the filesystem keeps the headroom the space
    * check keeps (provision_space_margin()) after it. FALSE when the copy
    * cannot be written and a statement needs it; a copy needed only for the
-   * collations loads the dump as it is, with a warning. PHP 5.6-safe.
+   * collations or the sql_mode lines loads the dump as it is, with a
+   * warning. PHP 5.6-safe.
    */
   function classic_load_file($dump_file) {
     $regexes = $this->get_statement_regexes();
@@ -1926,11 +1931,16 @@ port=%s
     $routines = FALSE;
     $own = FALSE;
     $tables = FALSE;
+    $mode_words = FALSE;
+    $none = array();
     $start = TRUE;
-    while (!($needs && ($tables || !$collation) && ($routines || !$routines_here)) && ($piece = fgets($in, 1048576)) !== FALSE) {
+    while (!($needs && ($tables || !$collation) && ($routines || !$routines_here) && $mode_words) && ($piece = fgets($in, 1048576)) !== FALSE) {
       if ($start) {
         if (!$needs && $this->statement_line($piece, $regexes) !== $piece) {
           $needs = TRUE;
+        }
+        if (!$mode_words && $this->sql_mode_8x_line($piece, $none) !== $piece) {
+          $mode_words = TRUE;
         }
         if ($collation && !$tables && $this->statement_line($piece, $collation) !== $piece) {
           $tables = TRUE;
@@ -1948,7 +1958,17 @@ port=%s
       $start = substr($piece, -1) === "\n";
     }
     $needs_collation = $tables || $routines;
-    if (!$needs && !$needs_collation) {
+    // a stored object made under a mode naming a word MySQL 8.x refuses (a
+    // dump of a 5.7 or MariaDB server): on a server known to be 8.x the copy
+    // leaves those words out of its sql_mode line
+    $modes = FALSE;
+    if ($mode_words) {
+      if (!is_string($here)) {
+        $here = $this->server_version_quiet();
+      }
+      $modes = is_string($here) && preg_match('/^8\./', $here);
+    }
+    if (!$needs && !$needs_collation && !$modes) {
       fclose($in);
       return $dump_file;
     }
@@ -1975,7 +1995,7 @@ port=%s
           '@dir' => $dir,
           '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
         ) + $figures), 'warning');
-        return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
+        return $needs ? FALSE : $this->classic_load_copy_skipped($dump_file, $tables, $routines, $modes);
       }
     }
     $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
@@ -1983,7 +2003,7 @@ port=%s
     $out = @fopen($copy, 'xb');
     if ($out === FALSE) {
       fclose($in);
-      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
+      return $needs ? FALSE : $this->classic_load_copy_skipped($dump_file, $tables, $routines, $modes);
     }
     @chmod($copy, 0600);
     rewind($in);
@@ -1992,6 +2012,8 @@ port=%s
     $rewritten = 0;
     $recollated = 0;
     $routines_kept = 0;
+    $moded = 0;
+    $words = array();
     if ($routines) {
       // the server was read as 8.x; a comment only 8.x runs all the same
       $head = "/*!80000 SET SESSION default_collation_for_utf8mb4 = 'utf8mb4_general_ci' */;\n";
@@ -2014,6 +2036,13 @@ port=%s
             $routines_kept++;
           }
         }
+        if ($modes) {
+          $kept = $this->sql_mode_8x_line($line, $words);
+          if ($kept !== $line) {
+            $moded++;
+            $line = $kept;
+          }
+        }
       }
       $start = substr($piece, -1) === "\n";
       $written = fwrite($out, $line);
@@ -2025,7 +2054,7 @@ port=%s
     fclose($in);
     if (!fclose($out) || !$ok) {
       @unlink($copy);
-      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
+      return $needs ? FALSE : $this->classic_load_copy_skipped($dump_file, $tables, $routines, $modes);
     }
     if ($rewritten == 1) {
       drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
@@ -2042,7 +2071,24 @@ port=%s
     elseif ($routines_kept > 1) {
       drush_log(dt('The dump was made on MySQL 5.x: its @n stored routines load with utf8mb4_general_ci, the default they were made with there, for their utf8mb4 parameters and return values.', array('@n' => $routines_kept)), 'notice');
     }
+    if ($moded) {
+      drush_log(dt('The dump\'s stored routines, triggers or events were made under an sql_mode naming words MySQL 8.x refuses (@words): @n of their sql_mode lines load from a copy without them.', array('@words' => implode(', ', array_keys($words)), '@n' => $moded)), 'notice');
+    }
     return $copy;
+  }
+
+  /**
+   * $dump_file, after a warning for each kind of line the copy
+   * classic_load_file() could not write would have changed. PHP 5.6-safe.
+   */
+  function classic_load_copy_skipped($dump_file, $tables, $routines, $modes) {
+    if ($tables || $routines) {
+      $this->classic_load_collation_skipped($dump_file, $tables, $routines);
+    }
+    if ($modes) {
+      drush_log(dt('The dump\'s stored routines, triggers or events were made under an sql_mode naming words MySQL 8.x refuses, and the dump loads as it is: they fail to load.'), 'warning');
+    }
+    return $dump_file;
   }
 
   /**
@@ -2255,6 +2301,265 @@ port=%s
     if ($failed) {
       drush_log(dt('The database was dumped on MySQL 5.x and @n of its table files could not be rewritten: their utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@n' => $failed)), 'warning');
     }
+  }
+
+  /**
+   * The version this service's server reports, or FALSE, read for a load
+   * about to run.
+   *
+   * A refused connect sets no error here: the load itself reports it. A
+   * session opened only to read the version goes again at once: it would sit
+   * idle through the load, which can outlast the server's wait_timeout, and
+   * the statement after the load would meet it closed. PHP 5.6-safe.
+   */
+  function server_version_quiet() {
+    $opened = is_null($this->conn);
+    if ($opened) {
+      $this->connect(TRUE);
+    }
+    $here = $this->conn ? $this->server_version() : FALSE;
+    if ($opened && $this->conn && method_exists($this, 'close')) {
+      $this->close();
+    }
+    return $here;
+  }
+
+  /**
+   * The sql_mode value $mode without the words MySQL 8.x refuses, each word
+   * left out set as a key of $removed; $mode itself when it names none.
+   *
+   * The list is one text with mydumper_object_modes_read()'s. PHP 5.6-safe.
+   */
+  function sql_mode_8x_words($mode, &$removed) {
+    $gone = '/^(?:NO_AUTO_CREATE_USER|NO_FIELD_OPTIONS|NO_KEY_OPTIONS|NO_TABLE_OPTIONS|DB2|MAXDB|MSSQL|MYSQL323|MYSQL40|ORACLE|POSTGRESQL)$/';
+    if (!is_array($removed)) {
+      $removed = array();
+    }
+    $keep = array();
+    $left = FALSE;
+    foreach (explode(',', $mode) as $word) {
+      if ($word !== '' && preg_match($gone, $word)) {
+        $removed[$word] = TRUE;
+        $left = TRUE;
+      }
+      else {
+        $keep[] = $word;
+      }
+    }
+    return $left ? implode(',', $keep) : $mode;
+  }
+
+  /**
+   * A line of a classic dump: the sql_mode line mysqldump writes before a
+   * stored routine, a trigger or an event, without the words MySQL 8.x
+   * refuses (sql_mode_8x_words()), the rest of the line as it was; any other
+   * line as it is. PHP 5.6-safe.
+   */
+  function sql_mode_8x_line($line, &$removed) {
+    if (strncmp($line, '/*!50003 SET sql_mode ', 22) !== 0
+      || !preg_match("#^(/\\*!50003 SET sql_mode +=[ ]+')([A-Z0-9_,]*)(' \\*/ ;;?)$#", $line, $m)) {
+      return $line;
+    }
+    $kept = $this->sql_mode_8x_words($m[2], $removed);
+    return $kept === $m[2] ? $line : $m[1] . $kept . substr($line, strlen($m[1]) + strlen($m[2]));
+  }
+
+  /**
+   * Leaves the sql_mode words MySQL 8.x refuses out of a MyQuick store, the
+   * mydumper directory $dir that a deploy (import_site_database()) or
+   * import_dump() loads with myloader or the database broker, when this
+   * service's server is 8.x.
+   *
+   * mydumper writes the dumping session's sql_mode into its metadata (the
+   * mode myloader sets on its sessions) and into a header line near the top
+   * of every file, and the object pass sets it again after each stored
+   * object (mydumper_object_modes()). A database dumped from a MySQL 5.7 or
+   * MariaDB server whose mode names NO_AUTO_CREATE_USER, a word 8.x no
+   * longer has, failed its load on 8.x (ERROR 1231). Those words go
+   * (sql_mode_8x_words()) from the SQL_MODE line of the metadata's
+   * [myloader_session_variables], from a file's header in its first ten
+   * lines (the form the object pass reads) and from the object pass's plain
+   * SET SQL_MODE lines, each line's form kept. A 5.7 or MariaDB server, or
+   * one whose version cannot be read, takes the store as it is, and so does
+   * a store that names no such word, without the server being asked. A data
+   * file can be large: its header is changed in place at its length, the
+   * value shortened and the line padded with spaces inside its comment, so
+   * no byte after it moves. The other files are written through a new file
+   * in the same directory renamed over them, their mode kept. A link, or a
+   * file that cannot be read or rewritten, loads as it is, with a warning.
+   * PHP 5.6-safe.
+   */
+  function store_sql_mode_8x($dir) {
+    $files = @glob($dir . '/*.sql');
+    $files = is_array($files) ? $files : array();
+    if (file_exists($dir . '/metadata') || is_link($dir . '/metadata')) {
+      $files[] = $dir . '/metadata';
+    }
+    $todo = array();
+    $bad = 0;
+    $words = array();
+    foreach ($files as $file) {
+      if (is_link($file)) {
+        $bad++;
+        continue;
+      }
+      if (!is_file($file)) {
+        continue;
+      }
+      $found = $this->store_sql_mode_8x_file($file, FALSE, $words);
+      if ($found < 0) {
+        $bad++;
+      }
+      elseif ($found > 0) {
+        $todo[] = $file;
+      }
+    }
+    if (!$todo && !$bad) {
+      return;
+    }
+    $here = $this->server_version_quiet();
+    if (!is_string($here) || !preg_match('/^8\./', $here)) {
+      return;
+    }
+    $changed = 0;
+    foreach ($todo as $file) {
+      $done = $this->store_sql_mode_8x_file($file, TRUE, $words);
+      if ($done > 0) {
+        $changed++;
+      }
+      elseif ($done < 0) {
+        $bad++;
+      }
+    }
+    if ($changed) {
+      drush_log(dt('The database was dumped under an sql_mode naming words MySQL 8.x refuses (@words): @n file(s) of its store load without them.', array('@words' => implode(', ', array_keys($words)), '@n' => $changed)), 'notice');
+    }
+    if ($bad) {
+      drush_log(dt('@n file(s) of the database\'s store are left as they are (a link, or a file that could not be read or rewritten): an sql_mode word MySQL 8.x refuses in them stops their load.', array('@n' => $bad)), 'warning');
+    }
+  }
+
+  /**
+   * store_sql_mode_8x() on one file of the store: 1 when it names a word
+   * MySQL 8.x refuses (and, with $write, is written without it), 0 when it
+   * names none, -1 when it cannot be read or written. Each word found is set
+   * as a key of $words. PHP 5.6-safe.
+   */
+  function store_sql_mode_8x_file($file, $write, &$words) {
+    $name = basename($file);
+    if ($name !== 'metadata' && !preg_match('/-schema(?:-[a-z]+)?\.sql$/', $name)) {
+      return $this->store_sql_mode_8x_head($file, $write, $words);
+    }
+    $lines = @file($file);
+    if ($lines === FALSE) {
+      return -1;
+    }
+    $header = "#^(/\\*!40101 SET SQL_MODE=')([A-Z0-9_,]*)('\\*/;)$#";
+    // the object pass's own lines, in the files it rewrites
+    $plain = preg_match('/-schema-(?:post|triggers)\.sql$/', $name) ? "#^(SET SQL_MODE=')([A-Z0-9_,]*)(';)$#" : FALSE;
+    $meta = $name === 'metadata';
+    $section = FALSE;
+    $head = $meta;
+    $changed = FALSE;
+    foreach ($lines as $i => $line) {
+      if ($meta) {
+        if (preg_match('/^\[.*\]\s*$/', $line)) {
+          $section = rtrim($line) === '[myloader_session_variables]';
+          continue;
+        }
+        $re = $section ? "#^(SQL_MODE *= *')([A-Z0-9_,]*)'#" : FALSE;
+      }
+      elseif (!$head && $i < 10 && preg_match($header, $line)) {
+        $re = $header;
+        $head = TRUE;
+      }
+      else {
+        $re = $plain;
+      }
+      if ($re === FALSE || !preg_match($re, $line, $m)) {
+        continue;
+      }
+      $kept = $this->sql_mode_8x_words($m[2], $words);
+      if ($kept !== $m[2]) {
+        $lines[$i] = $m[1] . $kept . substr($line, strlen($m[1]) + strlen($m[2]));
+        $changed = TRUE;
+      }
+    }
+    if (!$changed || !$write) {
+      return $changed ? 1 : 0;
+    }
+    $mode = @fileperms($file);
+    $new = $file . '.sqlmode';
+    @unlink($new);
+    $out = @fopen($new, 'xb');
+    $text = implode('', $lines);
+    $ok = $out !== FALSE && fwrite($out, $text) === strlen($text);
+    if ($out !== FALSE && !fclose($out)) {
+      $ok = FALSE;
+    }
+    if ($ok && $mode !== FALSE) {
+      $ok = @chmod($new, $mode & 0777);
+    }
+    if (!$ok || !@rename($new, $file)) {
+      @unlink($new);
+      return -1;
+    }
+    return 1;
+  }
+
+  /**
+   * store_sql_mode_8x_file() on a data file: its header, the first of its
+   * first ten lines in the form the object pass reads, changed in place at
+   * its length when it names a word MySQL 8.x refuses: the value without
+   * those words, the line padded with spaces inside its comment, so it still
+   * ends with the comment's close and its semicolon and no byte after it
+   * moves. Returns as that does. PHP 5.6-safe.
+   */
+  function store_sql_mode_8x_head($file, $write, &$words) {
+    $h = @fopen($file, $write ? 'r+b' : 'rb');
+    if ($h === FALSE) {
+      return -1;
+    }
+    // the name still the file opened, never a link put there since
+    clearstatcache();
+    $st = @fstat($h);
+    $ln = @lstat($file);
+    if (!$st || !$ln || is_link($file) || $st['ino'] != $ln['ino'] || $st['dev'] != $ln['dev']) {
+      fclose($h);
+      return -1;
+    }
+    $at = 0;
+    $n = 0;
+    $start = TRUE;
+    $m = NULL;
+    // read in pieces: a long data row is never held whole
+    while ($n < 10 && ($piece = fgets($h, 8192)) !== FALSE) {
+      $ends = substr($piece, -1) === "\n";
+      if ($start && $ends && preg_match("#^(/\\*!40101 SET SQL_MODE=')([A-Z0-9_,]*)('\\*/;)$#", $piece, $m)) {
+        break;
+      }
+      $m = NULL;
+      $at += strlen($piece);
+      if ($ends) {
+        $n++;
+      }
+      $start = $ends;
+    }
+    $kept = $m ? $this->sql_mode_8x_words($m[2], $words) : NULL;
+    if (!$m || $kept === $m[2] || !$write) {
+      fclose($h);
+      return ($m && $kept !== $m[2]) ? 1 : 0;
+    }
+    $line = $m[1] . $kept . "'" . str_repeat(' ', strlen($m[2]) - strlen($kept)) . "*/;\n";
+    if (strlen($line) !== strlen($piece) || fseek($h, $at) !== 0 || fwrite($h, $line) !== strlen($line) || !fflush($h)) {
+      // the header put back where a write was cut short
+      if (fseek($h, $at) === 0) {
+        fwrite($h, $piece);
+      }
+      fclose($h);
+      return -1;
+    }
+    return fclose($h) ? 1 : -1;
   }
 
   /**
