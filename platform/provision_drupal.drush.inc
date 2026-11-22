@@ -2742,7 +2742,7 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
       // Nothing in this codebase runs updatedb: core alone has no such
       // command, and a Drush 15 runs only under core's dr. A Drush 15 that is
       // there needs what dr is missing (the reason names it), not drush/drush.
-      $build = ($cli['version'] !== '' || is_dir($appRoot . '/vendor/drush'))
+      $build = ($cli['version'] !== '' || is_dir($appRoot . '/vendor/drush/drush'))
         ? dt("Build it again so core's dr can start (the reason above names what is missing)")
         : dt('Build it again with drush/drush in the project');
       drush_log(dt('@p updatedb skipped: this codebase brings no command line that runs database updates (@why), and Aegir Drush 8 must not run updatedb on D10+; the database updates were not applied. @build and move the site onto that build with Migrate: its deploy runs the database updates.', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@why' => $cli['why'], '@build' => $build)), 'warning');
