@@ -3091,7 +3091,10 @@ function _provision_drupal_info_type($filename) {
  * last so it wins a name found in both, and the scopes in their order (core,
  * sites/all, the root directory; a profile's own), the later winning a name
  * found twice, as in Drupal's discovery. A file that declares no type counts
- * only in the folder of its own kind.
+ * only in the folder of its own kind. In the other kind's folder, tests folders
+ * are left out, as Drupal's discovery leaves them out by default: the test
+ * themes a module ships are on no site, and the own kind's search keeps what
+ * it always found.
  *
  * @param string $type
  *   'module' or 'theme'.
@@ -3114,7 +3117,8 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
     }
     $folders[$path] = TRUE;
     foreach ($folders as $folder => $own_kind) {
-      foreach (drush_scan_directory($folder, "/\.info\.yml$/", $nomask, 0, TRUE, 'name') as $name => $file) {
+      $skip = $own_kind ? $nomask : array_merge($nomask, array('tests'));
+      foreach (drush_scan_directory($folder, "/\.info\.yml$/", $skip, 0, TRUE, 'name') as $name => $file) {
         $declared = _provision_drupal_info_type($file->filename);
         if ($declared == $type || ($declared === '' && $own_kind)) {
           // The name less its '.info' (drush keys 'x.info.yml' as 'x.info').
