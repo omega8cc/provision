@@ -472,6 +472,15 @@ if (strpos($boa_zones_body, 'zone=bgp_flood') !== FALSE):
   }
 
   ###
+  ### The optional full-text companion of llms.txt, served the same way.
+  ###
+  location = /<?php print $subdir; ?>/llms-full.txt {
+    access_log off;
+    log_not_found off;
+    try_files /sites/<?php print $this->uri; ?>/files/$host.llms-full.txt /sites/<?php print $this->uri; ?>/files/llms-full.txt /sites/$host/files/llms-full.txt /llms-full.txt $uri @cache_<?php print $subdir_loc; ?>;
+  }
+
+  ###
   ### Support for http://drupal.org/project/robotstxt module
   ### and static file in the sites/domain/files directory.
   ###
