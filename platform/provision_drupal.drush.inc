@@ -2014,11 +2014,12 @@ function _provision_site_local_php_ini($php = NULL) {
 /**
  * Open (or restore) the platform lock's chmod window for the core rebuild.
  *
- * Without $restore: raise the dirs the lock holds at 0400 to the lock's own
- * 0775 window and return their previous modes. With $restore (the array
- * returned by the opening call): put every dir back to the mode it had.
- * Only dirs found at a mode other than the window are touched, so an
- * unlocked platform is left alone. The verify runs as the account that owns
+ * Without $restore: raise the dirs the lock holds at 0400 to the unlock's
+ * own mode (_provision_open_mode(): group write in a tenant codebase alone)
+ * and return their previous modes. With $restore (the array returned by the
+ * opening call): put every dir back to the mode it had. Only dirs found at a
+ * mode other than the window are touched, so an unlocked platform is left
+ * alone. The verify runs as the account that owns
  * the platform, so no sudo is involved.
  */
 function _provision_drupal_rebuild_lock_window($root, $restore = NULL) {
@@ -2044,10 +2045,11 @@ function _provision_drupal_rebuild_lock_window($root, $restore = NULL) {
       continue;
     }
     $mode = fileperms($dir) & 07777;
-    if ($mode === 0775) {
+    $open = _provision_open_mode($dir);
+    if ($mode === $open) {
       continue;
     }
-    if (@chmod($dir, 0775)) {
+    if (@chmod($dir, $open)) {
       $previous[$dir] = $mode;
     }
   }

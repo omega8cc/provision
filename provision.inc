@@ -1847,8 +1847,9 @@ function provision_drush_local_lock_needed() {
  *
  * No marker/pid files: state is read from the patch sentinels (set by
  * provision_check_codebase_status, which MUST have run first) and the actual
- * permission bits the lock (0400) / unlock (0775) apply to vendor/drush and the
- * Symfony console Input/Style dirs. Patch-state is authoritative where patch
+ * permission bits the lock (0400) / unlock (0775 in a tenant codebase, 0755
+ * elsewhere: _provision_open_mode()) apply to vendor/drush and the Symfony
+ * console Input/Style dirs. Patch-state is authoritative where patch
  * templates exist (D10 to D12); for pre-D10 and D13+ the lock is the chmod alone,
  * so perm-bits are the only signal. Any patch-vs-perm disagreement (the
  * interrupted-run signature) returns 'partial' so the caller runs the body,
@@ -1886,16 +1887,16 @@ function provision_drush_local_lock_state() {
       && ((fileperms($inp) & 0777) === 0400)
       && ((fileperms($sty) & 0777) === 0400);
     $bits_unlocked = $drush_open
-      && ((fileperms($inp) & 0777) === 0775)
-      && ((fileperms($sty) & 0777) === 0775);
+      && ((fileperms($inp) & 0777) === _provision_open_mode($inp))
+      && ((fileperms($sty) & 0777) === _provision_open_mode($sty));
   }
   else {
     $bits_locked = ((fileperms($drush) & 0777) === 0400)
       && ((fileperms($inp) & 0777) === 0400)
       && ((fileperms($sty) & 0777) === 0400);
-    $bits_unlocked = ((fileperms($drush) & 0777) === 0775)
-      && ((fileperms($inp) & 0777) === 0775)
-      && ((fileperms($sty) & 0777) === 0775);
+    $bits_unlocked = ((fileperms($drush) & 0777) === _provision_open_mode($drush))
+      && ((fileperms($inp) & 0777) === _provision_open_mode($inp))
+      && ((fileperms($sty) & 0777) === _provision_open_mode($sty));
   }
 
   $version = drush_drupal_major_version();
@@ -2775,11 +2776,12 @@ function _provision_drush_autoload_heal($root) {
   if ($drush === '' || (fileperms($drush) & 0500) === 0500) {
     return;
   }
-  if (@chmod($drush, 0775)) {
+  $mode = _provision_open_mode($drush);
+  if (@chmod($drush, $mode)) {
     drush_log(dt('LOCK/DRUSH/AUTOLOAD @path was closed by an earlier lock while Composer loads a file from it on every request, which stops every site of the platform; it is open again', array('@path' => $drush)), 'warning');
   }
   else {
-    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path is closed while Composer loads a file from it on every request, so every site of the platform fails, and this task could not open it: its owner can, with chmod 0775', array('@path' => $drush)), 'error');
+    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path is closed while Composer loads a file from it on every request, so every site of the platform fails, and this task could not open it: its owner can, with chmod @mode', array('@path' => $drush, '@mode' => sprintf('%04o', $mode))), 'error');
   }
 }
 
@@ -2788,12 +2790,17 @@ function _provision_drush_autoload_heal($root) {
  * in the Aegir tasks like updatedb.
  */
 /**
- * The mode Unlock Local Drush gives Composer's vendor/bin/dr: executable, with
- * group write only where the folder it really sits in belongs to a tenant
- * codebase (~/static), never a built-in platform's a vendor/ link leads to.
+ * The mode the site-local Drush window gives what it opens: the vendor/drush
+ * and Symfony Console folders, Drush's drush.php and launcher, and Composer's
+ * vendor/bin/dr. Group write only where the folder really sits in a tenant
+ * codebase (~/static): a built-in platform's group holds the account's SFTP
+ * and client logins, which must never change code the backend user runs. A
+ * folder is judged by itself, a file by the folder it sits in, links
+ * followed (a vendor/ link into a built-in platform's takes its mode).
+ * Must remain PHP 5.6 compatible (legacy servers).
  */
-function _provision_dr_mode($file) {
-  $dir = realpath(dirname($file));
+function _provision_open_mode($path) {
+  $dir = realpath(is_dir($path) ? $path : dirname($path));
   return ($dir !== FALSE && preg_match('#/static/#', $dir . '/')) ? 0775 : 0755;
 }
 
@@ -2826,41 +2833,41 @@ function provision_unlock_drush_local_vnd() {
     // shell's dr runs it by its path, as vdrush runs drush.php, and the
     // shell runs only a file that may be executed. The docroot's own vendor/,
     // else the one above it when the docroot has none, as the permission pass
-    // walks them; its mode follows the tree it really sits in
-    // (_provision_dr_mode()).
+    // walks them. Everything this window opens takes the mode of the tree it
+    // really sits in (_provision_open_mode()).
     $bin_vnd_dr_local = d()->root . '/vendor/bin/dr';
     $bin_vnd_dr_above = d()->root . '/../vendor/bin/dr';
     $bin_vnd_dr_upok = !file_exists(d()->root . '/vendor');
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_loc, _provision_open_mode($dru_vnd_symf_con_inp_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_abo, _provision_open_mode($dru_vnd_symf_con_inp_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_sty_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_sty_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_sty_loc, _provision_open_mode($dru_vnd_symf_con_sty_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_sty_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_sty_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_sty_abo, _provision_open_mode($dru_vnd_symf_con_sty_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -2877,34 +2884,34 @@ function provision_unlock_drush_local_vnd() {
     }
 
     if (provision_file()->exists($dru_dru_dru_php_local)->status()) {
-      provision_file()->chmod($dru_dru_dru_php_local, 0775)
+      provision_file()->chmod($dru_dru_dru_php_local, _provision_open_mode($dru_dru_dru_php_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_dru_dru_php_above)->status()) {
-      provision_file()->chmod($dru_dru_dru_php_above, 0775)
+      provision_file()->chmod($dru_dru_dru_php_above, _provision_open_mode($dru_dru_dru_php_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_dru_drush_local)->status()) {
-      provision_file()->chmod($dru_dru_drush_local, 0775)
+      provision_file()->chmod($dru_dru_drush_local, _provision_open_mode($dru_dru_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_dru_drush_above)->status()) {
-      provision_file()->chmod($dru_dru_drush_above, 0775)
+      provision_file()->chmod($dru_dru_drush_above, _provision_open_mode($dru_dru_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (is_file($bin_vnd_dr_local) && !is_link($bin_vnd_dr_local)) {
-      provision_file()->chmod($bin_vnd_dr_local, _provision_dr_mode($bin_vnd_dr_local))
+      provision_file()->chmod($bin_vnd_dr_local, _provision_open_mode($bin_vnd_dr_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     elseif ($bin_vnd_dr_upok && is_file($bin_vnd_dr_above) && !is_link($bin_vnd_dr_above)) {
-      provision_file()->chmod($bin_vnd_dr_above, _provision_dr_mode($bin_vnd_dr_above))
+      provision_file()->chmod($bin_vnd_dr_above, _provision_open_mode($bin_vnd_dr_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -3076,23 +3083,23 @@ function provision_unlock_some_vnd() {
     $dru_vnd_symf_con_sty_abo = d()->root . '/../vendor/symfony/console/Style';
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_loc, _provision_open_mode($dru_vnd_symf_con_inp_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_abo, _provision_open_mode($dru_vnd_symf_con_inp_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -3136,12 +3143,12 @@ function provision_unlock_drush_only() {
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -3203,7 +3210,8 @@ function provision_lock_drush_local_vnd() {
     // Where Composer's autoloader loads a file from vendor/drush (Drush 15),
     // a vendor/drush at 0400 is a fatal error in every request of every site
     // here: it stays traversable, and one an older lock closed is opened to
-    // the unlock's mode. The console directories below still close.
+    // the unlock's mode (_provision_open_mode()). The console directories
+    // below still close.
     $drush_autoloaded = _provision_drush_in_autoload_files(d()->root);
     foreach (array($dru_vnd_drush_local, $dru_vnd_drush_above) as $dru_vnd_drush_dir) {
       if (!provision_file()->exists($dru_vnd_drush_dir)->status()) {
@@ -3216,7 +3224,7 @@ function provision_lock_drush_local_vnd() {
       }
       elseif ((fileperms($dru_vnd_drush_dir) & 0500) !== 0500) {
         drush_log(dt('LOCK/DRUSH/AUTOLOAD Composer loads a file from @path on every request, so the lock opens it again', array('@path' => $dru_vnd_drush_dir)), 'info');
-        provision_file()->chmod($dru_vnd_drush_dir, 0775)
+        provision_file()->chmod($dru_vnd_drush_dir, _provision_open_mode($dru_vnd_drush_dir))
         ->succeed('Changed permissions of <code>@path</code> to @perm')
         ->fail('Could not change permissions of <code>@path</code> to @perm');
       }
