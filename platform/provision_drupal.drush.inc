@@ -3070,26 +3070,76 @@ function provision_drupal_system_map() {
 }
 
 /**
+ * The type an .info.yml file declares (module, theme, profile), or ''.
+ */
+function _provision_drupal_info_type($filename) {
+  $text = @file_get_contents($filename);
+  $m = array();
+  if ($text !== FALSE && preg_match('/^type\s*:\s*[\'"]?([A-Za-z_]+)[\'"]?\s*(#.*)?$/m', $text, $m)) {
+    return strtolower($m[1]);
+  }
+  return '';
+}
+
+/**
+ * Find the .info.yml file of each Drupal 8+ extension of one type in a scope.
+ *
+ * Drupal goes by the type an .info.yml declares, wherever the file sits: a
+ * theme a module ships in its own folder (Canvas's canvas_stark) is a theme,
+ * and a module inside a theme's folder is a module. So each scope's modules
+ * and themes folders are both searched, the folder of the type's own kind
+ * last so it wins a name found in both, and the scopes in their order (core,
+ * sites/all, the root directory; a profile's own), the later winning a name
+ * found twice, as in Drupal's discovery. A file that declares no type counts
+ * only in the folder of its own kind.
+ *
+ * @param string $type
+ *   'module' or 'theme'.
+ *
+ * @return array
+ *   drush_scan_directory() file objects keyed by machine name.
+ */
+function _provision_drupal_find_info_files($scope, $key, $type) {
+  $own = ($type == 'theme') ? 'themes' : 'modules';
+  $other = ($type == 'theme') ? 'modules' : 'themes';
+  // Both lists come from one scope, so they pair up by position.
+  $own_paths = array_values(_provision_drupal_search_paths($scope, $key, $own));
+  $other_paths = array_values(_provision_drupal_search_paths($scope, $key, $other));
+  $nomask = array('.', '..', 'CVS', '.svn');
+  $files = array();
+  foreach ($own_paths as $i => $path) {
+    $folders = array();
+    if (isset($other_paths[$i])) {
+      $folders[$other_paths[$i]] = FALSE;
+    }
+    $folders[$path] = TRUE;
+    foreach ($folders as $folder => $own_kind) {
+      foreach (drush_scan_directory($folder, "/\.info\.yml$/", $nomask, 0, TRUE, 'name') as $name => $file) {
+        $declared = _provision_drupal_info_type($file->filename);
+        if ($declared == $type || ($declared === '' && $own_kind)) {
+          // The name less its '.info' (drush keys 'x.info.yml' as 'x.info').
+          $files[basename($name, '.info')] = $file;
+        }
+      }
+    }
+  }
+  return $files;
+}
+
+/**
  * Find modules in a certain scope.
  *
  * This function is general enough that it works for all supported
  * versions of Drupal.
  */
 function _provision_drupal_find_modules($scope, $key = '') {
-  $paths = _provision_drupal_search_paths($scope, $key, 'modules');
   $files = array();
 
   if (drush_drupal_major_version() >= 8) {
-    foreach ($paths as $path) {
-      $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
-    }
-    // Remove '.info' extension from the end of the file name.
-    foreach($files as $name => $file) {
-      $files[basename($name, '.info')] = $file;
-      unset($files[$name]);
-    }
+    $files = _provision_drupal_find_info_files($scope, $key, 'module');
   }
   else {
+    $paths = _provision_drupal_search_paths($scope, $key, 'modules');
     foreach ($paths as $path) {
       $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     }

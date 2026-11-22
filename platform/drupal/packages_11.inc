@@ -11,18 +11,12 @@
  * We do not support, nor need information on subthemes at this point.
  */
 function _provision_drupal_find_themes($scope, $key = '') {
-  $paths = _provision_drupal_search_paths($scope, $key, 'themes');
-  $files = array();
+  // A theme Drupal finds in a module's own folder (Canvas ships canvas_stark
+  // there) is recorded too, and a module inside a theme's folder is not.
+  $files = _provision_drupal_find_info_files($scope, $key, 'theme');
   $engines = array();
-  foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+  foreach (_provision_drupal_search_paths($scope, $key, 'themes') as $path) {
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
-  }
-
-  // Remove '.info' extension from the end of the file name.
-  foreach($files as $name => $file) {
-    $files[basename($name, '.info')] = $file;
-    unset($files[$name]);
   }
 
   foreach ($files as $name => $file) {
