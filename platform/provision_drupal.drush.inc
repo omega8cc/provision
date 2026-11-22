@@ -3073,24 +3073,65 @@ function provision_drupal_system_map() {
 
 /**
  * The type an .info.yml file declares (module, theme, profile), or ''.
+ *
+ * Read as the platform's own discovery reads it, the case kept. From Drupal
+ * 11.2 on it takes the parsed file's type key, and a file it cannot parse or
+ * that names no type stops the discovery; before 11.2 it takes the first line
+ * its pattern matches and skips a file none matches ('type : module', a value
+ * on the next line). Either way such a file is no extension here.
  */
 function _provision_drupal_info_type($filename) {
   $text = @file_get_contents($filename);
-  $m = array();
-  if ($text !== FALSE && preg_match('/^type\s*:\s*[\'"]?([A-Za-z_]+)[\'"]?\s*(#.*)?$/m', $text, $m)) {
-    return strtolower($m[1]);
+  if ($text === FALSE) {
+    return '';
+  }
+  if (version_compare(drush_drupal_version(), '11.2', '>=')) {
+    try {
+      $info = \Symfony\Component\Yaml\Yaml::parse($text);
+    }
+    catch (Exception $e) {
+      return '';
+    }
+    return (is_array($info) && isset($info['type']) && is_string($info['type'])) ? $info['type'] : '';
+  }
+  foreach (explode("\n", $text) as $line) {
+    $m = array();
+    if (preg_match('@^type:\s*(\'|")?(\w+)\1?\s*(?:\#.*)?$@', $line, $m)) {
+      return $m[2];
+    }
   }
   return '';
 }
 
 /**
- * The origin of a Drupal 8+ extension's copy, in Drupal's order of precedence.
+ * The platform root a package scan's search paths start with.
  *
- * Core 0, the install profile 1, sites/all 2, the root directory 3 and a
- * site's own folder 5, the ranks Drupal's discovery resolves a name found
- * twice by, the higher winning. A profile scope is the profile's whatever its
- * path (a core profile sits under core/); in the base scope the path tells
- * core, sites/all and the root directory apart.
+ * Backdrop's bootstrap leaves DRUSH_DRUPAL_ROOT empty, so its search paths
+ * fall back to the selected root, then the context's; the same order here.
+ */
+function _provision_drupal_scan_root() {
+  $root = drush_get_context('DRUSH_DRUPAL_ROOT');
+  if (!is_string($root) || $root === '') {
+    $root = drush_get_context('DRUSH_SELECTED_DRUPAL_ROOT');
+  }
+  if (!is_string($root) || $root === '') {
+    $root = d()->root;
+  }
+  return is_string($root) ? $root : '';
+}
+
+/**
+ * The origin of an extension's copy, in its core's order of precedence.
+ *
+ * The higher wins a name found twice, as the core's own discovery resolves
+ * it. Every core puts the install profile at 1, sites/all at 2 and a site's
+ * own folder at 5; a profile scope is the profile's whatever its path (a
+ * core profile sits under core/). The root directory's modules and themes
+ * folders differ: Drupal 8 and later run their copy over sites/all's (3),
+ * Drupal 6 and 7 search them first, so every other copy wins over theirs (0),
+ * and Backdrop runs theirs over a profile's (2; it searches no sites/all, and
+ * a copy there keeps the place the scan's order gives it). Core's own folder
+ * is 0.
  */
 function _provision_drupal_origin($scope, $key, $filename) {
   if ($scope == 'profiles') {
@@ -3099,19 +3140,41 @@ function _provision_drupal_origin($scope, $key, $filename) {
   if ($scope == 'sites') {
     return ($key == 'all') ? 2 : 5;
   }
-  $root = rtrim((string) drush_get_context('DRUSH_DRUPAL_ROOT'), '/') . '/';
-  $rel = (strpos($filename, $root) === 0) ? substr($filename, strlen($root)) : $filename;
+  $root = _provision_drupal_scan_root();
+  $prefix = rtrim($root, '/') . '/';
+  $rel = (strpos($filename, $prefix) === 0) ? substr($filename, strlen($prefix)) : $filename;
   if (strpos($rel, 'core/') === 0) {
     return 0;
   }
   if (strpos($rel, 'sites/all/') === 0) {
     return 2;
   }
-  return 3;
+  if (drush_drupal_major_version() >= 8) {
+    return 3;
+  }
+  if (provision_platform_is_backdrop($root)) {
+    return 2;
+  }
+  return 0;
 }
 
 /**
- * The origin a Drupal 8+ scan tagged a package copy with, or NULL.
+ * Scan one search path of a Drupal 6, 7 or Backdrop scope, each copy tagged.
+ *
+ * @return array
+ *   drush_scan_directory() file objects keyed by machine name, each with the
+ *   origin _provision_drupal_origin() gives it.
+ */
+function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
+  $files = drush_scan_directory($path, $mask, array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name');
+  foreach ($files as $file) {
+    $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
+  }
+  return $files;
+}
+
+/**
+ * The origin a package scan tagged a package copy with, or NULL.
  */
 function _provision_drupal_package_origin($package) {
   if (is_array($package)) {
@@ -3123,10 +3186,11 @@ function _provision_drupal_package_origin($package) {
 /**
  * Merge package lists, the later list winning a name found in more than one.
  *
- * When every copy carries the origin a Drupal 8+ scan tags it with, a name
- * keeps the copy of the highest origin, the one Drupal runs, so a profile's
- * copy of a module no longer beats the root directory's. Lists without the
- * tag (Drupal 7, packages a Verify before the tag recorded) merge as before.
+ * When every copy carries the origin a package scan tags it with, a name
+ * keeps the copy of the highest origin, the one the core runs, so a
+ * profile's copy of a module no longer beats the root directory's on Drupal
+ * 8 and later or Backdrop, nor sites/all's on Drupal 6 and 7. Lists without
+ * the tag (packages a Verify before the tag recorded) merge as before.
  */
 function _provision_drupal_merge_packages($lists) {
   $tagged = TRUE;
@@ -3154,6 +3218,71 @@ function _provision_drupal_merge_packages($lists) {
 }
 
 /**
+ * Refuse a deploy onto a platform whose copy of a site's module is older.
+ *
+ * Each module the site has enabled is compared with the platform's copy the
+ * site will run. Of the base list's copy and the install profile's, that is
+ * the one whose origin ranks higher. On Drupal 6 and 7 sites/all's list goes
+ * after the profile's, as those cores search it after the profile, which also
+ * decides it for packages a Verify recorded before copies carried an origin.
+ * A module in the site's own folder moves with the site, so its own copy is
+ * the one that runs and no platform copy is compared. The deploys of Drupal
+ * and of Backdrop both call it.
+ *
+ * The site's packages are those its context holds when the deploy has
+ * written the site's drushrc.php and loaded it. A Clone, a Migrate and a
+ * Restore of the panel run the deploy in a child that loads no site context
+ * before that write, so the file holds none and nothing is compared; for
+ * those tasks the panel's own comparison of the two platforms is the check.
+ *
+ * @param array $site_packages
+ *   The site's packages, its enabled modules with their schema numbers.
+ * @param array $drupal_packages
+ *   The target platform's packages, as its Verify recorded them.
+ * @param bool $sites_all_last
+ *   TRUE on Drupal 6 and 7, whose sites/all wins over the install profile.
+ */
+function _provision_drupal_deploy_schema_check($site_packages, $drupal_packages, $sites_all_last) {
+  $lists = array(isset($drupal_packages['base']['modules']) ? $drupal_packages['base']['modules'] : array());
+  if (isset($site_packages['profiles'])) {
+    $profiles = array_keys($site_packages['profiles']);
+    $profile = $profiles[0];
+    if (isset($drupal_packages['profiles'][$profile]['modules'])) {
+      $lists[] = $drupal_packages['profiles'][$profile]['modules'];
+    }
+  }
+  if ($sites_all_last && isset($drupal_packages['sites-all']['modules'])) {
+    $lists[] = $drupal_packages['sites-all']['modules'];
+  }
+  // The copy Drupal runs of a module more than one list holds.
+  $merged_modules = (count($lists) > 1) ? _provision_drupal_merge_packages($lists) : $lists[0];
+
+  if (isset($site_packages['modules']) && is_array($site_packages['modules'])) {
+    foreach ($site_packages['modules'] as $name => $module) {
+      if ($module['status'] == 1) {
+        if (isset($module['platform']) && $module['platform'] == -1) {
+          drush_log(dt("The !name module is installed in the site's modules directory. Skipping schema version check.", array('!name' => $name)), 'info');
+        }
+        elseif (!array_key_exists($name, $merged_modules)) {
+          drush_log(dt("Could not find a version of the !name module", array('!name' => $name)), 'warning');
+        }
+        else {
+          if (($merged_modules[$name]['schema_version'] > 0) && ($module['schema_version'] > $merged_modules[$name]['schema_version'])) {
+            drush_set_error('PROVISION_SCHEMA_UPGRADE_FAILURE',
+              dt("The version of the !name module found on this platform (!versionB) has a lower Schema version than the one the site has installed (!versionA)",
+              array('!name' => $name, '!versionA' => $module['schema_version'], '!versionB' => $merged_modules[$name]['schema_version'])));
+          }
+          else {
+            drush_log(dt("Found a valid version of the !name module with schema version !schema_version",
+              array('!name' => $name, '!schema_version' => $merged_modules[$name]['schema_version'])));
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
  * Find the .info.yml file of each Drupal 8+ extension of one type in a scope.
  *
  * Drupal goes by the type an .info.yml declares, wherever the file sits: a
@@ -3162,11 +3291,11 @@ function _provision_drupal_merge_packages($lists) {
  * and themes folders are both searched, the folder of the type's own kind
  * last so it wins a name found in both, and the scopes in their order (core,
  * sites/all, the root directory; a profile's own), the later winning a name
- * found twice, as in Drupal's discovery. A file that declares no type counts
- * only in the folder of its own kind. In the other kind's folder, tests folders
- * are left out, as Drupal's discovery leaves them out by default: the test
- * themes a module ships are on no site, and the own kind's search keeps what
- * it always found.
+ * found twice, as in Drupal's discovery. A file that declares no type is no
+ * extension, and tests folders are left out, as Drupal's discovery leaves
+ * them out unless a site turns test discovery on (BOA never does): a test
+ * module or theme is on no site, and one named like a real extension took
+ * the real one's place.
  *
  * @param string $type
  *   'module' or 'theme'.
@@ -3180,22 +3309,25 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
   // Both lists come from one scope, so they pair up by position.
   $own_paths = array_values(_provision_drupal_search_paths($scope, $key, $own));
   $other_paths = array_values(_provision_drupal_search_paths($scope, $key, $other));
-  $nomask = array('.', '..', 'CVS', '.svn');
+  $skip = array('.', '..', 'CVS', '.svn', 'tests');
   $files = array();
   foreach ($own_paths as $i => $path) {
     $folders = array();
     if (isset($other_paths[$i])) {
-      $folders[$other_paths[$i]] = FALSE;
+      $folders[] = $other_paths[$i];
     }
-    $folders[$path] = TRUE;
-    foreach ($folders as $folder => $own_kind) {
-      $skip = $own_kind ? $nomask : array_merge($nomask, array('tests'));
+    $folders[] = $path;
+    foreach ($folders as $folder) {
       foreach (drush_scan_directory($folder, "/\.info\.yml$/", $skip, 0, TRUE, 'name') as $name => $file) {
-        $declared = _provision_drupal_info_type($file->filename);
-        if ($declared == $type || ($declared === '' && $own_kind)) {
+        // The name less its '.info' (drush keys 'x.info.yml' as 'x.info'); as
+        // in Drupal's discovery, only a valid PHP function name is an extension.
+        $machine = basename($name, '.info');
+        if (!preg_match('/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/', $machine)) {
+          continue;
+        }
+        if (_provision_drupal_info_type($file->filename) === $type) {
           $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
-          // The name less its '.info' (drush keys 'x.info.yml' as 'x.info').
-          $files[basename($name, '.info')] = $file;
+          $files[$machine] = $file;
         }
       }
     }
@@ -3218,7 +3350,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
   else {
     $paths = _provision_drupal_search_paths($scope, $key, 'modules');
     foreach ($paths as $path) {
-      $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+      $files = array_merge($files, _provision_drupal_scan_origin($scope, $key, $path, "/\.module$/"));
     }
   }
 

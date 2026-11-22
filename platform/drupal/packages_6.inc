@@ -15,7 +15,7 @@ function _provision_drupal_find_themes($scope, $key = '') {
   $files = array();
   $engines = array();
   foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.info$/", array('.', '..', 'CVS', '.svn'), 0, true, 'name'));
+    $files = array_merge($files, _provision_drupal_scan_origin($scope, $key, $path, "/\.info$/"));
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, true, 'name'));
   }
   foreach ($files as $name => $file) {
