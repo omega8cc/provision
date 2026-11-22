@@ -2812,9 +2812,15 @@ function provision_unlock_drush_local_vnd() {
     $dru_dru_drush_above = d()->root . '/../vendor/drush/drush/drush';
     // Composer's proxy for core's dr (Drupal 11.5 and newer, Drush 15): the
     // shell's dr runs it by its path, as vdrush runs drush.php, and the
-    // shell runs only a file that may be executed
+    // shell runs only a file that may be executed. It takes group write only
+    // where a tenant codebase's files do (~/static), never on a built-in
+    // platform, whose code the backend runs and no shell login writes; the
+    // vendor/ above the docroot counts only below a web, docroot or html
+    // folder of the codebase.
     $bin_vnd_dr_local = d()->root . '/vendor/bin/dr';
     $bin_vnd_dr_above = d()->root . '/../vendor/bin/dr';
+    $bin_vnd_dr_mode = preg_match('#/static/#', d()->root) ? 0775 : 0755;
+    $bin_vnd_dr_upok = (bool) preg_match('#/(web|docroot|html)/?$#', d()->root);
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
       provision_file()->chmod($dru_vnd_drush_local, 0775)
@@ -2883,12 +2889,12 @@ function provision_unlock_drush_local_vnd() {
     }
 
     if (is_file($bin_vnd_dr_local) && !is_link($bin_vnd_dr_local)) {
-      provision_file()->chmod($bin_vnd_dr_local, 0775)
+      provision_file()->chmod($bin_vnd_dr_local, $bin_vnd_dr_mode)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
-    elseif (is_file($bin_vnd_dr_above) && !is_link($bin_vnd_dr_above)) {
-      provision_file()->chmod($bin_vnd_dr_above, 0775)
+    elseif ($bin_vnd_dr_upok && is_file($bin_vnd_dr_above) && !is_link($bin_vnd_dr_above)) {
+      provision_file()->chmod($bin_vnd_dr_above, $bin_vnd_dr_mode)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
