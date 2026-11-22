@@ -3105,18 +3105,16 @@ function _provision_drupal_find_modules($scope, $key = '') {
       continue;
     }
     $install_file = sprintf("%s/%s.install", dirname($info->filename), $name);
-    // Drupal now enforces a minimum schema version see: https://www.drupal.org/node/2186315
-    // It is \Drupal::CORE_MINIMUM_SCHEMA_VERSION, 8000 on every release from
-    // 8 on: a module with no update hook is installed at 8000. A floor of
-    // major * 1000 put such a module above what a site records from Drupal 9
-    // on, so the Migrate form counted it as an upgrade between identical
-    // platforms and the schema checks could not see a downgrade below it.
-    if (drush_drupal_major_version() >= 8) {
-      $schema_version = 8000;
-    }
-    else {
-      $schema_version = 0;
-    }
+    // A module whose code shows no update hook records no schema number (0),
+    // which the panel's comparison, its Compare page and the deploy check all
+    // read as unknown, as on Drupal 7. Drupal installs such a module at
+    // \Drupal::CORE_MINIMUM_SCHEMA_VERSION, 8000 on every release from 8 on
+    // (https://www.drupal.org/node/2186315), but a site upgraded from a release
+    // that had hooks keeps their last number when the hooks are gone: a floor
+    // here turned that site into a false downgrade, and the floor of
+    // major * 1000 counted every such module as an upgrade between identical
+    // platforms from Drupal 9 on.
+    $schema_version = 0;
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
       // Some modules keep update hooks in an include file (webform).
