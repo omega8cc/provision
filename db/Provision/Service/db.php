@@ -397,7 +397,13 @@ class Provision_Service_db extends Provision_Service {
    * of the mode the server stored for it before its CREATE and the file's
    * mode after it (myloader stops on a versioned-comment SET in the middle
    * of a file); mode words 8.x refuses are left out, so a 5.7 dump still
-   * loads there. The same rewrite as BOA's dump tools. Returns FALSE when
+   * loads there. A routine whose utf8mb4 parameters and return value share
+   * one of the two defaults default_collation_for_utf8mb4 takes gets that
+   * default the same way, the session's own value back after it,
+   * each a statement prepared from one naming MySQL 8 (a 5.x or MariaDB
+   * server, which has no such setting, runs DO 0 in its place, so the dump
+   * still loads there): no dump names their collation, and the load gave
+   * them its own. The same rewrite as BOA's dump tools. Returns FALSE when
    * an object or a file kept the dump's own mode; the dump stands either way.
    */
   function mydumper_object_modes($db_name, $dump_dir) {
@@ -417,12 +423,30 @@ class Provision_Service_db extends Provision_Service {
     if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $db_name)) {
       return FALSE;
     }
-    $result = $this->query("SELECT 'TRIGGER', HEX(TRIGGER_NAME), SQL_MODE FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '%s'"
-      . " UNION ALL SELECT ROUTINE_TYPE, HEX(ROUTINE_NAME), SQL_MODE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '%s'"
-      . " UNION ALL SELECT 'EVENT', HEX(EVENT_NAME), SQL_MODE FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '%s'",
-      $db_name, $db_name, $db_name);
+    // A routine's utf8mb4 parameters and return value take the loading
+    // session's default_collation_for_utf8mb4, which no dump names: each
+    // routine whose parameters and return value share one of the two
+    // defaults that setting takes is read with it, after a tab in its mode's
+    // value (as BOA's dump tools carry it), on any server: a 5.x or MariaDB
+    // one names utf8mb4_general_ci there, which a load on MySQL 8 then keeps.
+    // A server that refuses that read gives the modes alone.
+    $params = "IFNULL((SELECT IF(COUNT(DISTINCT p.COLLATION_NAME) = 1, MIN(p.COLLATION_NAME), '') FROM information_schema.PARAMETERS p"
+      . " WHERE p.SPECIFIC_SCHEMA = r.ROUTINE_SCHEMA AND p.SPECIFIC_NAME = r.ROUTINE_NAME AND p.ROUTINE_TYPE = r.ROUTINE_TYPE"
+      . " AND p.COLLATION_NAME IN ('utf8mb4_general_ci', 'utf8mb4_0900_ai_ci')), '')";
+    foreach (array($params, "''") as $coll) {
+      $result = $this->query("SELECT 'TRIGGER', HEX(TRIGGER_NAME), SQL_MODE, '' FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '%s'"
+        . " UNION ALL SELECT r.ROUTINE_TYPE, HEX(r.ROUTINE_NAME), r.SQL_MODE, " . $coll . " FROM information_schema.ROUTINES r WHERE r.ROUTINE_SCHEMA = '%s'"
+        . " UNION ALL SELECT 'EVENT', HEX(EVENT_NAME), SQL_MODE, '' FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '%s'",
+        $db_name, $db_name, $db_name);
+      if ($result) {
+        break;
+      }
+    }
     if (!$result) {
       return FALSE;
+    }
+    if ($coll !== $params) {
+      drush_log(dt('The stored routines\' utf8mb4 defaults of @db could not be read: its routines load with the loading server\'s default.', array('@db' => $db_name)), 'warning');
     }
     $gone = '/^(?:NO_AUTO_CREATE_USER|NO_FIELD_OPTIONS|NO_KEY_OPTIONS|NO_TABLE_OPTIONS|DB2|MAXDB|MSSQL|MYSQL323|MYSQL40|ORACLE|POSTGRESQL)$/';
     $modes = array();
@@ -438,7 +462,12 @@ class Provision_Service_db extends Provision_Service {
           $keep[] = $word;
         }
       }
-      $modes[$row[0] . ' ' . strtolower($row[1])] = implode(',', $keep);
+      $value = implode(',', $keep);
+      if ($coll !== "''" && isset($row[3]) && preg_match('/^(?:FUNCTION|PROCEDURE)$/', (string) $row[0])
+        && preg_match('/^utf8mb4_(?:general_ci|0900_ai_ci)$/', (string) $row[3])) {
+        $value .= "\t" . $row[3];
+      }
+      $modes[$row[0] . ' ' . strtolower($row[1])] = $value;
     }
     return $modes;
   }
@@ -488,31 +517,53 @@ class Provision_Service_db extends Provision_Service {
     }
     $out = array();
     $pending = FALSE;
+    $pending_coll = FALSE;
     $missing = FALSE;
     $count = count($lines);
     for ($i = 0; $i < $count; $i++) {
       $line = $lines[$i];
-      if ($pending && preg_match('/^SET character_set_client = @PREV_CHARACTER_SET_CLIENT;$/', $line)) {
-        $out[] = "SET SQL_MODE='" . $file_mode . "';\n";
+      if (($pending || $pending_coll) && preg_match('/^SET character_set_client = @PREV_CHARACTER_SET_CLIENT;$/', $line)) {
+        if ($pending) {
+          $out[] = "SET SQL_MODE='" . $file_mode . "';\n";
+        }
+        if ($pending_coll) {
+          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n";
+          $out[] = "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n";
+          $out[] = "EXECUTE boa_utf8mb4;\n";
+          $out[] = "DEALLOCATE PREPARE boa_utf8mb4;\n";
+        }
         $pending = FALSE;
+        $pending_coll = FALSE;
       }
       $out[] = $line;
       if (!preg_match('/^DROP (TRIGGER|FUNCTION|PROCEDURE|EVENT) IF EXISTS `((?:[^`]|``)+)`;$/', $line, $m)) {
         continue;
       }
-      if ($i < $count - 1 && strpos($lines[$i + 1], 'SET SQL_MODE=') === 0) {
+      if ($i < $count - 1 && preg_match('/^SET (?:SQL_MODE=|@BOA_UTF8MB4_SQL )/', $lines[$i + 1])) {
         return 0;
       }
       $key = $m[1] . ' ' . bin2hex(str_replace('``', '`', $m[2]));
       if (isset($modes[$key])) {
-        $out[] = "SET SQL_MODE='" . $modes[$key] . "';\n";
+        // the mode, and after a tab the routine's own utf8mb4 default
+        $parts = explode("\t", $modes[$key], 2);
+        $out[] = "SET SQL_MODE='" . $parts[0] . "';\n";
         $pending = TRUE;
+        if (isset($parts[1]) && ($m[1] === 'FUNCTION' || $m[1] === 'PROCEDURE')
+          && preg_match('/^utf8mb4_(?:general_ci|0900_ai_ci)$/', $parts[1])) {
+          // prepared from a statement naming MySQL 8: a 5.x or MariaDB
+          // server, which has no such setting, runs DO 0 in its place
+          $out[] = "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
+            . " SESSION default_collation_for_utf8mb4 = ''" . $parts[1] . "''', 'DO 0');\n";
+          $out[] = "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n";
+          $out[] = "EXECUTE boa_utf8mb4;\n";
+          $pending_coll = TRUE;
+        }
       }
       else {
         $missing = TRUE;
       }
     }
-    if ($pending) {
+    if ($pending || $pending_coll) {
       return 1;
     }
     $tmp = $file . '.modes';
@@ -798,6 +849,12 @@ class Provision_Service_db extends Provision_Service {
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
+      // The store stays this flow's through the import and the rotation of
+      // the deploy's post hook (provision_expim_lock()).
+      if (!provision_expim_lock('import', dt('the import of @db', array('@db' => $db_name)))) {
+        return FALSE;
+      }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
@@ -895,15 +952,17 @@ class Provision_Service_db extends Provision_Service {
         //   and only when the dump is NEWER than the internal flag - the
         //   flag is written before the flow's own backup dumps, so a
         //   legitimate flow always leaves metadata newer than the flag,
-        //   while a broken task's leftover always predates it: import;
-        // - anything else (mixed store, foreign dump with no flow or a
-        //   stale one): refuse.
+        //   while a broken task's leftover always predates it - and only
+        //   when the dump carries this flow's mark (provision_expim_lock()):
+        //   the flag is the account's, the mark is the flow's: import;
+        // - anything else (mixed store, foreign dump with no flow, a stale
+        //   one, or another task's): refuse.
         $own_dump = glob($oct_db_dirx . '/' . $db_name . '-schema-create.sql*');
         $all_dumps = glob($oct_db_dirx . '/*-schema-create.sql*');
         $own_count = is_array($own_dump) ? count($own_dump) : 0;
         $all_count = is_array($all_dumps) ? count($all_dumps) : 0;
         $internal_flag_file = $backup_path . '/.internal_backup_flag.pid';
-        $internal_flow = is_file($internal_flag_file);
+        $internal_flow = provision_internal_flow_active();
         $import_allowed = FALSE;
         if ($all_count && $own_count == $all_count) {
           $import_allowed = TRUE;
@@ -920,10 +979,19 @@ class Provision_Service_db extends Provision_Service {
           $metadata_file = $oct_db_dirx . '/metadata';
           $dump_fresh = is_file($metadata_file)
             && (@filemtime($metadata_file) >= @filemtime($internal_flag_file));
-          if (count($distinct) == 1 && $dump_fresh) {
+          if (count($distinct) == 1 && $dump_fresh && provision_expim_store_is_mine()) {
             $import_allowed = TRUE;
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
           }
+          elseif (count($distinct) == 1 && $dump_fresh) {
+            drush_log(dt('The foreign dump @found in the shared store was not made by this task.', array('@found' => implode(', ', $foreign_names))), 'warning');
+          }
+        }
+        // A store dumped on a 5.x server keeps its utf8mb4 collations on this
+        // one (the MySQL service's store_collation_5x()), whichever of the
+        // broker and myloader loads it.
+        if ($import_allowed && method_exists($this, 'store_collation_5x')) {
+          $this->store_collation_5x($oct_db_dirx);
         }
         if (!$import_allowed) {
           $found_dumps = array();

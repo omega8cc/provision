@@ -455,22 +455,19 @@ function _provision_grav_ensure_db_creds_loaded() {
  * restore): it dumps whatever mode a concurrent panel task leaked in, and the
  * dated tmp_expim retention leaves the dump alone. A leftover flag silently
  * ends that retention on the account, so every path that sets it clears it.
+ * The flag and the store are the account's: setting it waits for another
+ * flow on the account to end (provision_internal_flag_set()), and only the
+ * flow that set it clears it.
+ *
+ * @return bool
+ *   FALSE when the store could not be had (the error is set).
  */
 function _provision_grav_internal_backup_flag($on) {
-  $flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
   if ($on) {
-    if (!provision_file()->exists($flag)->status()) {
-      provision_file()->file_put_contents($flag, "Internal-DB-Backup \n")
-        ->succeed('Generated blank Internal-DB-Backup Flag-File (grav)')
-        ->fail('Could not generate Internal-DB-Backup Flag-File (grav)');
-    }
-    return;
+    return provision_internal_flag_set('Internal-DB-Backup Flag-File (grav)');
   }
-  if (is_file($flag)) {
-    provision_file()->unlink($flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File (grav)')
-      ->fail('Could not remove Internal-DB-Backup Flag-File (grav)');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File (grav)');
+  return TRUE;
 }
 
 /**
@@ -486,20 +483,20 @@ function _provision_grav_internal_backup_flag($on) {
  * internal-backup flag for a copy that feeds a deploy (clone, restore,
  * copy-upgrade); the caller clears it.
  *
- * @return string
- *   The mode forced.
+ * @return string|bool
+ *   The mode forced, or FALSE when the flag's store could not be had.
  */
 function _provision_grav_force_safety_mode($what, $internal = FALSE) {
   $mode = _provision_grav_has_db() ? 'site_files_with_mysqldump' : 'site_files_without_db_backup';
   if ($mode === 'site_files_with_mysqldump') {
+    if ($internal && !_provision_grav_internal_backup_flag(TRUE)) {
+      return FALSE;
+    }
     _provision_grav_ensure_db_creds_loaded();
     if (is_file(d()->site_path . '/database.sql')) {
       provision_file()->unlink(d()->site_path . '/database.sql')
         ->succeed('Removed a stale database.sql before the safety copy')
         ->fail('Could not remove a stale database.sql before the safety copy');
-    }
-    if ($internal) {
-      _provision_grav_internal_backup_flag(TRUE);
     }
   }
   if (!defined('SELECTED_BACKUP_MODE')) {
@@ -1397,12 +1394,14 @@ function provision_grav_find_sites($root = NULL) {
 /**
  * Remove a capsule-shaped tree, or park it for root-side cleanup.
  *
- * The web process creates cache subdirs at 0755 owned by the per-version web
- * user (FPM umask 022), and the CLI owner can neither delete their contents
- * nor chmod them, so a plain recursive delete leaves web-owned residue
- * behind (proven on the restore leg). The root heal (the sudo fix scripts,
- * which know the capsule model) hands the whole tree back to the instance
- * user first, so the delete then succeeds outright. Where the heal is
+ * The web process creates cache subdirs owned by the per-version web user,
+ * at 0755 under FPM's umask 022 where BOA's Grav setup file does not apply
+ * (folders made before the site's first Verify after the upgrade named it in
+ * the vhost, or on a box without the file), and the CLI owner can then
+ * neither delete their contents nor chmod them, so a plain recursive delete
+ * leaves web-owned residue behind (proven on the restore leg). The root heal
+ * (the sudo fix scripts, which know the capsule model) hands the whole tree
+ * back to the instance user first, so the delete then succeeds outright. Where the heal is
  * unavailable or something still survives, the fallback is a RENAME out of
  * the live tree into <backup_path>/pending-cleanup/ (rename needs only the
  * parent-dir write we do have), reported in ONE row: the residue is a

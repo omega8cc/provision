@@ -48,10 +48,6 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
     return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_SOURCE',
       dt('provision-backdrop-d6-upgrade must run against a site context.'));
   }
-  // Backup mode ctrl file cleanup, as the other lifecycle validates do.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The source must be Drupal 6 lineage, never Backdrop, never Drupal 7+.
   if (provision_platform_is_backdrop(d())) {
@@ -62,6 +58,14 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
     return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_SOURCE',
       dt('The source platform is Drupal @v; only Drupal 6 sites take this hop. Drupal 7 sites upgrade with provision-backdrop-upgrade directly.',
       array('@v' => drush_drupal_major_version())));
+  }
+
+  // The upgrade verifies its source through the panel, on the panel's record
+  // of the site; refused while that record names another platform than the
+  // site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
   }
 
   // The D6 -> D7 update hooks, the pinned kit and content_migrate all run
@@ -105,6 +109,10 @@ function drush_provision_backdrop_d6_upgrade_validate($new_name = NULL, $platfor
   if (is_dir($target_root . '/sites/' . $new_uri)) {
     return drush_set_error('PROVISION_BACKDROP_D6_UPGRADE_BAD_TARGET',
       dt('sites/@uri already exists on the target platform.', array('@uri' => $new_uri)));
+  }
+  // Nor a name another site still holds (provision_refuse_live_site_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('upgrade', $new_name)) {
+    return FALSE;
   }
 
   // The recorded profile must exist on the D7 target. A custom D6 profile
@@ -292,14 +300,10 @@ function _provision_backdrop_d6_upgrade_kit_report($db, $db_name) {
  */
 function drush_provision_backdrop_pre_provision_backdrop_d6_upgrade($new_name = NULL, $platform = NULL) {
   drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_backdrop_d6_upgrade'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_backdrop_d6_upgrade';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
-      ->succeed('Generated blank ' . $local_description)
-      ->fail('Could not generate ' . $local_description);
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_backdrop_d6_upgrade')) {
+    return FALSE;
   }
   drush_invoke('provision-backup');
 }
@@ -488,10 +492,7 @@ function drush_provision_backdrop_d6_upgrade($new_name = NULL, $platform = NULL)
     }
 
     $backup_path = d('@server_master')->backup_path;
-    $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade');
+    provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade');
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
@@ -590,12 +591,7 @@ function _provision_backdrop_d6_upgrade_assert_enable_targets($root, $uri, $enab
  */
 function drush_provision_backdrop_d6_upgrade_rollback($new_name = NULL, $platform = NULL) {
   $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  if (provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade_rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade_rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_backdrop_d6_upgrade_rollback');
   drush_log(dt('provision-backdrop-d6-upgrade failed; the source site @uri is untouched and still serving. Partial copy artifacts may remain (site alias @new, its site directory and copy database on the target platform); discard them with: drush @new provision-delete (or remove the alias with provision-save --delete) before retrying.',
     array('@uri' => d()->uri, '@new' => is_string($new_name) ? $new_name : '@<new site>')), 'warning');
 }

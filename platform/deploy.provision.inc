@@ -139,7 +139,8 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
       $profiles = array_keys($site_packages['profiles']);
       $profile = $profiles[0];
       if (isset($drupal_packages['profiles'][$profile]['modules'])) {
-        $merged_modules = array_merge($merged_modules, $drupal_packages['profiles'][$profile]['modules']);
+        // The copy Drupal runs of a module the profile and the base both hold.
+        $merged_modules = _provision_drupal_merge_packages(array($merged_modules, $drupal_packages['profiles'][$profile]['modules']));
       }
     }
 
@@ -299,19 +300,48 @@ function drush_provision_drupal_post_provision_deploy() {
       // schema left behind fails the task with the cause named right above
       // the error.
       $window = _provision_drupal_site_local_updatedb('DEPLOY');
-      // Verify The Old Platform Again Too (a migrate or clone across
-      // platforms), after a window that ran, as before; a skipped window
-      // (DEPLOY4b) has no old-platform verify, as before. The provision-unlock
-      // the old platform used to be sent first is gone: every layer's hook for
-      // that command is a documented no-op ("Nothing needs to happen in the
-      // backend"), so it only cost a backend process and a sleep(5) per D10+
-      // deploy.
-      if ($window !== NULL && !drush_get_option('deploy_replace_site', FALSE)) {
-        $old_platform = drush_get_option('old_platform', FALSE);
-        if ($old_platform) {
-          provision_backend_invoke($old_platform, 'provision-verify');
-          sleep(5);
-        }
+      // A strict move (the migrate's upgrade_strict option, see
+      // provision_upgrade_strict()) fails here on anything but updates that
+      // ran to completion, before anything of the source is retired: this
+      // deploy's rollback and the migrate's then remove the copy and leave
+      // the site on its old platform. Each failure gets a message of its own;
+      // a Drush that is executable and dies at start returns FALSE like an
+      // update that failed, so the window records whether it started, and
+      // whether only Drupal's requirements check failed before updates that
+      // all ran (_provision_site_local_updatedb_verdict()). With
+      // the error set, the tail below takes its skip branch and leaves
+      // settings.php to the rollback. Without the option nothing changes.
+      $strict = (bool) drush_get_option('upgrade_strict', FALSE);
+      // A Drush 15 codebase's window logs under DR, and its requirements
+      // check stops every update (verdict 'stopped').
+      $fail = (drush_get_option('provision_site_local_cli_kind', '') === 'dr') ? 'DEPLOY9/LOCAL/DR/FAIL' : 'DEPLOY9/LOCAL/DRUSH/FAIL';
+      if ($strict && $window === TRUE) {
+        drush_log(dt('UPGRADE/UPDATEDB the database updates completed.'), 'ok');
+      }
+      elseif ($strict && $window === NULL) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB the new platform's own Drush could not be run, so Drupal's database updates were not applied (the DEPLOY4b or DEPLOY2b line above says why)."));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_drush_started', NULL) === FALSE) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB the new platform's own Drush cannot start, so Drupal's database updates were not applied (the DEPLOY7 line above is all it printed)."));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'requirements') {
+        // The updates ran; Drupal's requirements check failed before them,
+        // which stops a strict move just the same.
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's requirements check reported errors on the new platform (the [error] lines above @fail): its database updates ran, but the move stops on those errors.", array('@fail' => $fail)));
+      }
+      elseif ($strict && drush_get_option('provision_site_local_updatedb_verdict', '') === 'stopped') {
+        // Never the words of the 'requirements' message above: the Upgrade
+        // task reads them as "its database updates ran", and here none did.
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drush 15 stopped at Drupal's requirements check on the new platform (the [error] lines above @fail) before running any update: its database updates were not applied, so the move stops.", array('@fail' => $fail)));
+      }
+      elseif ($strict) {
+        drush_set_error('PROVISION_UPGRADE_UPDATEDB', dt("UPGRADE/UPDATEDB Drupal's database updates did not finish on the new platform (see the lines above @fail).", array('@fail' => $fail)));
+      }
+      // Updates that did not finish, and a move that goes on: a Drush that
+      // died inside updatedb leaves the site in maintenance mode, which the
+      // log then names (a strict move is being rolled back instead).
+      if ($window === FALSE && !drush_get_error()) {
+        _provision_drupal_note_maintenance_left('DEPLOY');
       }
     }
     else {

@@ -270,6 +270,39 @@ function provision_backup_is_own_task() {
 }
 
 /**
+ * Implements drush_hook_COMMAND_validate() for provision-migrate.
+ *
+ * A Migrate's safety copy and deploy use the account's shared dump store and
+ * its flow flag (provision_internal_flag_set()), so the store is taken here,
+ * before any pre hook: the web server's pre hook takes the site's vhost away,
+ * and a task that waited for another one after that would leave its site
+ * without it for the whole wait.
+ */
+function drush_provision_migrate_validate() {
+  return _provision_expim_flow_validate();
+}
+
+/**
+ * Implements drush_hook_COMMAND_validate() for provision-restore.
+ *
+ * The same as a Migrate's (drush_provision_migrate_validate()).
+ */
+function drush_provision_restore_validate() {
+  return _provision_expim_flow_validate();
+}
+
+/**
+ * Takes the shared dump store for the flow this task runs.
+ */
+function _provision_expim_flow_validate() {
+  $command = drush_get_command();
+  if (!provision_expim_lock('flow', empty($command['command']) ? '' : dt('this @command', array('@command' => $command['command'])))) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
  * Implementation of hook_drush_command().
  */
 function provision_drush_command() {
@@ -935,7 +968,18 @@ function provision_backup_mode_resolve() {
   }
   $backup_mode = provision_backup_mode_sanitize(drush_get_option('selected_backup_mode', FALSE));
   if (empty($backup_mode)) {
-    if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+    // The control file carries a Backup task's mode from the queue to that
+    // task's provision-backup, the only process the queue writes it for. Any
+    // other process finds it there only beside such a task, or left behind by
+    // one, and took that task's mode: a copying task's deploy then looked for
+    // a dump its modeless safety copy never wrote, and failed. So the safety
+    // copies made inside a task and every deploy never read it.
+    if (!provision_task_is_top_level('provision-backup')) {
+      if (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
+        drush_log(dt('BACKUP/MODE/SKIP the backup mode control file belongs to a Backup task of its own; this process does not read it.'), 'info');
+      }
+    }
+    elseif (file_exists(AEGIR_BACKUP_MODE_CTRL)) {
       $backup_mode = provision_backup_mode_sanitize(@file_get_contents(AEGIR_BACKUP_MODE_CTRL));
       if ($backup_mode) {
         define('AEGIR_BACKUP_MODE_CTRL_READ', TRUE);

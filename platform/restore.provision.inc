@@ -10,14 +10,6 @@ function drush_provision_drupal_provision_restore_validate($restore_file = null)
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  // Backup mode ctrl file cleanup. The safety copy force-defines its own mode
-  // and never reads the ctrl file, so without this a dead backup task's
-  // leftover would survive the whole restore - adopted by the provision-deploy
-  // child and left behind to mis-mode the next modeless backup. On the serial
-  // queue any file present at task start is a dead leftover by definition.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
     provision_check_codebase_status();
@@ -53,19 +45,15 @@ function drush_provision_drupal_pre_provision_restore($restore_file) {
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_restore')) {
+    return FALSE;
+  }
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = false;
   _provision_drupal_create_settings_file();
   drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_restore'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_restore';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
-      ->succeed('Generated blank ' . $local_description)
-      ->fail('Could not generate ' . $local_description);
-  }
   // The safety copy is registered in the panel as a real backup of this
   // site, so it must honour the backup contract: self-contained, with the
   // database inside the archive. Force the restorable mode for this
@@ -105,12 +93,7 @@ function drush_provision_drupal_pre_provision_restore_rollback($restore_file) {
   _provision_restore_drop_safety_copy('Removed unused migration site package', 'Could not remove unused migration site package');
   // Belt for the flag cleanup above: rollback of the completed pre phase runs
   // when a later phase fails before the command-level cleanup is reached.
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in restore rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in restore rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in restore rollback');
 }
 
 /**
@@ -205,10 +188,5 @@ function drush_provision_drupal_provision_restore($restore_file) {
   // later backup on the account skip the MyQuick tmp_expim rotation, silently
   // ending dated DB-dump retention.
   $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_drupal_provision_restore');
 }

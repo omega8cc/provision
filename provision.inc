@@ -1684,6 +1684,11 @@ function _provision_lock_stock_swap($root, $patch_tpl) {
  */
 function findAppRoot($startDir) {
   $dir = realpath($startDir);
+  // A start that is not there has no real path, and the walk below would
+  // never reach '/': it would never end.
+  if ($dir === FALSE) {
+    return null;
+  }
   while ($dir !== '/' && !is_dir($dir . '/vendor')) {
     $dir = dirname($dir);
   }
@@ -1842,8 +1847,9 @@ function provision_drush_local_lock_needed() {
  *
  * No marker/pid files: state is read from the patch sentinels (set by
  * provision_check_codebase_status, which MUST have run first) and the actual
- * permission bits the lock (0400) / unlock (0775) apply to vendor/drush and the
- * Symfony console Input/Style dirs. Patch-state is authoritative where patch
+ * permission bits the lock (0400) / unlock (0775 in a tenant codebase, 0755
+ * elsewhere: _provision_open_mode()) apply to vendor/drush and the Symfony
+ * console Input/Style dirs. Patch-state is authoritative where patch
  * templates exist (D10 to D12); for pre-D10 and D13+ the lock is the chmod alone,
  * so perm-bits are the only signal. Any patch-vs-perm disagreement (the
  * interrupted-run signature) returns 'partial' so the caller runs the body,
@@ -1871,12 +1877,27 @@ function provision_drush_local_lock_state() {
     return 'unknown';
   }
 
-  $bits_locked = ((fileperms($drush) & 0777) === 0400)
-    && ((fileperms($inp) & 0777) === 0400)
-    && ((fileperms($sty) & 0777) === 0400);
-  $bits_unlocked = ((fileperms($drush) & 0777) === 0775)
-    && ((fileperms($inp) & 0777) === 0775)
-    && ((fileperms($sty) & 0777) === 0775);
+  // A Drush whose package Composer's autoloader loads a file from (Drush 15)
+  // keeps vendor/drush traversable in both states, so there the console
+  // directories alone tell locked from unlocked; a vendor/drush an older lock
+  // left at 0400 reads 'partial', and the lock body opens it again.
+  if (_provision_drush_in_autoload_files(d()->root)) {
+    $drush_open = ((fileperms($drush) & 0500) === 0500);
+    $bits_locked = $drush_open
+      && ((fileperms($inp) & 0777) === 0400)
+      && ((fileperms($sty) & 0777) === 0400);
+    $bits_unlocked = $drush_open
+      && ((fileperms($inp) & 0777) === _provision_open_mode($inp))
+      && ((fileperms($sty) & 0777) === _provision_open_mode($sty));
+  }
+  else {
+    $bits_locked = ((fileperms($drush) & 0777) === 0400)
+      && ((fileperms($inp) & 0777) === 0400)
+      && ((fileperms($sty) & 0777) === 0400);
+    $bits_unlocked = ((fileperms($drush) & 0777) === _provision_open_mode($drush))
+      && ((fileperms($inp) & 0777) === _provision_open_mode($inp))
+      && ((fileperms($sty) & 0777) === _provision_open_mode($sty));
+  }
 
   $version = drush_drupal_major_version();
 
@@ -1969,15 +1990,57 @@ function provision_drush_local_lock_state() {
  * must not turn every later task into a WARNING); a require that still
  * fails is a warning carrying composer's own message.
  *
- * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
- * holds even where the codebase allows dev stability): no Drush release
- * supports Drupal 12 yet, only 14.x-dev resolves on its core, and a box
- * never pulls a development Drush into a platform; --prefer-stable keeps the
- * packages it brings in stable too. Until Drush 14 is released composer
- * refuses that require on stability and changes nothing, which is an
- * advisory naming the constraint, like the skips above; any other failure
- * is the warning every major gets. Other majors keep the bare require
- * exactly as it was.
+ * Drupal 12 asks for a released Drush 15 only (^15@stable, which holds
+ * even where the codebase allows dev stability): a box never pulls a
+ * development Drush into a platform. The flag binds drush/drush alone: the
+ * packages it needs follow the codebase's own minimum-stability, and
+ * --prefer-stable takes their releases first. Drush 15 has no drush.php
+ * and runs under core's dr, which this backend's install, database updates
+ * and start check run for such a codebase (_provision_codebase_cli());
+ * Drush 14 will never be released. Until Drush 15 is tagged, and what it
+ * needs on Drupal 12 has a release where the codebase allows only stable
+ * ones, composer refuses that require on stability and changes nothing,
+ * which is an advisory naming the constraint, like the skips above; any
+ * other failure is the warning every major gets.
+ *
+ * A Drupal 11.5 or newer codebase before 12 asks for Drush 13
+ * (drush/drush:^13). The bare require would pick Drush 15 the day it is
+ * tagged; Drush 13 is the released Drush that supports 11.5 and keeps the
+ * drush.php that site owners' vdrush runs, which BOA's own 11.5 builds
+ * carry too, and a codebase that brings its own Drush 15 runs under dr all
+ * the same. The bare require writes ^13.8 there today for the Drush 13 it
+ * resolves, already below 14: ^13 holds no tighter, so the codebase gains
+ * no limit it would not have had. An older core cannot take Drush 15 and
+ * keeps the commands below.
+ * The core version is read from what composer recorded, else from the
+ * codebase's core/lib/Drupal.php.
+ *
+ * A codebase on a Symfony Console older than 7.4 asks for Drush with three
+ * Robo releases ruled out. consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call
+ * Symfony Console's Application::addCommand(), which exists only from
+ * Symfony Console 7.4, while their own constraints allow Symfony 6 and
+ * every Symfony 7. On an older Console the bare require resolved one of
+ * them and the Drush it installed died at start on "Call to undefined
+ * method Drush\Application::addCommand()": no database update could run on
+ * that platform, and a codebase that has a Drush never gets this require
+ * again. Measured 2026-11-13 on a fresh Drupal 10.6.21 codebase: Drush
+ * 13.8.1 with Robo 5.2.3 and Symfony Console 6.4.50 fatal, with Robo 5.1.1
+ * running; 2026-11-16 the same on Drupal 11.1.10 and its Symfony Console
+ * 7.2.9. The constraint names those releases alone (consolidation/robo
+ * issue 1199 is fixed on its 5.x branch after 5.2.3), so it lets every
+ * later release in and never holds the codebase back; written without a
+ * shell operator, it reads the same whichever shell runs the line.
+ *
+ * The rule follows the Console the codebase installed, never its major:
+ * Drupal 10 keeps Symfony 6, Drupal 11.0 has Console 7.1, 11.1 has 7.2 and
+ * 11.2 has 7.3 until 11.2.11; only 11.2.12 and later run on 7.4. The
+ * version is read from what composer recorded
+ * (vendor/composer/installed.json), which a locked platform still shows. A
+ * Console from 7.4 on keeps the bare require, so its composer.json gains no
+ * root requirement it does not need; so does a Console older than 6, which
+ * those releases do not accept (the legacy majors take a Drush that never
+ * asks for Robo 5). Where no Console version can be read the major decides:
+ * Drupal 10 gets the constraint, every other major the bare require.
  */
 function _provision_require_site_local_drush($approot) {
   if (_provision_codebase_has_composer_patches($approot)) {
@@ -2003,15 +2066,69 @@ function _provision_require_site_local_drush($approot) {
     return FALSE;
   }
   $major = drush_drupal_major_version();
+  // The Symfony Console and the Drupal core the codebase installed, as
+  // composer recorded them.
+  $console = '';
+  $core = '';
+  $installed_path = rtrim($approot, '/') . '/vendor/composer/installed.json';
+  if (is_readable($installed_path)) {
+    $installed = json_decode(file_get_contents($installed_path), TRUE);
+    $packages = (is_array($installed) && isset($installed['packages'])) ? $installed['packages'] : $installed;
+    if (is_array($packages)) {
+      foreach ($packages as $entry) {
+        if (!is_array($entry) || !isset($entry['name']) || !isset($entry['version'])) {
+          continue;
+        }
+        if ($entry['name'] === 'symfony/console' && $console === '') {
+          $console = ltrim((string) $entry['version'], 'vV');
+        }
+        elseif ($entry['name'] === 'drupal/core' && $core === '') {
+          $core = ltrim((string) $entry['version'], 'vV');
+        }
+      }
+    }
+  }
+  if (!preg_match('/^[0-9]+\.[0-9]+/', $core)) {
+    // Not recorded: the core's own version constant, in the docroot or the root.
+    $core = '';
+    foreach (array('/web', '/docroot', '/html', '') as $docroot) {
+      $drupal_php = rtrim($approot, '/') . $docroot . '/core/lib/Drupal.php';
+      if (is_readable($drupal_php) && preg_match("/const VERSION = '([0-9]+\\.[0-9]+[^']*)'/", (string) file_get_contents($drupal_php), $m)) {
+        $core = $m[1];
+        break;
+      }
+    }
+  }
+  // Drupal 11.5 and newer before Drupal 12, where Drush 15 could install.
+  $cap_drush = FALSE;
+  if (preg_match('/^([0-9]+)\.([0-9]+)/', $core, $m)) {
+    $cap_drush = ((int) $m[1] == 11 && (int) $m[2] >= 5);
+  }
+  if (preg_match('/^[0-9]+\.[0-9]+/', $console)) {
+    $hold_robo = version_compare($console, '6', '>=') && version_compare($console, '7.4', '<');
+  }
+  else {
+    // No version to read: the major decides, as it did before.
+    $hold_robo = ($major == 10);
+  }
+  $package = '';
   if ($major == 12) {
-    $package = 'drush/drush:^14@stable';
+    $package = 'drush/drush:^15@stable';
     $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+  }
+  elseif ($cap_drush) {
+    $package = 'drush/drush:^13';
+    $result = drush_shell_cd_and_exec($approot, 'composer require %s --no-interaction --no-progress', $package);
+  }
+  elseif ($hold_robo) {
+    $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
+    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush %s --no-interaction --no-progress', $package);
   }
   else {
     $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
-  if ($result && $major == 12) {
+  if ($result && $package !== '') {
     drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
   }
   elseif ($result) {
@@ -2019,10 +2136,10 @@ function _provision_require_site_local_drush($approot) {
   }
   elseif ($major == 12 && strpos($output, 'drush/drush') !== FALSE
     && strpos($output, 'does not match your minimum-stability') !== FALSE) {
-    // Composer's own refusal of the unreleased Drush, which changes nothing;
-    // any other failure (a conflict, the network, a half-done install) is a
-    // warning, as on every other major.
-    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major needs Drush 14 and a box takes only a released Drush, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+    // Composer's own refusal of a Drush or a dependency with no release yet,
+    // which changes nothing; any other failure (a conflict, the network, a
+    // half-done install) is a warning, as on every other major.
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major takes only a released Drush 15, and composer found none it can install within this codebase\'s stability settings yet, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
       '@package' => $package,
       '@root' => $approot,
       '@major' => $major,
@@ -2069,6 +2186,392 @@ function _provision_codebase_has_drush($approot) {
       }
     }
   }
+  return FALSE;
+}
+
+/**
+ * Which command line a codebase brings, read without running anything.
+ *
+ * 'drush': a Drush below 15, run through vendor/drush/drush/drush.php as every
+ * site-local step here runs it. 'dr': Drush 15 or newer, which has no
+ * drush.php and no site:install and runs only under Drupal core's own console,
+ * core/scripts/dr, through Composer's vendor/bin/dr with the two
+ * autoload_runtime.php files Composer writes for it: core/scripts/dr run
+ * directly looks for vendor/ beside the docroot and dies in a build that keeps
+ * vendor/ above it. 'none': no Drush at all, or a Drush 15 whose dr cannot
+ * start. Read from
+ * what Composer recorded and from the entry files, never by running: the
+ * platform lock holds vendor/drush (for a Drush below 15) and the console
+ * closed at rest, so nothing site-local starts on a locked codebase, while
+ * vendor/composer/installed.json stays readable.
+ *
+ * @param string $approot
+ *   The codebase root (the directory holding vendor/).
+ * @param string $docroot
+ *   The docroot (the directory holding core/).
+ *
+ * @return array
+ *   'kind' ('drush', 'dr' or 'none'), 'version' (drush/drush as Composer
+ *   recorded it, or ''), 'dr' (vendor/bin/dr for kind 'dr', else '') and
+ *   'why' (one line saying how the kind was read).
+ */
+function _provision_codebase_cli($approot, $docroot) {
+  $approot = rtrim($approot, '/');
+  $docroot = rtrim($docroot, '/');
+  $version = '';
+  $installed_path = $approot . '/vendor/composer/installed.json';
+  if (is_readable($installed_path)) {
+    $installed = json_decode((string) file_get_contents($installed_path), TRUE);
+    // Composer 2 wraps the list in "packages"; composer 1 wrote the list.
+    $packages = (is_array($installed) && isset($installed['packages'])) ? $installed['packages'] : $installed;
+    if (is_array($packages)) {
+      foreach ($packages as $package) {
+        if (is_array($package) && isset($package['name']) && $package['name'] === 'drush/drush') {
+          $version = isset($package['version']) ? (string) $package['version'] : '';
+          break;
+        }
+      }
+    }
+  }
+  // The major as Composer recorded the version (15.0.0, v15.0.0, 15.x-dev,
+  // dev-15.x); 0 when it says none (dev-main).
+  $major = 0;
+  if (preg_match('/^v?([0-9]+)\./', $version, $m)) {
+    $major = (int) $m[1];
+  }
+  elseif (preg_match('/^dev-([0-9]+)\./', $version, $m)) {
+    $major = (int) $m[1];
+  }
+  $drush_php = is_file($approot . '/vendor/drush/drush/drush.php');
+  // The lock closes vendor/drush (0400) only under a Drush that Composer does
+  // not autoload a file from, which is a Drush below 15: drush.php reads as
+  // missing there, and a version that names no major (a fork's dev-<branch>)
+  // would otherwise read as Drush 15.
+  $drush_closed = !$drush_php && is_dir($approot . '/vendor/drush')
+    && ((fileperms($approot . '/vendor/drush') & 0100) === 0)
+    && !_provision_drush_in_autoload_files($approot);
+  $has_drush = ($version !== '' || $drush_php || is_dir($approot . '/vendor/drush/drush'));
+  $result = array('kind' => 'none', 'version' => $version, 'dr' => '', 'why' => '');
+  if (!$has_drush) {
+    $result['why'] = 'no drush/drush in this codebase';
+    return $result;
+  }
+  if (($major > 0 && $major < 15) || ($major === 0 && ($drush_php || $drush_closed))) {
+    $result['kind'] = 'drush';
+    $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' runs through drush.php';
+    return $result;
+  }
+  // Composer writes its bin proxies to config.bin-dir, vendor/bin unless the
+  // project names another.
+  $bin_dir = 'vendor/bin';
+  $json = is_readable($approot . '/composer.json') ? json_decode((string) file_get_contents($approot . '/composer.json'), TRUE) : NULL;
+  if (is_array($json) && isset($json['config']['bin-dir']) && is_string($json['config']['bin-dir'])) {
+    $named = trim(str_replace('{$vendor-dir}', 'vendor', $json['config']['bin-dir']), '/');
+    if ($named !== '' && strpos($named, '..') === FALSE) {
+      $bin_dir = $named;
+    }
+  }
+  $dr = $approot . '/' . $bin_dir . '/dr';
+  $core_dr = is_file($docroot . '/core/scripts/dr');
+  $runtime = is_file($approot . '/vendor/autoload_runtime.php') && is_file($docroot . '/autoload_runtime.php');
+  if ($core_dr && is_file($dr) && $runtime) {
+    $result['kind'] = 'dr';
+    $result['dr'] = $dr;
+    $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php; it runs under core\'s dr';
+    return $result;
+  }
+  $missing = !$core_dr ? 'no core/scripts/dr' : (!is_file($dr) ? 'no ' . $bin_dir . '/dr' : 'no autoload_runtime.php');
+  $result['why'] = 'drush/drush ' . ($version !== '' ? $version : 'of no recorded version') . ' has no drush.php, and core\'s dr cannot start here (' . $missing . ')';
+  return $result;
+}
+
+/**
+ * Run the codebase's own Drush once: does it start?
+ *
+ * A Drush that is installed and dies at start looks sound everywhere else:
+ * the platform verifies, and the first sign is a deploy whose updatedb
+ * cannot run. Its --version is the cheapest run that loads its whole
+ * application, on the backend's own interpreter as every site-local run
+ * here (_provision_site_local_drush_cmd()). A Drush 15 codebase runs core's
+ * dr instead, from the docroot (_provision_site_local_dr_cmd()): its version
+ * line names Drupal, and it needs no site. Only a tree that can load it
+ * gives a verdict: on a locked Drupal 10+ codebase no site-local Drush
+ * starts, sound or not, so callers ask
+ * _provision_site_local_drush_runnable() first.
+ *
+ * @param string $approot
+ *   The codebase root (the directory holding vendor/).
+ * @param string $docroot
+ *   The docroot (the directory holding core/), to tell a Drush 15 codebase;
+ *   without it the codebase's drush.php is run.
+ *
+ * @return array
+ *   'started' (bool) and 'line' (string): the version line of a Drush that
+ *   starts, else the line it printed that says why it does not.
+ */
+function _provision_site_local_drush_start($approot, $docroot = '') {
+  $approot = rtrim($approot, '/');
+  $cli = ($docroot !== '') ? _provision_codebase_cli($approot, $docroot) : array('kind' => 'drush');
+  if ($cli['kind'] === 'dr' && function_exists('_provision_site_local_dr_cmd')) {
+    $started = (bool) drush_shell_cd_and_exec(rtrim($docroot, '/'), _provision_site_local_dr_cmd($cli['dr'], '', array('--version')));
+  }
+  else {
+    $started = (bool) drush_shell_cd_and_exec($approot, _provision_site_local_drush_cmd(array('--version')));
+  }
+  return array(
+    'started' => $started,
+    'line' => _provision_site_local_drush_line(drush_shell_exec_output(), $started),
+  );
+}
+
+/**
+ * The one line of a site-local Drush run worth quoting.
+ *
+ * Of a Drush that started, its version line; of one that did not, the first
+ * line naming an error, else the first line it printed. Control characters
+ * go, and the line is cut to a length a task log shows whole.
+ *
+ * @param array $output
+ *   The run's output lines.
+ * @param bool $started
+ *   Whether the run exited 0.
+ *
+ * @return string
+ *   The line, or '' when the run printed nothing.
+ */
+function _provision_site_local_drush_line($output, $started) {
+  $first = '';
+  $picked = '';
+  foreach ((array) $output as $line) {
+    $line = trim(preg_replace('/[\x00-\x1F\x7F]+/', ' ', (string) $line));
+    if ($line === '') {
+      continue;
+    }
+    if ($first === '') {
+      $first = $line;
+    }
+    if ($started ? (stripos($line, 'Drush') !== FALSE && preg_match('/[0-9]+\.[0-9x]/', $line)) : preg_match('/(fatal error|uncaught|exception|call to undefined|\berror\b|requires php)/i', $line)) {
+      $picked = $line;
+      break;
+    }
+  }
+  $line = ($picked !== '') ? $picked : $first;
+  if (strlen($line) > 300) {
+    $line = substr($line, 0, 297) . '...';
+  }
+  return $line;
+}
+
+/**
+ * The Robo and Symfony Console a codebase installed, when the pair cannot run.
+ *
+ * consolidation/robo 5.2.1, 5.2.2 and 5.2.3 call a Symfony Console method that
+ * exists only from 7.4 (see _provision_require_site_local_drush()). Read from
+ * what composer recorded, which a locked platform still shows. It names a
+ * known cause for a Drush already seen not to start, and is never a verdict
+ * by itself: a Drush that brings the method itself runs on that pair.
+ *
+ * @param string $approot
+ *   The codebase root.
+ *
+ * @return array|false
+ *   array('robo' => version, 'console' => version), or FALSE.
+ */
+function _provision_codebase_robo_misfit($approot) {
+  $installed_path = rtrim($approot, '/') . '/vendor/composer/installed.json';
+  if (!is_readable($installed_path)) {
+    return FALSE;
+  }
+  $installed = json_decode(file_get_contents($installed_path), TRUE);
+  if (!is_array($installed)) {
+    return FALSE;
+  }
+  $packages = isset($installed['packages']) ? $installed['packages'] : $installed;
+  if (!is_array($packages)) {
+    return FALSE;
+  }
+  $robo = '';
+  $console = '';
+  foreach ($packages as $package) {
+    if (!is_array($package) || !isset($package['name']) || !isset($package['version'])) {
+      continue;
+    }
+    if ($package['name'] === 'consolidation/robo') {
+      $robo = ltrim((string) $package['version'], 'vV');
+    }
+    elseif ($package['name'] === 'symfony/console') {
+      $console = ltrim((string) $package['version'], 'vV');
+    }
+  }
+  if (in_array($robo, array('5.2.1', '5.2.2', '5.2.3'), TRUE) && $console !== '' && version_compare($console, '7.4', '<')) {
+    return array('robo' => $robo, 'console' => $console);
+  }
+  return FALSE;
+}
+
+/**
+ * The warning for a codebase whose own Drush is there and cannot start.
+ *
+ * One plain statement of what it costs and what ends it. A registered
+ * codebase is never repaired in place here: BOA adds a Drush only to a
+ * codebase without one, and the fix is a fresh build and a Migrate, as for
+ * every code change.
+ *
+ * @param string $tag
+ *   The log marker the line starts with.
+ * @param string $approot
+ *   The codebase root.
+ * @param string $line
+ *   What the Drush printed (_provision_site_local_drush_line()).
+ *
+ * @return string
+ *   The message, for a warning.
+ */
+function _provision_site_local_drush_dead_text($tag, $approot, $line, $kind = 'drush') {
+  // Drush 15 runs under core's dr: name what does not start.
+  $what = ($kind === 'dr') ? dt("core's dr (Drush 15)") : dt("the platform's own Drush");
+  // A Drush that stops because this PHP is below what the codebase's packages
+  // require is sound: it is the PHP the platform's tasks run that is wrong,
+  // and a rebuild under the same PHP would not change it. Composer's own
+  // platform check and Drush's say so in their first line.
+  if (preg_match('/(dependencies require a PHP version|requires? PHP (version )?[>=0-9])/i', $line)) {
+    return dt("@p @what in @root does not start on PHP @php, the PHP this platform's tasks run@line. No site on this platform gets its database updates when it is migrated, cloned or restored here. Name a PHP the codebase accepts for the platform in ~/static/control/cli-per-platform.info, then run Verify on the platform.", array(
+      '@p' => $tag,
+      '@what' => $what,
+      '@root' => rtrim($approot, '/'),
+      '@php' => PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION,
+      '@line' => ' (' . $line . ')',
+    ));
+  }
+  $text = dt("@p @what in @root cannot start@line. No site on this platform gets its database updates when it is migrated, cloned or restored here, and it fails the same way for its sites on the command line. The codebase is not repaired in place: build it again with a Drush that starts, add that build as a new platform and move the sites onto it with Migrate.", array(
+    '@p' => $tag,
+    '@what' => $what,
+    '@root' => rtrim($approot, '/'),
+    '@line' => ($line === '') ? '' : ' (' . $line . ')',
+  ));
+  $misfit = _provision_codebase_robo_misfit($approot);
+  if ($misfit) {
+    $text .= ' ' . dt('This build holds consolidation/robo @robo, which cannot run on its Symfony Console @console: require Drush with those releases ruled out, composer require drush/drush "consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3"', array(
+      '@robo' => $misfit['robo'],
+      '@console' => $misfit['console'],
+    ));
+  }
+  return $text;
+}
+
+/**
+ * Record, or ask, whether this process has run the platform's own Drush once.
+ *
+ * In-process only, like _provision_drush_local_unlocked_here(): a task's
+ * verdict on its platform's Drush is given once, by whichever of its steps
+ * runs that Drush first.
+ *
+ * @param string $root
+ *   The platform root.
+ * @param bool $mark
+ *   TRUE to record $root.
+ *
+ * @return bool
+ *   Whether this process has run it for $root (before any mark).
+ */
+function _provision_site_local_drush_checked($root, $mark = FALSE) {
+  static $roots = array();
+  $real = realpath($root);
+  $key = ($real !== FALSE) ? $real : rtrim($root, '/');
+  $seen = isset($roots[$key]);
+  if ($mark) {
+    $roots[$key] = TRUE;
+  }
+  return $seen;
+}
+
+/**
+ * Can this codebase load its own Drush right now?
+ *
+ * Yes only for a tree that is open and stock: the three lock directories
+ * traversable, the console and core logger files as their packages ship
+ * them, the genuine psr/log in place. A locked tree and one caught between
+ * the two states answer no, and so does a codebase without a Drush: a start
+ * check there would call a sound platform dead. A Drush 15 codebase, which has
+ * no drush.php, counts when core's dr can run it (_provision_codebase_cli()).
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ *
+ * @return string
+ *   The codebase root when its Drush can be run, else ''.
+ */
+function _provision_site_local_drush_runnable($root) {
+  $approot = findAppRoot($root);
+  if (empty($approot)) {
+    return '';
+  }
+  if (!is_file($approot . '/vendor/drush/drush/drush.php')) {
+    $cli = _provision_codebase_cli($approot, $root);
+    if ($cli['kind'] !== 'dr') {
+      return '';
+    }
+  }
+  foreach (array('/vendor/drush', '/vendor/symfony/console/Input', '/vendor/symfony/console/Style') as $dir) {
+    if (!is_dir($approot . $dir) || (fileperms($approot . $dir) & 0500) !== 0500) {
+      return '';
+    }
+  }
+  provision_check_codebase_status();
+  if (d()->isConsolePatched || !d()->isCoreStock) {
+    return '';
+  }
+  $psr_dir = _provision_psr_log_dir($root);
+  if ($psr_dir !== '' && _provision_psr_log_detyped($psr_dir) !== FALSE) {
+    return '';
+  }
+  return $approot;
+}
+
+/**
+ * Say so when a platform's own Drush is installed and cannot start.
+ *
+ * For the two moments a platform stands open and settled without a deploy
+ * running: the lock that closes a window this process did not open (a
+ * codebase's first lock at its first Verify, and the lock after an Unlock
+ * Local Drush task), before it changes anything, and the end of the Unlock
+ * Local Drush task itself. Drupal 10 and newer only: their database updates
+ * run on that Drush alone. A lock that finds the platform closed checks
+ * nothing, so a platform whose state is permanent is named once per window
+ * and never on every task.
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ * @param string $tag
+ *   The log marker of the warning.
+ *
+ * @return bool|null
+ *   TRUE when the Drush starts, FALSE when it does not (the warning is
+ *   logged here), NULL when the tree gives no verdict.
+ */
+function _provision_site_local_drush_note_dead($root, $tag = 'DRUSH/LOCAL/DEAD') {
+  if (drush_drupal_major_version() < 10 || !function_exists('_provision_site_local_drush_cmd')) {
+    return NULL;
+  }
+  // One run and one verdict per process: a deploy's update window has run
+  // this Drush already (and said so when it did not start), and a lock that
+  // closes that window finds no marker when its vendor/drush could not be
+  // closed (_provision_drush_local_unlocked_here() marks only a closed one).
+  if (_provision_site_local_drush_checked($root)) {
+    return NULL;
+  }
+  $approot = _provision_site_local_drush_runnable($root);
+  if ($approot === '') {
+    return NULL;
+  }
+  _provision_site_local_drush_checked($root, TRUE);
+  $cli = _provision_codebase_cli($approot, $root);
+  $start = _provision_site_local_drush_start($approot, $root);
+  if ($start['started']) {
+    drush_log(dt('DRUSH/LOCAL/START @line', array('@line' => ($cli['kind'] === 'dr' ? 'dr: ' : '') . $start['line'])), 'info');
+    return TRUE;
+  }
+  drush_log(_provision_site_local_drush_dead_text($tag, $approot, $start['line'], $cli['kind']), 'warning');
   return FALSE;
 }
 
@@ -2198,13 +2701,109 @@ function _provision_drush_local_lock_is_open($root) {
   if ($drush === '') {
     return FALSE;
   }
+  // vendor/drush stays traversable under the lock where Composer's autoloader
+  // loads a file from it (see _provision_drush_in_autoload_files()), so there
+  // the console Input directory says whether site-local Drush could run.
+  if (_provision_drush_in_autoload_files($root)) {
+    $inp = _provision_first_existing(array(
+      $root . '/vendor/symfony/console/Input',
+      $root . '/../vendor/symfony/console/Input',
+    ));
+    return ($inp !== '' && (fileperms($inp) & 0777) !== 0400);
+  }
   return ((fileperms($drush) & 0777) !== 0400);
+}
+
+/**
+ * Does Composer's autoloader load a file from inside vendor/drush?
+ *
+ * Drush 15 declares an autoload "files" entry (src/Doctor/autoload_file.php),
+ * and Composer's generated loader requires every such file on each load of
+ * vendor/autoload.php, with no check that it can be read. At the lock's 0400,
+ * which no account can traverse, that require is a fatal error in every web
+ * request of every site on the platform, in every Drush 8 bootstrap of them
+ * and in core's own dr. So such a codebase keeps vendor/drush traversable
+ * when locked. Its site-local Drush still cannot run at rest: Drush 15 runs
+ * only under core's dr, a console application, and the lock closes the
+ * console Input and Style directories as before.
+ *
+ * Read from vendor/composer/autoload_files.php, which Composer writes beside
+ * the loader and which names each file by its $vendorDir path; the vendor
+ * directory is the one the lock itself works on (the platform root's own,
+ * else the one above it). Must remain PHP 5.6 compatible (legacy servers).
+ *
+ * @param string $root
+ *   The platform root (d()->root).
+ *
+ * @return bool
+ *   TRUE when a file inside vendor/drush is in that list.
+ */
+function _provision_drush_in_autoload_files($root) {
+  $vendor = _provision_first_existing(array(
+    $root . '/vendor/composer',
+    $root . '/../vendor/composer',
+  ));
+  if ($vendor === '' || !is_readable($vendor . '/autoload_files.php')) {
+    return FALSE;
+  }
+  $list = @file_get_contents($vendor . '/autoload_files.php');
+  return ($list !== FALSE && strpos($list, "\$vendorDir . '/drush/") !== FALSE);
+}
+
+/**
+ * Open a vendor/drush an earlier lock closed under a Drush 15, before a root bootstrap.
+ *
+ * Drush 8's bootstrap of a platform root loads vendor/autoload.php, which on
+ * such a codebase requires a file inside vendor/drush. A lock from before
+ * _provision_drush_in_autoload_files() left that folder at 0400, so the
+ * bootstrap dies before any task reaches the lock, and only a chmod by hand
+ * would bring the platform's sites back. Verify, Lock and Unlock Local Drush
+ * and Install call this just before they bootstrap the root, so one Verify
+ * repairs such a platform. A codebase without the entry is never touched.
+ * Must remain PHP 5.6 compatible (legacy servers).
+ *
+ * @param string $root
+ *   The platform root about to be bootstrapped.
+ */
+function _provision_drush_autoload_heal($root) {
+  if (empty($root) || !_provision_drush_in_autoload_files($root)) {
+    return;
+  }
+  $drush = _provision_first_existing(array(
+    $root . '/vendor/drush',
+    $root . '/../vendor/drush',
+  ));
+  if ($drush === '' || (fileperms($drush) & 0500) === 0500) {
+    return;
+  }
+  $mode = _provision_open_mode($drush);
+  if (@chmod($drush, $mode)) {
+    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path was closed by an earlier lock while Composer loads a file from it on every request, which stops every site of the platform; it is open again', array('@path' => $drush)), 'warning');
+  }
+  else {
+    drush_log(dt('LOCK/DRUSH/AUTOLOAD @path is closed while Composer loads a file from it on every request, so every site of the platform fails, and this task could not open it: its owner can, with chmod @mode', array('@path' => $drush, '@mode' => sprintf('%04o', $mode))), 'error');
+  }
 }
 
 /**
  * Unlock Site-Local Drush And Symfony/Console etc
  * in the Aegir tasks like updatedb.
  */
+/**
+ * The mode the site-local Drush window gives what it opens: the vendor/drush
+ * and Symfony Console folders, Drush's drush.php and launcher, and Composer's
+ * vendor/bin/dr. Group write only where the folder really sits in a tenant
+ * codebase (~/static): a built-in platform's group holds the account's SFTP
+ * and client logins, which must never change code the backend user runs. A
+ * folder is judged by itself, a file by the folder it sits in, links
+ * followed (a vendor/ link into a built-in platform's takes its mode).
+ * Must remain PHP 5.6 compatible (legacy servers).
+ */
+function _provision_open_mode($path) {
+  $dir = realpath(is_dir($path) ? $path : dirname($path));
+  return ($dir !== FALSE && preg_match('#/static/#', $dir . '/')) ? 0775 : 0755;
+}
+
 function provision_unlock_drush_local_vnd() {
 
   if (provision_file()->exists(d()->root)->status() &&
@@ -2230,36 +2829,45 @@ function provision_unlock_drush_local_vnd() {
     $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
     $dru_dru_drush_local = d()->root . '/vendor/drush/drush/drush';
     $dru_dru_drush_above = d()->root . '/../vendor/drush/drush/drush';
+    // Composer's proxy for core's dr (Drupal 11.5 and newer, Drush 15): the
+    // shell's dr runs it by its path, as vdrush runs drush.php, and the
+    // shell runs only a file that may be executed. The docroot's own vendor/,
+    // else the one above it when the docroot has none, as the permission pass
+    // walks them. Everything this window opens takes the mode of the tree it
+    // really sits in (_provision_open_mode()).
+    $bin_vnd_dr_local = d()->root . '/vendor/bin/dr';
+    $bin_vnd_dr_above = d()->root . '/../vendor/bin/dr';
+    $bin_vnd_dr_upok = !file_exists(d()->root . '/vendor');
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_loc, _provision_open_mode($dru_vnd_symf_con_inp_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_abo, _provision_open_mode($dru_vnd_symf_con_inp_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_sty_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_sty_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_sty_loc, _provision_open_mode($dru_vnd_symf_con_sty_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_sty_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_sty_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_sty_abo, _provision_open_mode($dru_vnd_symf_con_sty_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -2276,23 +2884,34 @@ function provision_unlock_drush_local_vnd() {
     }
 
     if (provision_file()->exists($dru_dru_dru_php_local)->status()) {
-      provision_file()->chmod($dru_dru_dru_php_local, 0775)
+      provision_file()->chmod($dru_dru_dru_php_local, _provision_open_mode($dru_dru_dru_php_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_dru_dru_php_above)->status()) {
-      provision_file()->chmod($dru_dru_dru_php_above, 0775)
+      provision_file()->chmod($dru_dru_dru_php_above, _provision_open_mode($dru_dru_dru_php_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_dru_drush_local)->status()) {
-      provision_file()->chmod($dru_dru_drush_local, 0775)
+      provision_file()->chmod($dru_dru_drush_local, _provision_open_mode($dru_dru_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_dru_drush_above)->status()) {
-      provision_file()->chmod($dru_dru_drush_above, 0775)
+      provision_file()->chmod($dru_dru_drush_above, _provision_open_mode($dru_dru_drush_above))
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+
+    if (is_file($bin_vnd_dr_local) && !is_link($bin_vnd_dr_local)) {
+      provision_file()->chmod($bin_vnd_dr_local, _provision_open_mode($bin_vnd_dr_local))
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    elseif ($bin_vnd_dr_upok && is_file($bin_vnd_dr_above) && !is_link($bin_vnd_dr_above)) {
+      provision_file()->chmod($bin_vnd_dr_above, _provision_open_mode($bin_vnd_dr_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -2464,23 +3083,23 @@ function provision_unlock_some_vnd() {
     $dru_vnd_symf_con_sty_abo = d()->root . '/../vendor/symfony/console/Style';
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_loc, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_loc, _provision_open_mode($dru_vnd_symf_con_inp_loc))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
-      provision_file()->chmod($dru_vnd_symf_con_inp_abo, 0775)
+      provision_file()->chmod($dru_vnd_symf_con_inp_abo, _provision_open_mode($dru_vnd_symf_con_inp_abo))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -2524,12 +3143,12 @@ function provision_unlock_drush_only() {
     $dru_vnd_drush_above = d()->root . '/../vendor/drush';
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0775)
+      provision_file()->chmod($dru_vnd_drush_local, _provision_open_mode($dru_vnd_drush_local))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
     if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0775)
+      provision_file()->chmod($dru_vnd_drush_above, _provision_open_mode($dru_vnd_drush_above))
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
@@ -2550,6 +3169,7 @@ function provision_lock_drush_local_vnd() {
 
     // Read before anything below changes the modes: is this lock closing a
     // window an earlier task left open? See _provision_drush_local_unlocked_here().
+    $unlocked_here = _provision_drush_local_unlocked_here(d()->root);
     $closes_foreign_window = _provision_drush_local_lock_is_open(d()->root)
       && !_provision_drush_local_unlocked_here(d()->root, FALSE, TRUE);
 
@@ -2577,15 +3197,40 @@ function provision_lock_drush_local_vnd() {
       }
     }
 
-    if (provision_file()->exists($dru_vnd_drush_local)->status()) {
-      provision_file()->chmod($dru_vnd_drush_local, 0400)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    // The last moment this platform's own Drush can be run before the lock
+    // closes it. When this process did not open the window (a codebase's
+    // first lock, the lock after an Unlock Local Drush task) and the tree is
+    // open and stock, a Drush that is there and cannot start is said now: a
+    // window a task opened itself ran that Drush and reported on it, and a
+    // lock that finds the platform closed checks nothing.
+    if (!$unlocked_here) {
+      _provision_site_local_drush_note_dead(d()->root);
     }
-    if (provision_file()->exists($dru_vnd_drush_above)->status()) {
-      provision_file()->chmod($dru_vnd_drush_above, 0400)
-      ->succeed('Changed permissions of <code>@path</code> to @perm')
-      ->fail('Could not change permissions of <code>@path</code> to @perm');
+
+    // Where Composer's autoloader loads a file from vendor/drush (Drush 15),
+    // a vendor/drush at 0400 is a fatal error in every request of every site
+    // here: it stays traversable, and one an older lock closed is opened to
+    // the unlock's mode (_provision_open_mode()). The console directories
+    // below still close.
+    $drush_autoloaded = _provision_drush_in_autoload_files(d()->root);
+    foreach (array($dru_vnd_drush_local, $dru_vnd_drush_above) as $dru_vnd_drush_dir) {
+      if (!provision_file()->exists($dru_vnd_drush_dir)->status()) {
+        continue;
+      }
+      if (!$drush_autoloaded) {
+        provision_file()->chmod($dru_vnd_drush_dir, 0400)
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
+      elseif ((fileperms($dru_vnd_drush_dir) & 0500) !== 0500) {
+        drush_log(dt('LOCK/DRUSH/AUTOLOAD Composer loads a file from @path on every request, so the lock opens it again', array('@path' => $dru_vnd_drush_dir)), 'info');
+        provision_file()->chmod($dru_vnd_drush_dir, _provision_open_mode($dru_vnd_drush_dir))
+        ->succeed('Changed permissions of <code>@path</code> to @perm')
+        ->fail('Could not change permissions of <code>@path</code> to @perm');
+      }
+      else {
+        drush_log(dt('LOCK/DRUSH/AUTOLOAD Composer loads a file from @path on every request, so the lock keeps it open; the console directories close', array('@path' => $dru_vnd_drush_dir)), 'info');
+      }
     }
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
@@ -2873,6 +3518,42 @@ function provision_auto_fix_platform_root($isroot) {
 }
 
 /**
+ * Whether a Grav or Textpattern vhost leaves the migration's 503 gate to PHP.
+ *
+ * BOA's /data/conf/global/global-http-off.php runs the rule Drupal and
+ * Backdrop sites follow: a gate file counts only in a control folder that is
+ * the account's own, which nginx cannot judge (it tests a path, never its
+ * owner). The vhost leaves the gate to it only for an Octopus account's site
+ * (the rule covers /data/disk/<account> alone), only while that file is
+ * there, and only when $hook_file, the file the site's PHP loads first,
+ * includes it: the Grav setup file such a vhost names, or a Textpattern
+ * site's private/config.php ($new_ok: one not written yet counts, as this
+ * provision writes it with the include, but only in a folder this process
+ * can search). Otherwise the vhost keeps nginx's path test.
+ */
+function provision_http_off_in_php($aegir_root, $hook_file, $new_ok = FALSE) {
+  $gate = '/data/conf/global/global-http-off.php';
+  if (!preg_match('#^/data/disk/[a-z0-9-]+$#', (string) $aegir_root)
+    || !@is_file($gate) || @is_link($gate)) {
+    return FALSE;
+  }
+  if (!@file_exists($hook_file) && !@is_link($hook_file)) {
+    // A folder (or a link at its name) this process cannot search hides a
+    // file that is there; only a folder not made yet is new.
+    $dir = dirname($hook_file);
+    if (@file_exists($dir) || @is_link($dir)) {
+      return $new_ok && @is_dir($dir) && @is_executable($dir);
+    }
+    return $new_ok;
+  }
+  if (!@is_file($hook_file) || @is_link($hook_file)) {
+    return FALSE;
+  }
+  $body = @file_get_contents($hook_file, FALSE, NULL, 0, 1048576);
+  return is_string($body) && strpos($body, $gate) !== FALSE;
+}
+
+/**
  * The Composer project root a platform Delete removes with the docroot.
  *
  * A Composer build keeps vendor/ and composer.lock beside its docroot, and
@@ -3072,6 +3753,90 @@ function _provision_platform_named_by_sites($name) {
     }
   }
   sort($sites);
+  return $sites;
+}
+
+/**
+ * Whether the platform's root holds no codebase Drush can bootstrap.
+ */
+function _provision_platform_no_codebase() {
+  $root = rtrim((string) d()->root, '/');
+  return $root === '' || !drush_valid_root($root);
+}
+
+/**
+ * Leave the disk alone on the Delete of a platform with no codebase.
+ *
+ * Whatever stands at such a root was never verified as this platform's code:
+ * a mistyped Platform Path can name a folder that holds anything. Only the
+ * record goes. hosting_git's and hosting_deploy's post-delete hooks remove a
+ * repository or project folder that differs from the root, so those paths
+ * are unset for this process, as on a platform deployed by neither. They are
+ * kept in a context for a hook that can tell the leftover of its own
+ * unfinished build from a folder that was there before.
+ */
+function _provision_platform_no_codebase_keep_disk() {
+  $kept = array();
+  foreach (array('repo_path', 'git_repository_path', 'composer_project_path', 'composer_git_path') as $property) {
+    $path = d()->$property;
+    if (is_string($path) && $path !== '') {
+      $kept[$property] = $path;
+    }
+    d()->$property = NULL;
+  }
+  drush_set_context('PROVISION_NO_CODEBASE_DEPLOY_PATHS', $kept);
+  drush_log(dt('DELETE/NO-CODEBASE only the record of @name goes: nothing at @root was verified as its code, so the backend deletes nothing on disk', array(
+    '@name' => ltrim((string) d()->name, '@'),
+    '@root' => (string) d()->root,
+  )), 'info');
+}
+
+/**
+ * The sites that stand in the way of the platform Delete.
+ *
+ * A root Drush can bootstrap is looked into as it always was. A root it
+ * cannot, where a build failed or never ran or the tree is gone, holds no
+ * codebase: asking for the bootstrap only set the error that failed the
+ * Delete, so the record of a platform that never worked could not be
+ * removed. There the sites are looked for by name and by path: one whose
+ * alias names this platform, and a site folder with a settings.php left at
+ * the root.
+ *
+ * @return array
+ *   The sites found; empty when the Delete may go ahead.
+ */
+function _provision_platform_delete_sites() {
+  static $said = array();
+  if (drush_get_option('force', FALSE)) {
+    return array();
+  }
+  $root = rtrim((string) d()->root, '/');
+  if (!_provision_platform_no_codebase()) {
+    $sites = drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT) ? provision_drupal_find_sites() : array();
+    return is_array($sites) ? $sites : array();
+  }
+  $sites = array();
+  foreach (_provision_platform_named_by_sites(d()->name) as $site) {
+    $sites[$site] = $site;
+  }
+  if ($root !== '') {
+    $files = glob(_provision_glob_quote($root) . '/sites/*/settings.php');
+    foreach (is_array($files) ? $files : array() as $file) {
+      $dir = dirname($file);
+      if (basename($dir) !== 'default' && !is_link($dir)) {
+        $sites[basename($dir)] = $file;
+      }
+    }
+  }
+  $name = ltrim((string) d()->name, '@');
+  if (empty($said[$name])) {
+    $said[$name] = TRUE;
+    drush_log(dt('DELETE/NO-CODEBASE @root holds no codebase to load: sites were looked for by alias and by folder, @count found@sites', array(
+      '@root' => $root,
+      '@count' => count($sites),
+      '@sites' => empty($sites) ? '' : ' (' . implode(', ', array_keys($sites)) . ')',
+    )), 'info');
+  }
   return $sites;
 }
 
@@ -3931,6 +4696,357 @@ function _scrub_object($input) {
 }
 
 /**
+ * The account's shared fast-dump store and the lock that holds it.
+ *
+ * Every site of an Octopus account dumps into one store, backups/tmp_expim,
+ * and the internal flow flag beside it is one file for the account too. A
+ * flow dumps in one process and imports in another (a Migrate's deploy
+ * child), so the store must stay that flow's from its dump to its import:
+ * two tasks run beside each other (by hand, or past the task runner's lock)
+ * once imported one site's database into another. Every touch of the store
+ * or the flag therefore takes the account's store lock, an flock() on
+ * backups/.tmp_expim.lock, held to the flow's last touch: a second flow
+ * waits for the first to end.
+ *
+ * The lock belongs to the process that took it, and the lock file names
+ * that process. A process it started (a deploy, a verify, any process below
+ * it) works under its lock, the way a task run from inside a task's backend
+ * works under the runner lock of hosting's task: it never waits on its own
+ * ancestor. Each finished dump is marked with the flow's token: a dump of
+ * another database is imported only into the flow that marked it, and a
+ * backup or a deploy moves aside only the dump its own flow marked.
+ *
+ * Owners: 'flow' (the internal flag's flow, provision_internal_flag_set()),
+ * 'dump' (a fast dump and the rotation of the same backup), 'import' (a
+ * deploy's fast import and its rotation). The first one taken holds the
+ * lock and only it releases it; a process exit releases it as well.
+ */
+function &_provision_expim_state() {
+  static $state = array(
+    'fp' => NULL,
+    'token' => '',
+    'owner' => '',
+    'since' => '',
+    'inside' => FALSE,
+    'internal' => FALSE,
+    'flagged' => FALSE,
+  );
+  return $state;
+}
+
+/**
+ * The store, its lock, its mark and the internal flow flag.
+ */
+function provision_expim_paths() {
+  $backup_path = d('@server_master')->backup_path;
+  return array(
+    'store' => $backup_path . '/tmp_expim',
+    'lock' => $backup_path . '/.tmp_expim.lock',
+    'mark' => $backup_path . '/.tmp_expim.flow',
+    'flag' => $backup_path . '/.internal_backup_flag.pid',
+  );
+}
+
+/**
+ * The key=value lines of a lock or mark file, as an array.
+ */
+function _provision_expim_record($path) {
+  $record = array();
+  $text = @file_get_contents($path);
+  if (!is_string($text)) {
+    return $record;
+  }
+  foreach (explode("\n", $text) as $line) {
+    $pos = strpos($line, '=');
+    if ($pos) {
+      $record[substr($line, 0, $pos)] = substr($line, $pos + 1);
+    }
+  }
+  return $record;
+}
+
+/**
+ * Whether $pid is an ancestor of this process (hosting's runner lock reads
+ * the same chain).
+ */
+function _provision_expim_is_ancestor($pid) {
+  $pid = (int) $pid;
+  if ($pid <= 1) {
+    return FALSE;
+  }
+  $p = (int) getmypid();
+  for ($i = 0; $i < 64 && $p > 1; $i++) {
+    $status = @file_get_contents('/proc/' . $p . '/status');
+    if ($status === FALSE || !preg_match('/^PPid:\s*(\d+)/m', $status, $m)) {
+      return FALSE;
+    }
+    $p = (int) $m[1];
+    if ($p === $pid) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * The holder named in the lock file, for the waiting and refusal messages.
+ */
+function _provision_expim_holder_text($record) {
+  if (empty($record['pid'])) {
+    return dt('a task that is starting or ending');
+  }
+  return dt('process @pid (@command of @site, since @since)', array(
+    '@pid' => $record['pid'],
+    '@command' => empty($record['command']) ? '?' : $record['command'],
+    '@site' => empty($record['site']) ? '?' : $record['site'],
+    '@since' => empty($record['since']) ? '?' : $record['since'],
+  ));
+}
+
+/**
+ * Writes the holder's record into the lock file it holds.
+ */
+function _provision_expim_write_record() {
+  $state = &_provision_expim_state();
+  if (!$state['fp']) {
+    return;
+  }
+  $command = drush_get_command();
+  $text = 'token=' . $state['token'] . "\n"
+    . 'pid=' . getmypid() . "\n"
+    . 'internal=' . ($state['internal'] ? '1' : '0') . "\n"
+    . 'command=' . (empty($command['command']) ? '' : $command['command']) . "\n"
+    . 'site=' . str_replace("\n", ' ', (string) d()->name) . "\n"
+    . 'since=' . $state['since'] . "\n";
+  ftruncate($state['fp'], 0);
+  rewind($state['fp']);
+  fwrite($state['fp'], $text);
+  fflush($state['fp']);
+}
+
+/**
+ * Takes the account's store lock for $owner, or finds this process already
+ * working under it.
+ *
+ * Another task's lock is waited for, for up to expim_lock_wait seconds
+ * (3600 by default), with a line every minute naming the holder; past that
+ * the task fails before it touched the store.
+ *
+ * @return string|bool
+ *   'acquired' when this call took the lock, 'held' when this process holds
+ *   it already, 'inside' when an ancestor of this process holds it, FALSE
+ *   when it could not be had (the error is set).
+ */
+function provision_expim_lock($owner, $what = '') {
+  $state = &_provision_expim_state();
+  if ($state['fp']) {
+    return 'held';
+  }
+  if ($state['inside']) {
+    return 'inside';
+  }
+  $paths = provision_expim_paths();
+  $wait = max(0, (int) drush_get_option('expim_lock_wait', 3600));
+  // 'c' creates it without truncating the holder's record; 'e' keeps it
+  // from the commands this process runs (PHP 7.0.16 and later, 5.6 ignores
+  // it), so nothing they leave running can hold the store.
+  $fp = @fopen($paths['lock'], 'ce');
+  if (!$fp) {
+    return drush_set_error('PROVISION_EXPIM_LOCK', dt('Could not open the lock of the shared dump store, @path.', array('@path' => $paths['lock'])));
+  }
+  $start = time();
+  $told = 0;
+  while (TRUE) {
+    $wouldblock = 0;
+    if (flock($fp, LOCK_EX | LOCK_NB, $wouldblock)) {
+      break;
+    }
+    $record = _provision_expim_record($paths['lock']);
+    if (!empty($record['token']) && !empty($record['pid']) && _provision_expim_is_ancestor($record['pid'])) {
+      fclose($fp);
+      $state['inside'] = TRUE;
+      $state['token'] = $record['token'];
+      $state['internal'] = !empty($record['internal']);
+      drush_log(dt('The shared dump store is held for this task by process @pid, which started this one.', array('@pid' => $record['pid'])), 'info');
+      return 'inside';
+    }
+    $elapsed = time() - $start;
+    if ($elapsed >= $wait) {
+      fclose($fp);
+      return drush_set_error('PROVISION_EXPIM_BUSY', dt('The shared dump store of this account is still held by @holder after @secs s: one task at a time may use it. Nothing of the store was touched for @what; run it again once that task has ended.', array(
+        '@holder' => _provision_expim_holder_text($record),
+        '@secs' => $elapsed,
+        '@what' => $what === '' ? dt('this task') : $what,
+      )));
+    }
+    if (!$told || time() - $told >= 60) {
+      drush_log(dt('Waiting for the shared dump store of this account, held by @holder: @what starts when that task has ended.', array(
+        '@holder' => _provision_expim_holder_text($record),
+        '@what' => $what === '' ? dt('this task') : $what,
+      )), 'notice');
+      $told = time();
+    }
+    sleep(2);
+  }
+  $state['fp'] = $fp;
+  $state['token'] = getmypid() . '-' . str_replace('.', '', uniqid('', TRUE));
+  $state['owner'] = $owner;
+  $state['since'] = date('Y-m-d H:i:s T');
+  $state['internal'] = FALSE;
+  _provision_expim_write_record();
+  if ($told) {
+    drush_log(dt('The shared dump store is free again after @secs s.', array('@secs' => time() - $start)), 'notice');
+  }
+  return 'acquired';
+}
+
+/**
+ * Releases the store lock if $owner took it.
+ */
+function provision_expim_unlock($owner) {
+  $state = &_provision_expim_state();
+  if (!$state['fp'] || $state['owner'] !== $owner) {
+    return FALSE;
+  }
+  ftruncate($state['fp'], 0);
+  fflush($state['fp']);
+  flock($state['fp'], LOCK_UN);
+  fclose($state['fp']);
+  $state['fp'] = NULL;
+  $state['token'] = '';
+  $state['owner'] = '';
+  $state['since'] = '';
+  $state['internal'] = FALSE;
+  $state['flagged'] = FALSE;
+  return TRUE;
+}
+
+/**
+ * The token of the flow this process works in, or '' outside one.
+ */
+function provision_expim_flow() {
+  $state = &_provision_expim_state();
+  return ($state['fp'] || $state['inside']) ? $state['token'] : '';
+}
+
+/**
+ * Whether this process works inside an internal flow (a Clone, Migrate,
+ * Restore or copying upgrade) that holds the store: its own, or the one of
+ * the process that started it. A flag on disk alone is no longer enough:
+ * with every flow under the store lock, a flag no live flow holds is a
+ * leftover of one that died.
+ */
+function provision_internal_flow_active() {
+  $state = &_provision_expim_state();
+  if (!($state['fp'] || $state['inside']) || !$state['internal']) {
+    return FALSE;
+  }
+  $paths = provision_expim_paths();
+  return is_file($paths['flag']);
+}
+
+/**
+ * Raises the internal flow flag for this process's flow, under the store
+ * lock: a flow waits here for another flow on the account to end, when its
+ * command's validate did not take the store already.
+ *
+ * The flow that holds the lock writes the flag anew the first time it sets
+ * it. No other flow can be live then, so a flag already there is a dead
+ * flow's, and the import's freshness test must count from this flow's start.
+ *
+ * @return bool
+ *   FALSE when the store could not be had (the error is set).
+ */
+function provision_internal_flag_set($description) {
+  $command = drush_get_command();
+  $got = provision_expim_lock('flow', empty($command['command']) ? '' : dt('this @command', array('@command' => $command['command'])));
+  if (!$got) {
+    return FALSE;
+  }
+  $state = &_provision_expim_state();
+  $paths = provision_expim_paths();
+  $fresh = $state['fp'] && !$state['flagged'];
+  $state['internal'] = TRUE;
+  if ($state['fp']) {
+    $state['flagged'] = TRUE;
+  }
+  _provision_expim_write_record();
+  if ($fresh || !is_file($paths['flag'])) {
+    provision_file()->file_put_contents($paths['flag'], "Internal-DB-Backup \n")
+      ->succeed('Generated blank ' . $description)
+      ->fail('Could not generate ' . $description);
+  }
+  return TRUE;
+}
+
+/**
+ * Lowers the internal flow flag at the end of this process's flow, then
+ * releases the store. A process that works under no flow leaves the flag
+ * alone: it belongs to another task (a task that gave up waiting for the
+ * store rolls back without the flag of the task it waited for).
+ */
+function provision_internal_flag_clear($description) {
+  $state = &_provision_expim_state();
+  if (!$state['fp'] && !$state['inside']) {
+    return;
+  }
+  $paths = provision_expim_paths();
+  if (is_file($paths['flag'])) {
+    provision_file()->unlink($paths['flag'])
+      ->succeed('Removed ' . $description)
+      ->fail('Could not remove ' . $description);
+  }
+  provision_expim_unlock('flow');
+}
+
+/**
+ * Marks the finished dump in the store as this flow's: the flow's token
+ * and the checksum of the dump's metadata, the file mydumper writes last.
+ */
+function provision_expim_mark_store() {
+  $token = provision_expim_flow();
+  $paths = provision_expim_paths();
+  $sum = is_file($paths['store'] . '/metadata') ? @md5_file($paths['store'] . '/metadata') : FALSE;
+  if ($token === '' || !$sum) {
+    return FALSE;
+  }
+  $tmp = $paths['mark'] . '.' . getmypid();
+  if (@file_put_contents($tmp, 'token=' . $token . "\n" . 'metadata=' . $sum . "\n") === FALSE || !@rename($tmp, $paths['mark'])) {
+    @unlink($tmp);
+    drush_log(dt('Could not mark the dump in the shared store as this task\'s, @path: no other site\'s database can be imported from it.', array('@path' => $paths['mark'])), 'warning');
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Whether the dump in the store is the one this process's flow marked.
+ */
+function provision_expim_store_is_mine() {
+  $token = provision_expim_flow();
+  if ($token === '') {
+    return FALSE;
+  }
+  $paths = provision_expim_paths();
+  $mark = _provision_expim_record($paths['mark']);
+  if (empty($mark['token']) || empty($mark['metadata']) || $mark['token'] !== $token) {
+    return FALSE;
+  }
+  $sum = is_file($paths['store'] . '/metadata') ? @md5_file($paths['store'] . '/metadata') : FALSE;
+  return $sum !== FALSE && $sum === $mark['metadata'];
+}
+
+/**
+ * Removes the store's mark once its dump has been moved aside.
+ */
+function provision_expim_unmark_store() {
+  $paths = provision_expim_paths();
+  if (is_file($paths['mark'])) {
+    @unlink($paths['mark']);
+  }
+}
+
+/**
  * Execute a command against a specific context object.
  *
  * @param $target
@@ -4488,6 +5604,334 @@ function provision_probe_new_name($option, $new_name, $platform) {
 }
 
 /**
+ * Refuse a copy onto a folder left at the site directory it is to build.
+ *
+ * A deploy onto an existing site directory replaces it: its validate sees
+ * the directory and extracts beside it, the pre hook swaps the two and the
+ * post hook deletes the one that was there. That is right for a Restore
+ * and for a Migrate that keeps its name on its own platform, whose folder
+ * is the site's own. A Clone, a Migrate under a new name and a Migrate onto
+ * another platform build a site that is not there yet, so a folder at its
+ * path is something else (one no site record holds, what a failed task left)
+ * and was deleted with no word but "Replacing the existing site". Called
+ * from those validates, before the safety copy; the panel site's own move
+ * is left out.
+ *
+ * @param string $task
+ *   The task's name in the message: clone, migrate.
+ * @param string|null $platform
+ *   The target platform's context name; empty for the site's own platform.
+ * @param string|null $new_name
+ *   The new name (@name or name); empty for the site's own name.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_folder_at_new_name($task, $platform = NULL, $new_name = NULL) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $target = empty($platform) ? d()->platform : d($platform);
+  if (!is_object($target) || empty($target->root)) {
+    return TRUE;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '') {
+    $uri = ltrim((string) d()->uri, '@');
+  }
+  $path = provision_auto_fix_platform_root($target->root) . '/sites/' . $uri;
+  if (_provision_folder_at_new_name_state($path, d()->site_path) !== 'TAKEN') {
+    return TRUE;
+  }
+  drush_set_error('PROVISION_FOLDER_AT_NEW_NAME', dt('@path already exists and holds no site of this task: the @task would replace it and delete what it holds. Import it as a site from its platform, or move it away, then run the task again.', array('@path' => $path, '@task' => $task)));
+  return FALSE;
+}
+
+/**
+ * What is at the path a copy is to build: FREE (nothing, not even a link),
+ * OWN (the site's own directory, or a link to it, such as a pre-Drupal 7
+ * alias link that a rename onto the alias removes itself) or TAKEN.
+ */
+function _provision_folder_at_new_name_state($path, $own_path) {
+  clearstatcache();
+  if (!file_exists($path) && !is_link($path)) {
+    return 'FREE';
+  }
+  $real = realpath($path);
+  $own = ((string) $own_path === '') ? FALSE : realpath($own_path);
+  if ($real !== FALSE && $own !== FALSE && $real === $own) {
+    return 'OWN';
+  }
+  return 'TAKEN';
+}
+
+/**
+ * Refuse a copy or a rename onto a name another site still holds.
+ *
+ * provision-save writes whatever alias it is given. A Clone, a Migrate under
+ * a new name or a Backdrop upgrade copy under a name whose alias still named
+ * another site's directory wrote that alias over with the copy's platform,
+ * the deploy wrote the name's vhost over, and the store check before it set
+ * the holder's files store aside as an orphan: the live site then served the
+ * copy. An alias whose recorded site directories are all gone (what a failed
+ * task left) holds nothing and is let through, and so is one naming the
+ * site's own directory. Grav and Textpattern check their new name the same
+ * way in their own validates. Called before the validate changes anything.
+ *
+ * @param string $task
+ *   The task's name in the message: clone, migrate, upgrade.
+ * @param string|null $new_name
+ *   The new name (@name or name); empty, or the site's own name, for none.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_live_site_at_new_name($task, $new_name = NULL) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '' || $uri === ltrim((string) d()->uri, '@') || $uri === ltrim((string) d()->name, '@')) {
+    return TRUE;
+  }
+  if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $uri)) {
+    return TRUE;
+  }
+  $file = provision_context_alias_file($uri);
+  clearstatcache();
+  if (!is_file($file)) {
+    return TRUE;
+  }
+  $own = ((string) d()->site_path === '') ? FALSE : realpath(d()->site_path);
+  foreach (_provision_alias_file_site_dirs($file, $uri) as $dir) {
+    if (!file_exists($dir) && !is_link($dir)) {
+      continue;
+    }
+    $real = realpath($dir);
+    if ($real !== FALSE && $own !== FALSE && $real === $own) {
+      continue;
+    }
+    drush_set_error('PROVISION_NEW_NAME_HELD', dt('@uri is held by another site, whose alias names @dir: the @task would take the name over from that site. Choose another name, or delete that site first, then run the task again.', array('@uri' => $uri, '@dir' => $dir, '@task' => $task)));
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * The site directories the alias file $file records for $uri, read from the
+ * file, never through d(): the process keeps every context it loads, and a
+ * copy reads the new name's context again after its own provision-save.
+ */
+function _provision_alias_file_site_dirs($file, $uri) {
+  $aliases = array();
+  if ((@include $file) === FALSE || !isset($aliases[$uri]) || !is_array($aliases[$uri])) {
+    return array();
+  }
+  $record = $aliases[$uri];
+  $dirs = array();
+  if (isset($record['site_path']) && is_string($record['site_path']) && $record['site_path'] !== '') {
+    $dirs[] = $record['site_path'];
+  }
+  if (isset($record['root']) && is_string($record['root']) && $record['root'] !== '') {
+    $dirs[] = rtrim($record['root'], '/') . '/sites/' . $uri;
+  }
+  return array_values(array_unique($dirs));
+}
+
+/**
+ * Note that a Migrate's target site directory is free when its command hook
+ * begins, before any verify it runs.
+ *
+ * A Migrate that keeps the site's name verifies the site through the front
+ * end before its deploy, on the panel's record of the site. When that record
+ * names the target platform (a move run by hand leaves it behind), the verify
+ * builds the site directory there and fails. Noted here so that the rollback
+ * can tell that directory from one that was there before the task
+ * (provision_migrate_remove_verify_dir()).
+ *
+ * @param string|null $platform
+ *   The migrate's platform argument.
+ * @param string|null $new_name
+ *   The migrate's new name argument.
+ */
+function provision_migrate_target_dir_probe($platform, $new_name = NULL) {
+  $target = empty($platform) ? d()->platform : d($platform);
+  if (!is_object($target) || empty($target->root)) {
+    return;
+  }
+  $uri = ltrim((string) $new_name, '@');
+  if ($uri === '') {
+    $uri = ltrim((string) d()->uri, '@');
+  }
+  $path = provision_auto_fix_platform_root($target->root) . '/sites/' . $uri;
+  if (_provision_folder_at_new_name_state($path, d()->site_path) === 'FREE') {
+    drush_set_option('migrate_target_dir_free', $path);
+  }
+}
+
+/**
+ * Remove the site directory a failed Migrate's own verify built on its target.
+ *
+ * Only for a task that failed before its deploy. The verify that builds the
+ * directory fails (Drush finds no settings.php for the site there), and the
+ * Migrate then stops before its deploy; a deploy that did run probed the
+ * directory as there before the task, and provision_remove_unfinished_target_copy()
+ * keeps it. Only a directory, never a link, that was free when the command hook began
+ * (provision_migrate_target_dir_probe()) and is not the site's own. The
+ * verify wrote it from the site's context: its settings.php names the site's
+ * own database, which stays, so the directory goes alone. The records the
+ * verify wrote into the target's sites.php stay, as a removed copy's do (see
+ * provision_remove_unfinished_target_copy()).
+ */
+function provision_migrate_remove_verify_dir() {
+  $path = drush_get_option('migrate_target_dir_free', '');
+  if (!is_string($path) || $path === '' || is_array(drush_get_option('migrate_target_copy', NULL))) {
+    return;
+  }
+  if (_provision_folder_at_new_name_state($path, d()->site_path) !== 'TAKEN' || is_link($path) || !is_dir($path)) {
+    return;
+  }
+  _provision_recursive_delete($path);
+  clearstatcache();
+  if (is_dir($path)) {
+    drush_log(dt('Could not remove @path, which the verify of this task built on the target platform.', array('@path' => $path)), 'warning');
+    return;
+  }
+  drush_log(dt('Removed @path, which the verify of this task built on the target platform.', array('@path' => $path)), 'notice');
+}
+
+/**
+ * The platform the control panel's record of a site names, or '' when the
+ * panel holds no record of it (or only a deleted one) or it cannot be read.
+ *
+ * Read on the panel's tables, never through node_load(), so no cache stands
+ * between this and the record. A read that fails never fails the task: the
+ * caller goes on as it did before.
+ *
+ * @param string $site
+ *   The site's context name, with or without its leading @.
+ *
+ * @return string
+ *   The platform's context name without its @, or ''.
+ */
+function provision_panel_site_platform($site) {
+  $site = ltrim((string) $site, '@');
+  if (!preg_match('/^[a-z0-9][a-z0-9.-]*$/i', $site)) {
+    return '';
+  }
+  $php = 'return (string) db_query("SELECT hcp.name FROM {hosting_context} hcs'
+    . ' INNER JOIN {hosting_site} s ON s.nid = hcs.nid'
+    . ' INNER JOIN {node} n ON n.nid = s.nid AND n.vid = s.vid'
+    . ' INNER JOIN {hosting_context} hcp ON hcp.nid = s.platform'
+    . ' WHERE hcs.name = :name AND n.type = :type AND s.status <> -2",'
+    . ' array(":name" => ' . var_export($site, TRUE) . ', ":type" => "site"))->fetchField()';
+  // No error, log or output of the read's child may reach this task (Drush
+  // still logs the command line, as for every backend call). A backend
+  // 'integrate' key, even FALSE, still has Drush raise a child that exits
+  // 255 here, and a reply with no backend packet is raised unless it is read
+  // as plain output; in a task an error raised here also goes up to the panel
+  // at once. So the child's errors, log and output are kept out by '#'
+  // options, which Drush turns into backend options and keeps off the
+  // child's command line.
+  $options = array('#integrate' => FALSE, '#log' => FALSE, '#output' => FALSE);
+  $backend = array('dispatch-using-alias' => TRUE, 'convert-stdout-to-backend' => TRUE);
+  $record = drush_sitealias_get_record('@hostmaster');
+  if (empty($record['remote-host'])) {
+    $backend['drush-script'] = DRUSH_COMMAND;
+  }
+  $result = drush_invoke_process('@hostmaster', 'php-eval', array($php), $options, $backend);
+  if (!is_array($result) || !empty($result['error_status'])
+    || !isset($result['object']) || !is_string($result['object'])) {
+    return '';
+  }
+  return ltrim($result['object'], '@');
+}
+
+/**
+ * Refuse a task whose verify through the panel would put the site's context
+ * on a platform the site is not on.
+ *
+ * A Migrate that keeps the site's name, a Clone and the copy upgrades verify
+ * the site through the front end (hosting-task @site verify: the Migrate's is
+ * the canary before its deploy, a copy's runs around its deploy). That verify
+ * saves the site's context from the panel's record and verifies it there.
+ * Neither a Migrate nor a Clone saves the context from the record when it is
+ * queued, so a move made outside the panel, which leaves the record on the
+ * platform the site left, reaches that verify with the record and the
+ * site's alias on two platforms. On a test server one such verify passed on
+ * a platform whose default site boots a database: it gave the site's
+ * database user a new password its own drushrc.php no longer held, and left
+ * nginx serving that platform until a reload. Refused in the task's
+ * validate, before its pre hooks touch the site.
+ *
+ * Left alone: the panel's own site, FastTrack (no such verify), a record
+ * that names the alias's platform or cannot be read, and an alias whose
+ * platform does not hold the site's directory: then the record is the true
+ * one, and the verify puts the alias right. When both platforms hold the
+ * site's directory, as a move that stopped midway leaves them, the task is
+ * refused too, with no import advised (PROVISION_PANEL_RECORD_SPLIT).
+ *
+ * @param string $task
+ *   The task's name in the message: migrate, clone, upgrade.
+ *
+ * @return bool
+ *   TRUE when the task may go on; FALSE with the error set.
+ */
+function provision_refuse_stale_panel_record($task) {
+  if (d()->type !== 'site' || provision_is_hostmaster_site()) {
+    return TRUE;
+  }
+  if (is_file(d('@server_master')->aegir_root . '/static/control/FastTrack.info')) {
+    return TRUE;
+  }
+  if (!is_object(d()->platform) || empty(d()->platform->name)) {
+    return TRUE;
+  }
+  clearstatcache();
+  $site_path = (string) d()->site_path;
+  if ($site_path === '' || !is_dir($site_path)) {
+    return TRUE;
+  }
+  $site = ltrim((string) d()->name, '@');
+  $alias = ltrim((string) d()->platform->name, '@');
+  $panel = provision_panel_site_platform($site);
+  if ($panel === '') {
+    drush_log(dt('PANEL/RECORD no record of @site could be read in the panel; the @task goes on.', array('@site' => $site, '@task' => $task)), 'info');
+    return TRUE;
+  }
+  if ($panel === $alias) {
+    drush_log(dt('PANEL/RECORD the panel and the alias of @site both name @platform.', array('@site' => $site, '@platform' => $panel)), 'info');
+    return TRUE;
+  }
+  // A site directory on the record's platform as well is what a move that
+  // stopped midway leaves: its alias already names the target and the
+  // platform it left still holds the site. The record may be the true one
+  // then, and an import would record the copy the alias names.
+  $panel_root = '';
+  $panel_context = d('@' . $panel);
+  if (is_object($panel_context) && !empty($panel_context->root)) {
+    $panel_root = provision_auto_fix_platform_root($panel_context->root);
+  }
+  $uri = ltrim((string) d()->uri, '@');
+  if ($panel_root !== '' && $uri !== '' && is_dir($panel_root . '/sites/' . $uri)) {
+    drush_set_error('PROVISION_PANEL_RECORD_SPLIT', dt('The panel\'s record of @site names platform @panel and the site\'s alias names @alias, and both platforms hold a directory for the site, as a move that stopped midway leaves them. Nothing was changed. Do not import the site to bring the record in line: that would record the copy the alias names, which may be the unfinished one. Ask support.', array(
+      '@site' => $site,
+      '@panel' => $panel,
+      '@alias' => $alias,
+    )));
+    return FALSE;
+  }
+  drush_set_error('PROVISION_PANEL_RECORD_STALE', dt('The panel\'s record of @site names platform @panel, but the site\'s alias and its directory are on @alias: a move or change made outside the panel left the record behind, and the verify this @task runs through the panel would work on @panel. Nothing was changed. Bring the record up to date with "@command", then run the @task again.', array(
+    '@site' => $site,
+    '@panel' => $panel,
+    '@alias' => $alias,
+    '@task' => $task,
+    '@command' => 'drush @hostmaster hosting-import @' . $site,
+  )));
+  return FALSE;
+}
+
+/**
  * Remove the context a failed clone or rename-migrate left behind.
  *
  * Both write the new site's context (provision-save) before they invoke the
@@ -4630,6 +6074,671 @@ function provision_migrate_failure_outcome($same_name, $retiring, $deployed) {
     return 'remove_copy';
   }
   return 'keep_new_context';
+}
+
+/**
+ * Whether this Migrate is a strict move.
+ *
+ * The command option upgrade_strict makes a Migrate that keeps the site's
+ * name fail closed: on database updates that did not run to completion
+ * (drush_provision_drupal_post_provision_deploy(), the Drupal 10+ update
+ * window) and on a home or login page that no longer answers as it did
+ * before the move (provision_upgrade_page_check()). Both are raised before
+ * the post phase, so the migrate's rollback removes the copy and the site
+ * stays on its old platform (provision_migrate_failure_outcome()). A rename
+ * ignores the option, and so does a move that stays on the site's own
+ * platform: there the deploy replaces the site in place and lets the
+ * original go before it returns, so a check that failed afterwards could
+ * put nothing back. The option is read from the command line alone: never a
+ * context property, never set in the site scope, so no alias and no
+ * drushrc.php carries it.
+ *
+ * @param string|null $platform
+ *   The migrate's platform argument.
+ * @param string|null $new_name
+ *   The migrate's new name argument.
+ *
+ * @return bool
+ *   TRUE when the option is set and the move keeps the site's name and
+ *   takes it onto another platform.
+ */
+function provision_upgrade_strict($platform = NULL, $new_name = NULL) {
+  if (!drush_get_option('upgrade_strict', FALSE)) {
+    return FALSE;
+  }
+  if (!is_null($new_name) && ($new_name != d()->name)) {
+    return FALSE;
+  }
+  if (is_null($platform) || ltrim((string) $platform, '@') === ltrim((string) d()->platform->name, '@')) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Where the page check asks for the current site's pages.
+ *
+ * Always this server's loopback address, on the web server's own two ports,
+ * over SSL when the site has it on. 'hosts' are the names a redirect may be
+ * followed to: the site's name, its aliases and its redirection target.
+ *
+ * @return array
+ *   'name', 'address', 'http_port', 'ssl_port', 'ssl', 'hosts'.
+ */
+function provision_upgrade_page_target() {
+  $name = strtolower(ltrim((string) d()->uri, '@'));
+  $hosts = array($name);
+  $aliases = d()->aliases;
+  if (is_array($aliases)) {
+    foreach ($aliases as $alias) {
+      if (is_string($alias) && trim($alias) !== '') {
+        $hosts[] = strtolower(trim($alias));
+      }
+    }
+  }
+  $redirection = d()->redirection;
+  if (is_string($redirection) && trim($redirection) !== '') {
+    $hosts[] = strtolower(trim($redirection));
+  }
+  return array(
+    'name' => $name,
+    'address' => '127.0.0.1',
+    'http_port' => (int) d()->server->http_port,
+    'ssl_port' => (int) d()->server->http_ssl_port,
+    'ssl' => (bool) d()->ssl_enabled,
+    'hosts' => array_values(array_unique($hosts)),
+  );
+}
+
+/**
+ * One request of the page check: a raw HTTP/1.0 GET over a socket.
+ *
+ * HTTP/1.0 with "Connection: close": the reply is never chunked and ends
+ * when the server closes. Over SSL the requested name is sent as SNI and
+ * the peer is not verified, the answer comes from the address given. The
+ * User-Agent is the one BOA's own requests send, which no bot or load rule
+ * matches; the cookie keeps the page caches out.
+ *
+ * @param string $address
+ *   The address to connect to.
+ * @param int $port
+ *   The port to connect to.
+ * @param bool $ssl
+ *   Whether to speak SSL on it.
+ * @param string $host
+ *   The name to ask for (Host header and SNI).
+ * @param string $path
+ *   The path, with its query.
+ * @param int $timeout
+ *   Seconds for the whole request, the connect included.
+ *
+ * @return array
+ *   'ended' is 'answered', or how the request did not answer: 'connect' (no
+ *   connection, refused or no handshake), 'timeout', 'empty' (closed with no
+ *   reply, as the web server does for a request it drops). When answered:
+ *   'status', 'location' (the first Location header), 'server_names' (every
+ *   X-Server-Name value, lower case) and 'error_text' (the body is Drupal's
+ *   error page).
+ */
+function _provision_upgrade_page_request($address, $port, $ssl, $host, $path, $timeout) {
+  $reply = array(
+    'ended' => 'connect',
+    'status' => 0,
+    'location' => '',
+    'server_names' => array(),
+    'error_text' => FALSE,
+  );
+  $port = (int) $port;
+  $timeout = max(1, (int) $timeout);
+  if ($port < 1 || $port > 65535) {
+    return $reply;
+  }
+  $context = stream_context_create(array('ssl' => array(
+    'peer_name' => $host,
+    'SNI_enabled' => TRUE,
+    'SNI_server_name' => $host,
+    'verify_peer' => FALSE,
+    'verify_peer_name' => FALSE,
+    'allow_self_signed' => TRUE,
+  )));
+  $started = microtime(TRUE);
+  $errno = 0;
+  $errstr = '';
+  // Silenced: a refused connection is an answer here, not a PHP warning in
+  // the task log (and SNI_server_name, which PHP 5.6 still reads, is noted
+  // as deprecated on every connect).
+  $socket = @stream_socket_client(($ssl ? 'ssl' : 'tcp') . '://' . $address . ':' . $port, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
+  if (!$socket) {
+    if ((microtime(TRUE) - $started) >= $timeout) {
+      $reply['ended'] = 'timeout';
+    }
+    return $reply;
+  }
+  stream_set_timeout($socket, $timeout);
+  $request = 'GET ' . $path . " HTTP/1.0\r\n"
+    . 'Host: ' . $host . "\r\n"
+    . "User-Agent: iCabProXy\r\n"
+    . "Cookie: NoCacheID=1\r\n"
+    . "Accept: text/html\r\n"
+    . "Connection: close\r\n\r\n";
+  $raw = '';
+  if (@fwrite($socket, $request) !== FALSE) {
+    // A megabyte is far more than the head and the error page's text need.
+    while (!feof($socket) && strlen($raw) < 1048576) {
+      // The limit is for the whole reply: each read gets what is left of it.
+      $left = $timeout - (microtime(TRUE) - $started);
+      if ($left > 0) {
+        stream_set_timeout($socket, (int) ceil($left));
+        $chunk = @fread($socket, 8192);
+        $meta = stream_get_meta_data($socket);
+      }
+      if ($left <= 0 || !empty($meta['timed_out'])) {
+        fclose($socket);
+        $reply['ended'] = 'timeout';
+        return $reply;
+      }
+      if ($chunk === FALSE) {
+        break;
+      }
+      $raw .= $chunk;
+    }
+  }
+  fclose($socket);
+  $cut = strpos($raw, "\r\n\r\n");
+  $head = ($cut === FALSE) ? $raw : (string) substr($raw, 0, $cut);
+  $body = ($cut === FALSE) ? '' : (string) substr($raw, $cut + 4);
+  $lines = explode("\r\n", $head);
+  $match = array();
+  if (!preg_match('`^HTTP/\d\.\d (\d{3})(?:\s|$)`', $lines[0], $match) || (int) $match[1] < 200) {
+    $reply['ended'] = 'empty';
+    return $reply;
+  }
+  $reply['ended'] = 'answered';
+  $reply['status'] = (int) $match[1];
+  foreach (array_slice($lines, 1) as $line) {
+    $colon = strpos($line, ':');
+    if ($colon === FALSE) {
+      continue;
+    }
+    $header = strtolower(trim((string) substr($line, 0, $colon)));
+    $value = trim((string) substr($line, $colon + 1));
+    if ($header === 'location' && $reply['location'] === '') {
+      $reply['location'] = $value;
+    }
+    elseif ($header === 'x-server-name') {
+      $reply['server_names'][] = strtolower($value);
+    }
+  }
+  $reply['error_text'] = (strpos($body, 'The website encountered an unexpected error') !== FALSE);
+  return $reply;
+}
+
+/**
+ * Where a redirect of the page check leads.
+ *
+ * Read by hand: parse_url() answers differently across PHP versions. An
+ * absolute Location gives its scheme (http or https only) and its whole
+ * authority as the host, so one that names a port or userinfo matches none
+ * of the site's names and is not followed; that test is the caller's. A
+ * relative Location is resolved against the request's own scheme, name and
+ * path.
+ *
+ * @param string $location
+ *   The Location header.
+ * @param string $scheme
+ *   The scheme of the request that got it, 'http' or 'https'.
+ * @param string $host
+ *   The name that request asked for.
+ * @param string $path
+ *   The path that request asked for, with its query.
+ *
+ * @return array|false
+ *   'scheme', 'host' (lower case) and 'path' (with its query), or FALSE
+ *   for a Location that cannot be followed.
+ */
+function _provision_upgrade_page_location($location, $scheme, $host, $path) {
+  $location = trim((string) $location);
+  $hash = strpos($location, '#');
+  if ($hash !== FALSE) {
+    $location = (string) substr($location, 0, $hash);
+  }
+  if ($location === '' || preg_match('`[\x00-\x20\x7f]`', $location)) {
+    return FALSE;
+  }
+  $match = array();
+  if (preg_match('`^([A-Za-z][A-Za-z0-9+.\-]*)://([^/?]*)(.*)$`', $location, $match)) {
+    $scheme = strtolower($match[1]);
+    $host = strtolower($match[2]);
+    $rest = $match[3];
+  }
+  elseif (preg_match('`^//([^/?]*)(.*)$`', $location, $match)) {
+    $host = strtolower($match[1]);
+    $rest = $match[2];
+  }
+  elseif (preg_match('`^[A-Za-z][A-Za-z0-9+.\-]*:`', $location)) {
+    return FALSE;
+  }
+  else {
+    $query = strpos($path, '?');
+    $bare = ($query === FALSE) ? $path : (string) substr($path, 0, $query);
+    if ($location[0] === '/') {
+      $rest = $location;
+    }
+    elseif ($location[0] === '?') {
+      $rest = $bare . $location;
+    }
+    else {
+      $slash = strrpos($bare, '/');
+      $rest = (($slash === FALSE) ? '/' : (string) substr($bare, 0, $slash + 1)) . $location;
+    }
+  }
+  if (($scheme !== 'http' && $scheme !== 'https') || $host === '') {
+    return FALSE;
+  }
+  if ($rest === '' || $rest[0] === '?') {
+    $rest = '/' . $rest;
+  }
+  return array('scheme' => $scheme, 'host' => $host, 'path' => $rest);
+}
+
+/**
+ * Take the page check's own query parameter out of a path it follows.
+ *
+ * Each chain of requests carries a random parameter, added to every request:
+ * a redirect that hands the query on would otherwise carry it twice.
+ */
+function _provision_upgrade_page_untoken($url, $token) {
+  $url = str_replace('?' . $token . '&', '?', (string) $url);
+  $url = str_replace('&' . $token, '', $url);
+  return str_replace('?' . $token, '', $url);
+}
+
+/**
+ * The place a Location names: the address without its query and fragment.
+ *
+ * What a chain that ended on a redirect is recorded and compared by. The
+ * query is left out on purpose: a sign-on redirect carries a new state value
+ * on every request, and the probe's own random parameter comes back inside a
+ * return address, encoded. Printable and bounded: the site's code wrote it,
+ * and it goes into the log.
+ */
+function _provision_upgrade_page_place($location) {
+  $location = (string) preg_replace('`[^\x21-\x7e]`', '', (string) $location);
+  $cut = strcspn($location, '?#');
+  return (string) substr($location, 0, min($cut, 255));
+}
+
+/**
+ * One page of the page check: the request, its redirects and one retry.
+ *
+ * A redirect is followed at most three times, always to the address given
+ * and on the port its scheme selects, never through DNS, and only to one of
+ * the names in $hosts (the site's own name, its aliases, its redirection
+ * target): the site's code sets the Location and this runs in the backend.
+ * Any other Location ends the chain on that redirect. The whole chain is
+ * tried once more after $retry_wait seconds when it ended without an
+ * answer or on 502 or 504.
+ *
+ * A status alone cannot tell a site from no site: a name with no vhost and
+ * a disabled site answer 200 with the server's default page. The site's own
+ * vhost adds X-Server-Name with the site's name to what PHP answers, which
+ * the web server sends on 2xx and 3xx answers only. So a final 2xx is the
+ * site's own ('own') only when it carries that header with the site's name.
+ *
+ * @param string $name
+ *   The site's name.
+ * @param string $path
+ *   The page: '/' or '/user/login'.
+ * @param string $address
+ *   The address every request connects to.
+ * @param int $http_port
+ *   The web server's plain port there.
+ * @param int $ssl_port
+ *   Its SSL port there.
+ * @param bool $ssl
+ *   Whether the first request goes over SSL.
+ * @param array $hosts
+ *   The names a redirect may be followed to.
+ * @param int $timeout
+ *   Seconds per request.
+ * @param int $retry_wait
+ *   Seconds before the one retry.
+ *
+ * @return array
+ *   'ended' ('answered', 'connect', 'timeout' or 'empty'), 'status' (the
+ *   final one), 'location' (when the chain ended on a redirect: the place
+ *   it names, see _provision_upgrade_page_place()), 'own', 'error_text',
+ *   'hops' (redirects followed).
+ */
+function provision_upgrade_page_probe($name, $path, $address, $http_port, $ssl_port, $ssl, $hosts = array(), $timeout = 30, $retry_wait = 10) {
+  $name = strtolower((string) $name);
+  $allowed = array($name => TRUE);
+  if (is_array($hosts)) {
+    foreach ($hosts as $allowed_host) {
+      $allowed[strtolower((string) $allowed_host)] = TRUE;
+    }
+  }
+  $record = array();
+  for ($attempt = 0; $attempt < 2; $attempt++) {
+    if ($attempt && $retry_wait > 0) {
+      sleep((int) $retry_wait);
+    }
+    $record = _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_port, $ssl, $allowed, $timeout);
+    if ($record['ended'] === 'answered' && $record['status'] != 502 && $record['status'] != 504) {
+      break;
+    }
+  }
+  return $record;
+}
+
+/**
+ * One chain of requests for provision_upgrade_page_probe().
+ */
+function _provision_upgrade_page_chain($name, $path, $address, $http_port, $ssl_port, $ssl, $allowed, $timeout) {
+  $token = 'boa_probe=' . mt_rand(100000, 999999);
+  $scheme = $ssl ? 'https' : 'http';
+  $host = $name;
+  $record = array();
+  for ($hop = 0; $hop <= 3; $hop++) {
+    $asked = $path . ((strpos($path, '?') === FALSE) ? '?' : '&') . $token;
+    $reply = _provision_upgrade_page_request($address, ($scheme === 'https') ? $ssl_port : $http_port, $scheme === 'https', $host, $asked, $timeout);
+    $record = array(
+      'ended' => $reply['ended'],
+      'status' => $reply['status'],
+      'location' => '',
+      'own' => FALSE,
+      'error_text' => $reply['error_text'],
+      'hops' => $hop,
+    );
+    if ($reply['ended'] !== 'answered') {
+      return $record;
+    }
+    if ($reply['status'] < 300) {
+      $record['own'] = (count($reply['server_names']) > 0 && array_unique($reply['server_names']) === array($name));
+      return $record;
+    }
+    if ($reply['status'] >= 400) {
+      return $record;
+    }
+    $record['location'] = _provision_upgrade_page_place($reply['location']);
+    $next = _provision_upgrade_page_location($reply['location'], $scheme, $host, $path);
+    if ($hop == 3 || $next === FALSE || !isset($allowed[$next['host']])) {
+      return $record;
+    }
+    if ((int) (($next['scheme'] === 'https') ? $ssl_port : $http_port) < 1) {
+      return $record;
+    }
+    $scheme = $next['scheme'];
+    $host = $next['host'];
+    $path = _provision_upgrade_page_untoken($next['path'], $token);
+  }
+  return $record;
+}
+
+/**
+ * The site's home and login pages, as the page check reads them.
+ *
+ * @param array $target
+ *   See provision_upgrade_page_target().
+ *
+ * @return array
+ *   'home' and 'login', each a provision_upgrade_page_probe() record.
+ */
+function provision_upgrade_pages($target, $timeout = 30, $retry_wait = 10) {
+  $pages = array();
+  foreach (array('home' => '/', 'login' => '/user/login') as $page => $path) {
+    $pages[$page] = provision_upgrade_page_probe($target['name'], $path, $target['address'], $target['http_port'], $target['ssl_port'], $target['ssl'], $target['hosts'], $timeout, $retry_wait);
+  }
+  return $pages;
+}
+
+/**
+ * What kind of answer a page record is.
+ *
+ * @return string
+ *   'none' (no answer, or no record), 'own' (the site's own 2xx), 'foreign'
+ *   (a 2xx that is not the site's own: the server's default page),
+ *   'redirect' (the chain ended on a 3xx) or 'error' (4xx or 5xx).
+ */
+function _provision_upgrade_page_kind($record) {
+  if (!is_array($record) || !isset($record['ended']) || $record['ended'] !== 'answered') {
+    return 'none';
+  }
+  if ($record['status'] < 300) {
+    return empty($record['own']) ? 'foreign' : 'own';
+  }
+  return ($record['status'] < 400) ? 'redirect' : 'error';
+}
+
+/**
+ * A page record in a few words, for the log.
+ */
+function _provision_upgrade_page_says($record) {
+  if (!is_array($record) || !isset($record['ended'])) {
+    return dt('not read');
+  }
+  switch ($record['ended']) {
+    case 'connect':
+      return dt('no connection');
+
+    case 'timeout':
+      return dt('no answer in time');
+
+    case 'empty':
+      return dt('closed with no reply');
+  }
+  $kind = _provision_upgrade_page_kind($record);
+  if ($kind === 'foreign') {
+    return dt('@status not from this site', array('@status' => $record['status']));
+  }
+  if ($kind === 'redirect') {
+    return dt('@status to !location', array('@status' => $record['status'], '!location' => ($record['location'] === '') ? dt('nowhere') : $record['location']));
+  }
+  if (!empty($record['error_text'])) {
+    return dt("@status with Drupal's error page", array('@status' => $record['status']));
+  }
+  return (string) $record['status'];
+}
+
+/**
+ * Compare one page with its baseline.
+ *
+ * @return array
+ *   The verdict and, for a failure, what the page did, as the rest of the
+ *   sentence "the home page ...". Verdicts: 'skip' (the baseline cannot be
+ *   compared with: it did not answer, or was a 2xx that is not the site's
+ *   own), 'inconclusive' (closed with no reply after the retry, which is
+ *   what the web server's flood limit does), 'pass', 'fail'.
+ */
+function _provision_upgrade_page_verdict($was, $now) {
+  $was_kind = _provision_upgrade_page_kind($was);
+  if ($was_kind === 'none' || $was_kind === 'foreign') {
+    return array('skip', '');
+  }
+  $now_kind = _provision_upgrade_page_kind($now);
+  $ended = (is_array($now) && isset($now['ended'])) ? $now['ended'] : 'empty';
+  if ($ended === 'empty') {
+    return array('inconclusive', '');
+  }
+  if ($ended === 'connect') {
+    return array('fail', dt('could not be reached'));
+  }
+  if ($ended === 'timeout') {
+    return array('fail', dt('did not answer in time'));
+  }
+  if ($now_kind === 'foreign') {
+    return array('fail', dt('was not served by this site'));
+  }
+  // A status that is an error says it by its number; Drupal's error page
+  // under a status that is none needs the words.
+  $answered = (!empty($now['error_text']) && $now['status'] < 400) ? dt('showed an error') : dt('answered @status', array('@status' => $now['status']));
+  if ($was_kind === 'own') {
+    // The site's own page must still be the site's own page.
+    return ($now_kind === 'own' && empty($now['error_text'])) ? array('pass', '') : array('fail', $answered);
+  }
+  if ($was_kind === 'redirect') {
+    // Like for like: the same redirect to the same place (recorded without
+    // its query, see _provision_upgrade_page_place()).
+    if ($now_kind === 'redirect' && $now['status'] == $was['status'] && $now['location'] === $was['location']) {
+      return array('pass', '');
+    }
+    if ($now_kind === 'redirect') {
+      return array('fail', dt('answered @status to !location', array('@status' => $now['status'], '!location' => ($now['location'] === '') ? dt('nowhere') : $now['location'])));
+    }
+    return array('fail', $answered);
+  }
+  // A page that answered 4xx or 5xx before (basic auth, maintenance): only
+  // a worse class fails it.
+  if ($was['status'] < 500 && $now['status'] >= 500) {
+    return array('fail', $answered);
+  }
+  return array('pass', '');
+}
+
+/**
+ * Compare the two pages after a move with their baseline.
+ *
+ * @param array|null $baseline
+ *   provision_upgrade_pages() before the move.
+ * @param array $now
+ *   The same after it.
+ *
+ * @return array
+ *   'outcome': 'pass'; 'fail' (a page no longer answers as it did; 'failed'
+ *   holds the sentences); 'inconclusive' (a page was closed with no reply
+ *   after the retry; 'unclear' names the pages); 'not_checked' (the home
+ *   page's baseline cannot be compared with). 'left_out' names a login page
+ *   whose own baseline cannot be compared with beside a home page that was
+ *   checked. 'summary' is the line for the log.
+ */
+function provision_upgrade_page_compare($baseline, $now) {
+  $result = array(
+    'outcome' => 'pass',
+    'failed' => array(),
+    'unclear' => array(),
+    'left_out' => array(),
+    'summary' => '',
+  );
+  $names = array('home' => dt('home'), 'login' => dt('login'));
+  $parts = array();
+  $verdicts = array();
+  foreach ($names as $page => $label) {
+    $was = (is_array($baseline) && isset($baseline[$page])) ? $baseline[$page] : NULL;
+    $is = (is_array($now) && isset($now[$page])) ? $now[$page] : NULL;
+    $verdicts[$page] = _provision_upgrade_page_verdict($was, $is);
+    $parts[] = dt('@page !now (was !was)', array('@page' => $label, '!now' => _provision_upgrade_page_says($is), '!was' => _provision_upgrade_page_says($was)));
+  }
+  $result['summary'] = implode(', ', $parts);
+  if ($verdicts['home'][0] === 'skip') {
+    $result['outcome'] = 'not_checked';
+    return $result;
+  }
+  foreach ($verdicts as $page => $verdict) {
+    if ($verdict[0] === 'fail') {
+      $result['failed'][] = dt('the @page page !did (it !was before)', array(
+        '@page' => $names[$page],
+        '!did' => $verdict[1],
+        '!was' => (_provision_upgrade_page_kind($baseline[$page]) === 'redirect')
+          ? dt('answered @status to !location', array('@status' => $baseline[$page]['status'], '!location' => ($baseline[$page]['location'] === '') ? dt('nowhere') : $baseline[$page]['location']))
+          : dt('answered @status', array('@status' => $baseline[$page]['status'])),
+      ));
+    }
+    elseif ($verdict[0] === 'inconclusive') {
+      $result['unclear'][] = $names[$page];
+    }
+    elseif ($verdict[0] === 'skip') {
+      $result['left_out'][] = $names[$page];
+    }
+  }
+  if (!empty($result['failed'])) {
+    $result['outcome'] = 'fail';
+  }
+  elseif (!empty($result['unclear'])) {
+    $result['outcome'] = 'inconclusive';
+  }
+  return $result;
+}
+
+/**
+ * Read the site's two pages before a strict move.
+ *
+ * Called at the end of the migrate's validate, while the site still serves.
+ * Kept in the process (validate and the command hook are one) for
+ * provision_upgrade_page_check().
+ *
+ * @return array
+ *   provision_upgrade_pages() of the current site.
+ */
+function provision_upgrade_page_baseline($target = NULL, $timeout = 30, $retry_wait = 10) {
+  if (!is_array($target)) {
+    $target = provision_upgrade_page_target();
+  }
+  $baseline = provision_upgrade_pages($target, $timeout, $retry_wait);
+  drush_set_option('upgrade_page_baseline', $baseline);
+  drush_log(dt('UPGRADE/BASELINE before the move: home !home, login !login.', array(
+    '!home' => _provision_upgrade_page_says($baseline['home']),
+    '!login' => _provision_upgrade_page_says($baseline['login']),
+  )), 'ok');
+  return $baseline;
+}
+
+/**
+ * The page check of a strict move.
+ *
+ * Reads the site's home and login pages again and compares them with the
+ * baseline taken before the move. The promise: the two pages must still
+ * answer, as the site's own, as they did, with no new error. A page that
+ * broke sets PROVISION_UPGRADE_PAGE_CHECK, which undoes the move. Two
+ * outcomes go on with a warning: a page closed with no reply after the
+ * retry (the flood limit on the login page does that, and it does not
+ * exempt this server's own address), and a baseline that cannot be compared
+ * with (it did not answer, or the name was not served by this site's vhost
+ * here).
+ *
+ * @param string $uri
+ *   The site's name.
+ * @param array|null $baseline
+ *   provision_upgrade_page_baseline()'s return.
+ * @param array|null $target
+ *   Where to ask; the current site's by default.
+ *
+ * @return bool
+ *   FALSE when the check failed and the error is set.
+ */
+function provision_upgrade_page_check($uri, $baseline, $target = NULL, $timeout = 30, $retry_wait = 10) {
+  if (!is_array($target)) {
+    $target = provision_upgrade_page_target();
+  }
+  $home = (is_array($baseline) && isset($baseline['home'])) ? _provision_upgrade_page_kind($baseline['home']) : 'none';
+  if ($home === 'none' || $home === 'foreign') {
+    drush_log(dt('UPGRADE/PAGES not checked: before the move the home page of @uri could not be read as this site\'s own from this server (home was !home, login was !login), so there is nothing to compare with. Look at the site.', array(
+      '@uri' => $uri,
+      '!home' => _provision_upgrade_page_says(is_array($baseline) && isset($baseline['home']) ? $baseline['home'] : NULL),
+      '!login' => _provision_upgrade_page_says(is_array($baseline) && isset($baseline['login']) ? $baseline['login'] : NULL),
+    )), 'warning');
+    return TRUE;
+  }
+  $result = provision_upgrade_page_compare($baseline, provision_upgrade_pages($target, $timeout, $retry_wait));
+  if ($result['outcome'] === 'fail') {
+    return drush_set_error('PROVISION_UPGRADE_PAGE_CHECK', dt('UPGRADE/PAGES !summary. After the move !failed: the move is undone and @uri stays on its old platform.', array(
+      '!summary' => $result['summary'],
+      '!failed' => implode('; ', $result['failed']),
+      '@uri' => $uri,
+    )));
+  }
+  if ($result['outcome'] === 'inconclusive') {
+    drush_log(dt('UPGRADE/PAGES !summary. Inconclusive: the !pages page gave no reply after one retry, which is what the web server does to requests over its flood limit; the move goes on. Look at the site.', array(
+      '!summary' => $result['summary'],
+      '!pages' => implode(dt(' and the '), $result['unclear']),
+    )), 'warning');
+  }
+  else {
+    drush_log(dt('UPGRADE/PAGES !summary.', array('!summary' => $result['summary'])), 'ok');
+  }
+  if (!empty($result['left_out'])) {
+    drush_log(dt('UPGRADE/PAGES the !pages page was left out of the check: before the move it could not be read as this site\'s own.', array('!pages' => implode(dt(' and the '), $result['left_out']))), 'warning');
+  }
+  return TRUE;
 }
 
 /**
@@ -5763,14 +7872,11 @@ function provision_copy_task_space_preflight($task, $platform = NULL, $new_name 
     }
     $margin = provision_space_margin($device['path']);
     if ($free < $device['need'] + $margin) {
-      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need GB free on the filesystem holding @path (@margin GB of it headroom) but only @free GB is free: free space first, nothing was written (@basis; /data/conf/disable_space_preflight.cnf turns this check off)', array(
+      drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what needs about @need @unit free on the filesystem holding @path (@margin @unit of it headroom) but only @free @unit is free: free space first, nothing was written (@basis; /data/conf/disable_space_preflight.cnf turns this check off)', array(
         '@what' => $what,
         '@basis' => $basis,
-        '@need' => round(($device['need'] + $margin) / $gb, 1),
-        '@margin' => round($margin / $gb, 1),
         '@path' => $device['path'],
-        '@free' => round($free / $gb, 1),
-      )));
+      ) + provision_space_figures($device['need'] + $margin, $margin, $free)));
       return FALSE;
     }
   }
@@ -5900,6 +8006,39 @@ function provision_path_device($path) {
 }
 
 /**
+ * The figures of a space message in a unit that tells the need from the free.
+ *
+ * A tenth of a gigabyte hides a shortfall of a few megabytes: a filesystem
+ * 4 MB short of a copy's room read "needs about 3 GB free ... but only 3 GB
+ * is free". The figures stay in gigabytes, rounded to a tenth, while the need
+ * and the free space differ there; otherwise they are given in the first of
+ * MB, KB and bytes that tells the two apart, the headroom in the same unit.
+ *
+ * @return array
+ *   '@need', '@margin' and '@free', and their '@unit'.
+ */
+function provision_space_figures($need, $margin, $free) {
+  $units = array(
+    array(1073741824, 1, 'GB'),
+    array(1048576, 0, 'MB'),
+    array(1024, 0, 'KB'),
+    array(1, 0, 'bytes'),
+  );
+  foreach ($units as $unit) {
+    $n = round($need / $unit[0], $unit[1]);
+    $f = round($free / $unit[0], $unit[1]);
+    if ($n != $f || $unit[0] == 1) {
+      return array(
+        '@need' => $n,
+        '@margin' => round($margin / $unit[0], $unit[1]),
+        '@free' => $f,
+        '@unit' => $unit[2],
+      );
+    }
+  }
+}
+
+/**
  * The headroom a copying task must leave on a filesystem: 2 GB, or 2% of
  * the filesystem when that is more. A copy that lands the box at zero is
  * the failure this exists to prevent, and BOA's own scripts stop at 90%.
@@ -5940,16 +8079,12 @@ function provision_copy_task_space_recheck($what) {
   if ($free === FALSE) {
     return TRUE;
   }
-  $gb = 1073741824;
   $margin = provision_space_margin($probe);
   if ($free < $bytes + $margin) {
-    drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what: the safety copy is done, but only @free GB is free on the filesystem holding @path for the @need GB unpacked copy (@margin GB of it headroom); the room went elsewhere since the pre-flight, free space and retry', array(
+    drush_set_error('PROVISION_INSUFFICIENT_SPACE', dt('@what: the safety copy is done, but only @free @unit is free on the filesystem holding @path for the @need @unit unpacked copy (@margin @unit of it headroom); the room went elsewhere since the pre-flight, free space and retry', array(
       '@what' => $what,
-      '@free' => round($free / $gb, 1),
       '@path' => $probe,
-      '@need' => round(($bytes + $margin) / $gb, 1),
-      '@margin' => round($margin / $gb, 1),
-    )));
+    ) + provision_space_figures($bytes + $margin, $margin, $free)));
     return FALSE;
   }
   // The same for the inodes the unpacked copy's files take

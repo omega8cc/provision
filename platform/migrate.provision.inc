@@ -19,9 +19,12 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
-  // Backup mode ctrl file cleanup
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
+  // A Migrate that keeps the site's name verifies it through the panel
+  // before its deploy, on the panel's record of the site; refused while that
+  // record names another platform than the site is on, before this validate
+  // changes anything (provision_refuse_stale_panel_record()).
+  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
+    return FALSE;
   }
   if (drush_drupal_major_version() >= 8) {
     // Lock Site-Local Drush if Unlocked
@@ -42,6 +45,19 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
   if (!provision_cli_php_target_preflight('migrate', $platform, $new_name)) {
     return FALSE;
   }
+  // A rename onto a name another site still holds is refused before the
+  // store check below moves anything: it would point that site at the
+  // renamed one (provision_refuse_live_site_at_new_name()). A rename, or a
+  // move onto another platform, builds a site directory that is not there
+  // yet: a folder at its path would be replaced and deleted. The site's own
+  // directory, kept by a move on its own platform, is not refused
+  // (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('migrate', $new_name)) {
+    return FALSE;
+  }
+  if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
+    return FALSE;
+  }
   // A site renamed by this migrate never inherits a files store still at
   // its new name: the store is set aside here, before the safety copy, or
   // the migrate is refused while it cannot be; a migrate that keeps its
@@ -50,6 +66,24 @@ function drush_provision_drupal_provision_migrate_validate($platform = NULL, $ne
     return FALSE;
   }
   drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_SITE);
+  // A strict move (provision_upgrade_strict()) reads the site's home and
+  // login pages here, while it still serves: the pre hook is what takes it
+  // offline and removes its vhost. The command hook compares them with the
+  // same pages after the move. A rename ignores the option, and so does a
+  // move that stays on the site's platform.
+  if (drush_get_option('upgrade_strict', FALSE)) {
+    if (provision_upgrade_strict($platform, $new_name)) {
+      if (!drush_get_error()) {
+        provision_upgrade_page_baseline();
+      }
+    }
+    elseif (!is_null($new_name) && ($new_name != d()->name)) {
+      drush_log(dt('UPGRADE/STRICT ignored: upgrade_strict applies only to a move that keeps the name of the site, and this one renames it.'), 'ok');
+    }
+    else {
+      drush_log(dt('UPGRADE/STRICT ignored: upgrade_strict applies only to a move onto another platform; on its own platform the deploy replaces the site in place, and a failed check could put nothing back.'), 'ok');
+    }
+  }
 }
 
 /**
@@ -67,21 +101,17 @@ function drush_provision_drupal_pre_provision_migrate($platform, $new_name = NUL
   if (provision_platform_is_foreign_cms(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_migrate')) {
+    return FALSE;
+  }
   // Set offline mode to true and re-generate the settings.php file.
   // This will write a $conf['site_offline'] = 1; to the settings.php file.
   drush_log(dt("Putting site under maintenance"));
   d()->site_enabled = FALSE;
   _provision_drupal_create_settings_file();
   drush_log(dt('Invoking drush provision-backup in drush_provision_drupal_pre_provision_migrate'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_drupal_pre_provision_migrate';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
-      ->succeed('Generated blank ' . $local_description)
-      ->fail('Could not generate ' . $local_description);
-  }
   drush_invoke('provision-backup');
   provision_drupal_push_site();
 
@@ -149,12 +179,7 @@ function drush_provision_drupal_pre_provision_migrate_rollback($platform, $new_n
   // Belt: a crashed migrate must not leave the internal-backup flag behind -
   // a leftover one makes every later backup on the account skip the MyQuick
   // tmp_expim rotation and can leak a dump into a files-only archive.
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
   if (!$kept_on_target) {
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
@@ -194,6 +219,10 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
   $options = array();
   $options = d()->options;
   $options['uri'] = d()->uri;
+
+  // Before the verifies below: one of them can build the target's site
+  // directory (see the rollback).
+  provision_migrate_target_dir_probe($platform, $new_name);
 
   $aegir_root = d('@server_master')->aegir_root;
   $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
@@ -385,6 +414,13 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // the deploy has updated its database (_provision_drupal_deploy_keeps_offline()).
     'provision_deploy_keep_offline' => TRUE,
   );
+  // A strict move: the deploy fails on database updates that did not
+  // complete. This array is the only way the option reaches the deploy; it
+  // is never a context property and never set in the site scope, so no
+  // alias and no drushrc.php carries it.
+  if (provision_upgrade_strict($platform, $new_name)) {
+    $deploy_options['upgrade_strict'] = TRUE;
+  }
   // On Drupal 10, 11 and 12 the live site and a copy built under its name, or its
   // www. twin, have cache namespaces of their own (see
   // _provision_valkey_site_copy_prefix()). The deploy's purge spares the live
@@ -400,6 +436,13 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     }
   }
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
+
+  // A verify above that failed fails the task, so it stops here, before the
+  // deploy: the site's own verify is the canary that it still verifies, and
+  // a copy built after it failed would only be taken away by the rollback.
+  if (drush_get_error()) {
+    return FALSE;
+  }
 
   // The safety copy took its time; the unpacked copy must still fit.
   if (!provision_copy_task_space_recheck('Migrate of ' . d()->uri)) {
@@ -425,6 +468,21 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     drush_set_option('provision_save_config', FALSE);
     provision_backend_invoke($target, 'provision-verify');
 
+    // A strict move compares the home and login pages with what the validate
+    // read before the move, and fails on a page that no longer answers as it
+    // did (provision_upgrade_page_check()). Only after a verify that came
+    // through: its errors integrate into this process. The wait: the verify
+    // reloads the web server by a signal, and workers that still hold the
+    // vhost of the old root would answer for the old code. Before the store
+    // step below, which a strict move runs only while no error is set: a
+    // failure raised after it would remove the copy and leave a store at
+    // the site's name that the old site does not use.
+    $strict = provision_upgrade_strict($platform, $new_name);
+    if ($strict && !drush_get_error()) {
+      sleep(5);
+      provision_upgrade_page_check($options['uri'], drush_get_option('upgrade_page_baseline', NULL));
+    }
+
     // Native files symlinking for the migrated/renamed site: give it its OWN
     // copy of files/private in its own store and re-symlink -- mirroring the
     // clone path (clone.provision.inc). A migrate deploys from a backup that
@@ -438,7 +496,9 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     // lines), the way a delete does; the nightly sweep stays the safety net.
     // Delegated to the root autosymlink tool via its sudo wrapper; the verify above
     // wrote the vhost so the account auto-resolves. Warn-not-fail.
-    _provision_drupal_native_symlink($options['uri'], TRUE);
+    if (!$strict || !drush_get_error()) {
+      _provision_drupal_native_symlink($options['uri'], TRUE);
+    }
   }
 }
 
@@ -509,9 +569,11 @@ function drush_provision_drupal_provision_migrate_rollback($platform, $new_name 
   // The copy the deploy built on the target. Under the same name the site
   // record went back to the old platform just above, so nothing points at the
   // copy whether or not its deploy completed. Under a new name a completed
-  // deploy keeps the copy with its context.
+  // deploy keeps the copy with its context. A task that failed before its
+  // deploy may have had its verify build the target's directory.
   if ($outcome === 'remove_copy') {
     provision_remove_unfinished_target_copy('migrate_target_copy');
+    provision_migrate_remove_verify_dir();
   }
   elseif ($outcome === 'keep_copy') {
     $record = drush_get_option('migrate_target_copy', NULL);
@@ -640,8 +702,5 @@ function drush_provision_drupal_post_provision_migrate($platform, $new_name = NU
   }
 
   $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  provision_file()->unlink($internal_backup_flag)
-    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate')
-    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate');
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_drupal_post_provision_migrate');
 }

@@ -289,3 +289,11 @@ if (isset($_SERVER['db_name'])) {
   if (is_readable('<?php print $this->site_path  ?>/local.settings.php')) {
     include_once('<?php print $this->site_path  ?>/local.settings.php');
   }
+
+  # Drupal keeps the class loader's lookups in APCu, found files and misses
+  # alike, under a key made of the platform root, the hash salt and the module
+  # list, and never expires them. A site renamed on its own platform keeps all
+  # three, so the web pool went on loading its classes from the folder the
+  # rename removed. The site's folder in the key gives each name its own
+  # lookups; a value set above is kept in front of it.
+  $settings['deployment_identifier'] = ((isset($settings['deployment_identifier']) && (string) $settings['deployment_identifier'] !== '') ? $settings['deployment_identifier'] . '.' : '') . 'sites/<?php print $this->uri ?>';

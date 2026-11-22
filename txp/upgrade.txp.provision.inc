@@ -58,12 +58,12 @@ function drush_provision_txp_upgrade_validate($new_name = NULL, $platform = NULL
     return drush_set_error('PROVISION_TXP_UPGRADE_BAD_SOURCE',
       dt('The source site is not on a Textpattern platform.'));
   }
-  // Clear a stale frontend backup-mode ctrl file before the safety backup
-  // runs: inheriting a dead task's mode would build the source archive in
-  // e.g. "database only" mode and deploy a files-less copy that still reports
-  // success.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
+  // The upgrade verifies its source through the panel after the copy, on the
+  // panel's record of the site; refused while that record names another
+  // platform than the site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
   }
 
   // The enforced floor, and the one extension the chain asserts for itself:
@@ -281,11 +281,10 @@ function drush_provision_txp_pre_provision_txp_upgrade($new_name = NULL, $platfo
   drush_set_option('backup_mode', 'site_files_with_mysqldump');
   drush_log(dt('Upgrade source copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_txp_upgrade'));
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, "Internal-DB-Backup \n")
-      ->succeed('Generated blank Internal-DB-Backup Flag-File (txp upgrade)')
-      ->fail('Could not generate Internal-DB-Backup Flag-File (txp upgrade)');
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Internal-DB-Backup Flag-File (txp upgrade)')) {
+    return FALSE;
   }
   drush_invoke('provision-backup');
 }
@@ -297,12 +296,7 @@ function drush_provision_txp_pre_provision_txp_upgrade_rollback($new_name = NULL
   provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused upgrade site package')
     ->fail('Could not remove unused upgrade site package');
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
 }
 
 /**
@@ -428,10 +422,7 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
       provision_backend_invoke('@hostmaster', 'hosting-task', array('@' . d()->uri, 'verify'), array('force' => TRUE));
     }
 
-    $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_txp_upgrade')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_txp_upgrade');
+    provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_txp_upgrade');
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');
@@ -450,12 +441,7 @@ function drush_provision_txp_upgrade($new_name = NULL, $platform = NULL) {
  * drop the source's database.
  */
 function drush_provision_txp_upgrade_rollback($new_name = NULL, $platform = NULL) {
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_txp_upgrade_rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_txp_upgrade_rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_txp_upgrade_rollback');
 
   $new_uri = is_string($new_name) ? ltrim($new_name, '@') : '';
   if ($new_uri === '' || !is_string($platform) || $platform === '') {

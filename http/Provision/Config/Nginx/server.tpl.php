@@ -248,7 +248,24 @@ if ($nginx_has_gzip) {
   ssl_prefer_server_ciphers  on;
 
   ## GeoIP support
-  geoip_country /usr/share/GeoIP/GeoIP.dat;
+  ### nginx does not start when the geoip_country file is missing, and the
+  ### upgrade path restarts it without a configtest: name a file only when it
+  ### is there. The IPv6 edition answers IPv4 visitors too, by the
+  ### IPv4-mapped address nginx looks them up by, so it goes first. Without
+  ### either the $geoip_country_* values are empty. BOA's nightly graceful.sh
+  ### keeps both current and reports a config without them.
+<?php
+$boa_geoip_db = '';
+foreach (array('/usr/share/GeoIP/GeoIPv6.dat', '/usr/share/GeoIP/GeoIP.dat') as $boa_geoip_try) {
+  if (@is_file($boa_geoip_try)) {
+    $boa_geoip_db = $boa_geoip_try;
+    break;
+  }
+}
+?>
+<?php if ($boa_geoip_db): ?>
+  geoip_country <?php print $boa_geoip_db; ?>;
+<?php endif; ?>
 
  ## Compression
   gzip_buffers      16 8k;
@@ -323,7 +340,21 @@ if ($nginx_has_gzip) {
                          # quoted for the same list forms as ut. Every field from
                          # ut on is appended, never reordered, so log parsers that
                          # stop earlier are unaffected.
-                         'uht="$upstream_header_time"';
+                         'uht="$upstream_header_time" '
+                         # bcron = the X-Boa-Cron request header, "-" without one:
+                         # the key the control panel sends with its scheduled cron
+                         # requests, which the cron watchdog compares with the
+                         # account's own. A request without it is never the panel's
+                         # once the account has a key.
+                         'bcron="$http_x_boa_cron" '
+                         # peer = $realip_remote_addr, the address that opened the
+                         # connection, where the first field is the visitor realip
+                         # resolved from it. They differ only for a request that
+                         # came through a trusted hop: a CDN's edge, the wildcard
+                         # SSL front (127.0.0.1), or another server relaying a moved
+                         # site, which is how the requests still arriving through
+                         # an old server are counted per name.
+                         'peer="$realip_remote_addr"';
 
   client_body_temp_path  /var/lib/nginx/body 1 2;
   access_log             /var/log/nginx/access.log main;
