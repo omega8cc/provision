@@ -3229,6 +3229,12 @@ function _provision_drupal_merge_packages($lists) {
  * the one that runs and no platform copy is compared. The deploys of Drupal
  * and of Backdrop both call it.
  *
+ * The site's packages are those its context holds when the deploy has
+ * written the site's drushrc.php and loaded it. A Clone, a Migrate and a
+ * Restore of the panel run the deploy in a child that loads no site context
+ * before that write, so the file holds none and nothing is compared; for
+ * those tasks the panel's own comparison of the two platforms is the check.
+ *
  * @param array $site_packages
  *   The site's packages, its enabled modules with their schema numbers.
  * @param array $drupal_packages
