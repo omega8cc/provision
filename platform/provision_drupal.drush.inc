@@ -2529,7 +2529,7 @@ function _provision_site_local_dr_updatedb_verdict($result, array $output) {
  * last write. Its own verdict (_provision_site_local_dr_updatedb_verdict())
  * tells an update that failed from Drupal's requirements check, which with
  * Drush 15 stops every update. The remedy it names is a new build and a
- * Migrate, whose deploy runs the updates: site owners have no dr yet.
+ * Migrate, whose deploy runs the updates.
  *
  * @param string $tag
  *   The marker prefix ('DEPLOY' or 'UPDATE'), already cleaned.
@@ -2729,6 +2729,19 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
       return NULL;
     }
     $unlocked_here = TRUE;
+  }
+
+  // The unlock brings a codebase with no Drush its first one
+  // (_provision_require_site_local_drush()); a Drush 15 has no drush.php, so
+  // a codebase read as having none is read again, and one that dr now runs is
+  // locked back and handed to dr's own window, which opens and closes its own.
+  if ($unlocked_here && $cli['kind'] === 'none') {
+    $cli = _provision_codebase_cli($appRoot, d()->root);
+    if ($cli['kind'] === 'dr') {
+      drush_log(dt('@p with provision_lock_drush_local_vnd (the unlock brought a Drush that runs under core\'s dr)', array('@p' => $tag . '2d/LOCAL/DRUSH/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+      return _provision_drupal_site_local_updatedb_dr($tag, $appRoot, $cli);
+    }
   }
 
   if (!is_executable($drushAbsolutePath)) {
