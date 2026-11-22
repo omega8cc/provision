@@ -387,6 +387,19 @@ if ( $boa_fold ~ "^(?!(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS):)|:(?:[^0:]|0[^
 }
 
 ###
+### The Drupal and Backdrop installer is never served (SA-CORE-2026-017 is
+### the reason to be strict). The last location of this file answers 404 to
+### every .php it does not name, but the local include files below are read
+### before it and nginx takes regex locations in the order it reads them, so
+### a PHP location added there would reach install.php. Tested here, at
+### server level and above those includes, where no location can take the
+### request first. No capturing group in the pattern.
+###
+if ( $uri ~* "^/(?:core/)?install\.php(?:/|$)" ) {
+  return 404;
+}
+
+###
 ### Add recommended HTTP headers
 ### Note: any location with its own add_header directives cancels ALL
 ### inherited add_header lines, so this pair is re-stated verbatim in
