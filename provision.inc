@@ -1991,12 +1991,14 @@ function provision_drush_local_lock_state() {
  *
  * Drupal 12 asks for a released Drush 15 only (^15@stable, which holds
  * even where the codebase allows dev stability): a box never pulls a
- * development Drush into a platform, and --prefer-stable keeps the packages
- * it brings in stable too. Drush 15 has no drush.php and runs under core's
- * dr, which this backend's install, database updates and start check run
- * for such a codebase (_provision_codebase_cli()); Drush 14 will never be
- * released. Until Drush 15 and the releases it needs on Drupal 12 are
- * tagged, composer refuses that require on stability and changes nothing,
+ * development Drush into a platform. The flag binds drush/drush alone: the
+ * packages it needs follow the codebase's own minimum-stability, and
+ * --prefer-stable takes their releases first. Drush 15 has no drush.php
+ * and runs under core's dr, which this backend's install, database updates
+ * and start check run for such a codebase (_provision_codebase_cli());
+ * Drush 14 will never be released. Until Drush 15 is tagged, and what it
+ * needs on Drupal 12 has a release where the codebase allows only stable
+ * ones, composer refuses that require on stability and changes nothing,
  * which is an advisory naming the constraint, like the skips above; any
  * other failure is the warning every major gets.
  *
@@ -2136,7 +2138,7 @@ function _provision_require_site_local_drush($approot) {
     // Composer's own refusal of a Drush or a dependency with no release yet,
     // which changes nothing; any other failure (a conflict, the network, a
     // half-done install) is a warning, as on every other major.
-    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major takes only a released Drush 15 with released dependencies, and composer found none yet, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major takes only a released Drush 15, and composer found none it can install within this codebase\'s stability settings yet, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
       '@package' => $package,
       '@root' => $approot,
       '@major' => $major,
