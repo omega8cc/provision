@@ -1989,23 +1989,23 @@ function provision_drush_local_lock_state() {
  * must not turn every later task into a WARNING); a require that still
  * fails is a warning carrying composer's own message.
  *
- * Drupal 12 asks for the stable Drush 14 only (^14@stable, which
- * holds even where the codebase allows dev stability): only 14.x-dev
- * resolves on its core among the Drush releases this backend can run, and
- * a box never pulls a development Drush into a platform; --prefer-stable
- * keeps the packages it brings in stable too. Drush 14 will never be
- * released (its maintainers support Drush 15 from Drupal 12 on), so composer
- * refuses that require on stability and changes nothing, which is an
- * advisory naming the constraint, like the skips above; any other failure
- * is the warning every major gets.
+ * Drupal 12 asks for a released Drush 15 only (^15@stable, which holds
+ * even where the codebase allows dev stability): a box never pulls a
+ * development Drush into a platform, and --prefer-stable keeps the packages
+ * it brings in stable too. Drush 15 has no drush.php and runs under core's
+ * dr, which this backend's install, database updates and start check run
+ * for such a codebase (_provision_codebase_cli()); Drush 14 will never be
+ * released. Until Drush 15 and the releases it needs on Drupal 12 are
+ * tagged, composer refuses that require on stability and changes nothing,
+ * which is an advisory naming the constraint, like the skips above; any
+ * other failure is the warning every major gets.
  *
- * A Drupal 11.5 or newer codebase asks for Drush 13 (drush/drush:^13).
- * Drush 15 works with core 11.5 and newer, has no drush.php and no
- * site:install, and runs only under core's dr, while this backend's
- * install, database updates and start check run drush.php: the bare
- * require would pick Drush 15 the day it is tagged and leave the platform
- * unable to install a site or update a database. Drush 13 supports 11.5,
- * and the bare require writes ^13.8 there today for the Drush 13 it
+ * A Drupal 11.5 or newer codebase before 12 asks for Drush 13
+ * (drush/drush:^13). The bare require would pick Drush 15 the day it is
+ * tagged; Drush 13 is the released Drush that supports 11.5 and keeps the
+ * drush.php that site owners' vdrush runs, which BOA's own 11.5 builds
+ * carry too, and a codebase that brings its own Drush 15 runs under dr all
+ * the same. The bare require writes ^13.8 there today for the Drush 13 it
  * resolves, already below 14: ^13 holds no tighter, so the codebase gains
  * no limit it would not have had. An older core cannot take Drush 15 and
  * keeps the commands below.
@@ -2096,7 +2096,7 @@ function _provision_require_site_local_drush($approot) {
       }
     }
   }
-  // Drupal 11.5 and newer before Drupal 12, where Drush 15 can install.
+  // Drupal 11.5 and newer before Drupal 12, where Drush 15 could install.
   $cap_drush = FALSE;
   if (preg_match('/^([0-9]+)\.([0-9]+)/', $core, $m)) {
     $cap_drush = ((int) $m[1] == 11 && (int) $m[2] >= 5);
@@ -2110,7 +2110,7 @@ function _provision_require_site_local_drush($approot) {
   }
   $package = '';
   if ($major == 12) {
-    $package = 'drush/drush:^14@stable';
+    $package = 'drush/drush:^15@stable';
     $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
   }
   elseif ($cap_drush) {
@@ -2133,10 +2133,10 @@ function _provision_require_site_local_drush($approot) {
   }
   elseif ($major == 12 && strpos($output, 'drush/drush') !== FALSE
     && strpos($output, 'does not match your minimum-stability') !== FALSE) {
-    // Composer's own refusal of the unreleased Drush, which changes nothing;
-    // any other failure (a conflict, the network, a half-done install) is a
-    // warning, as on every other major.
-    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: no released Drush that this backend runs supports Drupal @major (Drush 14 will never be released, Drush 15 runs only under core\'s dr), so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
+    // Composer's own refusal of a Drush or a dependency with no release yet,
+    // which changes nothing; any other failure (a conflict, the network, a
+    // half-done install) is a warning, as on every other major.
+    drush_log(dt('DRUSH/DRUSH composer require @package did not resolve in @root: Drupal @major takes only a released Drush 15 with released dependencies, and composer found none yet, so the codebase is left as it was and keeps no site-local Drush until it is built with one: @out', array(
       '@package' => $package,
       '@root' => $approot,
       '@major' => $major,
