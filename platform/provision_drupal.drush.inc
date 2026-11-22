@@ -3148,6 +3148,13 @@ function _provision_drupal_find_modules($scope, $key = '') {
         $schema_version = max($schema_version, (int) $removed_matches[1]);
       }
     }
+    // Drupal 8 and later never install a module below 8000, whatever lower
+    // update hooks or hook_update_last_removed() number its code still carries
+    // from Drupal 7: a site records 8000 for it, so the lower number here read
+    // as a downgrade from the site's own platform.
+    if ($schema_version > 0 && $schema_version < 8000 && drush_drupal_major_version() >= 8) {
+      $schema_version = 8000;
+    }
     $files[$name]->schema_version = $schema_version;
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
