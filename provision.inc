@@ -2810,6 +2810,11 @@ function provision_unlock_drush_local_vnd() {
     $dru_dru_dru_php_above = d()->root . '/../vendor/drush/drush/drush.php';
     $dru_dru_drush_local = d()->root . '/vendor/drush/drush/drush';
     $dru_dru_drush_above = d()->root . '/../vendor/drush/drush/drush';
+    // Composer's proxy for core's dr (Drupal 11.5 and newer, Drush 15): the
+    // shell's dr runs it by its path, as vdrush runs drush.php, and the
+    // shell runs only a file that may be executed
+    $bin_vnd_dr_local = d()->root . '/vendor/bin/dr';
+    $bin_vnd_dr_above = d()->root . '/../vendor/bin/dr';
 
     if (provision_file()->exists($dru_vnd_drush_local)->status()) {
       provision_file()->chmod($dru_vnd_drush_local, 0775)
@@ -2873,6 +2878,17 @@ function provision_unlock_drush_local_vnd() {
     }
     if (provision_file()->exists($dru_dru_drush_above)->status()) {
       provision_file()->chmod($dru_dru_drush_above, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+
+    if (is_file($bin_vnd_dr_local) && !is_link($bin_vnd_dr_local)) {
+      provision_file()->chmod($bin_vnd_dr_local, 0775)
+      ->succeed('Changed permissions of <code>@path</code> to @perm')
+      ->fail('Could not change permissions of <code>@path</code> to @perm');
+    }
+    elseif (is_file($bin_vnd_dr_above) && !is_link($bin_vnd_dr_above)) {
+      provision_file()->chmod($bin_vnd_dr_above, 0775)
       ->succeed('Changed permissions of <code>@path</code> to @perm')
       ->fail('Could not change permissions of <code>@path</code> to @perm');
     }
