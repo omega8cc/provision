@@ -609,6 +609,16 @@ location = /llms.txt {
 }
 
 ###
+### The optional full-text companion of llms.txt, served the same way:
+### a static file in the sites/domain/files directory, else the site.
+###
+location = /llms-full.txt {
+  access_log off;
+  log_not_found off;
+  try_files /sites/$main_site_name/files/$host.llms-full.txt /sites/$main_site_name/files/llms-full.txt $uri @cache;
+}
+
+###
 ### Support for https://drupal.org/project/robotstxt module
 ### and static file in the sites/domain/files directory.
 ###
