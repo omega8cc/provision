@@ -41,11 +41,6 @@ function drush_provision_grav_upgrade_validate($artefact = NULL) {
     return drush_set_error('PROVISION_GRAV_SITE_NOT_FOUND',
       dt('No Grav capsule found at !site.', array('!site' => d()->site_path)));
   }
-  // Clear a stale frontend backup-mode ctrl file before the safety copy runs:
-  // a dead task's database-only mode would make the grav backup refuse.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The whole verdict before anything is written: the artefact is what its
   // name says it is, and it is newer than this capsule.

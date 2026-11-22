@@ -43,6 +43,13 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
     return drush_set_error('PROVISION_GRAV_COPY_UPGRADE_BAD_SOURCE',
       dt('provision-grav-copy-upgrade only applies to sites on Grav platforms.'));
   }
+  // The upgrade verifies its source through the panel after the copy, on the
+  // panel's record of the site; refused while that record names another
+  // platform than the site is on, before this validate changes anything
+  // (provision_refuse_stale_panel_record()).
+  if (!provision_refuse_stale_panel_record('upgrade')) {
+    return FALSE;
+  }
   $refuse_server = d()->platform->web_server;
   if (!empty($platform) && is_object(d($platform)) && isset(d($platform)->web_server)) {
     $refuse_server = d($platform)->web_server;
@@ -123,12 +130,6 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
       array('@uri' => $new_uri)));
   }
 
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: a dead task's database-only mode would make the grav backup
-  // refuse, or a different mode change the archive's transport.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
 
   // The artefact verdict, measured against the SOURCE capsule -- the copy is
   // materialised from the source's archive, so the source's version is the
@@ -160,7 +161,9 @@ function drush_provision_grav_copy_upgrade_validate($new_name = NULL, $platform 
  * restore point the front end registers on the source.
  */
 function drush_provision_grav_pre_provision_grav_copy_upgrade($new_name = NULL, $platform = NULL) {
-  _provision_grav_force_safety_mode('Pre-upgrade (source)', TRUE);
+  if (_provision_grav_force_safety_mode('Pre-upgrade (source)', TRUE) === FALSE) {
+    return FALSE;
+  }
   drush_invoke('provision-backup');
 }
 

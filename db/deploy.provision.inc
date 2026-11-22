@@ -44,7 +44,10 @@ function drush_db_post_provision_deploy() {
     $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
   }
 
-  if (is_file($enable_myquick) && (is_file($oct_db_test) || is_file($oct_db_test_p))) {
+  // Only the dump this deploy's flow made is moved aside: the store is the
+  // account's, and a deploy that imported a classic database.sql, or none,
+  // would take another task's dump with it (provision_expim_store_is_mine()).
+  if (is_file($enable_myquick) && is_file($oct_db_test) && provision_expim_store_is_mine()) {
     // Rename temporary sql dump dir to site/date specific backup.
     $old = $oct_db_dirx;
     $new = $uri_db_dirz;
@@ -53,12 +56,17 @@ function drush_db_post_provision_deploy() {
       ->fail('Moving the Post-DB-Import @path1 to @path2 has failed.');
     if (is_dir($new)) {
       _provision_recursive_delete($old);
+      provision_expim_unmark_store();
       drush_log(dt("MyQuick tmp_expim dir removed in drush_db_post_provision_deploy @var", array('@var' => $old)), 'info');
     }
+  }
+  if (is_file($enable_myquick) && is_file($post_import_flag)) {
     provision_file()->unlink($post_import_flag)
       ->succeed('MyQuick Removed Post-DB-Import Flag-File in drush_db_post_provision_deploy')
       ->fail('MyQuick Could not remove Post-DB-Import Flag-File in drush_db_post_provision_deploy');
   }
+  provision_expim_unlock('import');
+  provision_expim_unlock('dump');
 
   // Always remove an extracted/imported database.sql from the live site dir,
   // whichever import path ran: the MyQuick branch above used to skip this,

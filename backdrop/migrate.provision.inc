@@ -81,19 +81,34 @@ function drush_provision_backdrop_provision_migrate_validate($platform = NULL) {
   }
 
   // Backdrop -> Backdrop: mirror the D-layer validate.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a migrate that cannot fit before its safety copy starts (the D
   // layer's pre-flight; the new name is the command's second positional).
   $args = drush_get_arguments();
   $new_name = isset($args[2]) ? $args[2] : NULL;
+  // A Migrate that keeps the site's name verifies it through the panel
+  // before its deploy, on the panel's record of the site; refused while that
+  // record names another platform than the site is on, before this validate
+  // changes anything (provision_refuse_stale_panel_record()).
+  if ((is_null($new_name) || $new_name == d()->name) && !provision_refuse_stale_panel_record('migrate')) {
+    return FALSE;
+  }
   if (!provision_copy_task_space_preflight('migrate', $platform, $new_name)) {
     return FALSE;
   }
   // Refuse a target that cannot run on its command-line PHP before the
   // safety copy, not at its deploy (provision_cli_php_target_preflight()).
   if (!provision_cli_php_target_preflight('migrate', $platform, $new_name)) {
+    return FALSE;
+  }
+  // A rename onto a name another site still holds is refused before the
+  // store check below moves anything (provision_refuse_live_site_at_new_name()).
+  // A rename, or a move onto another platform, builds a site directory that
+  // is not there yet: a folder at its path would be replaced and deleted
+  // (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_live_site_at_new_name('migrate', $new_name)) {
+    return FALSE;
+  }
+  if (!provision_refuse_folder_at_new_name('migrate', $platform, $new_name)) {
     return FALSE;
   }
   // A site renamed by this migrate never inherits a files store still at
@@ -116,6 +131,11 @@ function drush_provision_backdrop_pre_provision_migrate($platform, $new_name = N
   if (!provision_platform_is_backdrop(d())) {
     return;
   }
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_migrate')) {
+    return FALSE;
+  }
   // Mark the context disabled and re-render settings, mirroring the D-layer
   // pre-hook. NOTE: unlike Drupal's $conf['site_offline'], Backdrop keeps
   // maintenance mode in {state}, which this settings render does NOT set, so
@@ -129,15 +149,6 @@ function drush_provision_backdrop_pre_provision_migrate($platform, $new_name = N
   d()->site_enabled = FALSE;
   _provision_backdrop_create_settings_file();
   drush_log(dt('Invoking drush provision-backup in drush_provision_backdrop_pre_provision_migrate'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  $internal_backup_flag_blank = "Internal-DB-Backup \n";
-  $local_description = 'Adding Internal-DB-Backup Flag-File drush_provision_backdrop_pre_provision_migrate';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, $internal_backup_flag_blank)
-      ->succeed('Generated blank ' . $local_description)
-      ->fail('Could not generate ' . $local_description);
-  }
   drush_invoke('provision-backup');
   provision_drupal_push_site();
 
@@ -198,12 +209,7 @@ function drush_provision_backdrop_pre_provision_migrate_rollback($platform, $new
   // Belt: a crashed migrate must not leave the internal-backup flag behind -
   // a leftover one makes every later backup on the account skip the MyQuick
   // tmp_expim rotation and can leak a dump into a files-only archive.
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
   if (!$kept_on_target) {
     d()->service('http')->create_config('site');
     d()->service('http')->parse_configs();
@@ -229,6 +235,10 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   $options = array();
   $options = d()->options;
   $options['uri'] = d()->uri;
+
+  // Before the verifies below: one of them can build the target's site
+  // directory (see the rollback).
+  provision_migrate_target_dir_probe($platform, $new_name);
 
   $aegir_root = d('@server_master')->aegir_root;
   $enable_fast_track = $aegir_root . '/static/control/FastTrack.info';
@@ -405,6 +415,13 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   );
   drush_command_invoke_all_ref('provision_deploy_options_alter', $deploy_options, 'migrate');
 
+  // A verify above that failed fails the task, so it stops here, before the
+  // deploy: the site's own verify is the canary that it still verifies, and
+  // a copy built after it failed would only be taken away by the rollback.
+  if (drush_get_error()) {
+    return FALSE;
+  }
+
   // The safety copy took its time; the unpacked copy must still fit.
   if (!provision_copy_task_space_recheck('Migrate of ' . d()->uri)) {
     return FALSE;
@@ -493,9 +510,11 @@ function drush_provision_backdrop_provision_migrate_rollback($platform, $new_nam
   // The copy the deploy built on the target. Under the same name the site
   // record went back to the old platform just above, so nothing points at the
   // copy whether or not its deploy completed. Under a new name a completed
-  // deploy keeps the copy with its context.
+  // deploy keeps the copy with its context. A task that failed before its
+  // deploy may have had its verify build the target's directory.
   if ($outcome === 'remove_copy') {
     provision_remove_unfinished_target_copy('migrate_target_copy');
+    provision_migrate_remove_verify_dir();
   }
   elseif ($outcome === 'keep_copy') {
     $record = drush_get_option('migrate_target_copy', NULL);
@@ -538,10 +557,7 @@ function drush_provision_backdrop_post_provision_migrate($platform, $new_name = 
   }
 
   $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  provision_file()->unlink($internal_backup_flag)
-    ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate')
-    ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_backdrop_post_provision_migrate');
 }
 
 /**

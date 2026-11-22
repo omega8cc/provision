@@ -1359,6 +1359,11 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
     if (is_file($enable_myquick) && is_executable($myloader_path)) {
 
+      // The store stays this flow's through the import (provision_expim_lock()).
+      if (!provision_expim_lock('import', dt('the import of @db', array('@db' => $db_name)))) {
+        return;
+      }
+
       if ($db_name) {
         $mycnf = $this->generate_mycnf();
 
@@ -1442,16 +1447,17 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
         // made by older code. Acceptance rules:
         // - a mixed store (two databases' dumps) or an empty one: refuse;
         // - this database's own dump: import;
-        // - a single foreign dump: import ONLY inside an internal flow
-        //   (clone/migrate import a source-named dump into the target
-        //   database, marked by the internal-backup flag); outside one it
-        //   is a stale leftover of another site - the exact shape that
-        //   imported the wrong database in the past - so refuse.
+        // - a single foreign dump: import ONLY inside the internal flow
+        //   that dumped it (clone/migrate import a source-named dump into
+        //   the target database, marked by the internal-backup flag, and
+        //   the dump carries the flow's mark); any other is a leftover or
+        //   another task's dump - the exact shape that imported the wrong
+        //   database in the past - so refuse.
         $own_dump = glob($oct_db_dirx . '/' . $db_name . '-schema-create.sql*');
         $all_dumps = glob($oct_db_dirx . '/*-schema-create.sql*');
         $own_count = is_array($own_dump) ? count($own_dump) : 0;
         $all_count = is_array($all_dumps) ? count($all_dumps) : 0;
-        $internal_flow = is_file($backup_path . '/.internal_backup_flag.pid');
+        $internal_flow = provision_internal_flow_active();
         $import_allowed = FALSE;
         if ($all_count && $own_count == $all_count) {
           $import_allowed = TRUE;
@@ -1476,10 +1482,16 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
           $metadata_file = $oct_db_dirx . '/metadata';
           $dump_fresh = is_file($metadata_file)
             && (@filemtime($metadata_file) >= @filemtime($backup_path . '/.internal_backup_flag.pid'));
-          if (count($distinct) == 1 && $dump_fresh) {
+          if (count($distinct) == 1 && $dump_fresh && provision_expim_store_is_mine()) {
             $import_allowed = TRUE;
             drush_log(dt('Fast import of the internal-flow source dump @found into database @db.', array('@found' => implode(', ', $foreign_names), '@db' => $db_name)), 'info');
           }
+          elseif (count($distinct) == 1 && $dump_fresh) {
+            drush_log(dt('The foreign dump @found in the shared store was not made by this task.', array('@found' => implode(', ', $foreign_names))), 'warning');
+          }
+        }
+        if ($import_allowed) {
+          $this->store_collation_5x($oct_db_dirx);
         }
         if (!$import_allowed) {
           $found_dumps = array();
@@ -1556,7 +1568,34 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
 
       $cmd = sprintf("mysql --defaults-file=/dev/fd/3 --force %s", escapeshellcmd($db_name));
 
-      $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+      // A deadlock (1213) or a lock wait timeout (1205) ends only the
+      // statement MySQL picked, with its transaction, and asks the client to
+      // run it again: another session, InnoDB's own background threads among
+      // them, held a lock on the new database for a moment. A load whose first
+      // error is one of them runs again from the start, at most twice, a few
+      // seconds apart; a mysqldump file drops each table, view and stored
+      // object before it creates it, so it lands whole over what the last run
+      // left. It does not run again while another session of the loading
+      // login is on the database, and the events the last run made are
+      // dropped first (import_rerun_ready()). A load whose first error is
+      // another one, or the last run's errors, are reported below as before.
+      $attempt = 1;
+      while (TRUE) {
+        $success = $this->safe_shell_exec($cmd, $db_host, $db_user, $db_passwd, $load_file);
+        if (!$success || $attempt >= 3 || !$this->import_errors_retryable($this->safe_shell_exec_output)) {
+          break;
+        }
+        // The rerun check runs its own queries: the load's output is kept
+        // for the error read below when the load does not run again.
+        $load_output = $this->safe_shell_exec_output;
+        if (!$this->import_rerun_ready($db_name, $db_host, $db_user, $db_passwd)) {
+          $this->safe_shell_exec_output = $load_output;
+          break;
+        }
+        drush_log(dt('The first error of the load of database @db is a lock error MySQL asks to retry (@errors): loading the dump again, run @next of 3.', array('@db' => $db_name, '@errors' => $this->import_error_lines($load_output, 3), '@next' => $attempt + 1)), 'notice');
+        sleep(2 * $attempt);
+        $attempt++;
+      }
       if ($load_file !== $dump_file) {
         @unlink($load_file);
       }
@@ -1572,10 +1611,7 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       // whose post-hook drops the ORIGINAL database once no error is set.
       // --force is kept so a salvageable dump still loads as much as it can,
       // but the errors it prints are now read and reported.
-      $import_errors = '';
-      if (preg_match_all('/^ERROR .*/m', $this->safe_shell_exec_output, $matches)) {
-        $import_errors = implode("\n", array_slice($matches[0], 0, 10));
-      }
+      $import_errors = $this->import_error_lines($this->safe_shell_exec_output, 10);
       if (!$success) {
         drush_set_error('PROVISION_DB_IMPORT_FAILED', dt("Database import failed: %output", array('%output' => $this->safe_shell_exec_output)));
       }
@@ -1713,22 +1749,154 @@ port=%s
   }
 
   /**
+   * The rewrites that keep a MySQL 5.x dump's utf8mb4 tables and columns on
+   * the collation they had there, for a load on a server of another
+   * version.
+   *
+   * 5.x names a utf8mb4 table's or column's collation only when it is not
+   * that character set's default, utf8mb4_general_ci; 8.x's default is
+   * utf8mb4_0900_ai_ci, so such a table or column made from a 5.x dump on
+   * 8.x took that one. 8.x's own dumps name the collation on every utf8mb4
+   * table and column, and these entries are used only for a dump whose
+   * header names a 5.x server (classic_load_collation_regexes()). A stored
+   * routine's parameters and return type are written without a collation
+   * by 5.x and 8.x alike, so the line cannot tell which one it had: they
+   * are left as they are.
+   */
+  function collation_5x_regexes() {
+    return array(
+      // the table's own line, as SHOW CREATE TABLE writes it on 5.x
+      '#^(\) ENGINE=[A-Za-z0-9_]+(?: AUTO_INCREMENT=[0-9]+)? DEFAULT CHARSET=utf8mb4)(?![A-Za-z0-9_]| COLLATE=)#' => '$1 COLLATE=utf8mb4_general_ci',
+      // a column whose character set is not its table's
+      '#^(  `(?:[^`]|``)+` (?:(?:var)?char\([0-9]+\)|(?:tiny|medium|long)?text|(?:enum|set)\(\'(?:[^\'\\\\]++|\'\'|\\\\.)*+\'(?:,\'(?:[^\'\\\\]++|\'\'|\\\\.)*+\')*+\)) CHARACTER SET utf8mb4)(?![A-Za-z0-9_]| COLLATE )#' => '$1 COLLATE utf8mb4_general_ci',
+    );
+  }
+
+  /**
+   * collation_5x_regexes() for a dump read from $in when its header names a
+   * 5.x server and this service's server is not one (or cannot be asked),
+   * otherwise none; $here gets that server's version when it was asked.
+   * Reads the header only; the caller rewinds. PHP 5.6-safe.
+   */
+  function classic_load_collation_regexes($in, &$here = NULL) {
+    $made_on = '';
+    for ($i = 0; $i < 12 && ($piece = fgets($in, 4096)) !== FALSE; $i++) {
+      if (preg_match('/^-- Server version\s+([0-9][^\s]*)/', $piece, $m)) {
+        $made_on = $m[1];
+        break;
+      }
+      if (trim($piece) !== '' && strpos($piece, '--') !== 0) {
+        break;
+      }
+    }
+    if (!preg_match('/^5\./', $made_on)) {
+      return array();
+    }
+    // A refused connect sets no error here: the load itself reports it.
+    if (is_null($this->conn)) {
+      $this->connect(TRUE);
+    }
+    $here = $this->conn ? $this->server_version() : FALSE;
+    if (is_string($here) && preg_match('/^5\./', $here)) {
+      return array();
+    }
+    return $this->collation_5x_regexes();
+  }
+
+  /**
+   * The first $max ERROR lines of a load's output, one per line, or ''.
+   */
+  function import_error_lines($output, $max) {
+    if (!preg_match_all('/^ERROR .*/m', $output, $matches)) {
+      return '';
+    }
+    return implode("\n", array_slice($matches[0], 0, $max));
+  }
+
+  /**
+   * TRUE when the first ERROR line of a load's output is a deadlock (1213) or
+   * a lock wait timeout (1205), the two errors MySQL ends with "try
+   * restarting transaction". The errors after it can be its own fallout: a
+   * table its DROP could not remove is then "already exists" (1050) and gets
+   * the dump's rows over its own. A first error of any other kind would only
+   * repeat. PHP 5.6-safe.
+   */
+  function import_errors_retryable($output) {
+    if (!preg_match('/^ERROR .*/m', $output, $match)) {
+      return FALSE;
+    }
+    return preg_match('/^ERROR (1213|1205) \(/', $match[0]) === 1;
+  }
+
+  /**
+   * Before a classic load of database $db_name runs again, as the loading
+   * login. FALSE when another session of that login is on the database (a
+   * Drush or a web request of the site, whose writes into the half-loaded
+   * tables the next run would not see), or when that cannot be read. Then
+   * it drops the events the last run made: the dump creates them after the
+   * data, and an enabled one would fire while the next run loads the tables
+   * again. TRUE once none is left. PHP 5.6-safe.
+   */
+  function import_rerun_ready($db_name, $db_host, $db_user, $db_passwd) {
+    $client = 'mysql --defaults-file=/dev/fd/3 -B -N -e ';
+    $db = ' ' . escapeshellarg($db_name);
+    $sessions = 'SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB = DATABASE() AND ID <> CONNECTION_ID()';
+    if (!$this->safe_shell_exec($client . escapeshellarg($sessions) . $db, $db_host, $db_user, $db_passwd)
+      || !preg_match('/^([0-9]+)$/m', $this->safe_shell_exec_output, $match)) {
+      drush_log(dt('Could not read which sessions are on database @db, so its load does not run again.', array('@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    if ($match[1] !== '0') {
+      drush_log(dt('@n other session(s) of the loading login are on database @db, so its load does not run again.', array('@n' => $match[1], '@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    $events = 'SELECT EVENT_NAME FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE()';
+    if (!$this->safe_shell_exec($client . escapeshellarg($events) . $db, $db_host, $db_user, $db_passwd)) {
+      drush_log(dt('Could not list the events of database @db, so its load does not run again.', array('@db' => $db_name)), 'warning');
+      return FALSE;
+    }
+    $names = array();
+    foreach (explode("\n", $this->safe_shell_exec_output) as $line) {
+      if ($line !== '') {
+        // -B writes a backslash, a tab and a newline in a value escaped.
+        $names[] = strtr($line, array('\\\\' => '\\', '\\t' => "\t", '\\n' => "\n", '\\0' => "\0"));
+      }
+    }
+    foreach ($names as $name) {
+      $drop = 'DROP EVENT IF EXISTS `' . str_replace('`', '``', $name) . '`';
+      if (!$this->safe_shell_exec($client . escapeshellarg($drop) . $db, $db_host, $db_user, $db_passwd)) {
+        drush_log(dt('Could not drop the event @name the last load of database @db made, so its load does not run again.', array('@name' => $name, '@db' => $db_name)), 'warning');
+        return FALSE;
+      }
+    }
+    if ($names) {
+      drush_log(dt('Dropped @n event(s) the last load of database @db made, before loading it again.', array('@n' => count($names), '@db' => $db_name)), 'notice');
+    }
+    return TRUE;
+  }
+
+  /**
    * The dump file a classic load reads: the file itself, or a copy with
-   * get_statement_regexes() applied when a line of it still needs them.
+   * get_statement_regexes() applied when a line of it still needs them, and
+   * with classic_load_collation_regexes() applied for a 5.x dump loaded on
+   * another version.
    *
    * An archive made before the dump filter rewrote those statements keeps
    * ALTER DATABASE lines naming the dumped database around an object made
    * under another collation, and a trigger definer in double quotes; the
    * site's own login may run neither (ERROR 1044, ERROR 1227), so its
-   * Restore failed and rolled back. A dump made since needs no copy. Only a
-   * piece that starts a line is matched: every data row starts with its
-   * INSERT, and a long row is read in pieces. The copy is written to the
-   * instance's backup directory, readable by its owner only, and the caller
-   * removes it after the load; a copy a killed load left there goes at the
-   * next classic load (classic_load_sweep()). The copy is written only when
-   * the filesystem keeps the headroom the space check keeps
-   * (provision_space_margin()) after it. FALSE when the copy cannot be
-   * written. PHP 5.6-safe.
+   * Restore failed and rolled back. A dump made since needs no copy. An
+   * archive made on 5.x and restored after the server's upgrade to 8.x
+   * turned every utf8mb4 table and column that kept 5.x's default collation
+   * to 8.x's default. Only a piece that starts a line is matched: every data
+   * row starts with its INSERT, and a long row is read in pieces. The copy
+   * is written to the instance's backup directory, readable by its owner
+   * only, and the caller removes it after the load; a copy a killed load
+   * left there goes at the next classic load (classic_load_sweep()). The
+   * copy is written only when the filesystem keeps the headroom the space
+   * check keeps (provision_space_margin()) after it. FALSE when the copy
+   * cannot be written and a statement needs it; a copy needed only for the
+   * collations loads the dump as it is, with a warning. PHP 5.6-safe.
    */
   function classic_load_file($dump_file) {
     $regexes = $this->get_statement_regexes();
@@ -1739,15 +1907,48 @@ port=%s
       // The load reports the missing or unreadable file as before.
       return $dump_file;
     }
+    $here = FALSE;
+    $collation = $this->classic_load_collation_regexes($in, $here);
+    rewind($in);
     $needs = FALSE;
+    $needs_collation = FALSE;
+    // A 5.x dump's stored routines took 5.x's default, utf8mb4_general_ci,
+    // for their utf8mb4 parameters and return value; no dump names it, so
+    // on a server known to be MySQL 8.x the copy opens with that default for
+    // its session (MariaDB runs a comment for 8.x too and has no such
+    // setting, and 8.4 warns that a later release makes it read-only). A
+    // routine whose dump sets its own default just before it (a dump made
+    // since generate_dump() writes those lines) needs none: only a routine
+    // without one makes the copy open with it.
+    $routine_re = '#^CREATE (?:DEFINER=(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|[^\s@]+)@(?:`(?:[^`]|``)*`|"(?:[^"]|"")*"|\S+) )?(?:FUNCTION|PROCEDURE) #';
+    $routines_here = $collation && is_string($here) && preg_match('/^8\./', $here);
+    $own_re = '#^SET @BOA_UTF8MB4_SQL = IF\(VERSION\(\) [^\n]*, \'SET @BOA_PREV_UTF8MB4 = #';
+    $routines = FALSE;
+    $own = FALSE;
+    $tables = FALSE;
     $start = TRUE;
-    while (!$needs && ($piece = fgets($in, 1048576)) !== FALSE) {
-      if ($start && $this->statement_line($piece, $regexes) !== $piece) {
-        $needs = TRUE;
+    while (!($needs && ($tables || !$collation) && ($routines || !$routines_here)) && ($piece = fgets($in, 1048576)) !== FALSE) {
+      if ($start) {
+        if (!$needs && $this->statement_line($piece, $regexes) !== $piece) {
+          $needs = TRUE;
+        }
+        if ($collation && !$tables && $this->statement_line($piece, $collation) !== $piece) {
+          $tables = TRUE;
+        }
+        if ($routines_here && !$routines) {
+          if (preg_match($own_re, $piece)) {
+            $own = TRUE;
+          }
+          elseif (preg_match($routine_re, $piece)) {
+            $routines = !$own;
+            $own = FALSE;
+          }
+        }
       }
       $start = substr($piece, -1) === "\n";
     }
-    if (!$needs) {
+    $needs_collation = $tables || $routines;
+    if (!$needs && !$needs_collation) {
       fclose($in);
       return $dump_file;
     }
@@ -1755,15 +1956,26 @@ port=%s
     $free = @disk_free_space($dir);
     if (!is_file('/data/conf/disable_space_preflight.cnf') && function_exists('provision_space_margin') && $free !== FALSE) {
       $margin = provision_space_margin($dir);
-      if ($free < $need + $margin) {
+      // A copy needed only for the collations is made only with room for it
+      // and for the load that follows, which writes the database while the
+      // copy is still there, often on the same filesystem (the database is
+      // taken as the dump's size); without that room the dump loads as it is.
+      $room = $needs ? $need + $margin : 2 * $need + $margin;
+      if ($free < $room) {
         fclose($in);
-        drush_log(dt('The dump\'s rewritten copy needs about @need GB free on the filesystem holding @dir (@margin GB of it headroom) but only @free GB is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
-          '@need' => round(($need + $margin) / 1073741824, 1),
-          '@dir' => $dir,
+        // the figures in a unit that tells the room from the free space
+        // (provision.inc); in gigabytes where only this file is loaded
+        $figures = function_exists('provision_space_figures') ? provision_space_figures($room, $margin, $free) : array(
+          '@need' => round($room / 1073741824, 1),
           '@margin' => round($margin / 1073741824, 1),
           '@free' => round($free / 1073741824, 1),
-        )), 'warning');
-        return FALSE;
+          '@unit' => 'GB',
+        );
+        drush_log(dt('The dump\'s rewritten copy needs about @need @unit free on the filesystem holding @dir (@margin @unit of it headroom@load) but only @free @unit is free: free space first (/data/conf/disable_space_preflight.cnf turns this check off)', array(
+          '@dir' => $dir,
+          '@load' => $needs ? '' : dt(', and as much as the dump again for the load that follows'),
+        ) + $figures), 'warning');
+        return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
       }
     }
     $copy = $dir . '/.classic-load-' . getmypid() . '.sql';
@@ -1771,17 +1983,37 @@ port=%s
     $out = @fopen($copy, 'xb');
     if ($out === FALSE) {
       fclose($in);
-      return FALSE;
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
     }
     @chmod($copy, 0600);
     rewind($in);
     $ok = TRUE;
     $start = TRUE;
     $rewritten = 0;
-    while (($piece = fgets($in, 1048576)) !== FALSE) {
-      $line = $start ? $this->statement_line($piece, $regexes) : $piece;
-      if ($line !== $piece) {
-        $rewritten++;
+    $recollated = 0;
+    $routines_kept = 0;
+    if ($routines) {
+      // the server was read as 8.x; a comment only 8.x runs all the same
+      $head = "/*!80000 SET SESSION default_collation_for_utf8mb4 = 'utf8mb4_general_ci' */;\n";
+      $ok = fwrite($out, $head) === strlen($head);
+    }
+    while ($ok && ($piece = fgets($in, 1048576)) !== FALSE) {
+      $line = $piece;
+      if ($start) {
+        $line = $this->statement_line($piece, $regexes);
+        if ($line !== $piece) {
+          $rewritten++;
+        }
+        if ($collation) {
+          $kept = $this->statement_line($line, $collation);
+          if ($kept !== $line) {
+            $recollated++;
+            $line = $kept;
+          }
+          if ($routines && preg_match($routine_re, $line)) {
+            $routines_kept++;
+          }
+        }
       }
       $start = substr($piece, -1) === "\n";
       $written = fwrite($out, $line);
@@ -1793,15 +2025,236 @@ port=%s
     fclose($in);
     if (!fclose($out) || !$ok) {
       @unlink($copy);
-      return FALSE;
+      return $needs ? FALSE : $this->classic_load_collation_skipped($dump_file, $tables, $routines);
     }
     if ($rewritten == 1) {
       drush_log(dt('The dump carries 1 statement line written before the dump filter rewrote it (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with it rewritten.'), 'notice');
     }
-    else {
+    elseif ($rewritten > 1) {
       drush_log(dt('The dump carries @n statement lines written before the dump filter rewrote them (ALTER DATABASE naming the dumped database, a definer in double quotes): it loads from a copy with them rewritten.', array('@n' => $rewritten)), 'notice');
     }
+    if ($recollated) {
+      drush_log(dt('The dump was made on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load from a copy naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
+    }
+    if ($routines_kept == 1) {
+      drush_log(dt('The dump was made on MySQL 5.x: its stored routine loads with utf8mb4_general_ci, the default it was made with there, for its utf8mb4 parameters and return value.'), 'notice');
+    }
+    elseif ($routines_kept > 1) {
+      drush_log(dt('The dump was made on MySQL 5.x: its @n stored routines load with utf8mb4_general_ci, the default they were made with there, for their utf8mb4 parameters and return values.', array('@n' => $routines_kept)), 'notice');
+    }
     return $copy;
+  }
+
+  /**
+   * $dump_file, after a warning that the copy keeping a 5.x dump's
+   * collations could not be written. PHP 5.6-safe.
+   */
+  function classic_load_collation_skipped($dump_file, $tables = TRUE, $routines = FALSE) {
+    if ($tables && $routines) {
+      $what = dt('its utf8mb4 tables and columns that name no collation and its stored routines\' utf8mb4 parameters and return values take');
+    }
+    elseif ($routines) {
+      $what = dt('its stored routines\' utf8mb4 parameters and return values take');
+    }
+    else {
+      $what = dt('its utf8mb4 tables and columns that name no collation take');
+    }
+    drush_log(dt('The dump was made on MySQL 5.x and loads as it is: @what this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@what' => $what)), 'warning');
+    return $dump_file;
+  }
+
+  /**
+   * What classic_dump_routine_lines() needs through one classic dump of
+   * $db_name: each routine's own utf8mb4 default, as
+   * mydumper_object_modes_read() gives it (on any server).
+   * PHP 5.6-safe.
+   */
+  function classic_dump_routine_state($db_name) {
+    $colls = array();
+    $read = $this->mydumper_object_modes_read($db_name);
+    if (is_array($read)) {
+      foreach ($read as $key => $value) {
+        $parts = explode("\t", $value, 2);
+        if (isset($parts[1])) {
+          $colls[$key] = $parts[1];
+        }
+      }
+    }
+    return array('colls' => $colls, 'start' => TRUE, 'pending' => NULL, 'restore' => FALSE);
+  }
+
+  /**
+   * $piece of a classic dump, with each routine's own utf8mb4 default around
+   * its CREATE when $state knows one.
+   *
+   * A routine's utf8mb4 parameters and return value take the loading
+   * session's default_collation_for_utf8mb4, which no dump names, so a
+   * Restore gave them the server's default. mysqldump writes each routine
+   * after its DROP line, between a sql_mode line and the line putting the
+   * saved sql_mode back: the default goes after the first and the session's
+   * own value back after the second, each a statement prepared from one
+   * naming MySQL 8 (a 5.x or MariaDB server has no such setting, and 8.4
+   * warns that a later release makes it read-only: those run DO 0 in its
+   * place). $state['start'] says whether $piece starts a line; the caller
+   * keeps it. PHP 5.6-safe.
+   */
+  function classic_dump_routine_lines($piece, &$state) {
+    if (empty($state['start']) || empty($state['colls']) || substr($piece, -1) !== "\n") {
+      return $piece;
+    }
+    $line = substr($piece, 0, -1);
+    if (preg_match('#^/\*!50003 DROP (FUNCTION|PROCEDURE) IF EXISTS `((?:[^`]|``)+)` \*/;$#', $line, $m)) {
+      $key = $m[1] . ' ' . bin2hex(str_replace('``', '`', $m[2]));
+      $state['pending'] = isset($state['colls'][$key]) ? $state['colls'][$key] : NULL;
+      return $piece;
+    }
+    if ($state['pending'] !== NULL && preg_match('#^/\*!50003 SET sql_mode +=[ ]+\'[A-Z0-9_,]*\' \*/ ;$#', $line)) {
+      $coll = $state['pending'];
+      $state['pending'] = NULL;
+      $state['restore'] = TRUE;
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET @BOA_PREV_UTF8MB4 = @@SESSION.default_collation_for_utf8mb4,"
+        . " SESSION default_collation_for_utf8mb4 = ''" . $coll . "''', 'DO 0');\n"
+        . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
+        . "EXECUTE boa_utf8mb4;\n";
+    }
+    if ($state['restore'] && preg_match('#^/\*!50003 SET sql_mode +=[ ]+@saved_sql_mode \*/ ;$#', $line)) {
+      $state['restore'] = FALSE;
+      return $piece . "SET @BOA_UTF8MB4_SQL = IF(VERSION() LIKE '8.%', 'SET SESSION default_collation_for_utf8mb4 = @BOA_PREV_UTF8MB4', 'DO 0');\n"
+        . "PREPARE boa_utf8mb4 FROM @BOA_UTF8MB4_SQL;\n"
+        . "EXECUTE boa_utf8mb4;\n"
+        . "DEALLOCATE PREPARE boa_utf8mb4;\n";
+    }
+    return $piece;
+  }
+
+  /**
+   * Keeps a MySQL 5.x server's utf8mb4 collations in a MyQuick store, the
+   * mydumper directory $dir that a deploy (import_site_database()) or
+   * import_dump() loads with myloader or the database broker, when this
+   * service's server is not 5.x.
+   *
+   * A site moved from a database server on 5.x to one on 8.x is dumped on
+   * the first and loaded on the second; its utf8mb4 tables and columns that
+   * kept 5.x's default collation name none in the dump and took 8.x's
+   * default. mydumper writes no server version, but 8.x names the collation
+   * on every utf8mb4 table and on every column given a character set, so a
+   * line naming none was dumped on 5.x. Each table file (*-schema.sql) gets
+   * collation_5x_regexes() through a new file in the same directory renamed
+   * over it, its mode kept; a file that cannot be rewritten loads as it is,
+   * with a warning. Routines, triggers and views are in other files and
+   * stay as they are. PHP 5.6-safe.
+   */
+  function store_collation_5x($dir) {
+    $files = @glob($dir . '/*-schema.sql');
+    if (!is_array($files) || !$files) {
+      return;
+    }
+    // A refused connect sets no error here: the load itself reports it. A
+    // session opened only to read the version goes again at once: it would
+    // sit idle through the load, which can outlast the server's wait_timeout,
+    // and the statement after the load would meet it closed.
+    $opened = is_null($this->conn);
+    if ($opened) {
+      $this->connect(TRUE);
+    }
+    $here = $this->conn ? $this->server_version() : FALSE;
+    if ($opened && $this->conn && method_exists($this, 'close')) {
+      $this->close();
+    }
+    if (is_string($here) && preg_match('/^5\./', $here)) {
+      return;
+    }
+    $regexes = $this->collation_5x_regexes();
+    $recollated = 0;
+    $failed = 0;
+    foreach ($files as $file) {
+      if (is_link($file) || !is_file($file)) {
+        continue;
+      }
+      $lines = @file($file);
+      if ($lines === FALSE) {
+        $failed++;
+        continue;
+      }
+      $changed = 0;
+      foreach ($lines as $i => $line) {
+        $kept = $this->statement_line($line, $regexes);
+        if ($kept !== $line) {
+          $lines[$i] = $kept;
+          $changed++;
+        }
+      }
+      if (!$changed) {
+        continue;
+      }
+      $mode = @fileperms($file);
+      $new = $file . '.collation';
+      @unlink($new);
+      $out = @fopen($new, 'xb');
+      $text = implode('', $lines);
+      $ok = $out !== FALSE && fwrite($out, $text) === strlen($text);
+      if ($out !== FALSE && !fclose($out)) {
+        $ok = FALSE;
+      }
+      if ($ok && $mode !== FALSE) {
+        $ok = @chmod($new, $mode & 0777);
+      }
+      if (!$ok || !@rename($new, $file)) {
+        @unlink($new);
+        $failed++;
+        continue;
+      }
+      $recollated += $changed;
+    }
+    if ($recollated) {
+      drush_log(dt('The database was dumped on MySQL 5.x: @n utf8mb4 table and column definitions that name no collation load naming the one they had there, utf8mb4_general_ci, not this server\'s default.', array('@n' => $recollated)), 'notice');
+    }
+    // Its stored routines took 5.x's default for their utf8mb4 parameters
+    // and return value, and no dump names it: their file sets that default
+    // for the load's session just before its first routine (unless the file
+    // already sets each routine's own, as one dumped since the object pass
+    // writes those lines does), once, when this
+    // server is known to be MySQL 8.x (myloader stops on a versioned-comment
+    // SET, so it is plain, and reads the file's first lines as mydumper's
+    // header: myloader 1.0.19 crashed on a line put above them; MariaDB has
+    // no such setting, and 8.4 warns that a later release makes it
+    // read-only).
+    if ($recollated && is_string($here) && preg_match('/^8\./', $here)) {
+      $head = "SET SESSION default_collation_for_utf8mb4 = 'utf8mb4_general_ci';\n";
+      $posts = @glob($dir . '/*-schema-post.sql');
+      foreach (is_array($posts) ? $posts : array() as $file) {
+        if (is_link($file) || !is_file($file)) {
+          continue;
+        }
+        $text = @file_get_contents($file);
+        if ($text === FALSE || strpos($text, "\n" . $head) !== FALSE
+          || preg_match('#^SET @BOA_UTF8MB4_SQL = #m', $text)
+          || !preg_match('/^DROP (?:FUNCTION|PROCEDURE) IF EXISTS `/m', $text, $first, PREG_OFFSET_CAPTURE)) {
+          continue;
+        }
+        $mode = @fileperms($file);
+        $new = $file . '.collation';
+        @unlink($new);
+        $out = @fopen($new, 'xb');
+        $text = substr($text, 0, $first[0][1]) . $head . substr($text, $first[0][1]);
+        $ok = $out !== FALSE && fwrite($out, $text) === strlen($text);
+        if ($out !== FALSE && !fclose($out)) {
+          $ok = FALSE;
+        }
+        if ($ok && $mode !== FALSE) {
+          $ok = @chmod($new, $mode & 0777);
+        }
+        if (!$ok || !@rename($new, $file)) {
+          @unlink($new);
+          drush_log(dt('The database was dumped on MySQL 5.x and its stored routines\' file could not be rewritten: they take this server\'s default for their utf8mb4 parameters and return value instead of utf8mb4_general_ci.'), 'warning');
+          continue;
+        }
+        drush_log(dt('The database was dumped on MySQL 5.x: its stored routines load with utf8mb4_general_ci, the default they were made with there, for their utf8mb4 parameters and return value.'), 'notice');
+      }
+    }
+    if ($failed) {
+      drush_log(dt('The database was dumped on MySQL 5.x and @n of its table files could not be rewritten: their utf8mb4 tables and columns that name no collation take this server\'s default instead of utf8mb4_general_ci, the one they had there.', array('@n' => $failed)), 'warning');
+    }
   }
 
   /**
@@ -1960,6 +2413,12 @@ port=%s
 
     if (is_file($enable_myquick) && is_executable($mydumper_path)) {
 
+      // The store is the account's, one flow's at a time: from here to the
+      // import or the rotation of this dump (provision_expim_lock()).
+      if (!provision_expim_lock('dump', dt('the dump of @db', array('@db' => $db_name)))) {
+        return;
+      }
+
       $oct_db_test = $oct_db_dirx . '/metadata';
       $oct_db_test_p = $oct_db_dirx . '/metadata.partial';
       $count = 0;
@@ -2049,6 +2508,9 @@ port=%s
         }
         if ((!$dumped || !is_file($oct_db_dirx . '/metadata')) && !drush_get_option('force', FALSE)) {
           drush_set_error('PROVISION_BACKUP_FAILED', dt('Database dump failed: %output', array('%output' => $dumped ? 'the dump carries no metadata marker' : $this->broker_failure())));
+        }
+        elseif ($dumped && is_file($oct_db_dirx . '/metadata')) {
+          provision_expim_mark_store();
         }
       }
       elseif (is_dir($oct_db_dirx) &&
@@ -2147,6 +2609,9 @@ port=%s
         elseif ($success && !$this->mydumper_object_modes_apply($modes, $oct_db_dirx)) {
           drush_log(dt("The stored objects of @db kept the dump's own sql_mode: an import of one made under another mode can fail or work otherwise.", array('@db' => $db_name)), 'warning');
         }
+        if ($success && is_file($oct_db_dirx . '/metadata')) {
+          provision_expim_mark_store();
+        }
       }
     }
     elseif (!empty($source_db)) {
@@ -2167,6 +2632,10 @@ port=%s
       // nothing here depends on.
       $cmd = sprintf("mysqldump --defaults-file=/dev/fd/3 %s --no-tablespaces --no-autocommit --skip-add-locks --single-transaction --quick --hex-blob --loose-skip-column-statistics%s %s", $gtid_option, $this->mysqldump_objects_option(drush_get_option('db_name')), escapeshellcmd(drush_get_option('db_name')));
 
+      // Each routine takes its own utf8mb4 default along
+      // (classic_dump_routine_lines()), read before the dump starts.
+      $routine_state = $this->classic_dump_routine_state(drush_get_option('db_name'));
+
       // Fail if db file already exists.
       $dump_file = fopen(d()->site_path . '/database.sql', 'x');
       if ($dump_file === FALSE) {
@@ -2183,7 +2652,12 @@ port=%s
           // At this point we have opened a pipe to that mysqldump command. Now
           // we want to read it one line at a time and do our replacements.
           while (($buffer = fgets($pipes[1], 4096)) !== FALSE) {
+            $ends_line = substr($buffer, -1) === "\n";
             $this->filter_line($buffer);
+            if ($buffer) {
+              $buffer = $this->classic_dump_routine_lines($buffer, $routine_state);
+            }
+            $routine_state['start'] = $ends_line;
             // Write the resulting line in the backup file.
             if ($buffer) {
               // fwrite returns the byte count, and a SHORT write (disk full,

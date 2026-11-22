@@ -148,6 +148,18 @@ server {
   # hostname). Proven to reach getenv() under this FPM stack.
   fastcgi_param GRAV_ENVIRONMENT <?php print $this->uri; ?>;
 <?php
+  // The visitor's address for Grav, as the http template passes it: here the
+  // peer is the visitor (or the client realip resolved) unless it is one of
+  // BOA's on-box proxies, whose X-Real-IP the shared map believes. Shares the
+  // zones body with grav_locations.tpl.php, rendered in the same scope.
+  if (!isset($grav_zones_body)) {
+    $grav_zones_body = @is_file('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+      ? (string) @file_get_contents('/etc/nginx/conf.d/limit-req-zones-boa.conf')
+      : '';
+  }
+  if (strpos($grav_zones_body, '$boa_grav_client') !== FALSE) {
+    print "  fastcgi_param REMOTE_ADDR \$boa_grav_client;\n";
+  }
   // A site with a database (a shop): its connection reaches Grav as config
   // overrides from this root-owned file only, never from a file in the
   // capsule (see _provision_grav_db_overrides()); the same ProxySQL port

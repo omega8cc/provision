@@ -11,12 +11,6 @@ function drush_provision_drupal_pre_provision_delete($backup_file = NULL) {
     return;
   }
   if (d()->type === 'site') {
-    // Backup mode ctrl file cleanup, only where the safety backup follows:
-    // a platform or server delete takes no backup, and unlinking there would
-    // destroy a concurrent backup task's live mode for nothing.
-    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-      unlink(AEGIR_BACKUP_MODE_CTRL);
-    }
     // A site whose install was refused before anything was built has no
     // settings.php and no database: its safety copy would write a
     // settings.php of empty credentials (a warning) and archive nothing, a
@@ -120,8 +114,14 @@ function drush_provision_drupal_provision_delete() {
     // See Drush commit 3b74d40b1228f022464b92243c16127eb613c2df
     drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', d()->root);
 
-    if (!drush_get_option('force', FALSE) && drush_bootstrap(DRUSH_BOOTSTRAP_DRUPAL_ROOT) && provision_drupal_find_sites()) {
+    if (_provision_platform_delete_sites()) {
       drush_set_error(dt('Existing sites were found on this platform. These sites will need to be deleted before this platform can be deleted.'));
+    }
+    elseif (_provision_platform_no_codebase()) {
+      // A build that failed or never ran, or a path that names something
+      // else: the record goes and the disk stays as it is.
+      drush_invoke_process('@none', 'provision-save', array(d()->name), array('delete' => TRUE));
+      _provision_platform_no_codebase_keep_disk();
     }
     else {
       // The lock's read-only directories cannot be emptied: open them only

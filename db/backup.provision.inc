@@ -10,10 +10,10 @@ function drush_db_pre_provision_backup() {
   // latched by the backup validate before this pre hook runs. Never skip for
   // an INTERNAL backup (the flag is set by clone/migrate/restore before
   // invoking provision-backup): their deploy needs the dump regardless of a
-  // leaked mode from a concurrent panel task.
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
+  // leaked mode from a concurrent panel task. The flag is the account's:
+  // only this task's own flow counts (provision_internal_flow_active()).
   if (defined('SELECTED_BACKUP_MODE') && SELECTED_BACKUP_MODE === 'site_files_without_db_backup'
-      && !is_file($internal_backup_flag)) {
+      && !provision_internal_flow_active()) {
     drush_log(dt('Skipping the database dump for the files-only backup mode.'), 'info');
     return;
   }

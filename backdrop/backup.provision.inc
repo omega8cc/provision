@@ -377,9 +377,9 @@ function drush_provision_backdrop_post_provision_backup() {
   }
   drush_log(dt('Backed up site up to @path.', array('@path' => drush_get_option('backup_file'))), 'success');
 
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  if (!is_file($internal_backup_flag)) {
+  // Inside this task's internal flow the dump stays in the store for its
+  // deploy; a flag of no live flow no longer stops the rotation.
+  if (!provision_internal_flow_active()) {
 
     $enable_myquick = FALSE;
     $oct_db_test = FALSE;
@@ -396,7 +396,8 @@ function drush_provision_backdrop_post_provision_backup() {
       $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
     }
 
-    if (is_file($enable_myquick) && is_file($oct_db_test)) {
+    // Only this backup's own dump is moved aside (provision_expim_store_is_mine()).
+    if (is_file($enable_myquick) && is_file($oct_db_test) && provision_expim_store_is_mine()) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;
       provision_file()->switch_paths($old, $new)
@@ -404,10 +405,12 @@ function drush_provision_backdrop_post_provision_backup() {
         ->fail('Moving the Post-DB-Backup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
+        provision_expim_unmark_store();
         drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_backdrop_post_provision_backup @var", array('@var' => $old)), 'info');
       }
     }
   }
+  provision_expim_unlock('dump');
 
   if (d()->client_name) {
     $backup_dir = d()->server->clients_path . '/' . d()->client_name . '/backups';
@@ -446,7 +449,7 @@ function drush_provision_backdrop_provision_backup_rollback() {
       $enable_myquick = $aegir_root . '/static/control/MyQuick.info';
     }
 
-    if (is_file($enable_myquick) && is_file($oct_db_test)) {
+    if (is_file($enable_myquick) && is_file($oct_db_test) && provision_expim_store_is_mine()) {
       $old = $oct_db_dirx;
       $new = $uri_db_dirz;
       provision_file()->switch_paths($old, $new)
@@ -454,10 +457,12 @@ function drush_provision_backdrop_provision_backup_rollback() {
         ->fail('Moving the Post-DB-Cleanup @path1 to @path2 has failed.');
       if (is_dir($new)) {
         _provision_recursive_delete($old);
+        provision_expim_unmark_store();
         drush_log(dt("MyQuick tmp_expim dir removed in drush_provision_backdrop_provision_backup_rollback @var", array('@var' => $old)), 'info');
       }
     }
   }
+  provision_expim_unlock('dump');
 }
 
 /**

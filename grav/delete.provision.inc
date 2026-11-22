@@ -54,11 +54,6 @@ function drush_provision_grav_pre_provision_delete($backup_file = NULL) {
     return;
   }
   if (d()->type === 'site') {
-    // Dead-leftover ctrl cleanup, site deletes only (platform deletes take no
-    // backup; unlinking there would destroy a concurrent backup task's mode).
-    if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-      unlink(AEGIR_BACKUP_MODE_CTRL);
-    }
     // A site whose install was refused before its capsule was made has no
     // site directory: the safety copy cannot enter it (the Delete ended in
     // an error, the record stranded), and no database was made for it. One

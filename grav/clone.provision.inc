@@ -82,12 +82,6 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   if (!_provision_grav_check_new_name_alias($new_uri, 'PROVISION_GRAV_CLONE_TARGET_EXISTS')) {
     return FALSE;
   }
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: a dead task's database-only mode would make the grav
-  // backup refuse, or a different mode change the archive's transport.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a clone that cannot fit before its safety copy starts (the shared
   // pre-flight; a capsule's copies count the same way as a Drupal site's).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
@@ -96,6 +90,11 @@ function drush_provision_grav_provision_clone_validate($new_name = NULL, $platfo
   // Refuse a target that cannot run on its command-line PHP before the
   // safety copy, not at its deploy (provision_cli_php_target_preflight()).
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
+  // Any other folder at the new name too, not only a capsule: the deploy
+  // would replace and delete it (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
     return FALSE;
   }
 }
@@ -108,7 +107,9 @@ function drush_provision_grav_pre_provision_clone($new_name, $platform = NULL) {
   // offered as a restore point, so it must be self-contained, the same way
   // the restore and delete safety copies are. The deploy half below is
   // switched to match: both halves MUST agree on the transport.
-  _provision_grav_force_safety_mode('Clone', TRUE);
+  if (_provision_grav_force_safety_mode('Clone', TRUE) === FALSE) {
+    return FALSE;
+  }
   drush_log(dt('Invoking drush provision-backup in drush_provision_grav_pre_provision_clone'));
   drush_invoke('provision-backup');
 }

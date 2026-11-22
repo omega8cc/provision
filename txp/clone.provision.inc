@@ -112,13 +112,6 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
       array('!uri' => $new_uri)), 'info');
   }
 
-  // Clear a stale frontend backup-mode ctrl file before the internal safety
-  // backup runs: inheriting a dead task's mode would build the clone source
-  // archive in e.g. "database only" mode and deploy a files-less copy that
-  // still reports success.
-  if (defined('AEGIR_BACKUP_MODE_CTRL') && is_file(AEGIR_BACKUP_MODE_CTRL)) {
-    unlink(AEGIR_BACKUP_MODE_CTRL);
-  }
   // Refuse a clone that cannot fit before its safety copy starts (the shared
   // pre-flight; a Textpattern site's copies count the same way).
   if (!provision_copy_task_space_preflight('clone', $platform, $new_name)) {
@@ -127,6 +120,11 @@ function drush_provision_txp_provision_clone_validate($new_name = NULL, $platfor
   // Refuse a target that cannot run on its command-line PHP before the
   // safety copy, not at its deploy (provision_cli_php_target_preflight()).
   if (!provision_cli_php_target_preflight('clone', $platform, $new_name)) {
+    return FALSE;
+  }
+  // A folder at the new name that no context holds: the deploy would
+  // replace and delete it (provision_refuse_folder_at_new_name()).
+  if (!provision_refuse_folder_at_new_name('clone', $platform, $new_name)) {
     return FALSE;
   }
 }
@@ -159,12 +157,10 @@ function drush_provision_txp_pre_provision_clone($new_name, $platform = NULL) {
   drush_set_option('backup_mode', 'site_files_with_mysqldump');
   drush_log(dt('Clone safety copy forced to the restorable mode: site_files_with_mysqldump'), 'info');
   drush_log(dt('Invoking drush provision-backup in drush_provision_txp_pre_provision_clone'));
-  $backup_path = d('@server_master')->backup_path;
-  $internal_backup_flag = $backup_path . '/.internal_backup_flag.pid';
-  if (!provision_file()->exists($internal_backup_flag)->status()) {
-    provision_file()->file_put_contents($internal_backup_flag, "Internal-DB-Backup \n")
-      ->succeed('Generated blank Internal-DB-Backup Flag-File (txp clone)')
-      ->fail('Could not generate Internal-DB-Backup Flag-File (txp clone)');
+  // One flow at a time owns the account's dump store and its flag: a
+  // second waits here for the first to end (provision_internal_flag_set()).
+  if (!provision_internal_flag_set('Internal-DB-Backup Flag-File (txp clone)')) {
+    return FALSE;
   }
   drush_invoke('provision-backup');
 }
@@ -176,12 +172,7 @@ function drush_provision_txp_pre_provision_clone_rollback($new_name, $platform =
   provision_file()->unlink(drush_get_option('backup_file'))
     ->succeed('Removed unused clone site package')
     ->fail('Could not remove unused clone site package');
-  $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-  if (is_file($internal_backup_flag)) {
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in rollback')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in rollback');
-  }
+  provision_internal_flag_clear('Internal-DB-Backup Flag-File in rollback');
 }
 
 /**
@@ -322,10 +313,7 @@ function drush_provision_txp_provision_clone($new_name, $platform = NULL) {
   if (!drush_get_error()) {
     provision_backend_invoke($new_name, 'provision-verify');
 
-    $internal_backup_flag = d('@server_master')->backup_path . '/.internal_backup_flag.pid';
-    provision_file()->unlink($internal_backup_flag)
-      ->succeed('Removed Internal-DB-Backup Flag-File in drush_provision_txp_provision_clone')
-      ->fail('Could not remove Internal-DB-Backup Flag-File in drush_provision_txp_provision_clone');
+    provision_internal_flag_clear('Internal-DB-Backup Flag-File in drush_provision_txp_provision_clone');
   }
 
   provision_reload_config('site', d()->site_path . '/drushrc.php');

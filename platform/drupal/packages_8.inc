@@ -11,18 +11,12 @@
  * We do not support, nor need information on subthemes at this point.
  */
 function _provision_drupal_find_themes($scope, $key = '') {
-  $paths = _provision_drupal_search_paths($scope, $key, 'themes');
-  $files = array();
+  // A theme Drupal finds in a module's own folder (Canvas ships canvas_stark
+  // there) is recorded too, and a module inside a theme's folder is not.
+  $files = _provision_drupal_find_info_files($scope, $key, 'theme');
   $engines = array();
-  foreach ($paths as $path) {
-    $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
+  foreach (_provision_drupal_search_paths($scope, $key, 'themes') as $path) {
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
-  }
-
-  // Remove '.info' extension from the end of the file name.
-  foreach($files as $name => $file) {
-    $files[basename($name, '.info')] = $file;
-    unset($files[$name]);
   } 
 
   foreach ($files as $name => $file) {
@@ -33,8 +27,13 @@ function _provision_drupal_find_themes($scope, $key = '') {
 
     // If version is missing, or if version is set to 'VERSION', use "drush_drupal_version()".
     // The VERSION constant used in Git checkouts. Also appears when using DEV modules in composer.
+    // A theme that ships no version key at all takes the release Composer
+    // installed, as a module does; 'VERSION' stays core's, as the site scan
+    // reads it.
     if (empty($files[$name]->info['version']) || $files[$name]->info['version'] == 'VERSION') {
-      $files[$name]->version = drush_drupal_version();
+      $composer_version = empty($files[$name]->info['version'])
+        ? _provision_composer_installed_version(dirname($file->filename)) : FALSE;
+      $files[$name]->version = $composer_version ? $composer_version : drush_drupal_version();
     }
     else {
       $files[$name]->version = $files[$name]->info['version'];
@@ -137,6 +136,16 @@ function _provision_system_query($type) {
     $package->status = $extension_data->status;
     $package->filename = realpath($package->filename);
 
+    // A theme that ships no version key (one inside an install profile
+    // installed from Packagist, for one) takes the release Composer
+    // installed, as the platform scan records it.
+    if ($type == 'theme' && empty($package->version) && $package->filename) {
+      $composer_version = _provision_composer_installed_version(dirname($package->filename));
+      if ($composer_version) {
+        $package->version = $composer_version;
+      }
+    }
+
     if ($type == 'module') {
       $package->schema_version = drupal_get_installed_schema_version($name);
 
@@ -165,6 +174,14 @@ function _provision_system_query($type) {
           }
         }
       }
+    }
+
+    // Code that names no release anywhere, neither a version key nor a
+    // Composer package (custom code, a dev branch), takes Drupal's own
+    // release, as the platform scan records it, so the two agree and the
+    // Migrate form counts no upgrade between identical platforms.
+    if (empty($package->version)) {
+      $package->version = drush_drupal_version();
     }
 
     $packages[$name] = $package;
@@ -214,9 +231,12 @@ function _provision_drupal_search_paths($scope, $key = '', $type = 'modules') {
   $drupal_root = drush_get_context('DRUSH_DRUPAL_ROOT');
   switch ($scope) {
     case 'base':
-      $searchpaths[] = sprintf("%s/%s", $drupal_root, $type);
+      // Later paths win a name found twice, as in Drupal's own discovery
+      // (core, then sites/all, then the root directory): a contrib copy of a
+      // module core still ships (forum, action) is the one a site runs.
       $searchpaths[] = sprintf("%s/core/%s", $drupal_root, $type);
       $searchpaths[] = sprintf("%s/sites/all/%s", $drupal_root, $type);
+      $searchpaths[] = sprintf("%s/%s", $drupal_root, $type);
       break;
     case 'profiles':
       $profiles = _provision_find_profiles();

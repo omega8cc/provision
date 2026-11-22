@@ -1684,6 +1684,59 @@ function _provision_site_local_drush_cmd($args, $php_opts = array()) {
 }
 
 /**
+ * The shell line for one call of core's dr, for a Drush 15 codebase.
+ *
+ *   exec '<php>' -c '<ini>' '<app root>/vendor/bin/dr' ['--url=https://<uri>'] '<arg>' ...
+ *
+ * run from the docroot, on the backend's own interpreter and ini as every
+ * site-local run here. Composer's vendor/bin/dr, never core/scripts/dr: run
+ * directly that file looks for vendor/ beside the docroot and dies where the
+ * build keeps vendor/ above it. --url names the host for links; the site
+ * itself is chosen by DRUPAL_DEV_SITE_PATH, which the caller sets
+ * (_provision_site_local_dr_run()): with --url alone dr reads sites/default,
+ * finds no site there and answers 'Command ... is not defined' (measured on a
+ * BOA box, Drupal 12.0.0-beta2 with Drush 15.x-dev).
+ *
+ * @param string $dr   vendor/bin/dr, as _provision_codebase_cli() found it.
+ * @param string $uri  The site's uri, or '' for a call that needs no site.
+ * @param array $args  dr arguments and options, unescaped.
+ * @return string
+ */
+function _provision_site_local_dr_cmd($dr, $uri, $args) {
+  $all = array();
+  if ((string) $uri !== '') {
+    $all[] = '--url=https://' . $uri;
+  }
+  foreach ((array) $args as $arg) {
+    $all[] = $arg;
+  }
+  return _provision_php_script_cmd((string) $dr, $all);
+}
+
+/**
+ * Run core's dr once for the current site, from its docroot.
+ *
+ * DRUPAL_DEV_SITE_PATH (sites/<uri>) and the cloaked credentials reach the
+ * child only through the real environment, set right before the run and
+ * cleared right after it, so no later run inherits them. Every dr call needs
+ * an unlocked codebase: at rest dr exits 255 and prints nothing.
+ *
+ * @param string $dr    vendor/bin/dr.
+ * @param array $args   dr arguments and options, unescaped.
+ * @return array
+ *   'ok' (exit 0) and 'output' (the lines it printed, stderr included).
+ */
+function _provision_site_local_dr_run($dr, $args) {
+  $uri = (string) d()->uri;
+  putenv('DRUPAL_DEV_SITE_PATH=sites/' . $uri);
+  provision_prepare_environment_subprocess();
+  $ok = (bool) drush_shell_cd_and_exec((string) d()->root, _provision_site_local_dr_cmd($dr, $uri, $args));
+  provision_clear_environment_subprocess();
+  putenv('DRUPAL_DEV_SITE_PATH');
+  return array('ok' => $ok, 'output' => drush_shell_exec_output());
+}
+
+/**
  * Command line running any PHP script on the backend's own interpreter and
  * that interpreter's own php.ini: exec '<php>' -c '<ini>' [opts] '<script>' args.
  *
@@ -1961,11 +2014,12 @@ function _provision_site_local_php_ini($php = NULL) {
 /**
  * Open (or restore) the platform lock's chmod window for the core rebuild.
  *
- * Without $restore: raise the dirs the lock holds at 0400 to the lock's own
- * 0775 window and return their previous modes. With $restore (the array
- * returned by the opening call): put every dir back to the mode it had.
- * Only dirs found at a mode other than the window are touched, so an
- * unlocked platform is left alone. The verify runs as the account that owns
+ * Without $restore: raise the dirs the lock holds at 0400 to the unlock's
+ * own mode (_provision_open_mode(): group write in a tenant codebase alone)
+ * and return their previous modes. With $restore (the array returned by the
+ * opening call): put every dir back to the mode it had. Only dirs found at a
+ * mode other than the window are touched, so an unlocked platform is left
+ * alone. The verify runs as the account that owns
  * the platform, so no sudo is involved.
  */
 function _provision_drupal_rebuild_lock_window($root, $restore = NULL) {
@@ -1991,10 +2045,11 @@ function _provision_drupal_rebuild_lock_window($root, $restore = NULL) {
       continue;
     }
     $mode = fileperms($dir) & 07777;
-    if ($mode === 0775) {
+    $open = _provision_open_mode($dir);
+    if ($mode === $open) {
       continue;
     }
-    if (@chmod($dir, 0775)) {
+    if (@chmod($dir, $open)) {
       $previous[$dir] = $mode;
     }
   }
@@ -2223,6 +2278,14 @@ function _provision_drupal_clear_update_fetch_tasks() {
     // Aliases were already converted in the updatedb branch (site:alias-convert)
     // before this helper is called, so the site-local alias resolves.
     $appRoot = findAppRoot(d()->root);
+    // A codebase with Drush 15 (core's dr) or no Drush at all: the documented
+    // SQL delete, through provision's own database service, with no command
+    // line, so it runs the same locked or not.
+    $cli = _provision_codebase_cli($appRoot, d()->root);
+    if ($cli['kind'] !== 'drush') {
+      _provision_drupal_clear_update_fetch_tasks_sql();
+      return;
+    }
     $drushAbsolutePath = $appRoot . '/vendor/drush/drush/drush.php';
     if (is_executable($drushAbsolutePath)) {
       // SECURITY: $appRoot/$uri derive from the alias context;
@@ -2265,6 +2328,302 @@ function _provision_drupal_clear_update_fetch_tasks() {
     provision_backend_invoke(d()->name, 'ev', array($php));
     drush_set_context('DRUSH_ERROR_CODE', $pre_error);
   }
+}
+
+/**
+ * Clear the Update module's fetch tasks with SQL, for a Drupal 10+ codebase
+ * whose command line is core's dr or none.
+ *
+ * The documented workaround of the fetch-task deadlock
+ * (https://www.drupal.org/project/drupal/issues/2920285): the key_value rows
+ * of collection update_fetch_task deleted in the site's own database, through
+ * provision's db service as _provision_drupal_note_maintenance_left() reads
+ * it. A site whose tables carry a prefix has no plain key_value table; the
+ * query then fails and the clear is skipped with a warning, never guessed.
+ * Non-fatal by design, as the Drush path: a cosmetic reset never fails a
+ * deploy.
+ *
+ * @return bool
+ *   TRUE when the delete ran.
+ */
+function _provision_drupal_clear_update_fetch_tasks_sql() {
+  $db = (string) drush_get_option('db_name', '', 'site');
+  if ($db === '') {
+    $db = (string) drush_get_option('db_name', '');
+  }
+  if ($db === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db)) {
+    drush_log(dt('UPDFETCH/SQL/SKIP no database name for this site; update_fetch_task left untouched'), 'warning');
+    return FALSE;
+  }
+  $done = FALSE;
+  $error = '';
+  $service = d()->service('db');
+  // A session opened quietly first: a refused connect inside query() sets an
+  // error that reaches the panel's task at once as a backend packet, which
+  // nothing here can take back, and this clear must never fail a task.
+  if (property_exists($service, 'conn') && is_null($service->conn) && !$service->connect(TRUE)) {
+    drush_log(dt('UPDFETCH/SQL/SKIP no database session for @db (the connect was refused); update_fetch_task left untouched', array('@db' => $db)), 'warning');
+    return FALSE;
+  }
+  // The db service logs a failed query itself and returns FALSE: kept out of
+  // the task's verdict, as the Drupal 8/9 clear does.
+  $pre_error = drush_get_context('DRUSH_ERROR_CODE', DRUSH_SUCCESS);
+  try {
+    $result = $service->query("DELETE FROM `" . $db . "`.key_value WHERE collection = 'update_fetch_task'");
+    $done = ($result !== FALSE && $result !== NULL);
+  }
+  catch (Exception $e) {
+    $error = $e->getMessage();
+  }
+  drush_set_context('DRUSH_ERROR_CODE', $pre_error);
+  if ($done) {
+    drush_log(dt('UPDFETCH/SQL key_value rows of update_fetch_task deleted in @db (no command line)', array('@db' => $db)), 'info');
+    return TRUE;
+  }
+  drush_log(dt('UPDFETCH/SQL/SKIP the delete of update_fetch_task in @db did not run@why; update_fetch_task left untouched', array(
+    '@db' => $db,
+    '@why' => ($error !== '') ? ' (' . $error . ')' : '',
+  )), 'warning');
+  return FALSE;
+}
+
+/**
+ * Say so when updates that did not finish left the site in maintenance mode.
+ *
+ * A Drupal 8 or newer site's own Drush switches maintenance mode on for
+ * updatedb and off at its end. A run that dies in between leaves it on, the
+ * site answers every visitor with its maintenance page, and nothing in a
+ * deploy switches it off: the offline switch of a task is settings.php's,
+ * another thing. A half-updated site is not opened here either. The log names
+ * the state and the command that ends it once the updates are applied.
+ *
+ * The state is read from the site's own database through the db service,
+ * never through the Drush that just failed, and compared as text: a row a
+ * site can write is not unserialized.
+ *
+ * @param string $tag
+ *   The log prefix of the calling task (DEPLOY).
+ *
+ * @return bool
+ *   TRUE when the warning was logged.
+ */
+function _provision_drupal_note_maintenance_left($tag = 'DEPLOY') {
+  $db = (string) drush_get_option('db_name', '');
+  if ($db === '' || !preg_match('/^[A-Za-z0-9_]+$/', $db)) {
+    return FALSE;
+  }
+  $value = FALSE;
+  try {
+    $result = d()->service('db')->query("SELECT value FROM `" . $db . "`.key_value WHERE collection = 'state' AND name = 'system.maintenance_mode'");
+    if ($result) {
+      $value = $result->fetchColumn();
+    }
+  }
+  catch (Exception $e) {
+    $value = FALSE;
+  }
+  if (!in_array($value, array('b:1;', 'i:1;', 's:1:"1";'), TRUE)) {
+    return FALSE;
+  }
+  // Drush 15 under core's dr has maint:disable, no maint:set.
+  $cli = _provision_codebase_cli(findAppRoot(d()->root), d()->root);
+  $open = ($cli['kind'] === 'dr') ? "core's dr: maint:disable" : "the site's own Drush: maint:set 0";
+  drush_log(dt('@p the site is left in Drupal\'s maintenance mode: the update run switched it on and ended before switching it off, so visitors get "Site under maintenance". It stays closed while database updates are pending; once they are applied, open it with @open', array('@p' => $tag . '9/LOCAL/DRUSH/MAINT', '@open' => $open)), 'warning');
+  return TRUE;
+}
+
+/**
+ * How a site-local updatedb run ended, read from its exit and its output.
+ *
+ * Drush checks Drupal's requirements before it updates, prints each one that
+ * failed as an [error] row and asks whether to continue; --yes answers that
+ * and the updates then run. Those rows judge the site (an extension that
+ * does not allow this core, a module core no longer ships), not the update
+ * run: a run that went on to a [success] row, with no error row after the
+ * question, applied every pending update. Any other run with a [preflight]
+ * or [error] row, or a non-zero exit, did not complete.
+ *
+ * @param bool $result
+ *   TRUE on exit 0.
+ * @param array $output
+ *   The run's output lines.
+ *
+ * @return string
+ *   'complete'; 'requirements' when it completed after requirements errors;
+ *   'failed'.
+ */
+function _provision_site_local_updatedb_verdict($result, array $output) {
+  if (!$result) {
+    return 'failed';
+  }
+  if (!preg_match('/\[(preflight|error)\]/i', implode("\n", $output))) {
+    return 'complete';
+  }
+  $asked = FALSE;
+  foreach ($output as $index => $line) {
+    if (strpos((string) $line, 'Requirements check reports errors') !== FALSE) {
+      $asked = $index;
+      break;
+    }
+  }
+  if ($asked === FALSE) {
+    return 'failed';
+  }
+  $head = implode("\n", array_slice($output, 0, $asked));
+  $tail = implode("\n", array_slice($output, $asked + 1));
+  if (preg_match('/\[preflight\]/i', $head)
+    || preg_match('/\[(preflight|error)\]/i', $tail)
+    || !preg_match('/\[success\]/i', $tail)) {
+    return 'failed';
+  }
+  return 'requirements';
+}
+
+/**
+ * How a dr updatedb run ended (Drush 15 under core's dr), from its exit and
+ * its output.
+ *
+ * Measured on a BOA box (Drupal 12.0.0-beta2, Drush 15.x-dev, updatedb
+ * --no-interaction): updates applied end with "[OK] Finished performing
+ * updates." and none pending with "[OK] No database updates required.", both
+ * on exit 0; an update that throws ends with "[ERROR] Update aborted by: ..."
+ * on exit 1; Drupal's requirements check reporting errors ends with "[ERROR]
+ * Requirements check reports errors. Resolve them and run updatedb again." on
+ * exit 1, and no update runs (Drush below 15 went on after --yes); a site dr
+ * did not boot answers 'Command "updatedb" is not defined.' on exit 1. A run
+ * is complete only on exit 0 with its [OK] line and no [error] row.
+ *
+ * @param bool $result
+ *   TRUE on exit 0.
+ * @param array $output
+ *   The run's output lines.
+ *
+ * @return string
+ *   'complete'; 'stopped' when Drupal's requirements check stopped it before
+ *   any update; 'boot' when dr did not boot the site; 'failed'.
+ */
+function _provision_site_local_dr_updatedb_verdict($result, array $output) {
+  $text = implode("\n", $output);
+  if (preg_match('/Command "[^"]*" is not defined/', $text)) {
+    return 'boot';
+  }
+  if (strpos($text, 'Requirements check reports errors') !== FALSE) {
+    return 'stopped';
+  }
+  if ($result
+    && preg_match('/\[OK\] (Finished performing updates|No database updates required)/', $text)
+    && !preg_match('/\[(error|preflight)\]/i', $text)) {
+    return 'complete';
+  }
+  return 'failed';
+}
+
+/**
+ * The database update window for a Drupal 10+ codebase that runs Drush 15
+ * under core's dr (_provision_codebase_cli() kind 'dr').
+ *
+ * The same window as the site-local Drush one below, step for step and with
+ * the same step numbers in its markers (DEPLOY2 .. DEPLOY10, UPDATE2 ..
+ * UPDATE10), so every caller reads it the same way: a real unlock when the
+ * codebase cannot run its CLI at rest (dr exits 255 there), the start check
+ * (dr --version), dr updatedb for this site, the Update module's fetch-task
+ * clear, a real re-lock, then core's own container rebuild as the window's
+ * last write. Its own verdict (_provision_site_local_dr_updatedb_verdict())
+ * tells an update that failed from Drupal's requirements check, which with
+ * Drush 15 stops every update. The remedy it names is a new build and a
+ * Migrate, whose deploy runs the updates.
+ *
+ * @param string $tag
+ *   The marker prefix ('DEPLOY' or 'UPDATE'), already cleaned.
+ * @param string $appRoot
+ *   The codebase root.
+ * @param array $cli
+ *   _provision_codebase_cli() of this codebase.
+ *
+ * @return bool|null
+ *   As _provision_drupal_site_local_updatedb().
+ */
+function _provision_drupal_site_local_updatedb_dr($tag, $appRoot, array $cli) {
+  drush_log(dt('@p @why (@dr)', array('@p' => $tag . '3/LOCAL/DR/CHECK', '@why' => $cli['why'], '@dr' => $cli['dr'])), 'info');
+  // The site's folder is sites/<uri>, chosen through the environment: a uri
+  // that could leave sites/ never gets there.
+  if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._\-]*$/', (string) d()->uri)) {
+    drush_log(dt('@p updatedb skipped: the site uri @uri cannot name a folder under sites/; the database updates were not applied', array('@p' => $tag . '4b/LOCAL/DR/SKIP', '@uri' => d()->uri)), 'warning');
+    _provision_drupal_clear_update_fetch_tasks();
+    _provision_drupal_rebuild_d8plus();
+    return NULL;
+  }
+
+  $unlocked_here = FALSE;
+  if (_provision_site_local_drush_runnable(d()->root) === '') {
+    drush_log(dt('@p with provision_unlock_drush_local_vnd (core\'s dr does not run on a locked codebase)', array('@p' => $tag . '2/LOCAL/DR/UNLOCK')), 'info');
+    if (!provision_unlock_drush_local_vnd()) {
+      drush_log(dt('@p updatedb skipped: the unlock could not restore the genuine psr/log in this codebase (see the PSR/LOG lines), and core\'s dr does not start against the Aegir overlay; the database updates were not applied', array('@p' => $tag . '2b/LOCAL/DR/SKIP')), 'warning');
+      drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '2c/LOCAL/DR/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+      _provision_drupal_clear_update_fetch_tasks();
+      _provision_drupal_rebuild_d8plus();
+      return NULL;
+    }
+    $unlocked_here = TRUE;
+  }
+
+  if (_provision_site_local_drush_runnable(d()->root) === '') {
+    // Unlocked and still not open and stock: no dr starts here.
+    drush_log(dt('@p updatedb skipped: core\'s dr cannot run in @root even after the unlock (its console folders or core files are not as their packages ship them); the database updates were not applied', array('@p' => $tag . '4b/LOCAL/DR/SKIP', '@root' => $appRoot)), 'warning');
+    _provision_drupal_clear_update_fetch_tasks();
+    if ($unlocked_here) {
+      drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '5/LOCAL/DR/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+    }
+    _provision_drupal_rebuild_d8plus();
+    return NULL;
+  }
+
+  // The start check: dr --version needs no site, and names Drupal.
+  drush_log(dt('@p dr --version in @root', array('@p' => $tag . '6/LOCAL/DR/CMD', '@root' => d()->root)), 'info');
+  $start = _provision_site_local_drush_start($appRoot, d()->root);
+  drush_log($tag . '7/LOCAL/DR/VERSION ' . $start['line']);
+  drush_set_option('provision_site_local_drush_started', (bool) $start['started']);
+  if (!$start['started'] && !_provision_site_local_drush_checked(d()->root)) {
+    drush_log(_provision_site_local_drush_dead_text($tag . '8/LOCAL/DR/DEAD', $appRoot, $start['line'], 'dr'), 'warning');
+  }
+  _provision_site_local_drush_checked(d()->root, TRUE);
+
+  drush_log(dt('@p dr --url=https://@uri updatedb --no-interaction in @root (DRUPAL_DEV_SITE_PATH=sites/@uri)', array('@p' => $tag . '9/LOCAL/DR/CMD', '@uri' => d()->uri, '@root' => d()->root)), 'info');
+  $run = _provision_site_local_dr_run($cli['dr'], array('updatedb', '--no-interaction'));
+  $output = $run['output'];
+  $verdict = _provision_site_local_dr_updatedb_verdict($run['ok'], $output);
+  // Kept, with the kind, for the strict move's error
+  // (drush_provision_drupal_post_provision_deploy()). Process scope.
+  drush_set_option('provision_site_local_updatedb_verdict', $verdict);
+  drush_set_option('provision_site_local_cli_kind', 'dr');
+  $complete = ($verdict === 'complete');
+  $last = count($output) - 1;
+  foreach ($output as $index => $line) {
+    if (trim((string) $line) === '') {
+      continue;
+    }
+    drush_log($line, ($complete && $index == $last) ? 'success' : 'notice');
+  }
+  if ($complete) {
+    drush_log(dt('@p updatedb ran to completion', array('@p' => $tag . '9/LOCAL/DR/DONE')), 'success');
+  }
+  else {
+    $texts = array(
+      'stopped' => "@p updatedb stopped at Drupal's requirements check (the [error] lines above) before running any update, so every pending database update still waits. Resolve what those lines name in the codebase, build it again and move the site onto that build with Migrate: its deploy runs the database updates.",
+      'boot' => "@p core's dr did not start Drupal for this site (the 'is not defined' line above): no database update ran. Check the site's settings.php and database, then Migrate the site again: its deploy runs the database updates.",
+      'failed' => "@p updatedb did not run to completion (see the lines above): an update failed and the ones after it still wait. Fix it in the codebase, build it again and move the site onto that build with Migrate: its deploy runs the database updates.",
+    );
+    drush_log(dt($texts[isset($texts[$verdict]) ? $verdict : 'failed'], array('@p' => $tag . '9/LOCAL/DR/FAIL')), 'warning');
+  }
+  _provision_drupal_clear_update_fetch_tasks();
+  if ($unlocked_here) {
+    drush_log(dt('@p with provision_lock_drush_local_vnd', array('@p' => $tag . '10/LOCAL/DR/LOCK')), 'info');
+    provision_lock_drush_local_vnd();
+  }
+  _provision_drupal_rebuild_d8plus();
+  return $complete;
 }
 
 /**
@@ -2314,7 +2673,8 @@ function _provision_drupal_clear_update_fetch_tasks() {
  *
  * @return bool|null
  *   TRUE when updatedb ran to completion; FALSE when it ran but did not
- *   complete (the warning naming why is logged here, and the caches are still
+ *   complete, or completed after Drupal's requirements check reported errors
+ *   (the warning naming which is logged here, and the caches are still
  *   rebuilt); NULL when it did not run at all: no site-local updatedb applies
  *   (hostmaster, Drupal below 10), no executable site-local Drush even
  *   after the unlock (the 4b/LOCAL/DRUSH/SKIP warning is logged here), or an
@@ -2334,6 +2694,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
 
   // Find The App Root Directory
   $appRoot = findAppRoot(d()->root);
+
+  // A Drush 15 codebase has no drush.php: its updates run under core's dr,
+  // in a window of the same shape (_provision_drupal_site_local_updatedb_dr()).
+  // Every other codebase takes the site-local Drush path below unchanged.
+  $cli = _provision_codebase_cli($appRoot, d()->root);
+  if ($cli['kind'] === 'dr') {
+    return _provision_drupal_site_local_updatedb_dr($tag, $appRoot, $cli);
+  }
 
   // Define Local Drush Path
   $drushPath = 'vendor/drush/drush/drush.php';
@@ -2365,6 +2733,19 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
     $unlocked_here = TRUE;
   }
 
+  // The unlock brings a codebase with no Drush its first one
+  // (_provision_require_site_local_drush()); a Drush 15 has no drush.php, so
+  // a codebase read as having none is read again, and one that dr now runs is
+  // locked back and handed to dr's own window, which opens and closes its own.
+  if ($unlocked_here && $cli['kind'] === 'none') {
+    $cli = _provision_codebase_cli($appRoot, d()->root);
+    if ($cli['kind'] === 'dr') {
+      drush_log(dt('@p with provision_lock_drush_local_vnd (the unlock brought a Drush that runs under core\'s dr)', array('@p' => $tag . '2d/LOCAL/DRUSH/LOCK')), 'info');
+      provision_lock_drush_local_vnd();
+      return _provision_drupal_site_local_updatedb_dr($tag, $appRoot, $cli);
+    }
+  }
+
   if (!is_executable($drushAbsolutePath)) {
     // Log The Useful Info
     drush_log(dt('@p 404 Not Found or is not executable at @drush_path', array('@p' => $tag . '4/LOCAL/DRUSH/CHECK', '@drush_path' => $drushAbsolutePath)), 'info');
@@ -2372,7 +2753,18 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
     // Drush 8 (see above). Skip with a warning; the schema update must be
     // applied manually (Unlock Local Drush, then 'vdrush @alias updb') or by
     // repairing the site-local Drush.
-    drush_log(dt('@p updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@drush_path' => $drushAbsolutePath)), 'warning');
+    if ($cli['kind'] === 'none') {
+      // Nothing in this codebase runs updatedb: core alone has no such
+      // command, and a Drush 15 runs only under core's dr. A Drush 15 that is
+      // there needs what dr is missing (the reason names it), not drush/drush.
+      $build = ($cli['version'] !== '' || is_dir($appRoot . '/vendor/drush/drush'))
+        ? dt("Build it again so core's dr can start (the reason above names what is missing)")
+        : dt('Build it again with drush/drush in the project');
+      drush_log(dt('@p updatedb skipped: this codebase brings no command line that runs database updates (@why), and Aegir Drush 8 must not run updatedb on D10+; the database updates were not applied. @build and move the site onto that build with Migrate: its deploy runs the database updates.', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@why' => $cli['why'], '@build' => $build)), 'warning');
+    }
+    else {
+      drush_log(dt('@p updatedb skipped: site-local Drush not executable at @drush_path and Aegir Drush 8 must not run updatedb on D10+; apply the DB update manually', array('@p' => $tag . '4b/LOCAL/DRUSH/SKIP', '@drush_path' => $drushAbsolutePath)), 'warning');
+    }
     // Break the Update-module fetch-task deadlock introduced by the DB
     // import (clone/migrate/restore). On this degraded D10+ path the
     // site-local Drush is not executable, so the helper logs and skips
@@ -2397,8 +2789,26 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // Check And Display Site-Local Drush Version (run by the backend's own
   // PHP, see _provision_site_local_drush_cmd()).
   $result = drush_shell_cd_and_exec($appRoot, _provision_site_local_drush_cmd(array('--version')));
-  $output = implode('', drush_shell_exec_output());
+  $version_lines = drush_shell_exec_output();
+  $output = implode('', $version_lines);
   drush_log($tag . '7/LOCAL/DRUSH/VERSION ' . $output);
+  // Whether the site-local Drush started at all. An executable Drush that
+  // dies at start still gets updatedb run against it below and returns
+  // FALSE, like an update that failed; a caller that fails on that verdict
+  // (the strict deploy) reads this to name the right cause. Process scope,
+  // never saved.
+  drush_set_option('provision_site_local_drush_started', (bool) $result);
+  // A Drush that is there and cannot start is the platform's state, not this
+  // site's: it is named here once, with what ends it, before updatedb runs
+  // into the same failure and the 9/LOCAL/DRUSH/FAIL line reports that. Only
+  // a tree that can load its Drush gives that verdict: an unlock can end with
+  // its console patch still in place (a refused revert), and no Drush starts
+  // there, sound or not. A task names it once, whichever step runs it first.
+  if (!$result && !_provision_site_local_drush_checked(d()->root)
+    && _provision_site_local_drush_runnable(d()->root) !== '') {
+    drush_log(_provision_site_local_drush_dead_text($tag . '8/LOCAL/DRUSH/DEAD', $appRoot, _provision_site_local_drush_line($version_lines, FALSE)), 'warning');
+  }
+  _provision_site_local_drush_checked(d()->root, TRUE);
   // Call The Drush updatedb Command with Site-Local Drush, addressed by
   // --root/--uri like the update_fetch_task clear and the install path's
   // user:login (see above).
@@ -2414,9 +2824,15 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   // drush_shell_cd_and_exec() returns TRUE on exit 0, and an exit 0 whose
   // output carries a [preflight] or [error] row did not complete either: one
   // verdict, taken before the lines are logged, so the last line is never
-  // logged as a success right above the FAIL warning.
+  // logged as a success right above the FAIL warning. Drush's requirements
+  // check is told apart there: its rows fail the window as before, with a
+  // warning that says the updates themselves ran.
   $output = drush_shell_exec_output();
-  $complete = $result && !preg_match('/\[(preflight|error)\]/i', implode("\n", $output));
+  $verdict = _provision_site_local_updatedb_verdict($result, $output);
+  // Kept for the strict move's error (drush_provision_drupal_post_provision_deploy()),
+  // which says when only the requirements check failed.
+  drush_set_option('provision_site_local_updatedb_verdict', $verdict);
+  $complete = ($verdict === 'complete');
   foreach ($output as $index => $line) {
     if (!$complete) { // Log the entire error as a notice.
       $line_status = 'notice';
@@ -2428,8 +2844,14 @@ function _provision_drupal_site_local_updatedb($tag = 'DEPLOY') {
   }
   // A schema update that did not run is never a notice: the task would
   // otherwise end SUCCESSFUL over a site whose database is behind its code.
+  // Requirements errors are no notice either, but they leave no update
+  // behind, and the warning must not send anyone to apply one by hand.
   if (!$complete) {
-    drush_log(dt('@p updatedb did not run to completion (see the lines above); apply the pending database updates by hand', array('@p' => $tag . '9/LOCAL/DRUSH/FAIL')), 'warning');
+    $why = '@p updatedb did not run to completion (see the lines above); apply the pending database updates by hand';
+    if ($verdict === 'requirements') {
+      $why = "@p updatedb ran to completion after Drupal's requirements check reported errors (the [error] lines above): no database update is left to apply by hand, but resolve what those lines name, since update.php will not run until then";
+    }
+    drush_log(dt($why, array('@p' => $tag . '9/LOCAL/DRUSH/FAIL')), 'warning');
   }
   // Break the Update-module fetch-task deadlock introduced by the DB import
   // (clone/migrate/restore), while the site-local Drush still runs: the
@@ -2650,26 +3072,151 @@ function provision_drupal_system_map() {
 }
 
 /**
+ * The type an .info.yml file declares (module, theme, profile), or ''.
+ */
+function _provision_drupal_info_type($filename) {
+  $text = @file_get_contents($filename);
+  $m = array();
+  if ($text !== FALSE && preg_match('/^type\s*:\s*[\'"]?([A-Za-z_]+)[\'"]?\s*(#.*)?$/m', $text, $m)) {
+    return strtolower($m[1]);
+  }
+  return '';
+}
+
+/**
+ * The origin of a Drupal 8+ extension's copy, in Drupal's order of precedence.
+ *
+ * Core 0, the install profile 1, sites/all 2, the root directory 3 and a
+ * site's own folder 5, the ranks Drupal's discovery resolves a name found
+ * twice by, the higher winning. A profile scope is the profile's whatever its
+ * path (a core profile sits under core/); in the base scope the path tells
+ * core, sites/all and the root directory apart.
+ */
+function _provision_drupal_origin($scope, $key, $filename) {
+  if ($scope == 'profiles') {
+    return 1;
+  }
+  if ($scope == 'sites') {
+    return ($key == 'all') ? 2 : 5;
+  }
+  $root = rtrim((string) drush_get_context('DRUSH_DRUPAL_ROOT'), '/') . '/';
+  $rel = (strpos($filename, $root) === 0) ? substr($filename, strlen($root)) : $filename;
+  if (strpos($rel, 'core/') === 0) {
+    return 0;
+  }
+  if (strpos($rel, 'sites/all/') === 0) {
+    return 2;
+  }
+  return 3;
+}
+
+/**
+ * The origin a Drupal 8+ scan tagged a package copy with, or NULL.
+ */
+function _provision_drupal_package_origin($package) {
+  if (is_array($package)) {
+    return (isset($package['origin']) && is_numeric($package['origin'])) ? (int) $package['origin'] : NULL;
+  }
+  return (is_object($package) && isset($package->origin) && is_numeric($package->origin)) ? (int) $package->origin : NULL;
+}
+
+/**
+ * Merge package lists, the later list winning a name found in more than one.
+ *
+ * When every copy carries the origin a Drupal 8+ scan tags it with, a name
+ * keeps the copy of the highest origin, the one Drupal runs, so a profile's
+ * copy of a module no longer beats the root directory's. Lists without the
+ * tag (Drupal 7, packages a Verify before the tag recorded) merge as before.
+ */
+function _provision_drupal_merge_packages($lists) {
+  $tagged = TRUE;
+  foreach ($lists as $list) {
+    foreach ($list as $package) {
+      if (_provision_drupal_package_origin($package) === NULL) {
+        $tagged = FALSE;
+      }
+    }
+  }
+  $merged = array();
+  foreach ($lists as $list) {
+    if (!$tagged) {
+      $merged = array_merge($merged, $list);
+      continue;
+    }
+    foreach ($list as $name => $package) {
+      if (isset($merged[$name]) && _provision_drupal_package_origin($merged[$name]) > _provision_drupal_package_origin($package)) {
+        continue;
+      }
+      $merged[$name] = $package;
+    }
+  }
+  return $merged;
+}
+
+/**
+ * Find the .info.yml file of each Drupal 8+ extension of one type in a scope.
+ *
+ * Drupal goes by the type an .info.yml declares, wherever the file sits: a
+ * theme a module ships in its own folder (Canvas's canvas_stark) is a theme,
+ * and a module inside a theme's folder is a module. So each scope's modules
+ * and themes folders are both searched, the folder of the type's own kind
+ * last so it wins a name found in both, and the scopes in their order (core,
+ * sites/all, the root directory; a profile's own), the later winning a name
+ * found twice, as in Drupal's discovery. A file that declares no type counts
+ * only in the folder of its own kind. In the other kind's folder, tests folders
+ * are left out, as Drupal's discovery leaves them out by default: the test
+ * themes a module ships are on no site, and the own kind's search keeps what
+ * it always found.
+ *
+ * @param string $type
+ *   'module' or 'theme'.
+ *
+ * @return array
+ *   drush_scan_directory() file objects keyed by machine name.
+ */
+function _provision_drupal_find_info_files($scope, $key, $type) {
+  $own = ($type == 'theme') ? 'themes' : 'modules';
+  $other = ($type == 'theme') ? 'modules' : 'themes';
+  // Both lists come from one scope, so they pair up by position.
+  $own_paths = array_values(_provision_drupal_search_paths($scope, $key, $own));
+  $other_paths = array_values(_provision_drupal_search_paths($scope, $key, $other));
+  $nomask = array('.', '..', 'CVS', '.svn');
+  $files = array();
+  foreach ($own_paths as $i => $path) {
+    $folders = array();
+    if (isset($other_paths[$i])) {
+      $folders[$other_paths[$i]] = FALSE;
+    }
+    $folders[$path] = TRUE;
+    foreach ($folders as $folder => $own_kind) {
+      $skip = $own_kind ? $nomask : array_merge($nomask, array('tests'));
+      foreach (drush_scan_directory($folder, "/\.info\.yml$/", $skip, 0, TRUE, 'name') as $name => $file) {
+        $declared = _provision_drupal_info_type($file->filename);
+        if ($declared == $type || ($declared === '' && $own_kind)) {
+          $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
+          // The name less its '.info' (drush keys 'x.info.yml' as 'x.info').
+          $files[basename($name, '.info')] = $file;
+        }
+      }
+    }
+  }
+  return $files;
+}
+
+/**
  * Find modules in a certain scope.
  *
  * This function is general enough that it works for all supported
  * versions of Drupal.
  */
 function _provision_drupal_find_modules($scope, $key = '') {
-  $paths = _provision_drupal_search_paths($scope, $key, 'modules');
   $files = array();
 
   if (drush_drupal_major_version() >= 8) {
-    foreach ($paths as $path) {
-      $files = array_merge($files, drush_scan_directory($path, "/\.info\.yml$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
-    }
-    // Remove '.info' extension from the end of the file name.
-    foreach($files as $name => $file) {
-      $files[basename($name, '.info')] = $file;
-      unset($files[$name]);
-    }
+    $files = _provision_drupal_find_info_files($scope, $key, 'module');
   }
   else {
+    $paths = _provision_drupal_search_paths($scope, $key, 'modules');
     foreach ($paths as $path) {
       $files = array_merge($files, drush_scan_directory($path, "/\.module$/", array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name'));
     }
@@ -2698,13 +3245,16 @@ function _provision_drupal_find_modules($scope, $key = '') {
       continue;
     }
     $install_file = sprintf("%s/%s.install", dirname($info->filename), $name);
-    // Drupal now enforces a minimum schema version see: https://www.drupal.org/node/2186315
-    if (drush_drupal_major_version() >= 8) {
-      $schema_version = drush_drupal_major_version() * 1000;
-    }
-    else {
-      $schema_version = 0;
-    }
+    // A module whose code shows no update hook records no schema number (0),
+    // which the panel's comparison, its Compare page and the deploy check all
+    // read as unknown, as on Drupal 7. Drupal installs such a module at
+    // \Drupal::CORE_MINIMUM_SCHEMA_VERSION, 8000 on every release from 8 on
+    // (https://www.drupal.org/node/2186315), but a site upgraded from a release
+    // that had hooks keeps their last number when the hooks are gone: a floor
+    // here turned that site into a false downgrade, and the floor of
+    // major * 1000 counted every such module as an upgrade between identical
+    // platforms from Drupal 9 on.
+    $schema_version = 0;
     if (file_exists($install_file)) {
       $source = file_get_contents(trim($install_file));
       // Some modules keep update hooks in an include file (webform).
@@ -2737,6 +3287,13 @@ function _provision_drupal_find_modules($scope, $key = '') {
       if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{\s*return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
         $schema_version = max($schema_version, (int) $removed_matches[1]);
       }
+    }
+    // Drupal 8 and later never install a module below 8000, whatever lower
+    // update hooks or hook_update_last_removed() number its code still carries
+    // from Drupal 7: a site records 8000 for it, so the lower number here read
+    // as a downgrade from the site's own platform.
+    if ($schema_version > 0 && $schema_version < 8000 && drush_drupal_major_version() >= 8) {
+      $schema_version = 8000;
     }
     $files[$name]->schema_version = $schema_version;
 
