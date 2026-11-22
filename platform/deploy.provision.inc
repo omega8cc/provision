@@ -139,7 +139,8 @@ function drush_provision_drupal_pre_provision_deploy($backup_file) {
       $profiles = array_keys($site_packages['profiles']);
       $profile = $profiles[0];
       if (isset($drupal_packages['profiles'][$profile]['modules'])) {
-        $merged_modules = array_merge($merged_modules, $drupal_packages['profiles'][$profile]['modules']);
+        // The copy Drupal runs of a module the profile and the base both hold.
+        $merged_modules = _provision_drupal_merge_packages(array($merged_modules, $drupal_packages['profiles'][$profile]['modules']));
       }
     }
 

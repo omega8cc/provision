@@ -3082,6 +3082,76 @@ function _provision_drupal_info_type($filename) {
 }
 
 /**
+ * The origin of a Drupal 8+ extension's copy, in Drupal's order of precedence.
+ *
+ * Core 0, the install profile 1, sites/all 2, the root directory 3 and a
+ * site's own folder 5, the ranks Drupal's discovery resolves a name found
+ * twice by, the higher winning. A profile scope is the profile's whatever its
+ * path (a core profile sits under core/); in the base scope the path tells
+ * core, sites/all and the root directory apart.
+ */
+function _provision_drupal_origin($scope, $key, $filename) {
+  if ($scope == 'profiles') {
+    return 1;
+  }
+  if ($scope == 'sites') {
+    return ($key == 'all') ? 2 : 5;
+  }
+  $root = rtrim((string) drush_get_context('DRUSH_DRUPAL_ROOT'), '/') . '/';
+  $rel = (strpos($filename, $root) === 0) ? substr($filename, strlen($root)) : $filename;
+  if (strpos($rel, 'core/') === 0) {
+    return 0;
+  }
+  if (strpos($rel, 'sites/all/') === 0) {
+    return 2;
+  }
+  return 3;
+}
+
+/**
+ * The origin a Drupal 8+ scan tagged a package copy with, or NULL.
+ */
+function _provision_drupal_package_origin($package) {
+  if (is_array($package)) {
+    return (isset($package['origin']) && is_numeric($package['origin'])) ? (int) $package['origin'] : NULL;
+  }
+  return (is_object($package) && isset($package->origin) && is_numeric($package->origin)) ? (int) $package->origin : NULL;
+}
+
+/**
+ * Merge package lists, the later list winning a name found in more than one.
+ *
+ * When every copy carries the origin a Drupal 8+ scan tags it with, a name
+ * keeps the copy of the highest origin, the one Drupal runs, so a profile's
+ * copy of a module no longer beats the root directory's. Lists without the
+ * tag (Drupal 7, packages a Verify before the tag recorded) merge as before.
+ */
+function _provision_drupal_merge_packages($lists) {
+  $tagged = TRUE;
+  foreach ($lists as $list) {
+    foreach ($list as $package) {
+      if (_provision_drupal_package_origin($package) === NULL) {
+        $tagged = FALSE;
+      }
+    }
+  }
+  $merged = array();
+  foreach ($lists as $list) {
+    if (!$tagged) {
+      $merged = array_merge($merged, $list);
+      continue;
+    }
+    foreach ($list as $name => $package) {
+      if (isset($merged[$name]) && _provision_drupal_package_origin($merged[$name]) > _provision_drupal_package_origin($package)) {
+        continue;
+      }
+      $merged[$name] = $package;
+    }
+  }
+  return $merged;
+}
+
+/**
  * Find the .info.yml file of each Drupal 8+ extension of one type in a scope.
  *
  * Drupal goes by the type an .info.yml declares, wherever the file sits: a
@@ -3121,6 +3191,7 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
       foreach (drush_scan_directory($folder, "/\.info\.yml$/", $skip, 0, TRUE, 'name') as $name => $file) {
         $declared = _provision_drupal_info_type($file->filename);
         if ($declared == $type || ($declared === '' && $own_kind)) {
+          $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
           // The name less its '.info' (drush keys 'x.info.yml' as 'x.info').
           $files[basename($name, '.info')] = $file;
         }
