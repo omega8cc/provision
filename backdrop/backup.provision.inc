@@ -291,7 +291,7 @@ function drush_provision_backdrop_provision_backup() {
   }
   // The archive, and the store copy a Clone or Migrate makes later in the
   // same task, read the files and private stores as the backend user: let
-  // them read what the web server wrote closed there.
+  // them read what the account's users wrote closed there.
   _provision_drupal_backup_read_preflight();
   $command .= ' .';
   $result = drush_shell_exec($command,  $backup_file);

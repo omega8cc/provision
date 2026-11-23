@@ -857,20 +857,21 @@ function _provision_drupal_deploy_chgrp($extract_path) {
 }
 
 /**
- * Let a backup read what the site's web server wrote closed into its stores.
+ * Let a backup read what the account's users wrote closed into a site's stores.
  *
- * The web server writes as the account's web user, and a file it makes 0600
- * (a key pair from a key generator, say), or a directory it makes 0700, is
- * closed to the backend user that packs the archive: tar fails on it, and
- * with it the Backup and the Clone, Restore and Migrate that start with a
- * safety copy, as does the store copy a renaming Migrate makes as the
- * backend user. The site permissions fixer, run as root through its sudo
- * entry point, adds group read to each such file and group read and search
- * to each such directory in the site's own files and private stores, where
- * the owner is one of the account's web users and the group its web group,
- * and changes nothing else: the writer's owner, group and other bits stay,
- * so the web server reads it as before and the backend user reads it
- * through the web group, as it reads the rest of the store.
+ * The web server writes as the account's web user and a shell user as itself,
+ * and a file either makes 0600 (a key pair from a key generator, say), or a
+ * directory made 0700 (a code checker's own temporary folder), is closed to
+ * the backend user that packs the archive: tar fails on it, and with it the
+ * Backup and the Clone, Restore and Migrate that start with a safety copy,
+ * as does the store copy a renaming Migrate makes as the backend user. The
+ * site permissions fixer, run as root through its sudo entry point, adds
+ * group read to each such file and group read and search to each such
+ * directory in the site's own files and private stores, where the owner is
+ * one of the account's web or shell users and the group its web group or the
+ * account's own, and changes nothing else: the writer's owner, group and
+ * other bits stay, so the writer reads it as before and the backend user
+ * reads it through the group, as it reads the rest of the store.
  *
  * Octopus accounts only, as the native files symlinking. Warn-not-fail:
  * without the fixer, or with one that predates the mode, the archive is
@@ -896,7 +897,7 @@ function _provision_drupal_backup_read_preflight() {
     drush_log(dt('BACKUP/READ @line', array('@line' => $lines ? end($lines) : 'done')), 'info');
   }
   else {
-    drush_log(dt('BACKUP/READ the site permissions fixer did not open what the web server wrote closed (@line); the archive is attempted as it is', array('@line' => $lines ? reset($lines) : 'no output')), 'warning');
+    drush_log(dt('BACKUP/READ the site permissions fixer did not open what was written closed (@line); the archive is attempted as it is', array('@line' => $lines ? reset($lines) : 'no output')), 'warning');
   }
 }
 
