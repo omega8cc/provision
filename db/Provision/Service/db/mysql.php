@@ -610,7 +610,19 @@ class Provision_Service_db_mysql extends Provision_Service_db_pdo {
       return TRUE;
     }
     $hosts = array();
-    $rows = $this->query("SELECT Host FROM mysql.user WHERE User = '%s' AND account_locked = 'Y'", $username);
+    // MariaDB's mysql.user has no account_locked column: from 10.4 a lock is
+    // the account_locked key of mysql.global_priv's JSON, which JSON_VALUE()
+    // reads as 1, and before 10.4 an account cannot be locked at all.
+    $version = $this->server_version();
+    if ($version !== FALSE && stripos($version, 'mariadb') !== FALSE) {
+      if (preg_match('/(\d+\.\d+)\.\d+-mariadb/i', $version, $m) && version_compare($m[1], '10.4', '<')) {
+        return TRUE;
+      }
+      $rows = $this->query("SELECT Host FROM mysql.global_priv WHERE User = '%s' AND JSON_VALUE(Priv, '\$.account_locked') = 1", $username);
+    }
+    else {
+      $rows = $this->query("SELECT Host FROM mysql.user WHERE User = '%s' AND account_locked = 'Y'", $username);
+    }
     if ($rows) {
       while ($row = $rows->fetch()) {
         $hosts[] = $row['Host'];
