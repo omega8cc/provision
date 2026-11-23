@@ -3419,6 +3419,59 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
 }
 
 /**
+ * The source a module's update hooks are read from.
+ *
+ * Drupal knows a module's update hooks once it has run the module's .install
+ * file, so a file that one includes holds hooks of the module too, and so does
+ * a file the included one includes in turn (Varbase keeps its hooks two levels
+ * down). Each file is read once and only inside the module's own folder, as a
+ * file elsewhere is another extension's. An include names its file by a quoted
+ * path, taken from the folder of the file it stands in, then from the
+ * module's. Some modules (webform) load a hooks file by its name alone.
+ *
+ * @param string $dir
+ *   The module's folder.
+ * @param string $name
+ *   The module's machine name.
+ *
+ * @return string
+ *   The .install file's source, then each included file's.
+ */
+function _provision_drupal_install_source($dir, $name) {
+  $own = realpath($dir);
+  if ($own === FALSE) {
+    return '';
+  }
+  $source = '';
+  $seen = array();
+  $level = array(sprintf('%s/%s.install', $dir, $name), sprintf('%s/includes/%s.install.update.inc', $dir, $name));
+  for ($depth = 0; $level && $depth <= 10; $depth++) {
+    $next = array();
+    foreach ($level as $file) {
+      $path = realpath($file);
+      if ($path === FALSE || isset($seen[$path]) || !is_file($path) || !is_readable($path)) {
+        continue;
+      }
+      if ($depth > 0 && strpos($path, $own . '/') !== 0) {
+        continue;
+      }
+      $seen[$path] = TRUE;
+      $text = str_replace("\r", "\n", str_replace("\r\n", "\n", file_get_contents($path)));
+      $source .= "\n" . $text;
+      $matches = array();
+      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $text, $matches);
+      foreach ($matches[4] as $include) {
+        $include = ltrim($include, '/');
+        $here = dirname($path) . '/' . $include;
+        $next[] = is_file($here) ? $here : $own . '/' . $include;
+      }
+    }
+    $level = $next;
+  }
+  return $source;
+}
+
+/**
  * Find modules in a certain scope.
  *
  * This function is general enough that it works for all supported
@@ -3468,35 +3521,23 @@ function _provision_drupal_find_modules($scope, $key = '') {
     // platforms from Drupal 9 on.
     $schema_version = 0;
     if (file_exists($install_file)) {
-      $source = file_get_contents(trim($install_file));
-      // Some modules keep update hooks in an include file (webform).
-      $install_file_include = sprintf("%s/includes/%s.install.update.inc", dirname($info->filename), $name);
-      if (file_exists($install_file_include)) {
-        $source .= "\n" . file_get_contents(trim($install_file_include));
-      }
-      $source = str_replace("\r\n", "\n", $source);
-      $source = str_replace("\r", "\n", $source);
-      // Also search included files for function signature
-      $include_matches = array();
-      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
-      if (count($include_matches[0])) {
-        foreach($include_matches[4] as $include) {
-          if ($include_file = realpath(dirname($info->filename) . DIRECTORY_SEPARATOR . $include)) {
-            $source .= "\n" . file_get_contents($include_file);
-          }
-        }
-      }
+      $source = _provision_drupal_install_source(dirname($info->filename), $name);
+      // Only a function named after the module is its update hook.
       $function_matches = array();
-        preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
+      preg_match_all('!function\s*&?' . preg_quote($name, '!') . '_update_([0-9]+)\s*\(.*?\s*\{!i', $source, $function_matches);
 
       if (count($function_matches[0])) {
-        $schema_version = max($schema_version, max($function_matches[2]));
+        $schema_version = max($schema_version, max($function_matches[1]));
       }
       // A module that dropped its old update hooks keeps their last number in
       // hook_update_last_removed(); core counts it as the module's schema on
       // install and update, so a site already at that schema is no downgrade.
+      // A comment may stand before its return, read on Drupal 8 and later alone:
+      // Backdrop's system module answers a Drupal 7 number that way, and no
+      // Backdrop site records it.
+      $gap = (drush_drupal_major_version() >= 8) ? '(?:\s++|//[^\n]*\n|#[^\n]*\n|/\*[\s\S]*?\*/)*+' : '\s*';
       $removed_matches = array();
-      if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{\s*return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
+      if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{' . $gap . 'return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
         $schema_version = max($schema_version, (int) $removed_matches[1]);
       }
     }
