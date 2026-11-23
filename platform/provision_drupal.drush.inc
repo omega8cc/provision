@@ -3161,13 +3161,24 @@ function _provision_drupal_origin($scope, $key, $filename) {
 /**
  * Scan one search path of a Drupal 6, 7 or Backdrop scope, each copy tagged.
  *
+ * Drupal 7 and Backdrop take a .module or .info file only when its name, the
+ * file name less its extension, is a PHP function name (their
+ * DRUPAL_PHP_FUNCTION_PATTERN), so a file such as Backdrop's simpletest
+ * basis.tests.info is no extension there and is left out. Drupal 6 takes any
+ * name.
+ *
  * @return array
  *   drush_scan_directory() file objects keyed by machine name, each with the
  *   origin _provision_drupal_origin() gives it.
  */
 function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
   $files = drush_scan_directory($path, $mask, array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name');
-  foreach ($files as $file) {
+  $named = (drush_drupal_major_version() != 6);
+  foreach ($files as $name => $file) {
+    if ($named && !preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/', $file->name)) {
+      unset($files[$name]);
+      continue;
+    }
     $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
   }
   return $files;
