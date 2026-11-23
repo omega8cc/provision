@@ -12,10 +12,9 @@
  */
 function _provision_drupal_find_themes($scope, $key = '') {
   $paths = _provision_drupal_search_paths($scope, $key, 'themes');
-  $files = array();
+  $files = _provision_drupal_scan_paths($scope, $key, 'themes');
   $engines = array();
   foreach ($paths as $path) {
-    $files = array_merge($files, _provision_drupal_scan_origin($scope, $key, $path, "/\.info$/"));
     $engines = array_merge($engines, drush_scan_directory($path . "/engines", "/\.engine$/", array('.', '..', 'CVS', '.svn'), 0, true, 'name'));
   }
   foreach ($files as $name => $file) {
