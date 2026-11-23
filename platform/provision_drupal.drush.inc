@@ -857,20 +857,21 @@ function _provision_drupal_deploy_chgrp($extract_path) {
 }
 
 /**
- * Let a backup read what the site's web server wrote closed into its stores.
+ * Let a backup read what the account's users wrote closed into a site's stores.
  *
- * The web server writes as the account's web user, and a file it makes 0600
- * (a key pair from a key generator, say), or a directory it makes 0700, is
- * closed to the backend user that packs the archive: tar fails on it, and
- * with it the Backup and the Clone, Restore and Migrate that start with a
- * safety copy, as does the store copy a renaming Migrate makes as the
- * backend user. The site permissions fixer, run as root through its sudo
- * entry point, adds group read to each such file and group read and search
- * to each such directory in the site's own files and private stores, where
- * the owner is one of the account's web users and the group its web group,
- * and changes nothing else: the writer's owner, group and other bits stay,
- * so the web server reads it as before and the backend user reads it
- * through the web group, as it reads the rest of the store.
+ * The web server writes as the account's web user and a shell user as itself,
+ * and a file either makes 0600 (a key pair from a key generator, say), or a
+ * directory made 0700 (a code checker's own temporary folder), is closed to
+ * the backend user that packs the archive: tar fails on it, and with it the
+ * Backup and the Clone, Restore and Migrate that start with a safety copy,
+ * as does the store copy a renaming Migrate makes as the backend user. The
+ * site permissions fixer, run as root through its sudo entry point, adds
+ * group read to each such file and group read and search to each such
+ * directory in the site's own files and private stores, where the owner is
+ * one of the account's web or shell users and the group its web group or the
+ * account's own, and changes nothing else: the writer's owner, group and
+ * other bits stay, so the writer reads it as before and the backend user
+ * reads it through the group, as it reads the rest of the store.
  *
  * Octopus accounts only, as the native files symlinking. Warn-not-fail:
  * without the fixer, or with one that predates the mode, the archive is
@@ -896,7 +897,7 @@ function _provision_drupal_backup_read_preflight() {
     drush_log(dt('BACKUP/READ @line', array('@line' => $lines ? end($lines) : 'done')), 'info');
   }
   else {
-    drush_log(dt('BACKUP/READ the site permissions fixer did not open what the web server wrote closed (@line); the archive is attempted as it is', array('@line' => $lines ? reset($lines) : 'no output')), 'warning');
+    drush_log(dt('BACKUP/READ the site permissions fixer did not open what was written closed (@line); the archive is attempted as it is', array('@line' => $lines ? reset($lines) : 'no output')), 'warning');
   }
 }
 
@@ -3159,20 +3160,72 @@ function _provision_drupal_origin($scope, $key, $filename) {
 }
 
 /**
+ * Whether a Drupal 7 or Backdrop copy's .info names another core.
+ *
+ * Both cores keep the copy of a name they found first when a later search
+ * folder's copy is made for another core (an old contrib copy of what core now
+ * ships). Drupal 7 does so for modules and themes alike, by the core key;
+ * Backdrop for themes, by the backdrop key: it lists modules by their file's
+ * path, where no two copies meet, and the later one wins. Drupal 6 has no such
+ * rule, and a file with no .info beside it takes part as it is.
+ *
+ * @param object $file
+ *   The file found, with its filename and its name less the extension.
+ * @param string $type
+ *   'modules' or 'themes'.
+ */
+function _provision_drupal_names_other_core($file, $type) {
+  if (provision_platform_is_backdrop(_provision_drupal_scan_root())) {
+    if ($type != 'themes') {
+      return FALSE;
+    }
+    $key = 'backdrop';
+    $compatible = defined('BACKDROP_CORE_COMPATIBILITY') ? BACKDROP_CORE_COMPATIBILITY : '1.x';
+  }
+  elseif (drush_drupal_major_version() == 7) {
+    $key = 'core';
+    $compatible = defined('DRUPAL_CORE_COMPATIBILITY') ? DRUPAL_CORE_COMPATIBILITY : '7.x';
+  }
+  else {
+    return FALSE;
+  }
+  $info_file = dirname($file->filename) . '/' . $file->name . '.info';
+  if (!file_exists($info_file)) {
+    return FALSE;
+  }
+  $info = _provision_drupal_parse_info_file($info_file);
+  return isset($info[$key]) && $info[$key] != $compatible;
+}
+
+/**
  * Scan one search path of a Drupal 6, 7 or Backdrop scope, each copy tagged.
  *
  * Drupal 7 and Backdrop take a .module or .info file only when its name, the
  * file name less its extension, is a PHP function name (their
  * DRUPAL_PHP_FUNCTION_PATTERN), so a file such as Backdrop's simpletest
  * basis.tests.info is no extension there and is left out. Drupal 6 takes any
- * name.
+ * name. A theme sits in a folder of its own on all three, so a .info file
+ * right in a themes folder is none. Backdrop looks for nothing inside its
+ * special-purpose folders (css, js, templates and six more).
+ *
+ * A copy made for another core gets its origin below zero, the more so the
+ * later its folder is searched: it wins over no other copy, as in its core,
+ * and is kept where no other copy is found.
+ *
+ * @param string $type
+ *   'modules' or 'themes'.
  *
  * @return array
  *   drush_scan_directory() file objects keyed by machine name, each with the
  *   origin _provision_drupal_origin() gives it.
  */
-function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
-  $files = drush_scan_directory($path, $mask, array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name');
+function _provision_drupal_scan_origin($scope, $key, $path, $type) {
+  $skip = array('.', '..', 'CVS', '.svn');
+  if (provision_platform_is_backdrop(_provision_drupal_scan_root())) {
+    $skip = array_merge($skip, array('assets', 'css', 'scss', 'less', 'js', 'images', 'templates', 'node_modules', 'bower_components'));
+  }
+  $mask = ($type == 'themes') ? "/\.info$/" : "/\.module$/";
+  $files = drush_scan_directory($path, $mask, $skip, 0, TRUE, 'name', ($type == 'themes') ? 1 : 0);
   $named = (drush_drupal_major_version() != 6);
   foreach ($files as $name => $file) {
     if ($named && !preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/', $file->name)) {
@@ -3180,8 +3233,28 @@ function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
       continue;
     }
     $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
+    if (_provision_drupal_names_other_core($file, $type)) {
+      $file->origin = -1 - $file->origin;
+    }
   }
   return $files;
+}
+
+/**
+ * Scan every search path of a Drupal 6, 7 or Backdrop scope.
+ *
+ * A name more than one path holds keeps the copy its core runs, by the origin
+ * each copy is tagged with.
+ *
+ * @param string $type
+ *   'modules' or 'themes'.
+ */
+function _provision_drupal_scan_paths($scope, $key, $type) {
+  $lists = array();
+  foreach (_provision_drupal_search_paths($scope, $key, $type) as $path) {
+    $lists[] = _provision_drupal_scan_origin($scope, $key, $path, $type);
+  }
+  return _provision_drupal_merge_packages($lists);
 }
 
 /**
@@ -3347,6 +3420,59 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
 }
 
 /**
+ * The source a module's update hooks are read from.
+ *
+ * Drupal knows a module's update hooks once it has run the module's .install
+ * file, so a file that one includes holds hooks of the module too, and so does
+ * a file the included one includes in turn (Varbase keeps its hooks two levels
+ * down). Each file is read once; the includes of a file out of the module's own
+ * folder are not followed. An include names its file by a quoted path, taken
+ * from the folder of the file it stands in, then from the module's. Some
+ * modules (webform) load a hooks file by its name alone.
+ *
+ * @param string $dir
+ *   The module's folder.
+ * @param string $name
+ *   The module's machine name.
+ *
+ * @return string
+ *   The .install file's source, then each included file's.
+ */
+function _provision_drupal_install_source($dir, $name) {
+  $own = realpath($dir);
+  if ($own === FALSE) {
+    return '';
+  }
+  $source = '';
+  $seen = array();
+  $level = array(sprintf('%s/%s.install', $dir, $name), sprintf('%s/includes/%s.install.update.inc', $dir, $name));
+  for ($depth = 0; $level && $depth <= 10; $depth++) {
+    $next = array();
+    foreach ($level as $file) {
+      $path = realpath($file);
+      if ($path === FALSE || isset($seen[$path]) || !is_file($path) || !is_readable($path)) {
+        continue;
+      }
+      $seen[$path] = TRUE;
+      $text = str_replace("\r", "\n", str_replace("\r\n", "\n", file_get_contents($path)));
+      $source .= "\n" . $text;
+      if ($depth > 0 && strpos($path, $own . '/') !== 0) {
+        continue;
+      }
+      $matches = array();
+      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $text, $matches);
+      foreach ($matches[4] as $include) {
+        $include = ltrim($include, '/');
+        $here = dirname($path) . '/' . $include;
+        $next[] = is_file($here) ? $here : $own . '/' . $include;
+      }
+    }
+    $level = $next;
+  }
+  return $source;
+}
+
+/**
  * Find modules in a certain scope.
  *
  * This function is general enough that it works for all supported
@@ -3359,10 +3485,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
     $files = _provision_drupal_find_info_files($scope, $key, 'module');
   }
   else {
-    $paths = _provision_drupal_search_paths($scope, $key, 'modules');
-    foreach ($paths as $path) {
-      $files = array_merge($files, _provision_drupal_scan_origin($scope, $key, $path, "/\.module$/"));
-    }
+    $files = _provision_drupal_scan_paths($scope, $key, 'modules');
   }
 
   foreach ($files as $name => $info) {
@@ -3399,35 +3522,23 @@ function _provision_drupal_find_modules($scope, $key = '') {
     // platforms from Drupal 9 on.
     $schema_version = 0;
     if (file_exists($install_file)) {
-      $source = file_get_contents(trim($install_file));
-      // Some modules keep update hooks in an include file (webform).
-      $install_file_include = sprintf("%s/includes/%s.install.update.inc", dirname($info->filename), $name);
-      if (file_exists($install_file_include)) {
-        $source .= "\n" . file_get_contents(trim($install_file_include));
-      }
-      $source = str_replace("\r\n", "\n", $source);
-      $source = str_replace("\r", "\n", $source);
-      // Also search included files for function signature
-      $include_matches = array();
-      preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $source, $include_matches);
-      if (count($include_matches[0])) {
-        foreach($include_matches[4] as $include) {
-          if ($include_file = realpath(dirname($info->filename) . DIRECTORY_SEPARATOR . $include)) {
-            $source .= "\n" . file_get_contents($include_file);
-          }
-        }
-      }
+      $source = _provision_drupal_install_source(dirname($info->filename), $name);
+      // Only a function named after the module is its update hook.
       $function_matches = array();
-        preg_match_all('!function\s*&?([a-zA-Z0-9_]+)_update_([0-9]+)\s*\(.*?\s*\{!', $source, $function_matches);
+      preg_match_all('!function\s*&?' . preg_quote($name, '!') . '_update_([0-9]+)\s*\(.*?\s*\{!i', $source, $function_matches);
 
       if (count($function_matches[0])) {
-        $schema_version = max($schema_version, max($function_matches[2]));
+        $schema_version = max($schema_version, max($function_matches[1]));
       }
       // A module that dropped its old update hooks keeps their last number in
       // hook_update_last_removed(); core counts it as the module's schema on
       // install and update, so a site already at that schema is no downgrade.
+      // A comment may stand before its return, read on Drupal 8 and later alone:
+      // Backdrop's system module answers a Drupal 7 number that way, and no
+      // Backdrop site records it.
+      $gap = (drush_drupal_major_version() >= 8) ? '(?:\s++|//[^\n]*\n|#[^\n]*\n|/\*[\s\S]*?\*/)*+' : '\s*';
       $removed_matches = array();
-      if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{\s*return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
+      if (preg_match('!function\s*&?' . preg_quote($name, '!') . '_update_last_removed\s*\(\s*\)[^{]*\{' . $gap . 'return\s+([0-9]+)\s*;!', $source, $removed_matches)) {
         $schema_version = max($schema_version, (int) $removed_matches[1]);
       }
     }
