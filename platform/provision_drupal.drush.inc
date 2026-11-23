@@ -3159,20 +3159,72 @@ function _provision_drupal_origin($scope, $key, $filename) {
 }
 
 /**
+ * Whether a Drupal 7 or Backdrop copy's .info names another core.
+ *
+ * Both cores keep the copy of a name they found first when a later search
+ * folder's copy is made for another core (an old contrib copy of what core now
+ * ships). Drupal 7 does so for modules and themes alike, by the core key;
+ * Backdrop for themes, by the backdrop key: it lists modules by their file's
+ * path, where no two copies meet, and the later one wins. Drupal 6 has no such
+ * rule, and a file with no .info beside it takes part as it is.
+ *
+ * @param object $file
+ *   The file found, with its filename and its name less the extension.
+ * @param string $type
+ *   'modules' or 'themes'.
+ */
+function _provision_drupal_names_other_core($file, $type) {
+  if (provision_platform_is_backdrop(_provision_drupal_scan_root())) {
+    if ($type != 'themes') {
+      return FALSE;
+    }
+    $key = 'backdrop';
+    $compatible = defined('BACKDROP_CORE_COMPATIBILITY') ? BACKDROP_CORE_COMPATIBILITY : '1.x';
+  }
+  elseif (drush_drupal_major_version() == 7) {
+    $key = 'core';
+    $compatible = defined('DRUPAL_CORE_COMPATIBILITY') ? DRUPAL_CORE_COMPATIBILITY : '7.x';
+  }
+  else {
+    return FALSE;
+  }
+  $info_file = dirname($file->filename) . '/' . $file->name . '.info';
+  if (!file_exists($info_file)) {
+    return FALSE;
+  }
+  $info = _provision_drupal_parse_info_file($info_file);
+  return isset($info[$key]) && $info[$key] != $compatible;
+}
+
+/**
  * Scan one search path of a Drupal 6, 7 or Backdrop scope, each copy tagged.
  *
  * Drupal 7 and Backdrop take a .module or .info file only when its name, the
  * file name less its extension, is a PHP function name (their
  * DRUPAL_PHP_FUNCTION_PATTERN), so a file such as Backdrop's simpletest
  * basis.tests.info is no extension there and is left out. Drupal 6 takes any
- * name.
+ * name. A theme sits in a folder of its own on all three, so a .info file
+ * right in a themes folder is none. Backdrop looks for nothing inside its
+ * special-purpose folders (css, js, templates and six more).
+ *
+ * A copy made for another core gets its origin below zero, the more so the
+ * later its folder is searched: it wins over no other copy, as in its core,
+ * and is kept where no other copy is found.
+ *
+ * @param string $type
+ *   'modules' or 'themes'.
  *
  * @return array
  *   drush_scan_directory() file objects keyed by machine name, each with the
  *   origin _provision_drupal_origin() gives it.
  */
-function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
-  $files = drush_scan_directory($path, $mask, array('.', '..', 'CVS', '.svn'), 0, TRUE, 'name');
+function _provision_drupal_scan_origin($scope, $key, $path, $type) {
+  $skip = array('.', '..', 'CVS', '.svn');
+  if (provision_platform_is_backdrop(_provision_drupal_scan_root())) {
+    $skip = array_merge($skip, array('assets', 'css', 'scss', 'less', 'js', 'images', 'templates', 'node_modules', 'bower_components'));
+  }
+  $mask = ($type == 'themes') ? "/\.info$/" : "/\.module$/";
+  $files = drush_scan_directory($path, $mask, $skip, 0, TRUE, 'name', ($type == 'themes') ? 1 : 0);
   $named = (drush_drupal_major_version() != 6);
   foreach ($files as $name => $file) {
     if ($named && !preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*$/', $file->name)) {
@@ -3180,8 +3232,28 @@ function _provision_drupal_scan_origin($scope, $key, $path, $mask) {
       continue;
     }
     $file->origin = _provision_drupal_origin($scope, $key, $file->filename);
+    if (_provision_drupal_names_other_core($file, $type)) {
+      $file->origin = -1 - $file->origin;
+    }
   }
   return $files;
+}
+
+/**
+ * Scan every search path of a Drupal 6, 7 or Backdrop scope.
+ *
+ * A name more than one path holds keeps the copy its core runs, by the origin
+ * each copy is tagged with.
+ *
+ * @param string $type
+ *   'modules' or 'themes'.
+ */
+function _provision_drupal_scan_paths($scope, $key, $type) {
+  $lists = array();
+  foreach (_provision_drupal_search_paths($scope, $key, $type) as $path) {
+    $lists[] = _provision_drupal_scan_origin($scope, $key, $path, $type);
+  }
+  return _provision_drupal_merge_packages($lists);
 }
 
 /**
@@ -3359,10 +3431,7 @@ function _provision_drupal_find_modules($scope, $key = '') {
     $files = _provision_drupal_find_info_files($scope, $key, 'module');
   }
   else {
-    $paths = _provision_drupal_search_paths($scope, $key, 'modules');
-    foreach ($paths as $path) {
-      $files = array_merge($files, _provision_drupal_scan_origin($scope, $key, $path, "/\.module$/"));
-    }
+    $files = _provision_drupal_scan_paths($scope, $key, 'modules');
   }
 
   foreach ($files as $name => $info) {
