@@ -3424,10 +3424,10 @@ function _provision_drupal_find_info_files($scope, $key, $type) {
  * Drupal knows a module's update hooks once it has run the module's .install
  * file, so a file that one includes holds hooks of the module too, and so does
  * a file the included one includes in turn (Varbase keeps its hooks two levels
- * down). Each file is read once and only inside the module's own folder, as a
- * file elsewhere is another extension's. An include names its file by a quoted
- * path, taken from the folder of the file it stands in, then from the
- * module's. Some modules (webform) load a hooks file by its name alone.
+ * down). Each file is read once; the includes of a file out of the module's own
+ * folder are not followed. An include names its file by a quoted path, taken
+ * from the folder of the file it stands in, then from the module's. Some
+ * modules (webform) load a hooks file by its name alone.
  *
  * @param string $dir
  *   The module's folder.
@@ -3452,12 +3452,12 @@ function _provision_drupal_install_source($dir, $name) {
       if ($path === FALSE || isset($seen[$path]) || !is_file($path) || !is_readable($path)) {
         continue;
       }
-      if ($depth > 0 && strpos($path, $own . '/') !== 0) {
-        continue;
-      }
       $seen[$path] = TRUE;
       $text = str_replace("\r", "\n", str_replace("\r\n", "\n", file_get_contents($path)));
       $source .= "\n" . $text;
+      if ($depth > 0 && strpos($path, $own . '/') !== 0) {
+        continue;
+      }
       $matches = array();
       preg_match_all('!^\s*(include|require)(_once)?[\s\.\w\(]+([\'\"]{1}([\\\s\w\-\.\/]*)[\'\"]{1})!m', $text, $matches);
       foreach ($matches[4] as $include) {
