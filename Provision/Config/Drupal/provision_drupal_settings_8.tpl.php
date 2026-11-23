@@ -201,7 +201,9 @@ if (isset($_SERVER['db_name'])) {
 
   $settings['file_public_path'] = 'sites/<?php print $this->uri ?>/files';
   $settings['file_private_path'] = 'sites/<?php print $this->uri ?>/private/files';
-  $settings['file_temp_path'] = 'sites/<?php print $this->uri ?>/private/temp';
+  // Drupal documents this path as absolute: code run from another working
+  // directory resolves a relative one in the wrong place.
+  $settings['file_temp_path'] = (isset($app_root) ? $app_root . '/' : '') . 'sites/<?php print $this->uri ?>/private/temp';
   $config['system.file']['path']['temporary'] = 'sites/<?php print $this->uri ?>/private/temp';
   $settings['config_sync_directory'] = 'sites/<?php print $this->uri ?>/private/config/sync';
   $config_directories[CONFIG_SYNC_DIRECTORY] = 'sites/<?php print $this->uri ?>/private/config/sync';
