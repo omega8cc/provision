@@ -417,7 +417,7 @@ function drush_provision_drupal_post_provision_deploy() {
 
   // Remove the old database.
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
-    if ($old_database = drush_get_option('old_db_name', '')) {
+    if (($old_database = drush_get_option('old_db_name', '')) && !provision_db_stays($old_database, 'DEPLOY')) {
       if (!d()->service('db')->drop_database($old_database)) {
         drush_log(dt('Failed to drop database @old_database', array('@old_database' => $old_database)), 'warning');
       }

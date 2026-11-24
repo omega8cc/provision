@@ -37,10 +37,14 @@ function drush_db_post_provision_migrate() {
   drush_set_option('migrate_source_retiring', TRUE);
   provision_reload_config('site', d()->site_path . '/drushrc.php');
   $source = drush_get_option('provision_migrate_source_db', array());
-  if (is_array($source) && !empty($source['db_name'])) {
-    d()->service('db')->destroy_site_database($source);
+  if (!is_array($source) || empty($source['db_name'])) {
+    $source = d()->service('db')->fetch_site_credentials();
   }
-  else {
-    d()->service('db')->destroy_site_database();
+  // Only on another database server can the migrated site's own database
+  // have the old one's name.
+  $server = ltrim((string) drush_get_option('new_db_server', ''), '@');
+  $moved = $server !== '' && $server !== ltrim((string) d()->db_server->name, '@');
+  if (!provision_db_stays($source['db_name'], 'MIGRATE', $moved ? drush_get_option('new_site_path', '') : '')) {
+    d()->service('db')->destroy_site_database($source);
   }
 }
