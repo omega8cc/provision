@@ -20,6 +20,9 @@ function drush_db_provision_delete() {
       drush_log(dt('No database was created for this site; nothing to drop.'), 'info');
       return;
     }
+    if (provision_db_stays(drush_get_option('db_name', '', 'site'), 'DELETE')) {
+      return;
+    }
     d()->service('db')->destroy_site_database();
   }
 }
