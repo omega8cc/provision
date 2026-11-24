@@ -57,7 +57,7 @@ function drush_provision_grav_provision_install_validate() {
       $old = _provision_grav_drushrc_creds(d()->site_path . '/drushrc.php');
       $old_db_name = isset($old['db_name']) ? $old['db_name'] : '';
       if ($old_db_name !== '' && _provision_grav_has_db()) {
-        if (d()->service('db')->database_exists($old_db_name)) {
+        if (d()->service('db')->database_exists($old_db_name) && !provision_db_stays($old_db_name, 'REINSTALL')) {
           d()->service('db')->drop_database($old_db_name);
           drush_log(dt('Dropped database @database.', array(
             '@database' => $old_db_name,

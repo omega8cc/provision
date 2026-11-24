@@ -84,7 +84,7 @@ function drush_provision_drupal_provision_install_validate() {
         require_once(d()->site_path . '/drushrc.php');
         $old_db_name = $options['db_name'];
 
-        if (d()->service('db')->database_exists($old_db_name)) {
+        if (d()->service('db')->database_exists($old_db_name) && !provision_db_stays($old_db_name, 'REINSTALL')) {
           d()->service('db')->drop_database($old_db_name);
           drush_log(dt('Dropped database @database.', array(
             '@database' => $old_db_name,

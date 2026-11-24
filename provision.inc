@@ -5274,6 +5274,179 @@ function _provision_leftover_db_in_use($root, $leftover, $db_name) {
 }
 
 /**
+ * The real path of a directory, also when it is gone and its parent is not.
+ */
+function _provision_dir_real($dir) {
+  $dir = rtrim((string) $dir, '/');
+  if ($dir === '') {
+    return '';
+  }
+  $real = realpath($dir);
+  if ($real !== FALSE) {
+    return $real;
+  }
+  $parent = realpath(dirname($dir));
+  return ($parent === FALSE) ? $dir : rtrim($parent, '/') . '/' . basename($dir);
+}
+
+/**
+ * Whether a site directory names a database as its own.
+ *
+ * Looked for by its name in the two files the backend writes there, read as
+ * text and never included: an array's 'database' => '<name>' and a MySQL URL
+ * in settings.php, $options['db_name'] = '<name>' in drushrc.php. Not a
+ * connection to another site's database, which a migration source block
+ * assigns as ['database'] = '<name>'. A name in a comment counts.
+ */
+function _provision_dir_names_db($dir, $db_name) {
+  $name = preg_quote($db_name, '/');
+  $patterns = array(
+    'settings.php' => array('/[\'"]database[\'"]\s*=>\s*[\'"]' . $name . '[\'"]/', '/\bmysqli?:\/\/[^\s\'"]*\/' . $name . '(?:\?[^\s\'"]*)?[\'"]/'),
+    'drushrc.php' => array('/[\'"]db_name[\'"]\s*\]\s*=\s*[\'"]' . $name . '[\'"]/'),
+  );
+  foreach ($patterns as $file => $list) {
+    $text = is_file($dir . '/' . $file) ? @file_get_contents($dir . '/' . $file, FALSE, NULL, 0, 16777216) : FALSE;
+    if (!is_string($text) || strpos($text, $db_name) === FALSE) {
+      continue;
+    }
+    foreach ($list as $pattern) {
+      if (preg_match($pattern, $text)) {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * The directory of another site that names a database as its own, or ''.
+ *
+ * A copy whose making was cut off still names the database of the site it
+ * was copied from, and the next Verify of its platform lists it as a site of
+ * its own: what drops its database then drops the live site's. Asked before
+ * a task drops the database of a site that exists. Read are the directories
+ * every site alias of the account records, with what an interrupted task
+ * left beside them (.restore, .original), and every directory beside this
+ * site's; one that cannot be listed counts as holding one that names it. A
+ * database of that name on another server is not told apart.
+ *
+ * Not another site: this one's own directory by whatever alias or path, what
+ * was left beside it under its name, and the one a Migrate to another
+ * database server put it in, where the name can be the same.
+ *
+ * @param string $db_name
+ *   The database about to be dropped.
+ * @param string $target
+ *   The directory a Migrate to another database server put the site in, or ''.
+ *
+ * @return string
+ *   A directory, or ''.
+ */
+function _provision_db_other_site($db_name, $target = '') {
+  $db_name = (string) $db_name;
+  if ($db_name === '' || d()->type !== 'site') {
+    return '';
+  }
+  // This process moved and removed directories before it asks.
+  clearstatcache(TRUE);
+  // Also where a recorded root is the project root of a Composer codebase.
+  $paths = array(d()->site_path, _provision_platform_real_docroot(d()->root) . '/sites/' . d()->uri);
+  $beside = count($paths);
+  if ((string) $target !== '') {
+    array_push($paths, $target, _provision_platform_real_docroot(dirname(dirname($target))) . '/sites/' . basename($target));
+  }
+  $mine = array();
+  $folders = array();
+  foreach ($paths as $i => $path) {
+    $real = _provision_dir_real($path);
+    if ($real === '') {
+      continue;
+    }
+    array_push($mine, $real);
+    foreach (array('.restore', '.original') as $left) {
+      array_push($mine, $real . $left, _provision_dir_real($path . $left));
+    }
+    if ($i < $beside) {
+      $folders[] = dirname($real);
+    }
+  }
+
+  $files = glob(drush_server_home() . '/.drush/*.alias.drushrc.php');
+  foreach (is_array($files) ? $files : array() as $file) {
+    $text = @file_get_contents($file);
+    if (!is_string($text) || strpos($text, "'context_type' => 'site'") === FALSE) {
+      continue;
+    }
+    $m = array();
+    $dirs = array();
+    if (preg_match("/^  'site_path' => '([^'\n]+)'/m", $text, $m)) {
+      $dirs[] = $m[1];
+    }
+    $uri = preg_match("/^  'uri' => '([^'\n]+)'/m", $text, $m) ? $m[1] : basename($file, '.alias.drushrc.php');
+    if (preg_match("/^  'root' => '([^'\n]+)'/m", $text, $m)) {
+      $dirs[] = rtrim($m[1], '/') . '/sites/' . $uri;
+      $dirs[] = _provision_platform_real_docroot($m[1]) . '/sites/' . $uri;
+    }
+    foreach (array_unique($dirs) as $dir) {
+      foreach (array('', '.restore', '.original') as $left) {
+        $real = realpath($dir . $left);
+        if ($real !== FALSE && !in_array($real, $mine, TRUE) && _provision_dir_names_db($real, $db_name)) {
+          return $real;
+        }
+      }
+    }
+  }
+
+  foreach (array_unique($folders) as $sites) {
+    if (!is_dir($sites)) {
+      continue;
+    }
+    $names = @scandir($sites);
+    if (!is_array($names)) {
+      drush_log(dt('Cannot open @path to see whether another site uses the database @db.', array('@path' => $sites, '@db' => $db_name)), 'warning');
+      return $sites;
+    }
+    foreach ($names as $name) {
+      $dir = $sites . '/' . $name;
+      if ($name[0] === '.' || is_link($dir) || !is_dir($dir)) {
+        continue;
+      }
+      $real = _provision_dir_real($dir);
+      if (!in_array($real, $mine, TRUE) && _provision_dir_names_db($real, $db_name)) {
+        return $real;
+      }
+    }
+  }
+  return '';
+}
+
+/**
+ * Whether the database a task is about to drop stays, as another site uses it.
+ *
+ * @param string $db_name
+ *   The database.
+ * @param string $task
+ *   The prefix of the line in the log.
+ * @param string $target
+ *   The directory a Migrate to another database server put the site in, or ''.
+ *
+ * @return bool
+ *   TRUE when it stays, with its login's grants; the line says so.
+ */
+function provision_db_stays($db_name, $task, $target = '') {
+  $other = _provision_db_other_site($db_name, $target);
+  if ($other === '') {
+    return FALSE;
+  }
+  drush_log(dt('@task/DATABASE @db is kept, with its login: @other names the same database.', array(
+    '@task' => $task,
+    '@db' => $db_name,
+    '@other' => $other,
+  )), 'warning');
+  return TRUE;
+}
+
+/**
  * Drop the orphan copy database on the recorded db server context.
  *
  * Best-effort by design: a missing server context or an absent database logs

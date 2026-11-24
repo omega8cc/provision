@@ -195,7 +195,7 @@ function drush_provision_txp_post_provision_deploy() {
   // would have done it is union-guarded away, so without this every
   // replace-deploy leaves an orphaned database and its grants behind).
   if (!drush_get_error() && drush_get_option('deploy_replace_site', FALSE)) {
-    if ($old_database = drush_get_option('old_db_name', '')) {
+    if (($old_database = drush_get_option('old_db_name', '')) && !provision_db_stays($old_database, 'DEPLOY')) {
       if (!d()->service('db')->drop_database($old_database)) {
         drush_log(dt('Failed to drop database @old_database', array('@old_database' => $old_database)), 'warning');
       }
