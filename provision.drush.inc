@@ -765,9 +765,31 @@ function drush_provision_disable_pre_validate() {
 }
 
 /**
+ * A platform recorded at its project folder, loaded at the docroot below it.
+ *
+ * The Add platform form records a Composer build whose Docroot field was left
+ * empty at its project folder, and Verify finds the code in web/ (or
+ * docroot/, html/) below it before it loads anything. Lock and Unlock loaded
+ * the recorded folder as it is and failed. This finds the docroot the way
+ * Verify does, for a platform's own task only; a root that holds index.php
+ * is kept as it is.
+ */
+function provision_platform_task_root_found() {
+  if (d()->type !== 'platform' || empty(d()->root)) {
+    return;
+  }
+  $root = provision_auto_fix_platform_root(d()->root);
+  if ($root !== d()->root) {
+    d()->root = $root;
+    drush_set_context('DRUSH_SELECTED_DRUPAL_ROOT', $root);
+  }
+}
+
+/**
  * Implements drush_hook_pre_validate() for provision-lock.
  */
 function drush_provision_lock_pre_validate() {
+  provision_platform_task_root_found();
   return provision_task_root_bootstrap();
 }
 
@@ -775,6 +797,7 @@ function drush_provision_lock_pre_validate() {
  * Implements drush_hook_pre_validate() for provision-unlock.
  */
 function drush_provision_unlock_pre_validate() {
+  provision_platform_task_root_found();
   return provision_task_root_bootstrap();
 }
 
