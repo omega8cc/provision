@@ -397,7 +397,10 @@ function drush_provision_drupal_provision_migrate($platform, $new_name = NULL) {
     $options['db_server'] = $db_server;
   }
 
-  drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
+  // The site folder under the docroot the target platform serves: a platform
+  // recorded at its project folder keeps its code in web/ (or docroot/,
+  // html/) below it, where the deploy writes the site, as Verify finds it.
+  drush_set_option('new_site_path', provision_auto_fix_platform_root($options['root']) . "/sites/{$options['uri']}");
 
   // A rename's target context or site vhost that exists before this migrate
   // writes its own is not this migrate's to remove on a failure (see the

@@ -399,7 +399,10 @@ function drush_provision_backdrop_provision_migrate($platform, $new_name = NULL)
   unset($options['db_host']);
   unset($options['db_port']);
 
-  drush_set_option('new_site_path', "{$options['root']}/sites/{$options['uri']}");
+  // The site folder under the docroot the target platform serves: a platform
+  // recorded at its project folder keeps its code in web/ (or docroot/,
+  // html/) below it, where the deploy writes the site, as Verify finds it.
+  drush_set_option('new_site_path', provision_auto_fix_platform_root($options['root']) . "/sites/{$options['uri']}");
 
   // A rename's target context or site vhost that exists before this migrate
   // writes its own is not this migrate's to remove on a failure (see the
