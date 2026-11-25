@@ -1959,45 +1959,49 @@ function provision_drush_local_lock_state() {
 }
 
 /**
- * The interpreter Composer's platform check ran on, read from its php line.
+ * The interpreter websh gives a platform's tasks, read in its docroot.
  *
- * check-platform-reqs prints the PHP it ran on as a "php <version> <status>"
- * line, a BOA build of that PHP being /opt/phpNN/bin/php. '' when no such
- * line is there or that build is not.
+ * websh launches a line that starts with composer on the PHP it picks for the
+ * folder the line runs in: a cli-per-platform.info line for it, then a
+ * phpNN.info switch, then cli.info. Every task of the platform is matched by
+ * its docroot, the alias's root, and a line keyed at a docroot named neither
+ * web, docroot nor html does not cover the project folder above it, so the
+ * probe runs there. "composer --version" names the PHP it ran on. The folder
+ * is there by now even on a build's first Verify, whose own backend websh
+ * started before it existed, on the account's PHP. '' when no interpreter is
+ * named or it cannot run.
  *
- * @param array $lines
- *   The check's output lines.
+ * @param string $dir
+ *   The platform's docroot.
  *
  * @return string
  */
-function _provision_composer_check_php($lines) {
-  foreach ((array) $lines as $line) {
-    if (preg_match('/^php\s+([0-9]+)\.([0-9]+)\.[0-9]/', trim((string) $line), $m)) {
-      $bin = '/opt/php' . $m[1] . $m[2] . '/bin/php';
-      return is_executable($bin) ? $bin : '';
+function _provision_codebase_task_php($dir) {
+  $dir = rtrim((string) $dir, '/');
+  if ($dir === '' || !is_dir($dir) || !drush_shell_cd_and_exec($dir, 'composer --version --no-interaction')) {
+    return '';
+  }
+  foreach (drush_shell_exec_output() as $line) {
+    if (preg_match('#^PHP version [0-9]\S* \((/\S+)\)#', trim((string) $line), $m)) {
+      return is_executable($m[1]) ? $m[1] : '';
     }
   }
   return '';
 }
 
 /**
- * The composer command for the Drush require, on the PHP the check ran on.
+ * The composer command for the Drush step, on the PHP the platform's tasks run.
  *
- * websh launches a line that starts with composer on the PHP it picks for the
- * codebase when the line runs: a cli-per-platform.info line for its folder,
- * then a phpNN.info switch, then cli.info. That is the PHP every later task
- * of the platform runs on, so the platform check is such a line. On a build's
- * first Verify the folder did not exist when websh launched this backend,
- * which then runs on the account's PHP, while the check, run once the folder
- * is there, already gets the folder's own line. The require starts with the
- * time limit, and websh runs such a line as typed, on the server's default
- * PHP: it is given the check's interpreter by name, so the Drush it adds
- * resolves for the PHP the platform's tasks run on. This process's PHP where
- * the check named none; plain composer where neither interpreter or
+ * The check and the require both run Composer by name on the interpreter
+ * _provision_codebase_task_php() read, the require behind its time limit (a
+ * line websh runs as typed, on the server's default PHP, when not given one),
+ * so the check judges the PHP the require resolves for, and the Drush it adds
+ * keeps the floor of the PHP the platform's tasks run on. This process's PHP
+ * where no interpreter was read; plain composer where neither interpreter or
  * /usr/local/bin/composer is there (never on a BOA server).
  *
  * @param string $php
- *   The interpreter the check ran on (_provision_composer_check_php()), or ''.
+ *   The interpreter read in the docroot, or ''.
  *
  * @return string
  */
@@ -2096,7 +2100,7 @@ function _provision_composer_on_task_php($php = '') {
  * asks for Robo 5). Where no Console version can be read the major decides:
  * Drupal 10 gets the constraint, every other major the bare require.
  */
-function _provision_require_site_local_drush($approot) {
+function _provision_require_site_local_drush($approot, $docroot = '') {
   if (_provision_codebase_has_composer_patches($approot)) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase carries composer patches, and a resolve on this box would re-install the patched packages without their patches; it keeps no site-local Drush until it is built with one', array(
       '@root' => $approot,
@@ -2110,10 +2114,9 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  // A line that starts with composer: websh runs it on the codebase's PHP.
-  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
-  $check_lines = drush_shell_exec_output();
-  $check_output = implode('', $check_lines);
+  $composer = _provision_composer_on_task_php(_provision_codebase_task_php($docroot !== '' ? $docroot : $approot));
+  $check = drush_shell_cd_and_exec($approot, $composer . ' check-platform-reqs --no-plugins --no-interaction');
+  $check_output = implode('', drush_shell_exec_output());
   if (!$check) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
       '@root' => $approot,
@@ -2198,7 +2201,6 @@ function _provision_require_site_local_drush($approot) {
   }
   $drush_dir = $app . '/vendor/drush';
   $drush_dir_was = file_exists($drush_dir) || is_link($drush_dir);
-  $composer = _provision_composer_on_task_php(_provision_composer_check_php($check_lines));
   $started = time();
   if ($major == 12) {
     $package = 'drush/drush:^15@stable';
@@ -3074,12 +3076,12 @@ function provision_unlock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!_provision_codebase_has_drush(d()->root)) {
-        _provision_require_site_local_drush(d()->root);
+        _provision_require_site_local_drush(d()->root, d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!_provision_codebase_has_drush(d()->root . "/../")) {
-        _provision_require_site_local_drush(d()->root . "/../");
+        _provision_require_site_local_drush(d()->root . "/../", d()->root);
       }
     }
 
@@ -3344,12 +3346,12 @@ function provision_lock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!_provision_codebase_has_drush(d()->root)) {
-        _provision_require_site_local_drush(d()->root);
+        _provision_require_site_local_drush(d()->root, d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!_provision_codebase_has_drush(d()->root . "/../")) {
-        _provision_require_site_local_drush(d()->root . "/../");
+        _provision_require_site_local_drush(d()->root . "/../", d()->root);
       }
     }
 
