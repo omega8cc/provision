@@ -2112,22 +2112,69 @@ function _provision_require_site_local_drush($approot) {
     $hold_robo = ($major == 10);
   }
   $package = '';
+  // The task holds the account's queue while it runs, as the platform
+  // builds' own steps do, so the resolve gets the same 45 minutes: timeout
+  // stops composer and everything it started (KILL ten seconds after TERM).
+  // They run in a process group of their own, so an interrupt of a Verify
+  // run by hand no longer reaches composer; the limit still ends it.
+  $limit = 2700;
+  $bounded = is_executable('/usr/bin/timeout') ? '/usr/bin/timeout -k 10 ' . $limit . ' ' : '';
+  // A require killed from outside, by the limit or otherwise, cannot put
+  // back what it rewrote, as one that fails by itself does: the two files
+  // it edits are kept, and what it adds is noted, to be undone.
+  $app = rtrim($approot, '/');
+  $kept = array();
+  $absent = array();
+  foreach (array('composer.json', 'composer.lock') as $name) {
+    $file = $app . '/' . $name;
+    if ($bounded === '') {
+      continue;
+    }
+    if (is_file($file) && !is_link($file)) {
+      $text = @file_get_contents($file);
+      if ($text !== FALSE) {
+        $kept[$file] = $text;
+      }
+    }
+    elseif (!file_exists($file) && !is_link($file)) {
+      $absent[] = $file;
+    }
+  }
+  $drush_dir = $app . '/vendor/drush';
+  $drush_dir_was = file_exists($drush_dir) || is_link($drush_dir);
+  $started = time();
   if ($major == 12) {
     $package = 'drush/drush:^15@stable';
-    $result = drush_shell_cd_and_exec($approot, 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
   }
   elseif ($cap_drush) {
     $package = 'drush/drush:^13';
-    $result = drush_shell_cd_and_exec($approot, 'composer require %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --no-interaction --no-progress', $package);
   }
   elseif ($hold_robo) {
     $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
-    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush %s --no-interaction --no-progress', $package);
   }
   else {
-    $result = drush_shell_cd_and_exec($approot, 'composer require drush/drush --no-interaction --no-progress');
+    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
+  $undone = (!$result && $bounded !== '') ? _provision_require_drush_undo($app, $kept, $absent, $drush_dir_was) : '';
+  if (!$result && $bounded !== '' && (time() - $started) >= $limit) {
+    drush_log(dt('DRUSH/DRUSH composer require drush/drush ran longer than @minutes minutes in @root and was stopped; @undone: @out', array(
+      '@minutes' => (int) ceil($limit / 60),
+      '@root' => $approot,
+      '@undone' => $undone,
+      '@out' => $output,
+    )), 'warning');
+    return $result;
+  }
+  if ($undone !== '' && strpos($undone, 'nothing to undo') !== 0) {
+    drush_log(dt('DRUSH/DRUSH after the failed composer require in @root: @undone', array(
+      '@root' => $approot,
+      '@undone' => $undone,
+    )), 'warning');
+  }
   if ($result && $package !== '') {
     drush_log('DRUSH/DRUSH (' . $package . ') ' . $output);
   }
@@ -2153,6 +2200,58 @@ function _provision_require_site_local_drush($approot) {
     )), 'warning');
   }
   return $result;
+}
+
+/**
+ * Undo what a composer require of Drush that did not end well left behind.
+ *
+ * A require killed from outside (the time limit, the OOM killer) cannot put
+ * back the composer.json and composer.lock it rewrote, as one that fails by
+ * itself does. Once Composer has recorded Drush in vendor/composer/
+ * installed.json it has installed it and written the autoloader for it:
+ * then every file is left as it is, since taking Drush out under that
+ * autoloader would break every site of the codebase. Before that, the two
+ * files go back to what they held, a file the run made goes, and a
+ * vendor/drush the run placed goes too: no record lists it, and it would
+ * keep the next Verify from requiring Drush again.
+ *
+ * @return string
+ *   What was done, for the task log.
+ */
+function _provision_require_drush_undo($app, $kept, $absent, $drush_dir_was) {
+  $installed = @file_get_contents($app . '/vendor/composer/installed.json');
+  if (is_string($installed) && preg_match('/"name"\s*:\s*"drush\/drush"/', $installed)) {
+    return 'composer had already installed Drush, so its files are left as they are';
+  }
+  $done = array();
+  foreach ($kept as $file => $text) {
+    clearstatcache();
+    if (is_link($file)) {
+      $done[] = basename($file) . ' is a link now and was not written back';
+      continue;
+    }
+    $now = @file_get_contents($file);
+    if ($now === $text) {
+      continue;
+    }
+    $done[] = (@file_put_contents($file, $text) === strlen($text)) ? basename($file) . ' written back' : basename($file) . ' could not be written back';
+  }
+  foreach ($absent as $file) {
+    if (is_file($file) && !is_link($file)) {
+      $done[] = @unlink($file) ? basename($file) . ' removed' : basename($file) . ' could not be removed';
+    }
+  }
+  $drush_dir = $app . '/vendor/drush';
+  if (!$drush_dir_was && is_dir($drush_dir) && !is_link($drush_dir)) {
+    _provision_recursive_delete($drush_dir);
+    clearstatcache();
+    $done[] = file_exists($drush_dir) ? 'vendor/drush could not be fully removed' : 'vendor/drush removed';
+  }
+  $text = $done ? implode(', ', $done) : 'nothing to undo';
+  if (!file_exists($drush_dir)) {
+    $text .= '; it keeps no site-local Drush';
+  }
+  return $text;
 }
 
 /**
