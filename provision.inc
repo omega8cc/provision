@@ -1959,23 +1959,52 @@ function provision_drush_local_lock_state() {
 }
 
 /**
- * The composer command for this task's codebase, on the PHP this task runs on.
+ * The interpreter Composer's platform check ran on, read from its php line.
  *
- * websh launches a line that starts with composer on the PHP it picks for
- * the codebase (cli-per-platform.info, then cli.info), the one it picked for
- * this backend too. A line that starts with anything else, such as the
- * timeout that bounds the Drush require, runs as typed: composer then ran on
- * the server's default PHP and resolved packages for it, so a platform whose
- * tasks run on an older PHP got a Drush that could not start there, after
- * the platform check had passed on the older one. Naming the interpreter
- * keeps the check and the require on one PHP whoever launches the line.
- * Plain composer where the interpreter or /usr/local/bin/composer is not
- * there (never on a BOA server).
+ * check-platform-reqs prints the PHP it ran on as a "php <version> <status>"
+ * line, a BOA build of that PHP being /opt/phpNN/bin/php. '' when no such
+ * line is there or that build is not.
+ *
+ * @param array $lines
+ *   The check's output lines.
  *
  * @return string
  */
-function _provision_composer_on_task_php() {
-  $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : '';
+function _provision_composer_check_php($lines) {
+  foreach ((array) $lines as $line) {
+    if (preg_match('/^php\s+([0-9]+)\.([0-9]+)\.[0-9]/', trim((string) $line), $m)) {
+      $bin = '/opt/php' . $m[1] . $m[2] . '/bin/php';
+      return is_executable($bin) ? $bin : '';
+    }
+  }
+  return '';
+}
+
+/**
+ * The composer command for the Drush require, on the PHP the check ran on.
+ *
+ * websh launches a line that starts with composer on the PHP it picks for the
+ * codebase when the line runs: a cli-per-platform.info line for its folder,
+ * then a phpNN.info switch, then cli.info. That is the PHP every later task
+ * of the platform runs on, so the platform check is such a line. On a build's
+ * first Verify the folder did not exist when websh launched this backend,
+ * which then runs on the account's PHP, while the check, run once the folder
+ * is there, already gets the folder's own line. The require starts with the
+ * time limit, and websh runs such a line as typed, on the server's default
+ * PHP: it is given the check's interpreter by name, so the Drush it adds
+ * resolves for the PHP the platform's tasks run on. This process's PHP where
+ * the check named none; plain composer where neither interpreter or
+ * /usr/local/bin/composer is there (never on a BOA server).
+ *
+ * @param string $php
+ *   The interpreter the check ran on (_provision_composer_check_php()), or ''.
+ *
+ * @return string
+ */
+function _provision_composer_on_task_php($php = '') {
+  if ($php === '' || !is_executable($php)) {
+    $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : '';
+  }
   $bin = '/usr/local/bin/composer';
   if ($php === '' || !is_file($bin)) {
     return 'composer';
@@ -2081,9 +2110,10 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  $composer = _provision_composer_on_task_php();
-  $check = drush_shell_cd_and_exec($approot, $composer . ' check-platform-reqs --no-plugins --no-interaction');
-  $check_output = implode('', drush_shell_exec_output());
+  // A line that starts with composer: websh runs it on the codebase's PHP.
+  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
+  $check_lines = drush_shell_exec_output();
+  $check_output = implode('', $check_lines);
   if (!$check) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
       '@root' => $approot,
@@ -2168,6 +2198,7 @@ function _provision_require_site_local_drush($approot) {
   }
   $drush_dir = $app . '/vendor/drush';
   $drush_dir_was = file_exists($drush_dir) || is_link($drush_dir);
+  $composer = _provision_composer_on_task_php(_provision_composer_check_php($check_lines));
   $started = time();
   if ($major == 12) {
     $package = 'drush/drush:^15@stable';
