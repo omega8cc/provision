@@ -1959,6 +1959,31 @@ function provision_drush_local_lock_state() {
 }
 
 /**
+ * The composer command for this task's codebase, on the PHP this task runs on.
+ *
+ * websh launches a line that starts with composer on the PHP it picks for
+ * the codebase (cli-per-platform.info, then cli.info), the one it picked for
+ * this backend too. A line that starts with anything else, such as the
+ * timeout that bounds the Drush require, runs as typed: composer then ran on
+ * the server's default PHP and resolved packages for it, so a platform whose
+ * tasks run on an older PHP got a Drush that could not start there, after
+ * the platform check had passed on the older one. Naming the interpreter
+ * keeps the check and the require on one PHP whoever launches the line.
+ * Plain composer where the interpreter or /usr/local/bin/composer is not
+ * there (never on a BOA server).
+ *
+ * @return string
+ */
+function _provision_composer_on_task_php() {
+  $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : '';
+  $bin = '/usr/local/bin/composer';
+  if ($php === '' || !is_file($bin)) {
+    return 'composer';
+  }
+  return escapeshellarg($php) . ' ' . escapeshellarg($bin);
+}
+
+/**
  * Bring the site-local Drush into a platform that ships without one.
  *
  * Runs composer require drush/drush in the codebase root, but only after
@@ -2056,7 +2081,8 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
+  $composer = _provision_composer_on_task_php();
+  $check = drush_shell_cd_and_exec($approot, $composer . ' check-platform-reqs --no-plugins --no-interaction');
   $check_output = implode('', drush_shell_exec_output());
   if (!$check) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
@@ -2145,18 +2171,18 @@ function _provision_require_site_local_drush($approot) {
   $started = time();
   if ($major == 12) {
     $package = 'drush/drush:^15@stable';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require %s --prefer-stable --no-interaction --no-progress', $package);
   }
   elseif ($cap_drush) {
     $package = 'drush/drush:^13';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require %s --no-interaction --no-progress', $package);
   }
   elseif ($hold_robo) {
     $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require drush/drush %s --no-interaction --no-progress', $package);
   }
   else {
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush --no-interaction --no-progress');
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
   $undone = (!$result && $bounded !== '') ? _provision_require_drush_undo($app, $kept, $absent, $drush_dir_was) : '';
