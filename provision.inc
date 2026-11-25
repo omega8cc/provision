@@ -1959,6 +1959,64 @@ function provision_drush_local_lock_state() {
 }
 
 /**
+ * The interpreter websh gives a platform's tasks, read in its docroot.
+ *
+ * websh launches a line that starts with composer on the PHP it picks for the
+ * folder the line runs in: a cli-per-platform.info line for it, then a
+ * phpNN.info switch, then cli.info. Every task of the platform is matched by
+ * its docroot, the alias's root, and a line keyed at a docroot named neither
+ * web, docroot nor html does not cover the project folder above it, so the
+ * probe runs there. "composer --version" names the PHP it ran on. The folder
+ * is there by now even on a build's first Verify, whose own backend websh
+ * started before it existed, on the account's PHP. '' when no interpreter is
+ * named or it cannot run.
+ *
+ * @param string $dir
+ *   The platform's docroot.
+ *
+ * @return string
+ */
+function _provision_codebase_task_php($dir) {
+  $dir = rtrim((string) $dir, '/');
+  if ($dir === '' || !is_dir($dir) || !drush_shell_cd_and_exec($dir, 'composer --version --no-interaction')) {
+    return '';
+  }
+  foreach (drush_shell_exec_output() as $line) {
+    if (preg_match('#^PHP version [0-9]\S* \((/\S+)\)#', trim((string) $line), $m)) {
+      return is_executable($m[1]) ? $m[1] : '';
+    }
+  }
+  return '';
+}
+
+/**
+ * The composer command for the Drush step, on the PHP the platform's tasks run.
+ *
+ * The check and the require both run Composer by name on the interpreter
+ * _provision_codebase_task_php() read, the require behind its time limit (a
+ * line websh runs as typed, on the server's default PHP, when not given one),
+ * so the check judges the PHP the require resolves for, and the Drush it adds
+ * keeps the floor of the PHP the platform's tasks run on. This process's PHP
+ * where no interpreter was read; plain composer where neither interpreter or
+ * /usr/local/bin/composer is there (never on a BOA server).
+ *
+ * @param string $php
+ *   The interpreter read in the docroot, or ''.
+ *
+ * @return string
+ */
+function _provision_composer_on_task_php($php = '') {
+  if ($php === '' || !is_executable($php)) {
+    $php = (defined('PHP_BINARY') && PHP_BINARY !== '' && is_executable(PHP_BINARY)) ? PHP_BINARY : '';
+  }
+  $bin = '/usr/local/bin/composer';
+  if ($php === '' || !is_file($bin)) {
+    return 'composer';
+  }
+  return escapeshellarg($php) . ' ' . escapeshellarg($bin);
+}
+
+/**
  * Bring the site-local Drush into a platform that ships without one.
  *
  * Runs composer require drush/drush in the codebase root, but only after
@@ -2042,7 +2100,7 @@ function provision_drush_local_lock_state() {
  * asks for Robo 5). Where no Console version can be read the major decides:
  * Drupal 10 gets the constraint, every other major the bare require.
  */
-function _provision_require_site_local_drush($approot) {
+function _provision_require_site_local_drush($approot, $docroot = '') {
   if (_provision_codebase_has_composer_patches($approot)) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase carries composer patches, and a resolve on this box would re-install the patched packages without their patches; it keeps no site-local Drush until it is built with one', array(
       '@root' => $approot,
@@ -2056,7 +2114,8 @@ function _provision_require_site_local_drush($approot) {
     )), 'advisory');
     return FALSE;
   }
-  $check = drush_shell_cd_and_exec($approot, 'composer check-platform-reqs --no-plugins --no-interaction');
+  $composer = _provision_composer_on_task_php(_provision_codebase_task_php($docroot !== '' ? $docroot : $approot));
+  $check = drush_shell_cd_and_exec($approot, $composer . ' check-platform-reqs --no-plugins --no-interaction');
   $check_output = implode('', drush_shell_exec_output());
   if (!$check) {
     drush_log(dt('DRUSH/DRUSH skipped composer require drush/drush in @root: the codebase lock does not accept this PHP, so no resolve was started and the codebase is left as it was; it keeps no site-local Drush until it is built with one: @out', array(
@@ -2145,18 +2204,18 @@ function _provision_require_site_local_drush($approot) {
   $started = time();
   if ($major == 12) {
     $package = 'drush/drush:^15@stable';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --prefer-stable --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require %s --prefer-stable --no-interaction --no-progress', $package);
   }
   elseif ($cap_drush) {
     $package = 'drush/drush:^13';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require %s --no-interaction --no-progress', $package);
   }
   elseif ($hold_robo) {
     $package = 'consolidation/robo:!=5.2.1,!=5.2.2,!=5.2.3';
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush %s --no-interaction --no-progress', $package);
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require drush/drush %s --no-interaction --no-progress', $package);
   }
   else {
-    $result = drush_shell_cd_and_exec($approot, $bounded . 'composer require drush/drush --no-interaction --no-progress');
+    $result = drush_shell_cd_and_exec($approot, $bounded . $composer . ' require drush/drush --no-interaction --no-progress');
   }
   $output = implode('', drush_shell_exec_output());
   $undone = (!$result && $bounded !== '') ? _provision_require_drush_undo($app, $kept, $absent, $drush_dir_was) : '';
@@ -3017,12 +3076,12 @@ function provision_unlock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!_provision_codebase_has_drush(d()->root)) {
-        _provision_require_site_local_drush(d()->root);
+        _provision_require_site_local_drush(d()->root, d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!_provision_codebase_has_drush(d()->root . "/../")) {
-        _provision_require_site_local_drush(d()->root . "/../");
+        _provision_require_site_local_drush(d()->root . "/../", d()->root);
       }
     }
 
@@ -3287,12 +3346,12 @@ function provision_lock_drush_local_vnd() {
 
     if (provision_file()->exists($dru_vnd_symf_con_inp_loc)->status()) {
       if (!_provision_codebase_has_drush(d()->root)) {
-        _provision_require_site_local_drush(d()->root);
+        _provision_require_site_local_drush(d()->root, d()->root);
       }
     }
     elseif (provision_file()->exists($dru_vnd_symf_con_inp_abo)->status()) {
       if (!_provision_codebase_has_drush(d()->root . "/../")) {
-        _provision_require_site_local_drush(d()->root . "/../");
+        _provision_require_site_local_drush(d()->root . "/../", d()->root);
       }
     }
 

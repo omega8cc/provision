@@ -1878,7 +1878,12 @@ function _provision_drush10_alias_convert($aegir_root) {
     $alias_cmd = 'drush10 site:alias-convert ~/.drush/sites --yes';
   }
   drush_log(dt('DRUSH/TEN/ALIASES/UPDATE site:alias-convert ~/.drush/sites --yes in @aegir_root', array('@aegir_root' => $aegir_root)), 'info');
+  // A server alias's yml twin carries its database DSN, which the drushrc
+  // alias keeps from the account's group at 0400; the converter writes new
+  // twins at the umask, so this run's is the owner's alone.
+  $umask = umask(077);
   $result = drush_shell_cd_and_exec($aegir_root, $alias_cmd);
+  umask($umask);
   $lines = drush_shell_exec_output();
   $output = implode('', $lines);
   $shown = _provision_drush10_alias_convert_output($lines);
