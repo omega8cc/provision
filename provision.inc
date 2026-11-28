@@ -3916,10 +3916,36 @@ function _provision_platform_named_by_sites($name) {
 
 /**
  * Whether the platform's root holds no codebase Drush can bootstrap.
+ *
+ * Drush takes a root by its files, but a Composer build cut off in its
+ * install has its docroot's autoload.php and core while the autoloader that
+ * file requires is not there yet (Composer writes it last), and bootstrapping
+ * such a root ends the process on the missing file.
  */
 function _provision_platform_no_codebase() {
   $root = rtrim((string) d()->root, '/');
-  return $root === '' || !drush_valid_root($root);
+  return $root === '' || !drush_valid_root($root) || _provision_root_autoloader_missing($root);
+}
+
+/**
+ * Whether a root's autoload.php requires a file that is not there.
+ *
+ * Read as text, never included. Only the form Drupal's scaffold writes,
+ * a require of __DIR__ joined to a quoted path, is judged; any other form
+ * reads as not missing, as before.
+ */
+function _provision_root_autoloader_missing($root) {
+  $file = $root . '/autoload.php';
+  if (!is_file($file) || !is_readable($file)) {
+    return FALSE;
+  }
+  $text = @file_get_contents($file, FALSE, NULL, 0, 65536);
+  $m = array();
+  if (!is_string($text) || !preg_match('/\brequire(?:_once)?\s*\(?\s*__DIR__\s*\.\s*([\'"])([^\'"]+)\1/', $text, $m)) {
+    return FALSE;
+  }
+  clearstatcache();
+  return !is_file($root . $m[2]);
 }
 
 /**
